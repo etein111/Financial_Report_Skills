@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analysts - Neolyst</title>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+    <!-- Tailwind Config -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        zinc: {
+                            950: '#09090b',
+                            900: '#18181b',
+                            800: '#27272a',
+                            500: '#71717a',
+                            400: '#a1a1aa',
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: #09090b;
+            color: #ffffff;
+            min-height: 100vh;
+        }
+
+        .page-header {
+            background: #18181b;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 16px 24px;
+            display: flex;
+            align-items: center;
+        }
+
+        .page-title {
+            font-size: 20px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .content {
+            padding: 24px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        /* Toolbar */
+        .toolbar {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+
+        .toolbar-search {
+            flex: 1;
+            background: #27272a;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 13px;
+        }
+
+        .toolbar-search:focus {
+            outline: none;
+            background: #3f3f46;
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .toolbar-btn {
+            padding: 8px 16px;
+            background: #27272a;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: white;
+            border-radius: 6px;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 200ms;
+        }
+
+        .toolbar-btn:hover {
+            background: #3f3f46;
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        /* Table */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: #18181b;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        th {
+            text-align: left;
+            padding: 12px;
+            font-size: 13px;
+            font-weight: 500;
+            color: #a1a1aa;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        td {
+            padding: 12px;
+            font-size: 13px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        tr:hover {
+            background: rgba(39, 39, 42, 0.5);
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <div class="page-header">
+        <div class="page-title">
+            <span>👤</span>
+            <span>Analysts</span>
+        </div>
+    </div>
+
+    <!-- Content -->
+    <div class="content">
+        <!-- Toolbar -->
+        <div class="toolbar">
+            <input type="text" class="toolbar-search" placeholder="Search analysts...">
+            <button class="toolbar-btn">+ New</button>
+            <button class="toolbar-btn">Export</button>
+        </div>
+
+        <!-- Table -->
+        <table>
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Region</th>
+                    <th>Chinese Name</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>John Doe</td>
+                    <td>john.doe@example.com</td>
+                    <td>CN</td>
+                    <td>约翰·杜</td>
+                </tr>
+                <tr>
+                    <td>Jane Smith</td>
+                    <td>jane.smith@example.com</td>
+                    <td>US</td>
+                    <td>简·史密斯</td>
+                </tr>
+                <tr>
+                    <td>Mike Johnson</td>
+                    <td>mike.johnson@example.com</td>
+                    <td>HK</td>
+                    <td>迈克·约翰逊</td>
+                </tr>
+                <tr>
+                    <td>Sarah Williams</td>
+                    <td>sarah.williams@example.com</td>
+                    <td>JP</td>
+                    <td>莎拉·威廉姆斯</td>
+                </tr>
+                <tr>
+                    <td>David Chen</td>
+                    <td>david.chen@example.com</td>
+                    <td>TW</td>
+                    <td>大卫·陈</td>
+                </tr>
+                <tr>
+                    <td>Emily Zhang</td>
+                    <td>emily.zhang@example.com</td>
+                    <td>CN</td>
+                    <td>艾米丽·张</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>

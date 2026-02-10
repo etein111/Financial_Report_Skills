@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reports - Neolyst</title>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+    <!-- Tailwind Config -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        zinc: {
+                            950: '#09090b',
+                            900: '#18181b',
+                            800: '#27272a',
+                            500: '#71717a',
+                            400: '#a1a1aa',
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: #09090b;
+            color: #ffffff;
+            min-height: 100vh;
+        }
+
+        .page-header {
+            background: #18181b;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 16px 24px;
+            display: flex;
+            align-items: center;
+        }
+
+        .page-title {
+            font-size: 20px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .content {
+            padding: 24px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        /* Filters */
+        .filters {
+            background: #18181b;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 6px;
+            padding: 12px;
+            margin-bottom: 16px;
+            display: flex;
+            gap: 12px;
+        }
+
+        .filter-select, .filter-search {
+            background: #27272a;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 13px;
+        }
+
+        .filter-select:focus, .filter-search:focus {
+            outline: none;
+            background: #3f3f46;
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .filter-search {
+            flex: 1;
+        }
+
+        /* List Item */
+        .list-item {
+            background: #18181b;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 6px;
+            padding: 12px;
+            margin-bottom: 8px;
+            cursor: pointer;
+            transition: all 200ms;
+        }
+
+        .list-item:hover {
+            background: rgba(39, 39, 42, 0.5);
+            border-color: rgba(255, 255, 255, 0.15);
+        }
+
+        /* Status Badge */
+        .status-badge {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .status-draft {
+            background: rgba(113, 113, 122, 0.2);
+            color: #a1a1aa;
+        }
+
+        .status-review {
+            background: rgba(245, 158, 11, 0.2);
+            color: #fbbf24;
+        }
+
+        .status-published {
+            background: rgba(16, 185, 129, 0.2);
+            color: #34d399;
+        }
+
+        /* Meta Text */
+        .meta-text {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            color: #71717a;
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <div class="page-header">
+        <div class="page-title">
+            <span>📝</span>
+            <span>Reports</span>
+        </div>
+    </div>
+
+    <!-- Content -->
+    <div class="content">
+        <!-- Filters -->
+        <div class="filters">
+            <select class="filter-select">
+                <option>Status: All</option>
+                <option>Draft</option>
+                <option>Review</option>
+                <option>Published</option>
+            </select>
+            <select class="filter-select">
+                <option>Type: All</option>
+                <option>Company</option>
+                <option>Sector</option>
+                <option>Flash</option>
+            </select>
+            <input type="text" class="filter-search" placeholder="Search reports...">
+        </div>
+
+        <!-- Report List -->
+        <div class="list-item">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <div style="font-size: 14px; font-weight: 500; margin-bottom: 4px;">📄 AAPL Stock Analysis</div>
+                    <div style="font-size: 12px; color: #71717a;">Company | John Doe</div>
+                </div>
+                <div style="text-align: right;">
+                    <span class="status-badge status-draft">Draft</span>
+                    <div class="meta-text" style="margin-top: 4px;">2h ago</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="list-item">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <div style="font-size: 14px; font-weight: 500; margin-bottom: 4px;">📄 TSLA Investment Rating</div>
+                    <div style="font-size: 12px; color: #71717a;">Company | Jane Smith</div>
+                </div>
+                <div style="text-align: right;">
+                    <span class="status-badge status-review">Review</span>
+                    <div class="meta-text" style="margin-top: 4px;">Yesterday</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="list-item">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <div style="font-size: 14px; font-weight: 500; margin-bottom: 4px;">📄 Q4 Technology Sector Outlook</div>
+                    <div style="font-size: 12px; color: #71717a;">Sector | Mike Johnson</div>
+                </div>
+                <div style="text-align: right;">
+                    <span class="status-badge status-draft">Draft</span>
+                    <div class="meta-text" style="margin-top: 4px;">3 days ago</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="list-item">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <div style="font-size: 14px; font-weight: 500; margin-bottom: 4px;">📄 NVDA Earnings Preview</div>
+                    <div style="font-size: 12px; color: #71717a;">Company Flash | John Doe</div>
+                </div>
+                <div style="text-align: right;">
+                    <span class="status-badge status-published">Published</span>
+                    <div class="meta-text" style="margin-top: 4px;">Last week</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

@@ -2,9 +2,7 @@
 
 ## Context
 
-这是投资研究报告管理系统的第一个版本(MVP)。系统主要服务于券商内部使用,由系统管理员统一操作,负责管理研究报告的创建、编辑、版本控制和发布流程。
-
-第二个版本将开发独立的报告查看网站,因此第一个版本需要为未来集成预留接口。
+这是投资研究报告管理系统,服务于券商内部使用,支持三种角色(Analyst、SA、Admin)协同工作,负责管理研究报告的创建、编辑、审核和发布流程。
 
 ## Goals / Non-Goals
 
@@ -13,11 +11,11 @@
 - 实现报告的创建、编辑、版本管理功能
 - 实现报告发布和拒绝流程
 - 确保所有修改都有完整的审计追踪(修改人、修改时间)
-- 为未来版本预留扩展接口(发布后的报告复制到独立网站)
+- 提供接口供独立的报告查看网站获取已发布报告
 
 **Non-Goals:**
-- 多角色权限系统(第一个版本只有系统管理员)
-- 报告审批工作流(第一个版本由管理员直接操作)
+- 报告查看网站(独立系统,不包含在本项目范围内)
+- 移动端支持(第一个版本仅桌面端)
 
 ## Decisions
 
@@ -107,7 +105,7 @@ report (报告)
 - id: UUID (PK)
 - report_type: VARCHAR
 - title: VARCHAR
-- status: VARCHAR (draft: 未发布, published: 已发布, rejected: 已拒绝)
+- status: VARCHAR (draft: 草稿, submitted: 已提交, published: 已发布, rejected: 已拒绝)
 - language: VARCHAR (zh/en)
 - investment_thesis: TEXT
 - ticker: VARCHAR (nullable, Company 类型)
@@ -117,10 +115,13 @@ report (报告)
 - sector_id: UUID (nullable, FK, Sector 类型)
 - current_version: INTEGER
 - created_by: UUID (FK -> analyst)
+- submitted_at: TIMESTAMP (nullable, 提交审核时间)
+- submitted_by: UUID (nullable, FK -> analyst, 提交审核人)
 - published_at: TIMESTAMP (nullable)
 - published_by: UUID (nullable, FK -> analyst)
 - rejected_at: TIMESTAMP (nullable)
 - rejected_by: UUID (nullable, FK -> analyst)
+- rejection_reason: TEXT (nullable, 拒绝理由)
 - created_at: TIMESTAMP
 - updated_at: TIMESTAMP
 
@@ -131,7 +132,6 @@ report_version (报告版本历史)
 - basic_info_snapshot: JSONB (基本信息快照)
 - word_file_path: VARCHAR (nullable)
 - model_file_path: VARCHAR (nullable)
-- change_type: VARCHAR (basic_info/word/model)
 - changed_by: UUID (FK -> analyst)
 - changed_at: TIMESTAMP
 - comment: VARCHAR (optional)
@@ -180,7 +180,11 @@ storage/
 **实现:**
 - 每次修改(基本信息/Word/Model)都在 `report_version` 表中创建新记录
 - 使用 `version` 字段递增版本号
-- 使用 `change_type` 字段标识修改类型
+- 根据字段内容判断修改类型:
+  - `basic_info_snapshot` 有值 → 修改了基本信息
+  - `word_file_path` 有值 → 修改了Word文档
+  - `model_file_path` 有值 → 修改了Excel模型
+- 可以同时包含多个修改类型(如同时修改基本信息和Word)
 - 基本信息 snapshot 以 JSONB 格式存储,方便恢复和对比
 
 **理由:**
@@ -288,24 +292,25 @@ uv run uvicorn backend.main:app --reload
 
 ### Decision 7: 前端架构
 
-**选择:** Vue 3 + Composition API + Pinia + Tailwind CSS + Headless UI
+**选择:** Vue 3 + TypeScript + Vite + Tailwind CSS
 
 **理由:**
-- **Vue 3 Composition API**: 更好的类型推断,代码组织更灵活
-- **Pinia**: 官方推荐的状态管理库,比 Vuex 更简洁
-- **Tailwind CSS**: 实用优先的 CSS 框架,完美实现深色主题和定制化设计
-- **Headless UI (Vue)**: 无样式的可访问组件,与 Tailwind 完美配合
-- **不使用 Element Plus**: 为了完全控制视觉设计,使用 Headless UI + 自定义组件
+- **Vue 3**: 现代化前端框架，提供响应式数据和组件化开发
+- **TypeScript**: 类型安全，提升代码质量和可维护性
+- **Vite**: 极速的开发体验和热更新
+- **Tailwind CSS**: 实用优先的CSS框架，与prototype保持一致，快速实现定制化设计
+- **自定义组件**: 直接使用Tailwind构建简单组件，不使用Headless UI或Element Plus
+- **状态管理**: 使用Vue 3的reactive()和provide/inject，不需要Pinia（项目规模适中）
+- **与prototype一致**: 设计风格、CSS类名、颜色系统完全沿用已验证的prototype
 
-**界面设计模式: 桌面式界面 + 窗口化操作**
+**界面设计模式: 桌面式界面 + 多页面应用**
 
-与传统 Web 应用不同,本系统采用仿操作系统的桌面式界面:
+与传统 Web 应用不同，本系统采用仿桌面的多页面应用界面：
 
-1. **无全局导航条**: 没有传统的侧边栏或顶部导航栏
-2. **仿系统桌面**: 登录后进入类似 Windows/macOS 的桌面环境
-3. **功能卡片平铺**: 各功能模块以带图标的卡片形式展示在桌面上
-4. **窗口化操作**: 点击功能卡片打开可拖动、可调整大小的窗口
-5. **无返回按钮**: 窗口直接关闭,不需要返回按钮
+1. **桌面主页**: 登录后进入桌面主页，显示功能卡片
+2. **功能卡片**: 各功能模块以带图标的卡片形式展示
+3. **独立页面**: 点击功能卡片在新标签页打开独立功能页面
+4. **简单操作**: 功能页面用完直接关闭，无需返回按钮
 
 **视觉设计规范:**
 
@@ -366,14 +371,12 @@ gap: 12px
 transition: all 200ms ease
 ```
 
-**3. 窗口 (Windows):**
+**3. 页面头部 (Page Headers):**
 ```css
 /* 背景: zinc-900 */
-/* 边框: 1px white/10 */
-/* 标题栏: zinc-800, 48px height */
-/* 内容区: zinc-950 background */
-/* 圆角: 8px (rounded-lg) */
-box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5)
+/* 边框: 1px white/10 底部 */
+/* 标题: 20px, font-weight 600 */
+/* 内边距: 16px 24px */
 ```
 
 **4. 状态指示器 (Status Indicators):**
@@ -421,12 +424,12 @@ form gap: 16px
 }
 ```
 
-**窗口内容布局规范:**
+**功能页面布局规范:**
 
-**1. 报告列表窗口 (Report List Window):**
+**1. 报告列表页面 (Reports Page):**
 ```
 ┌─────────────────────────────────────────┐
-│ 📝 Reports                  [_][□][×] │  ← 标题栏 (zinc-800)
+│ 📝 Reports                               │  ← 页面标题
 ├─────────────────────────────────────────┤
 │ [Filters]                               │
 │ Status: [All▼] Type: [All▼] Search: [___] │  ← 筛选工具栏
@@ -450,10 +453,10 @@ form gap: 16px
   - 包含版本历史时间线
 ```
 
-**2. 基础数据管理窗口 (Data Management Windows):**
+**2. 基础数据管理页面 (Data Management Pages):**
 ```
 ┌─────────────────────────────────────────┐
-│ 👤 Analysts                 [_][□][×] │
+│ 👤 Analysts                               │  ← 页面标题
 ├─────────────────────────────────────────┤
 │ [Search]                [+ New] [Export]│  ← 工具栏
 ├─────────────────────────────────────────┤
@@ -475,7 +478,7 @@ form gap: 16px
 **3. 表单布局 (Forms):**
 ```
 ┌─────────────────────────────────────────┐
-│ ➕ New Report                [_][□][×] │
+│ ➕ New Report                            │  ← 页面标题
 ├─────────────────────────────────────────┤
 │                                         │
 │ Report Type *                           │  ← 标签 (13px, zinc-400)
@@ -506,7 +509,7 @@ form gap: 16px
 
 **4. 版本历史时间线 (Version History Timeline):**
 ```
-在报告编辑窗口右侧或底部显示:
+在报告编辑页面右侧或底部显示:
 
 📋 Version History
 ┌─────────────────────────────────────┐
@@ -531,19 +534,6 @@ form gap: 16px
 - 作者: Inter, 12px, zinc-500
 ```
 
-**响应式断点 (Responsive Breakpoints):**
-```css
-/* 窗口最小尺寸 */
-min-width: 800px
-min-height: 600px
-
-/* 窗口默认尺寸 */
-- 报告列表: 1200px × 800px
-- 基础数据管理: 1000px × 700px
-- 报告创建/编辑: 1000px × 800px
-```
-```
-
 **交互设计:**
 ```
 登录页
@@ -552,8 +542,9 @@ min-height: 600px
   ├── 功能卡片 (图标 + 名称) - 分组显示,所有文本使用英文
   │
   │   【报告功能组 - 上方】
-  │   ├── 📝 Reports          - View all reports
+  │   ├── 📝 Reports          - View my reports (Analyst) / View all reports (SA/Admin)
   │   ├── ➕ New Report       - Create new report
+  │   ├── ✅ Report Review    - Review submitted reports (SA/Admin only)
   │   └── 📄 Templates        - Report template management (Word/Excel)
   │
   │   【基础数据管理组 - 下方】
@@ -562,10 +553,6 @@ min-height: 600px
   │   ├── 🏗️ Sectors          - Industry classification management
   │   └── 🌍 Regions          - Region management
   │
-  └── 任务栏 (Taskbar.vue)
-      ├── 开始菜单 (可选)
-      ├── 已打开窗口列表
-      └── 系统托盘 (时间、通知等)
 ```
 
 **桌面布局设计:**
@@ -573,15 +560,9 @@ min-height: 600px
 - 报告功能组放在上方,因为这是最常用的核心功能
 - 基础数据管理组放在下方,作为配置类功能
 - 每个卡片包含: 图标 + 英文功能名称 + 简短描述(可选)
-- 卡片支持悬停效果,点击打开对应窗口
+- 卡片支持悬停效果,点击在新标签页打开独立功能页面
+- 功能页面直接关闭,无需返回按钮
 - **界面语言**: 所有 UI 文本使用英文(按钮、标签、菜单等)
-
-**窗口系统:**
-- 支持多个窗口同时打开
-- 窗口可拖动、调整大小、最小化、最大化、关闭
-- 窗口层级管理 (点击置顶)
-- 窗口状态保存在 Pinia store
-- 支持窗口快捷键 (Alt+Tab 切换)
 
 **页面结构:**
 ```
@@ -589,54 +570,40 @@ min-height: 600px
 ├── views/
 │   ├── Login.vue              # 登录页 (带粒子效果背景)
 │   │   # - 使用 ParticleBackground 组件
-│   │   # - 标语"The Future is Here"
+│   │   # - 标语"The Future is Now"
 │   │   # - 登录表单(英文界面)
-│   ├── Desktop.vue            # 桌面主界面
-│   └── windows/               # 窗口化功能页
-│       ├──报告管理/
-│       │   ├── ReportListWindow.vue       # 报告列表
-│       │   ├── ReportCreateWindow.vue     # 创建报告
-│       │   ├── ReportEditWindow.vue       # 编辑报告
-│       │   └── TemplateWindow.vue         # 报告模板管理 (Word/Excel)
-│       └──基础数据管理/
-│           ├── AnalystWindow.vue          # Analyst 管理
-│           ├── CoverageWindow.vue         # Coverage 管理
-│           ├── SectorWindow.vue           # Sector 管理
-│           └── RegionWindow.vue           # Region 管理
+│   ├── Desktop.vue            # 桌面主页
+│   ├── reports/              # 报告管理页面 (独立页面,新标签页打开)
+│   │   ├── ReportsPage.vue           # 报告列表页
+│   │   ├── NewReportPage.vue          # 创建报告页
+│   │   ├── ReportEditPage.vue         # 编辑报告页
+│   │   ├── ReportVersionsPage.vue     # 版本历史页
+│   │   └── TemplatesPage.vue          # 模板管理页
+│   ├── review/               # 报告审核页面 (SA/Admin only, 新标签页打开)
+│   │   ├── ReportReviewPage.vue        # 审核列表页
+│   │   └── ReportReviewDetailPage.vue  # 审核详情页
+│   └── data-management/       # 基础数据管理页面 (新标签页打开)
+│       ├── AnalystsPage.vue           # Analyst 管理页
+│       ├── CoveragePage.vue           # Coverage 管理页
+│       ├── SectorsPage.vue            # Sector 管理页
+│       └── RegionsPage.vue            # Region 管理页
 ├── components/
-│   ├── window/                # 窗口系统组件
-│   │   ├── WindowContainer.vue     # 窗口容器(支持拖动、调整大小)
-│   │   ├── WindowHeader.vue        # 窗口标题栏
-│   │   └── WindowManager.vue       # 窗口管理器
 │   ├── desktop/               # 桌面组件
-│   │   ├── DesktopIcon.vue         # 桌面图标卡片
-│   │   ├── DesktopCardGroup.vue    # 卡片组容器(带标题和分隔)
-│   │   └── Taskbar.vue             # 任务栏
+│   │   ├── DesktopCard.vue             # 桌面功能卡片
+│   │   ├── DesktopCardGroup.vue        # 卡片组容器
+│   │   └── DesktopHeader.vue           # 桌面顶部导航
 │   └── common/                 # 通用组件
-│       ├── ParticleBackground.vue  # 粒子背景组件
-│       └── Icon.vue                # 图标组件
+│       ├── ParticleBackground.vue      # 粒子背景组件
+│       └── StatusBadge.vue             # 状态标签组件
 └── stores/
-    ├── window.ts              # 窗口状态管理
-    ├── desktop.ts             # 桌面状态
-    └── user.ts                # 用户状态
+    ├── user.ts                # 用户状态
+    └── desktop.ts             # 桌面状态
 ```
 
-**Window Store 结构:**
-```typescript
-interface WindowState {
-  windows: Array<{
-    id: string
-    title: string
-    component: Component
-    position: { x: number; y: number }
-    size: { width: number; height: number }
-    isMinimized: boolean
-    isMaximized: boolean
-    zIndex: number
-  }>
-  activeWindowId: string | null
-}
-```
+**交互设计:**
+- 桌面卡片点击后在新标签页打开独立功能页面
+- 功能页面直接关闭，无需返回按钮
+- 页面间通过浏览器标签页切换
 
 **登录页设计 (Login Page):**
 
@@ -672,6 +639,65 @@ interface WindowState {
 - 圆角: 12px
 - 标语和登录框之间: 60px 间距
 ```
+
+**报告功能页面设计原则:**
+
+为了清晰区分报告管理和审核职责，系统将报告功能分为两个独立页面：
+
+**1. Reports 页面（报告列表）**
+- **功能定位**: 报告管理和协作页面
+- **访问权限**: 所有角色都可以访问
+  - **Analyst**: 查看和管理自己的报告（草稿、已提交、已发布、已拒绝）
+  - **SA/Admin**: 查看所有报告，监控报告状态
+- **主要操作**:
+  - 查看报告列表（按状态筛选）
+  - 创建新报告
+  - 编辑报告（只能编辑草稿状态的报告）
+  - 提交报告审核（Analyst 只能提交自己的草稿）
+  - 查看报告详情
+  - 查看版本历史
+- **页面特点**:
+  - 侧重于报告的 CRUD 操作
+  - 显示报告的完整生命周期
+  - 提供报告编辑和提交流程入口
+
+**2. Report Review 页面（报告审核）**
+- **功能定位**: SA/Admin 专属的报告审核工作台
+- **访问权限**: 仅 SA 和 Admin 可以访问
+- **主要操作**:
+  - 查看待审核报告列表（仅显示状态为"已提交"的报告）
+  - 查看报告完整信息（Word 预览、Excel 下载）
+  - 批准报告发布
+  - 拒绝报告（需填写拒绝理由）
+  - 查看审核历史和统计
+- **页面特点**:
+  - 专注于审核工作流
+  - 显示审核统计信息（待审核数量、今日已审核等）
+  - 高亮显示等待时间较长的报告
+  - 提供批量审核功能（可选）
+
+**两个页面的关系:**
+```
+Reports (报告管理)             Report Review (报告审核)
+       ↓                                ↓
+  Analyst 创建报告                Analyst 提交报告
+       ↓                                ↓
+  提交审核 ─────────────────────→  出现在审核队列
+       ↓                                ↓
+  显示状态: 已提交              SA/Admin 审核
+       ↓                                ↓
+  无法编辑                        批准/拒绝
+                                        ↓
+                                  状态: 已发布/已拒绝
+                                        ↓
+              Analyst 查看状态 ──────────→ 更新 Reports 中的状态
+```
+
+**为什么分离两个页面:**
+1. **职责分离**: 报告管理和审核是两个不同的业务流程
+2. **权限控制**: 审核页面需要特殊权限限制
+3. **用户体验**: SA/Admin 可以专注于审核工作，不被其他报告干扰
+4. **开发简化**: 两个页面可以独立开发和优化
 
 **粒子效果技术实现:**
 
@@ -750,6 +776,189 @@ const particleConfig = {
 
 **结论:** 使用原生 Canvas 2D 手写,零依赖、最小体积、最佳性能。
 
+### Decision 7.1: 界面原型验证后的架构调整
+
+**背景:** 在创建 HTML 静态原型并经过用户确认后,对原设计进行了重要调整。
+
+**调整 1: 从窗口化改为多页面应用**
+
+**原设计:** 窗口化操作模式
+- 点击桌面功能卡片打开可拖动、可调整大小的窗口
+- 支持多窗口同时打开
+
+**调整后:** 多页面应用模式
+- 点击桌面功能卡片在**新标签页**打开独立功能页面
+- 每个功能有独立 URL，方便分享和直接访问
+- 用户通过关闭标签页来关闭功能页，无需返回按钮
+
+**理由:**
+1. **可分享性**: 独立 URL 可以直接发送给他人
+2. **简化交互**: 用户熟悉浏览器标签页操作，降低学习成本
+3. **开发简化**: 不需要实现复杂的窗口管理系统
+4. **性能优化**: 每个页面独立加载，不占用主页面资源
+
+**页面结构:**
+```
+/login.html          - 登录页 (独立 URL)
+/index.html          - 桌面/主页
+/reports.html        - 报告列表 (新标签页打开)
+/new-report.html     - 创建报告 (新标签页打开)
+/templates.html      - 模板管理 (新标签页打开)
+/analysts.html       - Analyst 管理 (新标签页打开)
+/coverage.html       - Coverage 管理 (新标签页打开)
+/sectors.html        - Sector 管理 (新标签页打开)
+/regions.html        - Region 管理 (新标签页打开)
+```
+
+**实现细节:**
+- 桌面卡片使用 `<a>` 标签 + `target="_blank"` 打开新标签页
+- 每个功能页顶部有 "← Back to Desktop" 链接返回桌面
+- 登录页和桌面页完全分离,不同 URL
+
+**调整 2: 视觉设计优化**
+
+**背景色调整:**
+- **原设计**: 纯色背景 `#09090b` (zinc-950)
+- **调整后**: 渐变背景 `linear-gradient(to bottom, #0c1221 0%, #09090b 50%, #020617 100%)`
+- **理由**: 深蓝色到黑色的渐变更有层次感和科技感,避免过于单调
+
+**登录页标题调整:**
+- **原设计**: "The Future is Here" (48px, 可能折行)
+- **调整后**: "The Future is Now" (32px, `white-space: nowrap`)
+- **理由**: 更简洁有力,防止标题溢出登录框
+
+**粒子效果优化:**
+- **粒子数量**: 80 → 120 (适中密度)
+- **粒子速度**: 基础速度 2 (适中,不快不慢)
+- **交互方式**: 移除所有鼠标交互效果
+  - 不再响应鼠标位置
+  - 粒子自由移动,保持原始速度
+  - 保留粒子间连线效果(距离 < 140px)
+  - 保留脉冲闪烁效果
+
+**最终粒子配置:**
+```typescript
+const particleConfig = {
+  count: 120,                    // 粒子数量
+  speed: 2,                      // 移动速度 (vx, vy = (Math.random() - 0.5) * 2)
+  size: { min: 1, max: 3 },      // 粒子大小
+  opacity: { min: 0.3, max: 0.7 }, // 透明度范围
+  color: 'blue-cyan gradient',   // 蓝色-青色渐变 (hue: 200-260)
+  connectionDistance: 140,       // 连线距离阈值
+  mouseInteraction: false,       // 禁用鼠标交互
+  pulseSpeed: 0.15               // 脉冲速度
+}
+```
+
+**设计规范更新:**
+
+**1. 背景色系统:**
+```css
+/* 主背景 - 渐变 */
+--bg-primary: linear-gradient(to bottom, #0c1221 0%, #09090b 50%, #020617 100%);
+
+/* 备用纯色 (用于卡片等) */
+--bg-secondary: zinc-900       #18181b
+--bg-tertiary: zinc-950        #09090b
+```
+
+**2. 登录页布局:**
+```
+┌─────────────────────────────────────────────────────────┐
+│                                                         │
+│   [粒子效果背景 - Canvas 2D - 渐变背景]                  │
+│                                                         │
+│                 ┌─────────────────────────┐            │
+│                 │                         │            │
+│                 │  The Future is Now      │            │  ← 32px, 不折行
+│                 │    <Inter font>         │            │
+│                 │    white-space: nowrap  │            │
+│                 │                         │            │
+│                 │  Research Report        │            │
+│                 │  Management System      │            │
+│                 ├─────────────────────────┤            │
+│                 │  Email                  │            │
+│                 │  [______________]       │            │
+│                 │                         │            │
+│                 │  Password               │            │
+│                 │  [______________]       │            │
+│                 │                         │            │
+│                 │     [    Login    ]     │            │
+│                 │                         │            │
+│                 └─────────────────────────┘            │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
+
+尺寸: 400px × 420px
+登录框背景: zinc-900 (#18181b)
+边框: 1px white/10
+圆角: 12px
+```
+
+**3. 桌面布局:**
+```
+┌─────────────────────────────────────────────────────────────┐
+│ Neolyst                              Welcome, Admin  Logout │  ← 顶部导航栏
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  Reports                                                    │  ← 卡片组标题
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐                 │
+│  │   📝     │  │   ➕     │  │   📄     │                 │
+│  │ Reports  │  │New Report│  │Templates │                 │
+│  │View all  │  │Create new│  │Word/Excel│                 │
+│  └──────────┘  └──────────┘  └──────────┘                 │
+│                                                             │
+│  Data Management                                           │  ← 卡片组标题
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  │
+│  │   👤     │  │   🏢     │  │   🏗️    │  │   🌍     │  │
+│  │ Analysts │  │ Coverage │  │ Sectors  │  │ Regions  │  │
+│  └──────────┘  └──────────┘  └──────────┘  └──────────┘  │
+└─────────────────────────────────────────────────────────────┘
+
+卡片:
+- 尺寸: 自适应,保持 4:3 宽高比
+- 背景: zinc-900
+- 边框: 1px white/10
+- 悬停: 边框变亮 white/20,轻微上移 2px
+- 图标: 40px emoji
+- 标题: 14px, font-weight 500
+- 描述: 12px, zinc-500
+```
+
+**4. 功能页布局:**
+```
+┌─────────────────────────────────────────────────────────────┐
+│ 📝 Reports                        ← Back to Desktop          │  ← 页面头部
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  [功能内容区]                                               │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+
+页面头部:
+- 背景: zinc-900
+- 边框底部: 1px white/10
+- 标题: 20px, font-weight 600
+- 返回链接: 14px, zinc-500 → hover zinc-400
+```
+
+**影响范围:**
+1. **前端架构**: 简化为多页面应用，无需窗口管理系统
+2. **路由设计**: 使用 Vue Router，每个功能页独立路由
+3. **组件设计**: 页面级组件，功能页面独立
+4. **状态管理**: 使用 Vue 3 的 reactive() 和 provide/inject，管理用户状态
+
+**原型文件位置:**
+- `prototype/login.html` - 登录页原型
+- `prototype/index.html` - 桌面主页原型
+- `prototype/reports.html` - 报告列表原型
+- `prototype/new-report.html` - 创建报告原型
+- `prototype/templates.html` - 模板管理原型
+- `prototype/analysts.html` - Analyst 管理原型
+- `prototype/coverage.html` - Coverage 管理原型(占位)
+- `prototype/sectors.html` - Sector 管理原型(占位)
+- `prototype/regions.html` - Region 管理原型(占位)
+
 ---
 
 ### Decision 7.5: 前端性能优化原则
@@ -768,7 +977,7 @@ const particleConfig = {
 
 **2. 代码分割**
 - 按路由分割代码
-- 窗口组件懒加载
+- 页面组件懒加载
 - 非首屏资源延迟加载
 
 **3. 图片优化**
@@ -795,7 +1004,6 @@ const particleConfig = {
 **包大小目标:**
 - 首屏 JS: < 200KB gzipped
 - 完整应用: < 500KB gzipped
-- 单个窗口组件: < 50KB gzipped
 
 ### Decision 8.5: 代码质量工具
 
@@ -1017,26 +1225,1118 @@ test:cov = "pytest --cov=backend --cov-report=html"
 - ✅ 新功能必须有单元测试 (覆盖率目标 > 80%)
 - ✅ Pre-commit hooks 必须安装并启用
 
-### Decision 9: 认证和授权
+### Decision 8.6: 开发规范和项目组织
 
-**选择:** 使用 Supabase Auth
+**目的:** 建立统一的开发规范，确保代码质量和团队协作效率。
 
-**实现:**
-- 第一个版本只有系统管理员角色
+#### 界面和语言规范
+
+**多语言使用原则:**
+- **系统界面**: 英文（所有 UI 文本、按钮、菜单、标签）
+- **API 响应消息**: 英文（成功、错误、验证提示）
+- **数据库字段名**: 英文（所有表名、字段名、枚举值）
+- **代码注释和文档**: 中文（便于团队理解和维护）
+- **项目文档**: 中文（README、设计文档、API 文档）
+- **报告内容**: 支持中英文双语（报告标题、摘要、正文）
+
+**前端界面格式:**
+```javascript
+// 日期格式
+const formatDate = (date) => 'YYYY-MM-DD'  // 2024-01-15
+
+// 数字格式
+const formatNumber = (num) => num.toLocaleString()  // 1,234.56
+
+// 货币格式
+const formatCurrency = (amount, currency) =>
+  new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(amount)
+  // $1,234.56, ¥1,234.56
+```
+
+**后端 API 响应格式:**
+```python
+# 成功响应
+{
+    "success": true,
+    "data": {...},
+    "message": "Report created successfully",
+    "error": null
+}
+
+# 错误响应
+{
+    "success": false,
+    "data": null,
+    "message": "Validation failed",
+    "error": "Email already exists"
+}
+```
+
+**数据库枚举值:**
+```sql
+-- 报告状态
+'draft', 'submitted', 'published', 'rejected'
+
+-- 用户角色
+'analyst', 'sa', 'admin'
+
+-- 报告类型
+'Company', 'Sector', 'Company Flash', 'Sector Flash', 'Common'
+```
+
+#### 代码风格
+
+**Python (后端) 代码规范:**
+```bash
+# 使用 UTF-8 编码
+# -*- coding: utf-8 -*-
+
+# 遵循 PEP 8 规范
+# 最大行长度: 100 字符
+# 使用类型注解
+from typing import List, Optional
+from datetime import datetime
+
+def create_report(
+    title: str,
+    report_type: str,
+    analyst_id: str,
+    investment_thesis: Optional[str] = None
+) -> Report:
+    """
+    创建新的研究报告
+
+    Args:
+        title: 报告标题
+        report_type: 报告类型
+        analyst_id: 分析师 ID
+        investment_thesis: 投资论点（可选）
+
+    Returns:
+        创建的报告对象
+
+    Raises:
+        ValueError: 参数验证失败
+    """
+    pass
+```
+
+**TypeScript (前端) 代码规范:**
+```typescript
+// 使用 TypeScript 类型注解
+interface Report {
+  id: string
+  title: string
+  type: ReportType
+  status: ReportStatus
+  createdBy: string
+  createdAt: Date
+}
+
+// 使用明确的返回类型
+async function fetchReports(status?: ReportStatus): Promise<Report[]> {
+  const params = status ? { status } : {};
+  const response = await api.get('/reports', { params });
+  return response.data;
+}
+
+// 使用可选链和空值合并
+const analystName = report.analyst?.name ?? 'Unknown';
+```
+
+#### 文件组织原则
+
+**项目目录结构:**
+```
+neolyst/
+├── backend/                 # 后端代码
+│   ├── api/                # API 路由
+│   ├── models/             # 数据模型
+│   ├── services/           # 业务逻辑
+│   ├── core/               # 核心配置
+│   │   ├── config.py       # 配置文件
+│   │   ├── security.py     # 安全相关
+│   │   └── database.py     # 数据库连接
+│   └── main.py             # 应用入口
+│
+├── frontend/               # 前端代码
+│   ├── src/
+│   │   ├── views/          # 页面组件
+│   │   ├── components/     # 可复用组件
+│   │   ├── composables/    # Vue 组合式函数(状态管理)
+│   │   ├── api/            # API 客户端
+│   │   ├── types/          # TypeScript 类型
+│   │   └── main.ts         # 应用入口
+│   └── package.json
+│
+├── tests/                  # 测试代码
+│   ├── test_api.py        # API 测试
+│   ├── test_models.py     # 模型测试
+│   └── test_services.py   # 服务测试
+│
+├── scripts/                # 工具脚本
+│   ├── init_db.py         # 数据库初始化
+│   ├── seed_data.py       # 种子数据
+│   └── migrate.py         # 数据迁移
+│
+├── docs/                   # 文档
+│   ├── api.md             # API 文档
+│   └── deployment.md      # 部署文档
+│
+├── openspec/              # OpenSpec 文档
+│   └── changes/
+│
+├── .env                   # 环境变量（不纳入版本控制）
+├── .env.example          # 环境变量示例
+├── .gitignore
+├── README.md             # 项目说明（中文）
+└── pyproject.toml        # Python 项目配置
+```
+
+**命名约定:**
+```python
+# 测试文件
+test_report.py
+test_analyst_service.py
+
+# 工具脚本
+init_db.py
+seed_data.py
+create_admin.py
+
+# 文档
+api.md
+deployment.md
+architecture.md
+```
+
+**❌ 避免在根目录:**
+- ❌ test.py（临时测试文件）
+- ❌ tmp.py（临时脚本）
+- ❌ random_file.json（散乱文件）
+
+#### 技术栈和依赖
+
+**后端技术:**
+```toml
+# pyproject.toml
+[project]
+name = "neolyst"
+requires-python = ">=3.14"  # 使用最新 Python 特性
+
+dependencies = [
+    "fastapi>=0.115.0",           # Web 框架
+    "uvicorn[standard]>=0.32.0",  # ASGI 服务器
+    "supabase>=2.27.3",           # Supabase Python 客户端
+    "python-dotenv>=1.2.1",       # 环境变量管理
+    "pydantic>=2.10.0",            # 数据验证
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.24.0",
+    "pytest-cov>=6.0.0",
+    "ruff>=0.8.0",
+    "black>=24.0.0",
+    "mypy>=1.14.0",
+]
+```
+
+**前端技术:**
+```json
+// package.json
+{
+  "name": "neolyst-frontend",
+  "type": "module",
+  "dependencies": {
+    "vue": "^3.5.0",
+    "typescript": "^5.7.0",
+    "@supabase/supabase-js": "^2.39.0",
+    "vue-router": "^4.5.0",
+    "pinia": "^2.2.0"
+  },
+  "devDependencies": {
+    "vite": "^6.0.0",
+    "eslint": "^9.0.0",
+    "prettier": "^3.4.0"
+  }
+}
+```
+
+**后端服务:**
+- **Supabase**: https://slxeorayantrboopghej.supabase.co
+  - PostgreSQL 数据库
+  - Supabase Auth（认证和授权）
+  - Row Level Security (RLS)
+  - 实时订阅和数据同步
+
+#### 环境配置
+
+**必需的环境变量:**
+```bash
+# .env 文件（不纳入版本控制）
+SUPABASE_URL=https://slxeorayantrboopghej.supabase.co
+SUPABASE_ANON_KEY=your_anon_key_here
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key_here  # 仅后端使用
+DATABASE_URL=postgresql://...  # 可选，用于直接数据库访问
+
+# 应用配置
+APP_ENV=development  # development | production
+LOG_LEVEL=INFO       # DEBUG | INFO | WARNING | ERROR
+```
+
+**环境变量示例:**
+```bash
+# .env.example
+SUPABASE_URL=your_supabase_url
+SUPABASE_ANON_KEY=your_supabase_anon_key
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+DATABASE_URL=your_database_url
+
+APP_ENV=development
+LOG_LEVEL=INFO
+```
+
+#### API 设计规范
+
+**RESTful API 原则:**
+```python
+# 使用语义化的 URL 路径
+GET    /api/v1/reports              # 获取报告列表
+GET    /api/v1/reports/{id}         # 获取单个报告
+POST   /api/v1/reports              # 创建报告
+PUT    /api/v1/reports/{id}         # 更新报告
+DELETE /api/v1/reports/{id}         # 删除报告
+
+# 使用嵌套资源
+GET    /api/v1/reports/{id}/versions      # 获取报告版本列表
+POST   /api/v1/reports/{id}/submit       # 提交报告审核
+POST   /api/v1/reports/{id}/approve      # 批准报告
+POST   /api/v1/reports/{id}/reject       # 拒绝报告
+```
+
+**统一的响应格式:**
+```python
+# Pydantic 模型
+from pydantic import BaseModel, Generic, TypeVar, Optional
+
+T = TypeVar('T')
+
+class ApiResponse(BaseModel, Generic[T]):
+    success: bool
+    data: Optional[T] = None
+    message: str = ""
+    error: Optional[str] = None
+
+# 使用示例
+@app.get("/api/v1/reports/{id}")
+async def get_report(id: str) -> ApiResponse[ReportResponse]:
+    report = await report_service.get_report(id)
+    return ApiResponse(
+        success=True,
+        data=report,
+        message="Report retrieved successfully"
+    )
+```
+
+**错误处理:**
+```python
+from fastapi import HTTPException
+
+# 使用 HTTPException
+@app.post("/api/v1/reports")
+async def create_report(report: ReportCreate):
+    if not validate_ticker(report.ticker):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid ticker symbol"
+        )
+
+    if await report_exists(report.title):
+        raise HTTPException(
+            status_code=409,
+            detail="Report with this title already exists"
+        )
+```
+
+#### 代码质量工具总结
+
+**类型检查:**
+- `mypy`: 静态类型检查，捕获类型错误
+
+**单元测试:**
+- `pytest`: 测试框架
+- `pytest-asyncio`: 异步测试支持
+- `pytest-cov`: 代码覆盖率
+- 目标: 80%+ 覆盖率
+
+**代码检查:**
+- `ruff`: 快速的 Python linter（替代 flake8, pylint）
+- `black`: 代码格式化
+- 遵循 PEP 8 规范
+
+**Pre-commit Hooks:**
+```yaml
+# .pre-commit-config.yaml
+repos:
+  - repo: https://github.com/psf/black
+    rev: 24.1.1
+    hooks:
+      - id: black
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.1.14
+    hooks:
+      - id: ruff
+        args: [--fix]
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.8.0
+    hooks:
+      - id: mypy
+        additional_dependencies: [types-all]
+```
+
+#### 认证与授权
+
+**Supabase Auth:**
+- JWT Token 认证机制
+- 用户角色存储在 `user_metadata` 和 `app_metadata` 中
+- Row Level Security (RLS) 在数据库层面保护数据
+
+**基于角色的访问控制 (RBAC):**
+- **Analyst**: 只能访问自己创建的数据
+- **SA**: 可以查看所有数据，可以审核
+- **Admin**: 拥有所有权限，可以管理用户
+
+#### 总结
+
+**开发规范的核心原则:**
+1. **代码质量**: 使用类型注解、单元测试、代码检查
+2. **文件组织**: 清晰的目录结构，命名约定
+3. **多语言策略**: 界面和 API 使用英文，文档和注释使用中文
+4. **环境管理**: 使用 `.env` 文件，不纳入版本控制
+5. **API 设计**: RESTful 原则，统一的响应格式
+6. **权限控制**: Supabase Auth + RLS，数据库层面保护
+
+---
+
+### Decision 9: 用户角色和权限系统
+
+**选择:** 使用 Supabase Auth + RLS (Row Level Security) 实现权限控制
+
+**为什么选择 Supabase RLS:**
+- ✅ 数据库层面的权限控制，更安全
+- ✅ 自动过滤数据，无需应用层手动过滤
+- ✅ 减少后端代码，权限控制逻辑在数据库中
+- ✅ 性能更好，数据库直接过滤
+- ✅ 防止应用层权限绕过
+
+**三种角色定义:**
+
+1. **Analyst(分析师)**
+   - 创建和编辑自己的报告（包括已提交状态的报告）
+   - 提交报告审核
+   - 查看自己的所有报告(草稿/已提交/已发布/已拒绝)
+   - 查看被拒绝报告的拒绝理由
+   - 重新编辑被拒绝的报告
+
+2. **SA(合规人员/Supervisor Analyst)**
+   - 查看所有 Analyst 的报告
+   - 审核已提交的报告
+   - 批准或拒绝报告发布
+   - 填写拒绝理由
+   - 查看审核历史和统计
+   - 不能创建或编辑报告
+
+3. **Admin(系统管理员)**
+   - 拥有所有权限
+   - 管理基础数据(Analyst、Coverage、Sector、Region、Templates)
+   - 查看和编辑所有报告
+   - 替 Analyst 创建报告
+   - 管理 Analyst 账号(创建、禁用、重置密码)
+   - 充当 SA 角色，可以审核报告
+
+**Supabase Auth 集成:**
+
+1. **用户创建流程（带邮箱重复验证）:**
+```python
+# Admin 创建 Analyst 时
+async def create_analyst(analyst_data: AnalystCreate):
+    email = analyst_data.email
+
+    # 1. 检查 analyst 表中是否已存在该邮箱
+    existing_analyst = db.query(
+        "SELECT * FROM analyst WHERE email = $1",
+        email
+    )
+
+    if existing_analyst:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Email already exists for analyst: {existing_analyst['full_name']}"
+        )
+
+    # 2. 检查 Supabase Auth 中是否已存在该邮箱
+    try:
+        existing_users = supabase.auth.admin.list_users()
+        auth_user_exists = any(
+            user.email == email
+            for user in existing_users.users
+        )
+
+        if auth_user_exists:
+            # 数据不一致：Auth 有用户但 analyst 表没有
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Email exists in authentication system but no corresponding analyst record. "
+                    f"Please contact system administrator to resolve data inconsistency."
+                )
+            )
+    except Exception as e:
+        # 如果无法查询 Auth 用户，继续创建（可能会失败，但让 Auth 返回错误）
+        logger.warning(f"Failed to check Auth users: {e}")
+
+    # 3. 在 analyst 表中创建记录
+    analyst = db.insert(analyst_data)
+
+    # 4. 在 Supabase Auth 中创建用户
+    try:
+        created_user = supabase.auth.admin.create_user({
+            'email': analyst_data.email,
+            'password': generate_default_password(),  # 如: analyst123
+            'email_confirm': True,
+            'user_metadata': {
+                'role': analyst_data.role,  # 'analyst', 'sa', 'admin'
+            },
+            'app_metadata': {
+                'provider': 'email',
+                'role': analyst_data.role,
+                'analyst_id': str(analyst.id)
+            }
+        })
+    except Exception as auth_error:
+        # 如果 Auth 创建失败，删除 analyst 记录（回滚）
+        db.delete("analyst", analyst.id)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to create authentication user: {str(auth_error)}"
+        )
+
+    # 5. 发送欢迎邮件(包含默认密码)
+    try:
+        password = generate_default_password()
+        send_welcome_email(analyst_data.email, password)
+    except Exception as email_error:
+        # 邮件发送失败不影响创建，只记录警告
+        logger.warning(f"Failed to send welcome email: {email_error}")
+
+    return analyst
+```
+
+2. **角色信息存储:**
+   - Supabase Auth 的 `user_metadata` 和 `app_metadata` 存储 `role` 和 `analyst_id`
+   - 登录后 JWT token 包含角色信息
+   - RLS policies 使用 `auth.jwt()->>'app_metadata'->>'role'` 获取当前用户角色
+
+**数据库设计 (启用 RLS):**
+
+```sql
+-- analyst 表
+CREATE TABLE analyst (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  full_name VARCHAR NOT NULL,
+  chinese_name VARCHAR,
+  email VARCHAR UNIQUE NOT NULL,
+  suffix VARCHAR,
+  region_id UUID REFERENCES region(id),
+  sfc VARCHAR,
+  is_active BOOLEAN DEFAULT true,
+  created_at TIMESTAMP DEFAULT now(),
+  updated_at TIMESTAMP DEFAULT now()
+);
+
+-- report 表
+CREATE TABLE report (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  report_type VARCHAR NOT NULL,
+  title VARCHAR NOT NULL,
+  status VARCHAR NOT NULL DEFAULT 'draft', -- 'draft', 'submitted', 'published', 'rejected'
+  language VARCHAR,
+  investment_thesis TEXT,
+
+  -- Company 类型字段
+  ticker VARCHAR,
+  rating VARCHAR,
+  target_price DECIMAL,
+
+  -- Sector 类型字段
+  region_id UUID REFERENCES region(id),
+  sector_id UUID REFERENCES sector(id),
+
+  -- 工作流字段
+  created_by UUID NOT NULL REFERENCES analyst(id),
+  submitted_at TIMESTAMP,
+  submitted_by UUID REFERENCES analyst(id),
+  published_at TIMESTAMP,
+  published_by UUID REFERENCES analyst(id),
+  rejected_at TIMESTAMP,
+  rejected_by UUID REFERENCES analyst(id),
+  rejection_reason TEXT,
+
+  created_at TIMESTAMP DEFAULT now(),
+  updated_at TIMESTAMP DEFAULT now()
+);
+
+-- 启用 RLS
+ALTER TABLE analyst ENABLE ROW LEVEL SECURITY;
+ALTER TABLE report ENABLE ROW LEVEL SECURITY;
+ALTER TABLE coverage ENABLE ROW LEVEL SECURITY;
+ALTER TABLE sector ENABLE ROW LEVEL SECURITY;
+ALTER TABLE region ENABLE ROW LEVEL SECURITY;
+ALTER TABLE template ENABLE ROW LEVEL SECURITY;
+```
+
+**RLS Policies (报告权限控制):**
+
+```sql
+-- 辅助函数：获取当前用户 ID 和角色
+CREATE OR REPLACE FUNCTION get_current_analyst_id()
+RETURNS UUID AS $$
+  SELECT (auth.jwt()->>'analyst_id')::UUID;
+$$ LANGUAGE sql SECURITY DEFINER;
+
+CREATE OR REPLACE FUNCTION get_current_role()
+RETURNS VARCHAR AS $$
+  SELECT (auth.jwt()->>'app_metadata'->>'role')::VARCHAR;
+$$ LANGUAGE sql SECURITY DEFINER;
+
+-- Report 表的 RLS Policies
+
+-- 1. 所有认证用户都可以查看报告（根据角色过滤）
+CREATE POLICY "Reports can be viewed by authenticated users"
+ON report FOR SELECT
+USING (true);  -- 具体过滤在下面
+
+-- 2. Analyst 只能查看自己创建的报告
+CREATE POLICY "Analysts can view own reports"
+ON report FOR SELECT
+TO authenticated
+USING (
+  get_current_role() = 'analyst'
+  AND created_by = get_current_analyst_id()
+);
+
+-- 3. SA 和 Admin 可以查看所有报告
+CREATE POLICY "SA and Admin can view all reports"
+ON report FOR SELECT
+TO authenticated
+USING (
+  get_current_role() IN ('sa', 'admin')
+);
+
+-- 4. Analyst 只能插入自己的报告 (created_by 自动设置)
+CREATE POLICY "Analysts can insert own reports"
+ON report FOR INSERT
+TO authenticated
+WITH CHECK (
+  get_current_role() = 'analyst'
+  AND created_by = get_current_analyst_id()
+);
+
+-- 5. Admin 可以为任何 Analyst 插入报告
+CREATE POLICY "Admin can insert reports for any analyst"
+ON report FOR INSERT
+TO authenticated
+WITH CHECK (get_current_role() = 'admin');
+
+-- 6. Analyst 只能更新自己的报告（草稿和已提交状态）
+CREATE POLICY "Analysts can update own reports"
+ON report FOR UPDATE
+TO authenticated
+USING (
+  get_current_role() = 'analyst'
+  AND created_by = get_current_analyst_id()
+  AND status IN ('draft', 'submitted')  -- 允许编辑草稿和已提交的报告
+)
+WITH CHECK (
+  status IN ('draft', 'submitted')  -- 保持状态不变
+  OR (status = 'draft' AND created_by = get_current_analyst_id())  -- 允许从草稿提交
+);
+
+-- 7. Admin 可以更新任何报告
+CREATE POLICY "Admin can update any report"
+ON report FOR UPDATE
+TO authenticated
+USING (get_current_role() = 'admin')
+WITH CHECK (true);
+
+-- 8. SA 不能更新任何报告
+-- (没有 policy = 不能更新)
+
+-- 9. SA 和 Admin 可以审核报告（更新 status 为 published/rejected）
+CREATE POLICY "SA and Admin can review reports"
+ON report FOR UPDATE
+TO authenticated
+USING (
+  get_current_role() IN ('sa', 'admin')
+  AND status = 'submitted'
+)
+WITH CHECK (
+  status IN ('published', 'rejected')
+  AND (
+    (status = 'published' AND published_by = get_current_analyst_id())
+    OR (status = 'rejected' AND rejected_by = get_current_analyst_id())
+  )
+);
+```
+
+**RLS Policies (基础数据权限):**
+
+```sql
+-- Analyst 表 (Admin only)
+CREATE POLICY "Only Admin can manage analysts"
+ON analyst FOR ALL
+TO authenticated
+USING (get_current_role() = 'admin')
+WITH CHECK (get_current_role() = 'admin');
+
+-- 但所有用户都可以查看 Analyst 信息（用于下拉选择等）
+CREATE POLICY "All users can view analysts"
+ON analyst FOR SELECT
+TO authenticated
+USING (true);
+
+-- Coverage, Sector, Region 表 (所有认证用户可读，Admin 可写)
+CREATE POLICY "All users can view base data"
+ON coverage FOR SELECT
+TO authenticated
+USING (true);
+
+CREATE POLICY "Only Admin can modify base data"
+ON coverage FOR ALL
+TO authenticated
+USING (get_current_role() = 'admin')
+WITH CHECK (get_current_role() = 'admin');
+
+-- 对 Sector, Region 应用相同的策略
+
+-- Template 表 (所有认证用户可读可下载，Admin 可写可删除)
+CREATE POLICY "All users can view templates"
+ON template FOR SELECT
+TO authenticated
+USING (true);
+
+CREATE POLICY "Only Admin can manage templates"
+ON template FOR ALL
+TO authenticated
+USING (get_current_role() = 'admin')
+WITH CHECK (get_current_role() = 'admin');
+```
+
+**后端 API 简化 (使用 RLS):**
+
+```python
+# 邮箱检查 API (Admin only，在创建 Analyst 前验证)
+@router.get("/api/analysts/check-email")
+async def check_analyst_email(
+    email: str,
+    current_user: CurrentUser = Depends(get_current_user)
+):
+    """
+    检查邮箱是否可用于创建 Analyst
+
+    Returns:
+        {
+            "available": bool,      # 邮箱是否可用
+            "exists_in_db": bool,    # 是否在 analyst 表中存在
+            "exists_in_auth": bool,  # 是否在 Supabase Auth 中存在
+            "message": str           # 提示信息
+        }
+    """
+    # 检查 analyst 表
+    existing_analyst = db.query(
+        "SELECT id, full_name FROM analyst WHERE email = $1",
+        email
+    )
+    exists_in_db = len(existing_analyst) > 0
+
+    # 检查 Supabase Auth
+    exists_in_auth = False
+    try:
+        users = supabase.auth.admin.list_users()
+        exists_in_auth = any(user.email == email for user in users.users)
+    except Exception as e:
+        logger.warning(f"Failed to check Auth: {e}")
+
+    # 判断并返回结果
+    if exists_in_db:
+        return {
+            "available": False,
+            "exists_in_db": True,
+            "exists_in_auth": False,
+            "message": f"Email already exists for analyst: {existing_analyst[0]['full_name']}"
+        }
+    elif exists_in_auth:
+        return {
+            "available": False,
+            "exists_in_db": False,
+            "exists_in_auth": True,
+            "message": "Email exists in authentication system but no corresponding analyst record. Please recover or use different email."
+        }
+    else:
+        return {
+            "available": True,
+            "exists_in_db": False,
+            "exists_in_auth": False,
+            "message": "Email is available"
+        }
+
+# 无需手动过滤数据，RLS 自动处理
+@router.get("/api/reports")
+async def list_reports():
+    # RLS 自动根据角色过滤：
+    # - Analyst: 只能看到 created_by = 自己的报告
+    # - SA/Admin: 可以看到所有报告
+    reports = db.query("SELECT * FROM report")  # 简单查询即可
+    return reports
+
+@router.post("/api/reports")
+async def create_report(
+    report_data: ReportCreate,
+    current_user: CurrentUser = Depends(get_current_user)
+):
+    # Admin 创建时可以指定 created_for_analyst_id
+    # RLS 会检查权限
+    if current_user.role == 'admin' and report_data.created_for_analyst_id:
+        created_by = report_data.created_for_analyst_id
+    else:
+        created_by = current_user.id
+
+    report = db.create_report(
+        **report_data.dict(exclude={'created_for_analyst_id'}),
+        created_by=created_by,
+        status='draft'
+    )
+    return report
+
+@router.put("/api/reports/{id}")
+async def update_report(
+    id: str,
+    report_data: ReportUpdate,
+):
+    # RLS 自动检查：
+    # - Analyst: 只能更新 status IN ('draft', 'submitted') 且 created_by=自己的报告
+    # - SA: 不能更新（没有 policy）
+    # - Admin: 可以更新任何报告
+    report = db.update_report(id, report_data)
+    return report
+
+@router.post("/api/reports/{id}/submit")
+async def submit_report(id: str, current_user: CurrentUser = Depends(get_current_user)):
+    # RLS 会检查 Analyst 是否拥有该报告
+    report = db.update_report_status(
+        id,
+        status='submitted',
+        submitted_at=datetime.now(),
+        submitted_by=current_user.id
+    )
+    return report
+```
+
+**报告审核 API (使用 RLS):**
+
+```python
+@router.get("/api/reports/submitted")
+async def list_submitted_reports():
+    # RLS 自动限制只有 SA/Admin 可以访问
+    # 通过查询过滤待审核报告
+    reports = db.query(
+        "SELECT * FROM report WHERE status = 'submitted'"
+    )
+    return reports
+
+@router.post("/api/reports/{id}/approve")
+async def approve_report(
+    id: str,
+    current_user: CurrentUser = Depends(get_current_user)
+):
+    # RLS 检查：只有 SA/Admin 可以更新 status='submitted' 的报告
+    updated = db.update_report_status(
+        id,
+        status='published',
+        published_at=datetime.now(),
+        published_by=current_user.id
+    )
+
+    # 发送邮件通知 Analyst
+    send_approval_email(...)
+
+    return updated
+
+@router.post("/api/reports/{id}/reject")
+async def reject_report(
+    id: str,
+    reason: str,
+    current_user: CurrentUser = Depends(get_current_user)
+):
+    # RLS 检查：只有 SA/Admin 可以更新 status='submitted' 的报告
+    updated = db.update_report_status(
+        id,
+        status='rejected',
+        rejected_at=datetime.now(),
+        rejected_by=current_user.id,
+        rejection_reason=reason
+    )
+
+    # 发送邮件通知 Analyst
+    send_rejection_email(...)
+
+    return updated
+```
+
+**前端权限控制 (简化):**
+
+```typescript
+// stores/user.ts
+interface UserState {
+  id: string
+  role: 'analyst' | 'sa' | 'admin'
+  email: string
+  name: string
+}
+
+// 权限检查函数 (主要用于 UI 控制，实际权限由 RLS 保证)
+const can = {
+  editReport: (user: User, report: Report) => {
+    if (user.role === 'sa') return false
+    if (user.role === 'admin') return true
+    return user.role === 'analyst' && report.created_by === user.id && report.status === 'draft'
+  },
+
+  accessReviewPage: (user: User) => {
+    return user.role === 'sa' || user.role === 'admin'
+  },
+
+  createForAnalyst: (user: User) => {
+    return user.role === 'admin'
+  },
+
+  manageAnalysts: (user: User) => {
+    return user.role === 'admin'
+  }
+}
+
+// 路由守卫
+router.beforeEach((to, from, next) => {
+  const user = useUserStore()
+  if (to.meta.requiresRole && !can[to.meta.permission](user)) {
+    next('/desktop')
+  } else {
+    next()
+  }
+})
+```
+
+**RLS 安全优势:**
+
+1. **数据库层面控制**：即使应用层代码有漏洞，RLS 也能保护数据
+2. **自动过滤**：无需手动编写过滤逻辑
+3. **性能优化**：数据库直接过滤，减少网络传输
+4. **简化代码**：后端 API 代码更简洁
+5. **审计友好**：所有权限控制逻辑集中在数据库中
+
+**注意事项:**
+
+1. **RLS 不能完全替代应用层检查**：
+   - UI 层仍需要权限检查来显示/隐藏按钮
+   - 业务逻辑层需要检查权限来提供友好的错误提示
+
+2. **使用 SECURITY DEFINER 函数**：
+   - 某些操作需要提升权限（如发送邮件）
+   - 使用 `SECURITY DEFINER` 函数绕过 RLS
+
+3. **测试 RLS Policies**：
+   - 需要针对每种角色测试 RLS policies
+   - 确保 policies 正确且没有漏洞
+
+4. **性能监控**：
+   - 复杂的 RLS policies 可能影响查询性能
+   - 需要在生产环境监控和优化
+
+**前端界面设计:**
+
+**桌面功能卡片调整:**
+```
+【报告功能组 - 上方】
+├── 📝 Reports          - View my reports (Analyst) / View all reports (SA/Admin)
+├── ➕ New Report       - Create new report
+├── ✅ Report Review    - Review submitted reports (SA/Admin only)
+└── 📄 Templates        - View and download templates (All users) / Manage templates (Admin only)
+
+【基础数据管理组 - 下方】
+├── 👤 Analysts         - Analyst management (Admin only)
+├── 🏢 Coverage         - Company coverage management
+├── 🏗️ Sectors          - Industry classification management
+└── 🌍 Regions          - Region management
+```
+
+**新建报告页面 (Admin 特有功能):**
+```html
+<!-- Admin 创建报告时显示 Analyst 选择器 -->
+<div class="form-group" v-if="user.role === 'admin'">
+  <label class="form-label">Create for Analyst *</label>
+  <select class="form-select" v-model="formData.created_for_analyst_id" required>
+    <option value="">Select an analyst...</option>
+    <option v-for="analyst in analysts" :value="analyst.id">
+      {{ analyst.full_name }} ({{ analyst.email }})
+    </option>
+  </select>
+</div>
+```
+
+**报告审核页面设计:**
+```
+┌─────────────────────────────────────────────────────────────┐
+│ ✅ Report Review                            ← Back to Desktop │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  📊 Review Statistics                                      │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │ Pending Review: 12  |  Reviewed Today: 8          │   │
+│  └─────────────────────────────────────────────────────┘   │
+│                                                             │
+│  [Filters]                                                  │
+│  Type: [All▼]  Analyst: [All▼]  Search: [_______]          │
+│                                                             │
+│  📋 Pending Reports (12)                                   │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │ 📄 AAPL Stock Analysis                  [Review]    │   │
+│  │    Company | John Doe | Submitted 2h ago           │   │
+│  ├─────────────────────────────────────────────────────┤   │
+│  │ 📄 TSLA Investment Rating               [Review]    │   │
+│  │    Company | Jane Smith | Submitted 5h ago         │   │
+│  └─────────────────────────────────────────────────────┘   │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**报告审核详情页:**
+```
+┌─────────────────────────────────────────────────────────────┐
+│ ✅ Review Report: AAPL Stock Analysis                       │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  Report Information:                                        │
+│  - Type: Company                                           │
+│  - Analyst: John Doe                                       │
+│  - Submitted: 2 hours ago                                  │
+│  - Ticker: AAPL                                            │
+│  - Rating: Buy                                             │
+│  - Target Price: $250                                      │
+│                                                             │
+│  📄 Word Document: [Preview] [Download]                     │
+│  📊 Excel Model: [Download]                                │
+│                                                             │
+│  [Approve & Publish]  [Reject with Reason]                 │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**报告状态流转图:**
+```
+Analyst          SA/Admin
+  │                │
+  │ 创建报告        │
+  ├──────────────► │ (status: draft)
+  │                │
+  │ 提交审核        │
+  ├──────────────► │ (status: submitted)
+  │                │
+  │                │ 审核批准
+  │◄──────────────┤ (status: published)
+  │                │
+  │                │ 审核拒绝
+  │◄──────────────┤ (status: rejected)
+  │                │
+  │ 重新编辑        │
+  ├──────────────► │ (status: draft)
+  │                │
+  │ 提交审核        │
+  ├──────────────► │ (status: submitted)
+```
+
+**邮件通知模板:**
+
+1. **账号创建通知:**
+```
+Subject: Your Neolyst Account Has Been Created
+
+Dear {{ analyst_name }},
+
+Your Neolyst account has been created successfully.
+
+Login URL: https://neolyst.example.com/login
+Email: {{ email }}
+Temporary Password: {{ temporary_password }}
+
+Please change your password after first login.
+
+Best regards,
+Neolyst Admin
+```
+
+2. **报告批准通知:**
+```
+Subject: Your Report Has Been Published
+
+Dear {{ analyst_name }},
+
+Your report "{{ report_title }}" has been approved and published.
+
+Approved by: {{ sa_name }}
+Approved at: {{ approved_at }}
+
+You can view the published report at:
+{{ report_url }}
+
+Congratulations!
+```
+
+3. **报告拒绝通知:**
+```
+Subject: Your Report Has Been Rejected
+
+Dear {{ analyst_name }},
+
+Your report "{{ report_title }}" has been rejected.
+
+Rejected by: {{ sa_name }}
+Rejected at: {{ rejected_at }}
+Reason: {{ rejection_reason }}
+
+You can view the rejection reason and make changes at:
+{{ report_url }}
+
+Please re-edit the report and submit it again when ready.
+```
+
+---
 - 使用 Email + Password 登录
 - JWT Token 存储在 localStorage
 - API 请求携带 Authorization header
 
-**未来扩展:**
-- 第二个版本将添加 Analyst、研究主管、SA 等角色
-- 使用 Supabase RLS(Row Level Security)实现数据权限控制
+**注意:** 报告查看网站是独立系统,由其他项目负责,本系统仅提供已发布报告的数据接口。
 
-### Decision 11: 已发布报告的对外接口
+### Decision 10: 已发布报告的对外接口
 
 **设计:** 为外部系统提供已发布报告的查询接口
 
 **实现:**
-- 发布报告时,在 `published_at` 和 `published_by` 字段记录发布信息
+- SA 批准发布报告时,报告状态变为 `published`
+- 记录 `published_at` 和 `published_by`(SA)
 - 提供公开 API 供外部系统(如独立的报告查看网站)查询已发布报告
 - API 支持按时间戳增量查询,方便外部系统同步数据
 
@@ -1053,6 +2353,7 @@ Response:
       "report_type": "Company",
       "title": "报告标题",
       "published_at": "2024-01-01T00:00:00Z",
+      "published_by": "sa_name",
       "basic_info": { ... },  # 报告基本信息
       "word_file_url": "https://...",  # Word 文件下载链接
       "model_file_url": "https://..."  # Excel 文件下载链接(如有)
