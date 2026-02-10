@@ -102,26 +102,27 @@
 - **THEN** 系统应该创建新的 Region 记录
 - **AND** Region 名称不能与现有 Region 重复
 
-### Requirement: Word 模板管理
+### Requirement: 报告模板管理
 
-系统应该能够管理不同类型报告的 Word 模板文件。
+系统应该能够管理不同类型报告的模板文件,包括 Word 和 Excel 模板。
 
-#### Scenario: 上传 Word 模板
+#### Scenario: 上传报告模板
 
-- **WHEN** 管理员上传新的 Word 模板文件
+- **WHEN** 管理员上传新的报告模板文件(Word 或 Excel)
 - **THEN** 系统应该保存模板文件
 - **AND** 必须指定模板对应的报告类型(Company, Sector, Flash 等)
+- **AND** 必须指定模板文件类型(Word 或 Excel)
 
 #### Scenario: 查看模板列表
 
 - **WHEN** 管理员访问模板管理页面
 - **THEN** 应该显示所有模板的列表
-- **AND** 显示模板名称、报告类型、上传时间等信息
+- **AND** 显示模板名称、报告类型、文件类型(Word/Excel)、上传时间等信息
 
 #### Scenario: 下载模板
 
 - **WHEN** 管理员点击下载模板
-- **THEN** 系统应该下载对应的 Word 文件
+- **THEN** 系统应该下载对应的模板文件(Word 或 Excel)
 
 #### Scenario: 更新模板
 

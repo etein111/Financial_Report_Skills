@@ -19,7 +19,7 @@
   - [ ] 2.1.3 sector 表
   - [ ] 2.1.4 coverage 表
   - [ ] 2.1.5 coverage_analyst 关联表
-  - [ ] 2.1.6 word_template 表
+  - [ ] 2.1.6 template 表(报告模板 Word/Excel)
   - [ ] 2.1.7 report 表
   - [ ] 2.1.8 report_version 表
   - [ ] 2.1.9 report_analyst 关联表
@@ -53,9 +53,9 @@
   - [ ] 3.4.4 GET /api/coverage/{id} - 获取详情
   - [ ] 3.4.5 PUT /api/coverage/{id} - 更新
 
-- [ ] 3.5 Word Template API
+- [ ] 3.5 Template API (报告模板)
   - [ ] 3.5.1 GET /api/templates - 获取列表
-  - [ ] 3.5.2 POST /api/templates - 上传模板
+  - [ ] 3.5.2 POST /api/templates - 上传模板(支持 Word 和 Excel)
   - [ ] 3.5.3 GET /api/templates/{id} - 下载模板
   - [ ] 3.5.4 PUT /api/templates/{id} - 更新模板
 
@@ -127,8 +127,8 @@
   - [ ] 6.4.3 DuplicateWarningDialog.vue - 重复 Ticker 警告对话框
   - [ ] 6.4.4 添加桌面图标卡片
 
-- [ ] 6.5 Word Template 管理窗口
-  - [ ] 6.5.1 TemplateWindow.vue - 窗口化界面(列表、上传、下载)
+- [ ] 6.5 Template 管理窗口(报告模板 Word/Excel)
+  - [ ] 6.5.1 TemplateWindow.vue - 窗口化界面(列表、上传 Word/Excel、下载)
   - [ ] 6.5.2 添加桌面图标卡片
 
 ## 7. 前端开发 - 报告管理窗口
