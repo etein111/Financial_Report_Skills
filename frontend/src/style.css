@@ -1,0 +1,17 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Neolyst 全局样式 */
+body {
+  margin: 0;
+  padding: 0;
+  font-family: 'Inter', sans-serif;
+  background: linear-gradient(to bottom, #0c1221 0%, #09090b 50%, #020617 100%);
+  color: #ffffff;
+  min-height: 100vh;
+}
+
+#app {
+  min-height: 100vh;
+}
