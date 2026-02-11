@@ -81,9 +81,9 @@
 - [ ] 2.5.1 实现 Analyst 信息管理 API（`api/analyst_info.py`）
 - [ ] 2.5.2 实现 `GET /api/analyst-info`（获取列表，支持搜索，所有认证用户可读）
 - [ ] 2.5.3 实现 `POST /api/analyst-info/check-email`（邮箱唯一性检查）
-- [ ] 2.5.4 实现 `POST /api/analyst-info`（创建业务信息，仅 Admin）
-- [ ] 2.5.5 实现 `PUT /api/analyst-info/{id}`（更新业务信息，仅 Admin）
-- [ ] 2.5.6 实现 `DELETE /api/analyst-info/{id}`（删除业务信息，仅 Admin）
+- [ ] 2.5.4 实现 `POST /api/analyst-info`（创建 Analyst 信息，仅 Admin）
+- [ ] 2.5.5 实现 `PUT /api/analyst-info/{id}`（更新 Analyst 信息，仅 Admin）
+- [ ] 2.5.6 实现 `DELETE /api/analyst-info/{id}`（删除 Analyst 信息，仅 Admin）
 - [ ] 2.5.7 集成 Analyst 信息路由到 `main.py`
 - [ ] 2.5.8 测试 RLS policies（确保 Admin/SA/Analyst 权限正确）
 
@@ -163,11 +163,11 @@
 - [ ] 3.9.2 实现页面头部（标题 + "Back to Desktop" 链接）
 - [ ] 3.9.3 实现搜索功能（按 full_name 或 email）
 - [ ] 3.9.4 实现 Analyst 信息列表（表格形式）
-- [ ] 3.9.5 实现创建业务信息表单（字段: full_name, chinese_name, email, suffix, region_id, sfc）
+- [ ] 3.9.5 实现创建 Analyst 信息表单（字段: full_name, chinese_name, email, suffix, region_id, sfc）
 - [ ] 3.9.6 实现邮箱唯一性检查（调用 `POST /api/analyst-info/check-email`）
 - [ ] 3.9.7 实现创建成功提示（创建成功后显示提示）
-- [ ] 3.9.8 实现编辑业务信息功能
-- [ ] 3.9.9 实现删除业务信息功能（含确认对话框）
+- [ ] 3.9.8 实现编辑 Analyst 信息功能
+- [ ] 3.9.9 实现删除 Analyst 信息功能（含确认对话框）
 - [ ] 3.9.10 权限控制（仅 Admin 可见整个页面）
 - [ ] 3.9.11 创建/编辑/删除 API 调用和错误处理
 
@@ -201,9 +201,9 @@
 - [ ] 4.3.1 测试 Analyst 信息列表加载（所有角色可见）
 - [ ] 4.3.2 测试搜索功能（按 full_name 或 email 过滤）
 - [ ] 4.3.3 测试邮箱唯一性检查（重复邮箱返回错误）
-- [ ] 4.3.4 测试创建业务信息（Admin 成功）
-- [ ] 4.3.5 测试编辑业务信息（Admin 成功）
-- [ ] 4.3.6 测试删除业务信息（Admin 成功）
+- [ ] 4.3.4 测试创建 Analyst 信息（Admin 成功）
+- [ ] 4.3.5 测试编辑 Analyst 信息（Admin 成功）
+- [ ] 4.3.6 测试删除 Analyst 信息（Admin 成功）
 - [ ] 4.3.7 测试页面权限控制（SA 和 Analyst 访问返回 403 或 404）
 
 ### 4.4 UI/UX 测试

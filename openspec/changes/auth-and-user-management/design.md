@@ -57,7 +57,7 @@ Neolyst 项目需要建立用户认证和权限控制基础设施，为后续的
 }
 ```
 
-**注意:** 由于用户账号与业务信息解耦，`app_metadata` 中不需要 `analyst_id` 字段。
+**注意:** 由于用户账号与 Analyst 信息解耦，`app_metadata` 中不需要 `analyst_id` 字段。
 
 | metadata 类型 | 谁可以修改 | 适用场景 | 示例 |
 |-------------|-----------|---------|------|
@@ -101,18 +101,18 @@ WITH CHECK (get_current_role() = 'admin');
 
 ---
 
-#### Decision 3: 用户账号与业务信息解耦
+#### Decision 3: 用户账号与 Analyst 信息解耦
 
-**选择:** 用户账号管理系统（Auth users）与业务信息系统（analyst 表）完全解耦。
+**选择:** 用户账号管理系统（Auth users）与 Analyst 信息系统（analyst 表）完全解耦。
 
 **理由:**
-- ✅ 职责清晰：用户账号用于认证，业务信息用于数据记录
-- ✅ 灵活性高，可以有不登录系统的业务信息记录
+- ✅ 职责清晰：用户账号用于认证，Analyst 信息用于数据记录
+- ✅ 灵活性高，可以有不登录系统的 Analyst 信息记录
 - ✅ 避免数据同步问题
 
 **隐式关联规则（为未来报告功能预留）：**
 - 当 User Auth 的 email 与 Analyst 的 email **一致时**，系统认为是**同一人**
-- **当前阶段：** 只有 Admin 可以访问业务信息管理，SA/Analyst 不需要
+- **当前阶段：** 只有 Admin 可以访问 Analyst 信息管理，SA/Analyst 不需要
 - **未来报告功能：** Analyst 登录后可以查看/编辑自己的报告（报告表的 `contact_person` 字段关联到 analyst.email）
 - **不使用外键关联**，通过 email 字符串匹配实现逻辑关联
 - 示例：Analyst `john.doe@example.com` 登录后，只能看到 `contact_person = 'john.doe@example.com'` 的报告
@@ -122,7 +122,7 @@ WITH CHECK (get_current_role() = 'admin');
 | 系统 | 用途 | 数据存储 | API |
 |------|------|--------|------|
 | **用户管理** | 认证和权限 | Supabase Auth users | `/api/users` |
-| **业务信息** | 业务数据记录 | analyst 表 | `/api/analyst-info` |
+| **Analyst 信息** | Analyst 数据记录 | analyst 表 | `/api/analyst-info` |
 
 ---
 
@@ -484,16 +484,16 @@ const particleConfig = {
 | PUT | `/api/regions/{id}` | 更新地区 | 仅 Admin |
 | DELETE | `/api/regions/{id}` | 删除地区 | 仅 Admin |
 
-### Analyst 业务信息管理 API
+### Analyst 信息管理 API
 
 | 方法 | 端点 | 说明 | 权限 |
 |------|--------|------|------|
-| GET | `/api/analyst-info` | 获取 Analyst 业务信息列表（支持搜索） | 所有认证用户 |
-| POST | `/api/analyst-info` | 创建 Analyst 业务信息 | 仅 Admin |
-| PUT | `/api/analyst-info/{id}` | 更新 Analyst 业务信息 | 仅 Admin |
-| DELETE | `/api/analyst-info/{id}` | 删除 Analyst 业务信息 | 仅 Admin |
+| GET | `/api/analyst-info` | 获取 Analyst 信息列表（支持搜索） | 所有认证用户 |
+| POST | `/api/analyst-info` | 创建 Analyst 信息 | 仅 Admin |
+| PUT | `/api/analyst-info/{id}` | 更新 Analyst 信息 | 仅 Admin |
+| DELETE | `/api/analyst-info/{id}` | 删除 Analyst 信息 | 仅 Admin |
 
-**注意:** 此 API 只管理业务信息，不创建或修改用户账号。`email` 字段仅用于业务记录。
+**注意:** 此 API 只管理 Analyst 信息，不创建或修改用户账号。`email` 字段仅用于业务记录。
 
 ---
 
