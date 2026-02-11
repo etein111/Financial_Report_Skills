@@ -36,7 +36,7 @@
 #### Scenario: Data Management 功能组
 - **WHEN** 用户查看桌面主页
 - **THEN** Data Management 功能组显示以下卡片:
-  - 👤 Analysts - Analyst information management (Admin only)
+  - 👤 Analyst Info - Analyst information management (Admin only)
   - 🏢 Coverage - Company coverage management
   - 🏗️ Sectors - Industry classification management
   - 🌍 Regions - Region management

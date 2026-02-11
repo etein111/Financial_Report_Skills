@@ -207,6 +207,13 @@
 - 删除业务信息不删除用户账号
 - 邮箱字段仅用于业务记录，不与认证系统关联
 
+**隐式关联规则（为未来报告功能预留）：**
+- 当 User Auth 的 email 与 Analyst 的 email **一致时**，系统认为是**同一人**
+- **当前阶段：** 只有 Admin 可以访问业务信息管理，SA/Analyst 不需要
+- **未来报告功能：** Analyst 登录后可以查看/编辑自己的报告（报告表的 `contact_person` 字段关联到 analyst.email）
+- **不使用外键关联**，通过 email 字符串匹配实现逻辑关联
+- 示例：Analyst `john.doe@example.com` 登录后，只能看到 `contact_person = 'john.doe@example.com'` 的报告
+
 ## Capabilities
 
 本变更新增以下能力（Capabilities）：

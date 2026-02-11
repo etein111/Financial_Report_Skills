@@ -41,13 +41,13 @@
 
 ## 阶段 2：后端 API 开发
 
-**目标：** 实现所有后端 API 接口，包括认证、Region 管理、Analyst 管理。
+**目标：** 实现所有后端 API 接口，包括认证、用户管理、Region 管理、Analyst 信息管理。
 
 ### 2.1 后端项目结构
-- [ ] 2.1.1 创建后端目录结构（`api/`, `core/`, `models/`, `db/`）
+- [ ] 2.1.1 创建后端目录结构（`api/`, `core/`, `models/`）
 - [ ] 2.1.2 配置 Supabase Client（`core/supabase.py`）
 - [ ] 2.1.3 创建配置管理模块（`core/config.py`，读取环境变量）
-- [ ] 2.1.4 创建 Pydantic 数据模型（`models/auth.py`, `models/region.py`, `models/analyst.py`）
+- [ ] 2.1.4 创建 Pydantic 数据模型（`models/auth.py`, `models/user.py`, `models/region.py`, `models/analyst.py`）
 
 ### 2.2 认证 API
 - [ ] 2.2.1 实现 JWT 验证中间件（`core/security.py`，从 Authorization header 提取并验证 token）
@@ -56,49 +56,50 @@
 - [ ] 2.2.4 实现登出 API（`POST /api/auth/logout`，可选，前端清除 token 即可）
 - [ ] 2.2.5 集成认证路由到 `main.py`
 
-### 2.3 Region 管理 API
-- [ ] 2.3.1 实现 Region CRUD API（`api/regions.py`）
-- [ ] 2.3.2 实现 `GET /api/regions`（获取列表，所有认证用户可读）
-- [ ] 2.3.3 实现 `POST /api/regions`（创建，仅 Admin）
-- [ ] 2.3.4 实现 `PUT /api/regions/{id}`（更新，仅 Admin）
-- [ ] 2.3.5 实现 `DELETE /api/regions/{id}`（删除，仅 Admin）
-- [ ] 2.3.6 集成 Region 路由到 `main.py`
-- [ ] 2.3.7 测试 RLS policies（使用不同角色的 token 验证权限）
+### 2.3 用户管理 API
+- [ ] 2.3.1 实现用户管理 API（`api/users.py`）
+- [ ] 2.3.2 实现 `GET /api/users`（获取列表，支持搜索，仅 Admin）
+- [ ] 2.3.3 实现 `POST /api/users`（创建用户，仅 Admin）
+- [ ] 2.3.4 实现 `PUT /api/users/{id}`（更新用户信息，仅 Admin）
+- [ ] 2.3.5 实现 `PUT /api/users/{id}/password`（修改密码，仅 Admin）
+- [ ] 2.3.6 实现 `PUT /api/users/{id}/role`（修改角色，仅 Admin）
+- [ ] 2.3.7 实现 `DELETE /api/users/{id}`（删除用户，仅 Admin）
+- [ ] 2.3.8 实现 `POST /api/users/check-email`（检查邮箱唯一性，仅 Admin）
+- [ ] 2.3.9 实现 `PUT /api/users/{id}/toggle-status`（启用/禁用账号，仅 Admin）
+- [ ] 2.3.10 集成用户管理路由到 `main.py`
 
-### 2.4 Analyst 管理 API
-- [ ] 2.4.1 实现 Analyst CRUD API（`api/analysts.py`）
-- [ ] 2.4.2 实现 `GET /api/analysts`（获取列表，支持搜索，所有认证用户可读）
-- [ ] 2.4.3 实现 `POST /api/analysts/check-email`（邮箱唯一性检查）
-- [ ] 2.4.4 实现 `POST /api/analysts`（创建，仅 Admin）
-  - 创建 analyst 表记录
-  - 同步创建 Supabase Auth 用户（生成随机密码）
-  - 失败时回滚 analyst 记录
-  - 返回临时密码（仅一次）
-- [ ] 2.4.5 实现 `PUT /api/analysts/{id}`（更新，仅 Admin）
-- [ ] 2.4.6 实现 `DELETE /api/analysts/{id}`（删除，仅 Admin）
-  - 删除 analyst 表记录
-  - 同步删除 Supabase Auth 用户（通过 email 查找）
-- [ ] 2.4.7 实现 `POST /api/analysts/{id}/reset-password`（重置密码，Admin 和 SA 可用）
-  - 生成新随机密码
-  - 更新 Supabase Auth 用户密码
-  - 返回新密码（仅一次）
-- [ ] 2.4.8 实现 `PUT /api/analysts/{id}/toggle-status`（启用/禁用账号，仅 Admin）
-- [ ] 2.4.9 集成 Analyst 路由到 `main.py`
-- [ ] 2.4.10 测试 RLS policies（确保 Admin/SA/Analyst 权限正确）
+### 2.4 Region 管理 API
+- [ ] 2.4.1 实现 Region CRUD API（`api/regions.py`）
+- [ ] 2.4.2 实现 `GET /api/regions`（获取列表，所有认证用户可读）
+- [ ] 2.4.3 实现 `POST /api/regions`（创建，仅 Admin）
+- [ ] 2.4.4 实现 `PUT /api/regions/{id}`（更新，仅 Admin）
+- [ ] 2.4.5 实现 `DELETE /api/regions/{id}`（删除，仅 Admin）
+- [ ] 2.4.6 集成 Region 路由到 `main.py`
+- [ ] 2.4.7 测试 RLS policies（使用不同角色的 token 验证权限）
 
-### 2.5 后端启动验证
-- [ ] 2.5.1 运行 `uv run uvicorn src.main:app --reload` 启动开发服务器
-- [ ] 2.5.2 访问 Auto API 文档（`http://localhost:8000/docs`）验证所有接口已注册
-- [ ] 2.5.3 测试健康检查接口（如果实现）
+### 2.5 Analyst 信息管理 API
+- [ ] 2.5.1 实现 Analyst 信息管理 API（`api/analyst_info.py`）
+- [ ] 2.5.2 实现 `GET /api/analyst-info`（获取列表，支持搜索，所有认证用户可读）
+- [ ] 2.5.3 实现 `POST /api/analyst-info/check-email`（邮箱唯一性检查）
+- [ ] 2.5.4 实现 `POST /api/analyst-info`（创建业务信息，仅 Admin）
+- [ ] 2.5.5 实现 `PUT /api/analyst-info/{id}`（更新业务信息，仅 Admin）
+- [ ] 2.5.6 实现 `DELETE /api/analyst-info/{id}`（删除业务信息，仅 Admin）
+- [ ] 2.5.7 集成 Analyst 信息路由到 `main.py`
+- [ ] 2.5.8 测试 RLS policies（确保 Admin/SA/Analyst 权限正确）
+
+### 2.6 后端启动验证
+- [ ] 2.6.1 运行 `uv run uvicorn src.main:app --reload` 启动开发服务器
+- [ ] 2.6.2 访问 Auto API 文档（`http://localhost:8000/docs`）验证所有接口已注册
+- [ ] 2.6.3 测试健康检查接口（如果实现）
 
 ---
 
 ## 阶段 3：前端开发
 
-**目标：** 实现所有前端页面和组件，包括登录、桌面主页、Region 和 Analyst 管理页面。
+**目标：** 实现所有前端页面和组件，包括登录、桌面主页、Region 和 Analyst 信息管理页面。
 
 ### 3.1 前端项目配置
-- [ ] 3.1.1 配置 Vue Router（路由结构：`/login`, `/desktop`, `/regions`, `/analysts`）
+- [ ] 3.1.1 配置 Vue Router（路由结构：`/login`, `/desktop`, `/regions`, `/analyst-info`）
 - [ ] 3.1.2 创建 Axios 实例（`api/client.ts`，配置 baseURL）
 - [ ] 3.1.3 实现请求拦截器（自动添加 JWT Token 到 Authorization header）
 - [ ] 3.1.4 实现响应拦截器（处理 401 错误，清除 token 并跳转登录）
@@ -131,7 +132,7 @@
 - [ ] 3.5.2 实现顶部导航栏（Logo + Welcome, {name} + Logout 按钮）
 - [ ] 3.5.3 创建功能卡片组件 `components/desktop/DesktopCard.vue`
 - [ ] 3.5.4 实现 Reports 功能卡片组（4 个卡片：Reports, New Report, Report Review, Templates）
-- [ ] 3.5.5 实现 Data Management 功能卡片组（4 个卡片：Analysts, Coverage, Sectors, Regions）
+- [ ] 3.5.5 实现 Data Management 功能卡片组（4 个卡片：Analyst Info, Coverage, Sectors, Regions）
 - [ ] 3.5.6 实现卡片悬停效果和样式
 
 ### 3.6 占位页面
@@ -145,7 +146,7 @@
 - [ ] 3.7.2 未登录用户访问受保护路由时重定向到 `/login`
 - [ ] 3.7.3 已登录用户访问 `/login` 时重定向到 `/desktop`
 - [ ] 3.7.4 创建权限检查函数 `composables/usePermission.ts`
-- [ ] 3.7.5 集成权限检查到功能卡片（Analysts 卡片仅 Admin 可见）
+- [ ] 3.7.5 集成权限检查到功能卡片（Analyst Info 卡片仅 Admin 可见）
 
 ### 3.8 Region 管理页面
 - [ ] 3.8.1 创建 `views/RegionsPage.vue` 页面组件
@@ -157,20 +158,18 @@
 - [ ] 3.8.7 权限控制（Admin only 可见创建/编辑/删除按钮）
 - [ ] 3.8.8 创建/编辑/删除 API 调用和错误处理
 
-### 3.9 Analyst 管理页面
-- [ ] 3.9.1 创建 `views/AnalystsPage.vue` 页面组件
+### 3.9 Analyst 信息管理页面
+- [ ] 3.9.1 创建 `views/AnalystInfoPage.vue` 页面组件
 - [ ] 3.9.2 实现页面头部（标题 + "Back to Desktop" 链接）
 - [ ] 3.9.3 实现搜索功能（按 full_name 或 email）
-- [ ] 3.9.4 实现 Analyst 列表（表格形式）
-- [ ] 3.9.5 实现创建 Analyst 表单（字段: full_name, chinese_name, email, role, region, suffix, sfc）
-- [ ] 3.9.6 实现邮箱唯一性检查（调用 `POST /api/analysts/check-email`）
-- [ ] 3.9.7 实现创建成功对话框（显示临时密码，仅一次）
-- [ ] 3.9.8 实现编辑 Analyst 功能
-- [ ] 3.9.9 实现重置密码功能（显示新密码，仅一次）
-- [ ] 3.9.10 实现启用/禁用账号功能
-- [ ] 3.9.11 实现删除 Analyst 功能（含确认对话框）
-- [ ] 3.9.12 权限控制（仅 Admin 可见整个页面）
-- [ ] 3.9.13 创建/编辑/删除/重置 API 调用和错误处理
+- [ ] 3.9.4 实现 Analyst 信息列表（表格形式）
+- [ ] 3.9.5 实现创建业务信息表单（字段: full_name, chinese_name, email, suffix, region_id, sfc）
+- [ ] 3.9.6 实现邮箱唯一性检查（调用 `POST /api/analyst-info/check-email`）
+- [ ] 3.9.7 实现创建成功提示（创建成功后显示提示）
+- [ ] 3.9.8 实现编辑业务信息功能
+- [ ] 3.9.9 实现删除业务信息功能（含确认对话框）
+- [ ] 3.9.10 权限控制（仅 Admin 可见整个页面）
+- [ ] 3.9.11 创建/编辑/删除 API 调用和错误处理
 
 ### 3.10 登出功能
 - [ ] 3.10.1 在 Desktop.vue 实现 Logout 按钮点击事件
@@ -198,17 +197,14 @@
 - [ ] 4.2.4 测试删除 Region（Admin 成功，其他角色 403）
 - [ ] 4.2.5 测试 RLS policies（使用不同角色的 token）
 
-### 4.3 Analyst 管理测试
-- [ ] 4.3.1 测试 Analyst 列表加载（所有角色可见）
+### 4.3 Analyst 信息管理测试
+- [ ] 4.3.1 测试 Analyst 信息列表加载（所有角色可见）
 - [ ] 4.3.2 测试搜索功能（按 full_name 或 email 过滤）
 - [ ] 4.3.3 测试邮箱唯一性检查（重复邮箱返回错误）
-- [ ] 4.3.4 测试创建 Analyst（Admin 成功，临时密码正确显示）
-- [ ] 4.3.5 测试创建 Analyst 时 Auth 用户同步失败回滚
-- [ ] 4.3.6 测试编辑 Analyst（Admin 成功）
-- [ ] 4.3.7 测试重置密码（Admin 和 SA 成功，新密码正确显示）
-- [ ] 4.3.8 测试启用/禁用账号（Admin 成功）
-- [ ] 4.3.9 测试删除 Analyst（Admin 成功，Auth 用户同步删除）
-- [ ] 4.3.10 测试页面权限控制（Analyst 和 SA 访问返回 403 或 404）
+- [ ] 4.3.4 测试创建业务信息（Admin 成功）
+- [ ] 4.3.5 测试编辑业务信息（Admin 成功）
+- [ ] 4.3.6 测试删除业务信息（Admin 成功）
+- [ ] 4.3.7 测试页面权限控制（SA 和 Analyst 访问返回 403 或 404）
 
 ### 4.4 UI/UX 测试
 - [ ] 4.4.1 验证粒子背景效果和性能（60fps）
@@ -220,7 +216,7 @@
 
 ### 4.5 角色权限测试
 - [ ] 4.5.1 使用 Admin 账号验证所有功能可访问
-- [ ] 4.5.2 使用 SA 账号验证可访问 Analyst 列表和重置密码功能
+- [ ] 4.5.2 使用 SA 账号验证可访问 Analyst 信息列表
 - [ ] 4.5.3 使用 Analyst 账号验证无法访问管理页面
 - [ ] 4.5.4 验证 RLS policies 在数据库层面正确过滤数据
 
@@ -252,9 +248,9 @@
 
 ## 任务统计
 
-- **总任务数**: 116（已重构和优化）
+- **总任务数**: 124（已重构和优化）
 - **已完成**: 0
-- **待完成**: 116
+- **待完成**: 124
 
 ## 实施建议
 

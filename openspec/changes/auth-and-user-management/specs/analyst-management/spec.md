@@ -1,206 +1,399 @@
+# Analyst 信息管理规范
+
 ## ADDED Requirements
 
-### Requirement: 系统提供 Analyst 数据模型
+### Requirement: 系统提供 Analyst 业务数据模型
 
-系统 SHALL 提供 Analyst（分析师）数据模型，支持存储分析师基本信息和关联 Region。
+系统 SHALL 提供 Analyst（分析师）业务数据模型，支持存储基本信息、关联 Region、SFC 编号等。
+
+**重要：** 本规范与用户账号系统完全解耦。Analyst 信息管理 **不创建或修改用户账号**，只管理 Analyst 数据记录。
+
+---
+
+## 数据模型
+
+### Requirement: Analyst 表结构
+
+系统 SHALL 创建 analyst 表存储 Analyst 信息。
 
 #### Scenario: Analyst 表结构
+
 - **WHEN** 查看 analyst 表结构
-- **THEN** 包含以下字段:
+- **THEN** 表包含以下字段：
   - `id`: UUID 主键
-  - `full_name`: VARCHAR 英文全名
+  - `full_name`: VARCHAR 英文全名（必填）
   - `chinese_name`: VARCHAR 中文名（可选）
-  - `email`: VARCHAR 邮箱（唯一，关联 Supabase Auth）
-  - `suffix`: VARCHAR 后缀（如 "CFA"）
-  - `region_id`: UUID 外键关联 region 表（可选）
-  - `sfc`: VARCHAR SFC 执照号（可选）
+  - `email`: VARCHAR 邮箱（必填，唯一）
+  - `suffix`: VARCHAR 后缀（如 "CFA", "CPA"）
+  - `region_id`: UUID 外键，关联 region 表（可选）
+  - `sfc`: VARCHAR SFC 编号（可选）
   - `is_active`: BOOLEAN 是否启用（默认 true）
   - `created_at`: TIMESTAMP 创建时间
   - `updated_at`: TIMESTAMP 更新时间
 
-#### Scenario: Email 唯一性约束
-- **WHEN** 创建或更新 Analyst
-- **THEN** email 字段必须在 analyst 表中唯一
-- **AND** 重复的 email 无法插入或更新
+#### Scenario: 外键关系
 
-### Requirement: 系统 CRUD 操作受 RLS 保护
+- **WHEN** Analyst 关联 Region
+- **THEN** analyst.region_id 外键关联到 region.id
+- **AND** 删除 Region 时，analyst.region_id 设为 NULL（ON DELETE SET NULL）
 
-系统 SHALL 在 analyst 表上启用 Row Level Security (RLS)，根据角色控制访问。
+---
 
-#### Scenario: 所有认证用户可以查看 Analyst
-- **WHEN** 任何已认证用户查询 analyst 表
-- **THEN** RLS policy 允许 SELECT 操作
-- **AND** 用户可以查看所有 Analyst 记录（用于下拉选择等）
+## API 设计
 
-#### Scenario: 只有 Admin 可以创建或修改 Analyst
-- **WHEN** Admin 用户执行 INSERT 或 UPDATE 操作
-- **THEN** RLS policy 允许操作
-- **AND** 数据成功写入或更新
+### Requirement: Analyst 信息 CRUD API
 
-#### Scenario: 非 Admin 用户不能修改 Analyst 表
-- **WHEN** SA 或 Analyst 角色的用户尝试 INSERT 或 UPDATE analyst 表
-- **THEN** RLS policy 拒绝操作
-- **AND** 数据库返回权限错误
-
-### Requirement: 创建 Analyst 时自动创建 Supabase Auth 用户
-
-系统 SHALL 在创建 Analyst 记录时，自动在 Supabase Auth 中创建对应的认证用户。
-
-#### Scenario: 创建新的 Analyst 和 Auth 用户
-- **WHEN** Admin 用户调用 POST /api/analysts
-- **AND** 提供的 email 在 Supabase Auth 中不存在
-- **THEN** 后端首先在 analyst 表创建记录
-- **AND** 然后使用 Supabase Admin API 创建 Auth 用户
-- **AND** Auth 用户的 user_metadata 包含 full_name
-- **AND** Auth 用户的 app_metadata 包含 role（"analyst"）和 analyst_id
-- **AND** 生成随机密码或默认密码
-- **AND** 返回 Analyst 记录和生成的密码
-
-#### Scenario: Email 已存在于 Supabase Auth
-- **WHEN** Admin 用户调用 POST /api/analysts
-- **AND** 提供的 email 已在 Supabase Auth 中存在
-- **THEN** 后端返回 400 错误
-- **AND** 错误消息: "Email already exists in authentication system. Please use a different email or recover the existing account."
-
-#### Scenario: Email 已存在于 analyst 表
-- **WHEN** Admin 用户调用 POST /api/analysts
-- **AND** 提供的 email 已在 analyst 表中存在
-- **THEN** 后端返回 400 错误
-- **AND** 错误消息: "Analyst with this email already exists"
-
-#### Scenario: 创建失败时回滚
-- **WHEN** 创建 Auth 用户失败（如 Supabase 服务错误）
-- **THEN** 后端删除已创建的 analyst 记录（回滚）
-- **AND** 返回 500 错误
-- **AND** 错误消息包含 Supabase 错误详情
-
-### Requirement: 系统提供 Analyst CRUD API
-
-系统 SHALL 提供完整的 Analyst 创建、读取、更新、删除接口。
+系统 SHALL 提供完整的 Analyst 信息 CRUD API。
 
 #### Scenario: 获取 Analyst 列表
-- **WHEN** 前端调用 GET /api/analysts
-- **AND** 用户已认证
-- **THEN** 后端返回所有 Analyst 记录
-- **AND** 返回数据按 created_at 倒序排列
-- **AND** 可以通过 query 参数搜索（按 full_name 或 email）
 
-#### Scenario: 创建 Analyst
-- **WHEN** Admin 用户调用 POST /api/analysts
-- **AND** 请求体包含: full_name, email, role 等字段
-- **THEN** 后端验证必填字段
-- **AND** 后端检查 email 唯一性
-- **AND** 创建 analyst 记录和 Auth 用户
-- **AND** 返回创建的 Analyst 对象
-- **AND** 返回 201 状态码
+- **WHEN** Admin 用户已登录
+- **THEN** 可以调用 GET /api/analyst-info
+- **AND** API 返回所有 Analyst 信息
+- **AND** 数据按 created_at 倒序排列
+- **AND** 支持通过 query 参数搜索（按 full_name 或 email）
 
-#### Scenario: 更新 Analyst 基本信息
-- **WHEN** Admin 用户调用 PUT /api/analysts/{id}
-- **AND** 请求体包含要更新的字段
-- **THEN** 后端验证 Analyst 存在
-- **AND** 更新 analyst 表记录
-- **AND** 如果更新了 email，同步更新 Supabase Auth 用户邮箱（使用 Admin API）
-- **AND** 返回更新后的 Analyst 对象
+**API 端点：** `GET /api/analyst-info`
 
-#### Scenario: 启用/禁用 Analyst 账号
-- **WHEN** Admin 用户调用 PUT /api/analysts/{id}/toggle-status
-- **THEN** 后端切换 is_active 字段（true ↔ false）
-- **AND** 同时在 Supabase Auth 中禁用/启用用户（使用 Admin API 的 ban_user 方法）
-- **AND** 返回更新后的 Analyst 对象
+**查询参数：**
+- `search`: 搜索关键词（可选）
+- `page`: 页码（可选，默认 1）
+- `limit`: 每页数量（可选，默认 20）
 
-#### Scenario: 重置 Analyst 密码
-- **WHEN** Admin 用户调用 POST /api/analysts/{id}/reset-password
-- **THEN** 后端生成新的随机密码
-- **AND** 使用 Supabase Admin API 更新用户密码
-- **AND** 返回新密码（仅一次显示机会）
-- **AND** 或发送邮件给用户（Phase 1 暂缓，只记录到日志）
+**响应示例：**
+```json
+{
+  "success": true,
+  "message": "获取成功",
+  "data": {
+    "items": [
+      {
+        "id": "uuid",
+        "full_name": "John Doe",
+        "chinese_name": "张三",
+        "email": "john.doe@example.com",
+        "suffix": "CFA",
+        "region_id": "uuid",
+        "region_name": "China",
+        "sfc": "ABC123",
+        "is_active": true,
+        "created_at": "2024-01-01T00:00:00Z",
+        "updated_at": "2024-01-01T00:00:00Z"
+      }
+    ],
+    "total": 1,
+    "page": 1,
+    "limit": 20
+  }
+}
+```
 
-#### Scenario: 删除 Analyst
-- **WHEN** Admin 用户调用 DELETE /api/analysts/{id}
-- **THEN** 后端验证 Analyst 存在
-- **AND** 删除 analyst 表记录
-- **AND** 删除 Supabase Auth 中的用户（使用 Admin API）
-- **AND** 返回 204 状态码
+---
 
-### Requirement: 前端提供 Analyst 管理页面
+### Requirement: 创建 Analyst 信息
 
-系统 SHALL 提供 Analyst 管理页面，允许 Admin 管理分析师信息。
+系统 SHALL 支持创建新的 Analyst 信息记录。
 
-#### Scenario: Analyst 管理页面布局
-- **WHEN** Admin 用户访问 /analysts 路由
-- **THEN** 显示 Analyst 管理页面
-- **AND** 页面包含 Analyst 列表（表格形式）
-- **AND** 页面顶部有搜索框（按姓名或邮箱搜索）
-- **AND** 页面顶部有 "Create Analyst" 按钮（Admin only）
-- **AND** 每个 Analyst 行有操作按钮（Edit, Reset Password, Toggle Status, Delete）
+#### Scenario: 创建 Analyst 信息
 
-#### Scenario: 创建 Analyst 表单
-- **WHEN** 用户点击 "Create Analyst" 按钮
-- **THEN** 显示表单对话框或页面
-- **AND** 表单包含:
-  - Full Name 输入框（必填）
-  - Chinese Name 输入框（可选）
-  - Email 输入框（必填）
-  - Role 选择器（必填: Analyst, SA, Admin）
-  - Region 下拉选择（可选，从 Region 表获取）
-  - Suffix 输入框（可选）
-  - SFC License 输入框（可选）
-  - Submit 按钮
-- **AND** 表单验证必填字段和 email 格式
+- **WHEN** Admin 用户已登录
+- **AND** 访问 Analyst 信息管理页面
+- **AND** 点击 "Create Analyst" 按钮
+- **THEN** 显示创建表单
+- **AND** 填写表单字段：
+  - Full Name（英文全名，必填）
+  - Chinese Name（中文名，可选）
+  - Email（邮箱，必填，唯一性检查）
+  - Suffix（后缀，如 "CFA"）
+  - Region（下拉选择，从 Region 表获取）
+  - SFC License No.（SFC 编号，可选）
+- **AND** 点击 "Submit" 提交表单
+- **THEN** 前端调用 POST /api/analyst-info
+- **AND** 后端验证邮箱唯一性
+- **AND** 创建 analyst 表记录（**不创建 Auth 用户**）
+- **AND** 返回成功提示
 
-#### Scenario: 创建 Analyst 成功
-- **WHEN** 用户提交创建表单
-- **AND** 后端返回成功
-- **THEN** 显示成功提示
-- **AND** 如果后端返回了密码，显示生成的密码（仅一次）
-- **AND** 提示管理员将密码安全地传达给用户
-- **AND** 关闭对话框并刷新列表
+**API 端点：** `POST /api/analyst-info`
 
-#### Scenario: 编辑 Analyst
-- **WHEN** 用户点击某个 Analyst 的 Edit 按钮
+**请求体：**
+```json
+{
+  "full_name": "John Doe",
+  "chinese_name": "张三",
+  "email": "john.doe@example.com",
+  "suffix": "CFA",
+  "region_id": "uuid",
+  "sfc": "ABC123",
+  "is_active": true
+}
+```
+
+**成功响应：**
+```json
+{
+  "success": true,
+  "message": "创建成功",
+  "data": { /* 创建的 Analyst 对象 */ }
+}
+```
+
+**错误响应：**
+```json
+{
+  "success": false,
+  "message": "创建失败",
+  "error": "Email already exists"
+}
+```
+
+**注意：** 创建 Analyst 信息**不会**：
+- ❌ 创建 Supabase Auth 用户
+- ❌ 生成随机密码
+- ❌ 发送欢迎邮件
+- ✅ 只创建 analyst 表记录
+
+---
+
+### Requirement: 更新 Analyst 信息
+
+系统 SHALL 支持更新已有的 Analyst 信息。
+
+#### Scenario: 更新 Analyst 信息
+
+- **WHEN** Admin 用户已登录
+- **AND** 访问 Analyst 信息管理页面
+- **AND** 在列表中点击某个 Analyst 的 "Edit" 按钮
 - **THEN** 显示编辑表单（预填充现有数据）
-- **AND** 用户修改字段
-- **AND** 提交后调用 PUT /api/analysts/{id}
-- **AND** 成功后关闭对话框并刷新列表
+- **AND** Admin 可以修改除 email 外的所有字段
+- **AND** 点击 "Update" 提交表单
+- **THEN** 前端调用 PUT /api/analyst-info/{id}
 
-#### Scenario: 重置密码
-- **WHEN** 用户点击 "Reset Password" 按钮
+**API 端点：** `PUT /api/analyst-info/{id}`
+
+**请求体：**
+```json
+{
+  "full_name": "John Doe",
+  "chinese_name": "张三",
+  "email": "john.doe@example.com",  // 不可修改（用于唯一性标识）
+  "suffix": "CFA",
+  "region_id": "uuid",
+  "sfc": "ABC123",
+  "is_active": true
+}
+```
+
+**成功响应：**
+```json
+{
+  "success": true,
+  "message": "更新成功",
+  "data": { /* 更新后的 Analyst 对象 */ }
+}
+```
+
+---
+
+### Requirement: 删除 Analyst 信息
+
+系统 SHALL 支持删除不需要的 Analyst 信息记录。
+
+#### Scenario: 删除 Analyst 信息
+
+- **WHEN** Admin 用户已登录
+- **AND** 访问 Analyst 信息管理页面
+- **AND** 在列表中点击某个 Analyst 的 "Delete" 按钮
+- **THEN** 显示确认对话框：**"确定要删除该 Analyst 的信息吗？此操作将删除 Analyst 数据，但不影响用户账号。"**
+- **AND** 用户确认删除
+- **THEN** 前端调用 DELETE /api/analyst-info/{id}
+
+**API 端点：** `DELETE /api/analyst-info/{id}`
+
+**成功响应：**
+```json
+{
+  "success": true,
+  "message": "删除成功",
+  "data": { "id": "uuid" }
+}
+```
+
+**注意：** 删除 Analyst 信息**不会**：
+- ❌ 删除 Supabase Auth 用户
+- ❌ 从 analyst 表删除用户
+- ✅ 只删除 analyst 表记录
+
+---
+
+## 前端页面规范
+
+### Requirement: Analyst 信息管理页面
+
+系统 SHALL 提供完整的管理页面。
+
+#### Scenario: 页面布局
+
+- **WHEN** Admin 用户访问 `/analyst-info`
+- **THEN** 显示 Analyst 信息管理页面
+- **AND** 页面包含：
+  - 顶部导航栏（标题 + "Back to Desktop" 链接）
+  - 搜索框（按 full_name 或 email）
+  - Analyst 信息列表（表格形式）
+  - "Create Analyst" 按钮（Admin only）
+
+#### Scenario: 列表展示
+
+- **WHEN** 页面加载或搜索
+- **THEN** 显示 Analyst 信息列表
+- **AND** 列表包含以下列：
+  - Full Name（英文全名）
+  - Chinese Name（中文名）
+  - Email
+  - Region（地区名称）
+  - SFC No.（SFC 编号）
+  - Status（状态）
+  - 操作列（Edit, Delete 按钮）
+
+#### Scenario: 创建表单
+
+- **WHEN** Admin 点击 "Create Analyst"
+- **THEN** 显示创建表单对话框
+- **AND** 表单包含以下字段：
+  - Full Name 输入框（必填，验证格式）
+  - Chinese Name 输入框（可选）
+  - Email 输入框（必填，验证格式和唯一性）
+  - Region 下拉选择（从 Region 表获取）
+  - SFC License No. 输入框（可选）
+  - Submit 按钮
+- **AND** 前端实时验证邮箱唯一性（调用 POST /api/analyst-info/check-email）
+
+#### Scenario: 编辑表单
+
+- **WHEN** Admin 点击某个 Analyst 的 "Edit" 按钮
+- **THEN** 显示编辑表单对话框（预填充现有数据）
+- **AND** 表单包含所有字段（Email 不可修改，用于唯一性标识）
+- **AND** "Update" 提交后显示成功提示
+
+#### Scenario: 删除确认
+
+- **WHEN** Admin 点击某个 Analyst 的 "Delete" 按钮
 - **THEN** 显示确认对话框
-- **AND** 确认后调用 POST /api/analysts/{id}/reset-password
-- **AND** 显示新生成的密码
-- **AND** 提示密码仅显示一次
+- **AND** 确认信息：**"确定要删除该 Analyst 的信息吗？此操作将删除 Analyst 数据，但不影响用户账号。"**
+- **AND** 确认后调用 DELETE API
+- **AND** 成功后刷新列表并显示成功提示
 
-#### Scenario: 启用/禁用账号
-- **WHEN** 用户点击启用/禁用按钮
-- **THEN** 切换账号状态
-- **AND** 成功后刷新列表并更新按钮文本（如 "Enable" ↔ "Disable"）
+---
 
-#### Scenario: 删除 Analyst
-- **WHEN** 用户点击某个 Analyst 的 Delete 按钮
-- **THEN** 显示确认对话框（警告：此操作将删除 Auth 用户和所有数据）
-- **AND** 确认后调用 DELETE /api/analysts/{id}
-- **AND** 成功后从列表中移除该 Analyst
+## 权限控制
 
-### Requirement: 非 Admin 用户无法访问 Analyst 管理
+### Requirement: 只有 Admin 可以访问
 
-系统 SHALL 限制只有 Admin 用户可以访问 Analyst 管理功能。
+系统 SHALL 限制只有 Admin 用户可以访问 Analyst 信息管理功能。
 
-#### Scenario: SA 或 Analyst 访问 Analyst 管理
-- **WHEN** SA 或 Analyst 角色的用户尝试访问 /analysts
-- **THEN** 前端权限检查隐藏 Analyst 管理卡片或页面
-- **AND** 或显示权限不足提示
-- **AND** 桌面上的 Analysts 卡片标记为 "Admin Only"
+#### Scenario: 访问控制
 
-### Requirement: 系统检查 Email 唯一性
+- **WHEN** 用户尝试访问 `/analyst-info`
+- **THEN** 系统检查用户角色
+- **AND** 如果不是 Admin
+- **THEN** 返回 403 Forbidden
+- **AND** 显示权限不足提示
 
-系统 SHALL 在创建或更新 Analyst 前检查 email 的唯一性。
+#### Scenario: UI 隐藏
 
-#### Scenario: Email 检查 API
-- **WHEN** 前端调用 POST /api/analysts/check-email
+- **WHEN** 用户不是 Admin
+- **THEN** "Analyst Info" 卡片在桌面主页隐藏
+- **AND** 路由守卫阻止访问
+
+---
+
+## 数据验证
+
+### Requirement: 邮箱唯一性检查
+
+系统 SHALL 在创建和更新 Analyst 信息时验证邮箱唯一性。
+
+#### Scenario: 创建时检查
+
+- **WHEN** Admin 提交创建表单
+- **THEN** 前端调用 POST /api/analyst-info/check-email
 - **AND** 提供 email 参数
-- **THEN** 后端检查 email 是否可用
-- **AND** 返回:
-  - `available`: true/false
-  - `exists_in_db`: 是否在 analyst 表中存在
-  - `exists_in_auth`: 是否在 Supabase Auth 中存在
-  - `message`: 提示信息
+- **THEN** 后端查询 analyst 表
+- **AND** 如果 email 已存在
+- **THEN** 返回 `{"exists": true}`
+- **AND** 前端显示错误提示："该邮箱已被使用"
+
+#### Scenario: 更新时检查
+
+- **WHEN** Admin 提交编辑表单
+- **THEN** 前端调用 POST /api/analyst-info/check-email
+- **AND** 提供 email 参数和当前 analyst id（排除自己）
+- **THEN** 后端查询 analyst 表
+- **AND** 如果 email 已被其他 Analyst 使用
+- **THEN** 返回 `{"exists": true}`
+- **AND** 前端显示错误提示："该邮箱已被其他 Analyst 使用"
+
+**注意：** 更新自己的记录时不需要检查（因为 email 未改变）
+
+---
+
+## 搜索功能
+
+### Requirement: 支持搜索
+
+系统 SHALL 支持按 full_name 或 email 搜索 Analyst 信息。
+
+#### Scenario: 搜索 Analyst
+
+- **WHEN** Admin 在搜索框输入关键词
+- **AND** 触发搜索（实时或点击搜索按钮）
+- **THEN** 前端调用 GET /api/analyst-info?search={keyword}
+- **THEN** 后端使用 SQL LIKE 查询
+- **AND** 返回匹配的结果
+- **AND** 前端显示过滤后的列表
+
+**SQL 实现：**
+```sql
+SELECT * FROM analyst
+WHERE full_name ILIKE '%' || chinese_name ILIKE '%' || email ILIKE '%'
+ORDER BY created_at DESC;
+```
+
+---
+
+## 用户账号与 Analyst 信息解耦说明
+
+### Requirement: 完全解耦设计
+
+系统 SHALL 将用户账号管理和 Analyst 信息管理完全解耦为两个独立功能。
+
+**用户管理（/api/users）：**
+- 创建 Supabase Auth 用户
+- 管理用户账号（创建、编辑、删除）
+- 修改密码、修改角色
+- 启用/禁用账号
+- **目的：** 系统认证和权限控制
+
+**Analyst 信息管理（/api/analyst-info）：**
+- 创建 Analyst 数据记录（analyst 表）
+- 管理 Analyst 信息（创建、编辑、删除）
+- 关联 Region
+- 记录 SFC 编号等
+- **目的：** Analyst 数据记录，与认证系统解耦
+
+**关键区别：**
+- Analyst 信息管理**不创建或修改用户账号**
+- Analyst 信息管理**不包含密码、角色等认证相关功能**
+- email 字段在两个系统中独立存在（user_metadata 和 analyst 表）
+
+**隐式关联规则（为未来报告功能预留）：**
+- 当 User Auth 的 email 与 Analyst 的 email **一致时**，系统认为是**同一人**
+- **当前阶段（auth-and-user-management）：** 只有 Admin 可以访问 Analyst 信息管理，SA/Analyst 不需要
+- **未来报告功能：** Analyst 登录后可以查看/编辑自己的报告，报告表的 `contact_person` 字段关联到 analyst.email
+- **不使用外键关联**，通过 email 字符串匹配实现逻辑关联
+- 示例：Analyst `john.doe@example.com` 登录后，只能看到 `contact_person = 'john.doe@example.com'` 的报告
+
+**好处：**
+- ✅ 职责清晰，易于维护
+- ✅ Analyst 数据可以独立存在（不需要登录账号的 Analyst 也能有记录）
+- ✅ 避免数据同步问题
+- ✅ 通过 email 一致性即可建立用户与 Analyst 信息的关联

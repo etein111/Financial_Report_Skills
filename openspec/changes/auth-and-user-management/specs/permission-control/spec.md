@@ -1,85 +1,165 @@
+# 权限控制规范
+
 ## ADDED Requirements
 
 ### Requirement: 系统支持三种用户角色
 
-系统 SHALL 支持三种用户角色：Admin（系统管理员）、SA（合规人员）、Analyst（分析师）。
+系统 SHALL 支持三种用户角色：Admin（系统管理员）、SA（高级分析师）、Analyst（普通分析师）。
 
 #### Scenario: 角色存储在 Supabase Auth app_metadata
+
 - **WHEN** 创建用户时
 - **THEN** 角色信息存储在 Supabase Auth 的 **app_metadata** 中（仅服务端可修改）
-- **AND** user_metadata 包含用户可修改的信息: `{"full_name": "John Doe"}`
-- **AND** app_metadata 包含安全相关信息: `{"role": "admin", "analyst_id": "<uuid>", "provider": "email"}`
-- **AND** role 字段只存在 app_metadata 中，不存在 user_metadata 中（防止用户自行修改权限）
+- **AND** user_metadata 包含用户可修改的信息：`{"full_name": "John Doe", "avatar_url": "..."}`
+- **AND** app_metadata 包含安全相关信息：`{"role": "admin"|"sa"|"analyst", "provider": "email"}`
+- **AND** role 字段只存在 app_metadata 中（防止用户自行提升权限）
 
 #### Scenario: JWT token 包含角色信息
+
 - **WHEN** 用户成功登录
-- **THEN** Supabase Auth 生成的 JWT token 包含 role 信息
-- **AND** 后端和 RLS policies 可以从 JWT 中读取角色
+- **THEN** Supabase Auth 生成的 JWT token 自动包含 role 信息
+- **AND** 后端和 RLS policies 可以直接从 JWT 读取角色
 
-### Requirement: 数据库提供 RLS 辅助函数
+#### Scenario: RLS 辅助函数
 
-系统 SHALL 提供 PostgreSQL 函数从 JWT token 中提取当前用户的角色和 ID。
+系统 SHALL 提供 PostgreSQL 函数从 JWT token 中提取当前用户角色。
 
-#### Scenario: 获取当前用户角色
-- **WHEN** RLS policy 或数据库函数调用 `get_current_role()`
-- **THEN** 函数从 JWT token 的 app_metadata 中提取 role
-- **AND** 返回角色字符串: "admin", "sa", 或 "analyst"
+**实现：**
+```sql
+CREATE OR REPLACE FUNCTION get_current_role()
+RETURNS VARCHAR AS $$
+  SELECT (auth.jwt()->>'app_metadata'->>'role')::VARCHAR;
+$$ LANGUAGE sql SECURITY DEFINER;
+```
 
-#### Scenario: 获取当前 analyst_id
-- **WHEN** RLS policy 或数据库函数调用 `get_current_analyst_id()`
-- **THEN** 函数从 JWT token 的 app_metadata 中提取 analyst_id
-- **AND** 返回 UUID 类型
+**使用示例：**
+```sql
+-- 所有认证用户可读
+CREATE POLICY "All users can view analysts"
+ON analyst FOR SELECT TO authenticated USING (true);
 
-### Requirement: analyst 表启用 RLS 并配置权限策略
+-- 只有 Admin 可写
+CREATE POLICY "Only Admin can modify analysts"
+ON analyst FOR ALL TO authenticated
+USING (get_current_role() = 'admin')
+WITH CHECK (get_current_role() = 'admin');
+```
 
-系统 SHALL 在 analyst 表上启用 Row Level Security (RLS)，并根据角色配置访问策略。
+---
 
-#### Scenario: 所有认证用户可以查看 analyst 信息
-- **WHEN** 任何已认证用户查询 analyst 表
-- **THEN** RLS policy 允许 SELECT 操作
-- **AND** 用户可以查看所有 analyst 记录（用于下拉选择等）
+## 权限矩阵
 
-#### Scenario: 只有 Admin 可以创建或修改 analyst 记录
-- **WHEN** Admin 用户执行 INSERT 或 UPDATE 操作
-- **THEN** RLS policy 允许操作
-- **AND** 数据成功写入或更新
+| 功能 | Admin | SA | Analyst |
+|------|-------|------|----------|
+| 用户管理 | ✅ | ❌ | ❌ |
+| Region 管理 | ✅ | ❌ | ❌ |
+| 业务信息管理 | ✅ | ❌ | ❌ |
+| 查看业务信息 | ✅ | ✅ | ✅ |
+| 查看报告 | ✅ | ✅ | ✅ |
+| 审核报告 | ✅ | ✅ | ❌ |
 
-#### Scenario: 非 Admin 用户不能修改 analyst 表
-- **WHEN** SA 或 Analyst 角色的用户尝试 INSERT 或 UPDATE analyst 表
-- **THEN** RLS policy 拒绝操作
-- **AND** 数据库返回权限错误
+**注意：** SA 和 Analyst 的查看报告和审核报告功能将在后续变更中实现。
 
-### Requirement: JWT 验证中间件从 token 中提取用户信息
+---
 
-系统 SHALL 提供 FastAPI 依赖函数，从 JWT token 中提取用户信息并注入到请求中。
+## API 权限检查
 
-#### Scenario: 成功验证 JWT 并提取用户信息
-- **WHEN** API 请求包含有效的 JWT token
-- **THEN** JWT 验证中间件解析 token
-- **AND** 提取 user_id, role, analyst_id 等信息
-- **AND** 将信息注入到请求的 `state` 中
-- **AND** 后续路由处理器可以访问这些信息
+### Requirement: 前端权限检查函数
 
-#### Scenario: JWT 验证失败
-- **WHEN** JWT token 无效、过期或格式错误
-- **THEN** JWT 验证中间件抛出 HTTPException
-- **AND** 返回 401 Unauthorized 状态码
-- **AND** 错误消息: "Invalid or expired token"
+系统 SHALL 提供前端权限检查函数，用于 UI 层面的显示控制。
 
-### Requirement: 前端提供权限检查函数库
+**实现：**
+```typescript
+// composables/usePermission.ts
+export function usePermission() {
+  const { userState } = useAuth()
 
-系统 SHALL 提供前端权限检查函数，用于 UI 层面的显示控制（注意：实际权限由 RLS 保证）。
+  const isAdmin = () => userState.user?.role === 'admin'
+  const isSA = () => userState.user?.role === 'sa'
+  const canManageUsers = isAdmin
+  const canManageRegions = isAdmin
+  const canManageAnalystInfo = isAdmin
 
-#### Scenario: 检查用户是否可以访问桌面
-- **WHEN** 前端调用权限检查函数
-- **THEN** 函数返回用户是否已认证（基于 localStorage 的 token）
+  const canAccessReportReview = isSA || isAdmin
+  const canViewReports = true  // 所有认证用户都可查看
 
-#### Scenario: 检查用户是否为 Admin
-- **WHEN** 前端调用 `can.isAdmin(user)`
-- **THEN** 函数检查 user.role === 'admin'
-- **AND** 返回 true 或 false
+  return {
+    isAdmin,
+    isSA,
+    isAnalyst,
+    canManageUsers,
+    canManageRegions,
+    canManageAnalystInfo,
+    canAccessReportReview,
+    canViewReports
+  }
+}
+```
 
-#### Scenario: 检查用户是否可以访问审核页面
-- **WHEN** 前端调用 `can.accessReviewPage(user)`
-- **THEN** 函数检查 user.role 是否为 'sa' 或 'admin'
-- **AND** 返回 true 或 false
+---
+
+## 后端权限验证
+
+### Requirement: 后端中间件验证
+
+系统 SHALL 提供 FastAPI 中间件验证用户角色。
+
+**实现：**
+```python
+# core/security.py
+from fastapi import Request, HTTPException
+from functools import wraps
+
+def require_role(*allowed_roles: str):
+    def decorator(f):
+        @wraps(f)
+        async def wrapper(request: Request, *args, **kwargs):
+            # 从 JWT 提取角色
+            token = request.headers.authorization.split(' ')[1]
+            payload = jwt.decode(token, options={'verify_signature': False})
+            role = payload.get('app_metadata', {}).get('role')
+
+            if role not in allowed_roles:
+                raise HTTPException(
+                    status_code=403,
+                    detail="Insufficient permissions"
+                )
+
+            return await f(*args, **kwargs)
+        return wrapper
+```
+
+**使用示例：**
+```python
+@app.get("/api/users")
+@require_role('admin')
+async def get_users(request: Request):
+    return {"users": [...]}
+
+@app.post("/api/regions")
+@require_role('admin')
+async def create_region(request: Request):
+    return {"region": "created"}
+```
+
+---
+
+## 角色定义
+
+### Admin（系统管理员）
+- **完整权限**：可以访问所有功能
+- **用户管理**：创建、编辑、删除用户
+- **Region 管理**：创建、编辑、删除 Region
+- **业务信息管理**：创建、编辑、删除业务信息
+- **报告管理**：完整权限
+
+### SA（Senior Analyst - 高级分析师）
+- **有限权限**：可以访问业务信息和审核功能
+- **查看功能**：查看业务信息列表、查看报告列表
+- **审核功能**：审核报告（后续变更）
+- **限制**：无法管理用户、Region、业务信息
+
+### Analyst（普通分析师）
+- **只读权限**：只能查看数据
+- **查看功能**：查看业务信息列表、查看报告列表
+- **限制**：无法管理用户、Region、业务信息
