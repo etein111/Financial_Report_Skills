@@ -1,20 +1,79 @@
 schema: spec-driven
 
-# Project context (optional)
-# This is shown to AI when creating artifacts.
-# Add your tech stack, conventions, style guides, domain knowledge, etc.
-# Example:
-#   context: |
-#     Tech stack: TypeScript, React, Node.js
-#     We use conventional commits
-#     Domain: e-commerce platform
+# 项目上下文
+# 这些内容会在 OpenSpec 创建任何 artifact 时注入到 AI 提示中
+context: |
+  技术栈:
+    - 后端: FastAPI + Python 3.11+
+    - 前端: Vue 3 + TypeScript + Vite
+    - 数据库: Supabase (PostgreSQL + RLS)
+    - 样式: Tailwind CSS
+    - 部署: Vercel (同域名一体化)
 
-# Per-artifact rules (optional)
-# Add custom rules for specific artifacts.
-# Example:
-#   rules:
-#     proposal:
-#       - Keep proposals under 500 words
-#       - Always include a "Non-goals" section
-#     tasks:
-#       - Break tasks into chunks of max 2 hours
+  开发工具:
+    - Python 包管理: uv
+    - 代码质量: Black, Ruff, mypy
+    - 前端代码质量: Prettier, ESLint, TypeScript
+
+  约定:
+    - 文档和注释使用中文
+    - UI 界面使用英文
+    - 遵循功能 vs 技术实现分离原则
+
+  领域: 投资研究报告管理系统
+
+  角色定义:
+    - Admin: 系统管理员，拥有所有权限
+    - SA (Senior Analyst): 高级分析师，负责报告审核（后续变更）
+    - Analyst: 普通分析师，创建和编辑自己的报告
+
+  核心概念:
+    - 用户管理: 登录账号管理（Auth users），包括邮箱、密码、角色
+    - Analyst 信息管理: 业务资料管理（analyst 表），包括姓名、地区、SFC 编号
+    - 两个系统完全解耦，独立管理
+
+# Per-artifact 规则
+# 这些规则只会在创建对应的 artifact 时注入
+rules:
+  proposal:
+    # 文档结构
+    - 必需章节: Why, Scope, Features, Capabilities, System Impact, Key Decisions
+
+    # 内容要求
+    - Features 从用户价值描述，使用"作为...我需要..."格式
+    - Features 包含: 用户价值、用户故事、功能点、权限规则
+    - Features 不包含: API 接口、数据字段、技术实现代码
+    - Scope 的"不包含功能"必须是真正的业务功能，不含技术实现选择
+    - 所有受限功能必须标注"仅 Admin 可见"
+    - Key Decisions 与 Features 描述保持一致
+    - 移除过时或冲突的决策
+
+    # 术语统一
+    - "用户管理" = 登录账号管理（Auth users）
+    - "Analyst 信息管理" = 业务资料管理
+    - 同一概念使用统一术语，全文档保持一致
+
+  design:
+    # 定位
+    - 面向技术方案和实现细节（怎么做）
+    - proposal.md 面向业务需求和用户价值（做什么）
+
+    # 内容要求
+    - 包含架构决策和权衡
+    - 包含 API 接口设计
+    - 包含数据库设计（表结构、RLS policies）
+    - 包含前端组件设计
+
+  tasks:
+    # 组织方式
+    - 按阶段组织（阶段 1：环境准备，阶段 2：后端开发，等）
+    - 每个阶段包含相关任务清单
+    - 任务使用 checkbox 格式（- [ ] 未完成，- [x] 已完成）
+
+    # 任务粒度
+    - 每个任务应该可在 2-4 小时内完成
+    - 每个任务必须可验证（有明确的完成标准）
+
+    # 格式要求
+    - 任务描述使用祈使句（创建、实现、添加）
+    - 包含相关文件路径（如适用）

@@ -2,15 +2,22 @@
 
 本文件为 Claude Code (claude.ai/code) 在此代码库中工作时提供指导。
 
-## 项目状态
+## 项目概览
 
-此仓库目前为空。.gitignore 文件表明这是一个 Python 项目。
+本项目使用 **OpenSpec** 管理变更和规范。
+- **完整配置**: `openspec/config.yaml`（技术栈、规范）
+- OpenSpec AI 会自动读取并注入到提示中
 
-目前还没有构建命令、测试或代码架构需要记录。一旦代码库建立，应更新此文件。
+## OpenSpec 常用命令
 
-## 语言设置
+```bash
+# 变更管理
+openspec list                    # 查看所有变更
+openspec new change <name>     # 创建新变更
+openspec continue                # 继续当前变更
 
-- 所有对话和交流使用**中文**
-- 所有文件内容尽量使用**中文**编写
-- 代码注释使用**中文**
-- 文档和说明使用**中文**
+# 配置查看
+openspec schema which           # 查看当前使用的 schema
+```
+
+**遇到问题？** 查看 `openspec/config.yaml` 获取完整上下文。
