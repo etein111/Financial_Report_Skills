@@ -111,6 +111,10 @@
 权限：
 - 仅 Admin 可访问与操作。
 
+账号状态规则：
+- 用户被禁用后无法登录系统。
+- 已禁用用户可由 Admin 重新启用，启用后恢复正常登录能力。
+
 ### 3.4 Region 管理（Regions）
 
 用户价值：Admin 可维护地区字典数据，支撑后续业务选择。
@@ -119,6 +123,7 @@
 - Region 列表
 - 创建 / 编辑 / 删除 Region
 - 名称与代码唯一性校验
+- 系统预置 Region：China、Hong Kong、Japan、Taiwan、Korea、India、Macau、US
 - 删除 Region 时不做关联阻断；若被 Analyst 引用，按数据库策略 `ON DELETE SET NULL` 自动置空关联。
 
 权限：
@@ -126,7 +131,7 @@
 - 数据读取（SELECT）对所有已认证用户开放。
 
 列表行为：
-- 遵循「3.8 列表与分页通用规则」。
+- 遵循「3.9 列表与分页通用规则」。
 
 ### 3.5 Analyst 信息管理（Analyst Info）
 
@@ -136,6 +141,8 @@
 - Analyst 列表（支持按 `full_name`、`chinese_name`、`email` 搜索）
 - 创建 / 编辑 / 删除 Analyst 信息
 - 邮箱唯一性校验
+- 列表展示字段：`full_name`、`chinese_name`、`email`、`region`、`is_active`
+- 创建必填字段：`full_name`、`email`、`region`
 
 权限：
 - 管理功能（页面与操作）仅 Admin。
@@ -146,7 +153,7 @@
 - Analyst 信息通过 email 与未来报告业务做逻辑关联，不做外键强绑定到 Auth 用户。
 
 列表行为：
-- 遵循「3.8 列表与分页通用规则」。
+- 遵循「3.9 列表与分页通用规则」。
 
 ### 3.6 桌面与导航
 
@@ -163,7 +170,12 @@
 - 前端展示时间统一使用北京时间（UTC+8）。
 - 后端接口与数据库时间约定统一为北京时间（UTC+8）。
 
-### 3.8 列表与分页通用规则
+### 3.8 界面语言与数据语言约定
+
+- 前端界面语言统一为英文（按钮、标题、表单标签、提示文案）。
+- 业务数据内容支持中英文（例如姓名、报告标题、摘要等）。
+
+### 3.9 列表与分页通用规则
 
 - 列表默认按 `created_at` **降序**排序（最新创建在前）。
 - 当列表数据超过 15 条时启用分页。
@@ -195,6 +207,7 @@
 - RLS 采用“读写分离”策略：
   - SELECT：authenticated
   - INSERT/UPDATE/DELETE：Admin
+- 初始化写入预置 Region 数据（China、Hong Kong、Japan、Taiwan、Korea、India、Macau、US）。
 - 用户账号由 Supabase Auth 管理。
 
 ### 5.2 后端 API（FastAPI）
