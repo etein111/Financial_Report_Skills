@@ -88,15 +88,16 @@ $$ LANGUAGE sql SECURITY DEFINER;
 ```sql
 ALTER TABLE analyst ENABLE ROW LEVEL SECURITY;
 
--- 所有认证用户可读
-CREATE POLICY "All users can view analysts"
-ON analyst FOR SELECT TO authenticated USING (true);
+-- 只有 Admin 可读（service_role 或 admin 角色）
+CREATE POLICY "Only Admin can view analysts"
+ON analyst FOR SELECT TO authenticated, postgres
+USING (current_user = 'postgres' OR get_current_role() = 'admin');
 
 -- 只有 Admin 可写
 CREATE POLICY "Only Admin can modify analysts"
-ON analyst FOR ALL TO authenticated
-USING (get_current_role() = 'admin')
-WITH CHECK (get_current_role() = 'admin');
+ON analyst FOR ALL TO authenticated, postgres
+USING (current_user = 'postgres' OR get_current_role() = 'admin')
+WITH CHECK (current_user = 'postgres' OR get_current_role() = 'admin');
 ```
 
 ---
@@ -144,13 +145,15 @@ CREATE TABLE region (
 
 ALTER TABLE region ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "All users can view regions"
-ON region FOR SELECT TO authenticated USING (true);
+-- 只有 Admin 可读可写
+CREATE POLICY "Only Admin can view regions"
+ON region FOR SELECT TO authenticated, postgres
+USING (current_user = 'postgres' OR get_current_role() = 'admin');
 
 CREATE POLICY "Only Admin can modify regions"
-ON region FOR ALL TO authenticated
-USING (get_current_role() = 'admin')
-WITH CHECK (get_current_role() = 'admin');
+ON region FOR ALL TO authenticated, postgres
+USING (current_user = 'postgres' OR get_current_role() = 'admin')
+WITH CHECK (current_user = 'postgres' OR get_current_role() = 'admin');
 ```
 
 **Analyst 表:**
@@ -170,13 +173,15 @@ CREATE TABLE analyst (
 
 ALTER TABLE analyst ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "All users can view analysts"
-ON analyst FOR SELECT TO authenticated USING (true);
+-- 只有 Admin 可读可写
+CREATE POLICY "Only Admin can view analysts"
+ON analyst FOR SELECT TO authenticated, postgres
+USING (current_user = 'postgres' OR get_current_role() = 'admin');
 
 CREATE POLICY "Only Admin can manage analysts"
-ON analyst FOR ALL TO authenticated
-USING (get_current_role() = 'admin')
-WITH CHECK (get_current_role() = 'admin');
+ON analyst FOR ALL TO authenticated, postgres
+USING (current_user = 'postgres' OR get_current_role() = 'admin')
+WITH CHECK (current_user = 'postgres' OR get_current_role() = 'admin');
 ```
 
 ---

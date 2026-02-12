@@ -1,0 +1,9 @@
+{
+  "full_name": "John Smith",
+  "chinese_name": "張三",
+  "email": "john.smith@example.com",
+  "suffix": "CFA",
+  "sfc": "ABC123",
+  "region_id": "ea59a235-4b0a-4a76-ba1e-40fcc47b2f49",
+  "is_active": true
+}

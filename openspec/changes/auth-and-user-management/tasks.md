@@ -7,22 +7,22 @@
 **目标：** 完成开发环境的基础配置，为后续开发做好准备。
 
 ### 1.1 Supabase 项目配置
-- [ ] 1.1.1 配置 Supabase 项目并获取 API keys（`SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`）
-- [ ] 1.1.2 创建并测试 RLS 辅助函数 `get_current_role()`（在 SQL Editor 中执行并验证）
+- [x] 1.1.1 配置 Supabase 项目并获取 API keys（`SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`）
+- [x] 1.1.2 创建并测试 RLS 辅助函数 `get_current_role()`（在 SQL Editor 中执行并验证）
 
 ### 1.2 数据库迁移脚本
-- [ ] 1.2.1 编写数据库迁移脚本（`backend/migrations/001_create_region_table.sql` 和 `002_create_analyst_table.sql`，包含表结构和 RLS policies）
-- [ ] 1.2.2 执行迁移脚本并验证表结构和 RLS policies 已正确创建
+- [x] 1.2.1 编写数据库迁移脚本（`backend/migrations/001_create_region_table.sql` 和 `002_create_analyst_table.sql`，包含表结构和 RLS policies）
+- [x] 1.2.2 执行迁移脚本并验证表结构和 RLS policies 已正确创建
 
 ### 1.3 初始化 Admin 用户
-- [ ] 1.3.1 创建 `backend/scripts/init_admin.py` 脚本（实现 Admin 创建逻辑 + Supabase Admin API 集成 + 错误处理）
-- [ ] 1.3.2 运行脚本验证 Admin 用户创建成功（email: admin@neolyst.com, password: Admin123）
+- [x] 1.3.1 创建 `backend/scripts/init_admin.py` 脚本（实现 Admin 创建逻辑 + Supabase Admin API 集成 + 错误处理）
+- [x] 1.3.2 运行脚本验证 Admin 用户创建成功（email: admin@neolyst.com, password: Admin123）
 
 ### 1.4 后端环境配置
-- [ ] 1.4.1 创建环境配置文件和更新依赖（`.env.example` + `.env` + `pyproject.toml`，验证环境变量加载正常）
+- [x] 1.4.1 创建环境配置文件和更新依赖（`.env.example` + `.env` + `pyproject.toml`，验证环境变量加载正常）
 
 ### 1.5 前端环境配置
-- [ ] 1.5.1 创建前端环境配置和全局样式（`.env.example` + `.env` + Tailwind CSS 配置 + `assets/styles/main.css`）
+- [x] 1.5.1 创建前端环境配置和全局样式（`.env.example` + `.env` + Tailwind CSS 配置 + `assets/styles/main.css`）
 
 ---
 
@@ -31,29 +31,29 @@
 **目标：** 实现所有后端 API 接口，包括认证、用户管理、Region 管理、Analyst 信息管理。
 
 ### 2.1 后端项目结构
-- [ ] 2.1.1 搭建后端项目结构（创建 `api/`, `core/`, `models/` 目录，配置 Supabase Client，创建 `config.py`，创建所有 Pydantic 模型）
+- [x] 2.1.1 搭建后端项目结构（创建 `api/`, `core/`, `models/` 目录，配置 Supabase Client，创建 `config.py`，创建所有 Pydantic 模型）
 
 ### 2.2 认证 API
-- [ ] 2.2.1 实现 JWT 验证中间件和登录/登出 API（`core/security.py` + `POST /api/auth/login` + `POST /api/auth/logout`）
-- [ ] 2.2.2 实现 `GET /api/auth/me`（从 JWT 提取用户信息）并集成路由到 `main.py`
+- [x] 2.2.1 实现 JWT 验证中间件和登录/登出 API（`core/security.py` + `POST /api/auth/login` + `POST /api/auth/logout`）
+- [x] 2.2.2 实现 `GET /api/auth/me`（从 JWT 提取用户信息）并集成路由到 `main.py`
 
 ### 2.3 用户管理 API
-- [ ] 2.3.1 实现用户 CRUD API（`api/users.py`，包含 `GET /api/users` 支持搜索、`POST /api/users` 创建、`PUT /api/users/{id}` 更新、`DELETE /api/users/{id}` 删除）
-- [ ] 2.3.2 实现密码和角色管理 API（`PUT /password` 修改密码、`PUT /role` 修改角色、`PUT /toggle-status` 启用/禁用）
-- [ ] 2.3.3 实现邮箱唯一性检查（`POST /check-email`）并集成路由，测试权限控制（仅 Admin）
+- [x] 2.3.1 实现用户 CRUD API（`api/users.py`，包含 `GET /api/users` 支持搜索、`POST /api/users` 创建、`PUT /api/users/{id}` 更新、`DELETE /api/users/{id}` 删除）
+- [x] 2.3.2 实现密码和角色管理 API（`PUT /password` 修改密码、`PUT /role` 修改角色、`PUT /toggle-status` 启用/禁用）
+- [x] 2.3.3 实现邮箱唯一性检查（`POST /check-email`）并集成路由，测试权限控制（仅 Admin）
 
 ### 2.4 Region 管理 API
-- [ ] 2.4.1 实现 Region CRUD API（`api/regions.py`，包含 `GET/POST/PUT/DELETE /api/regions`）
-- [ ] 2.4.2 集成路由到 `main.py` 并测试 RLS policies（使用不同角色的 token 验证 Admin vs 其他角色权限）
+- [x] 2.4.1 实现 Region CRUD API（`api/regions.py`，包含 `GET/POST/PUT/DELETE /api/regions`）
+- [x] 2.4.2 集成路由到 `main.py` 并测试 RLS policies（使用不同角色的 token 验证 Admin vs 其他角色权限）
 
 ### 2.5 Analyst 信息管理 API
-- [ ] 2.5.1 实现 Analyst 信息 CRUD API（`api/analyst_info.py`，包含 `GET /api/analyst-info` 支持搜索、`POST/PUT/DELETE` 实现增删改）
-- [ ] 2.5.2 实现邮箱唯一性检查 API（`POST /check-email`）并集成路由
-- [ ] 2.5.3 测试 RLS policies 和权限控制（确保所有认证用户可读，仅 Admin 可写）
+- [x] 2.5.1 实现 Analyst 信息 CRUD API（`api/analyst_info.py`，包含 `GET /api/analyst-info` 支持搜索、`POST/PUT/DELETE` 实现增删改）
+- [x] 2.5.2 实现邮箱唯一性检查 API（`POST /check-email`）并集成路由
+- [x] 2.5.3 测试 RLS policies 和权限控制（确保只有 Admin 可读写）
 
 ### 2.6 后端启动验证
-- [ ] 2.6.1 启动开发服务器并验证 API 文档（`uv run uvicorn src.main:app --reload`，访问 `http://localhost:8000/docs`）
-- [ ] 2.6.2 编写后端 API 使用文档（`docs/API.md`，包含认证方式、端点列表、请求/响应示例）
+- [x] 2.6.1 启动开发服务器并验证 API 文档（`uv run uvicorn src.main:app --reload`，访问 `http://localhost:8000/docs`）
+- [x] 2.6.2 编写后端 API 使用文档（`docs/API.md`，包含认证方式、端点列表、请求/响应示例）
 
 ---
 
@@ -62,41 +62,41 @@
 **目标：** 实现所有前端页面和组件，包括登录、桌面主页、Region 和 Analyst 信息管理页面。
 
 ### 3.1 前端项目配置
-- [ ] 3.1.1 配置 Vue Router 和路由结构（`/login`, `/desktop`, `/regions`, `/analyst-info`, `/coming-soon`）
-- [ ] 3.1.2 创建 Axios 实例并实现拦截器（`api/client.ts`，请求拦截器自动添加 Token，响应拦截器处理 401）
-- [ ] 3.1.3 编写前端配置文档（`docs/FRONTEND.md`，包含路由结构、API 调用方式、状态管理说明）
+- [x] 3.1.1 配置 Vue Router 和路由结构（`/login`, `/desktop`, `/regions`, `/analyst-info`, `/coming-soon`）
+- [x] 3.1.2 创建 Axios 实例并实现拦截器（`api/client.ts`，请求拦截器自动添加 Token，响应拦截器处理 401）
+- [x] 3.1.3 编写前端配置文档（`docs/FRONTEND.md`，包含路由结构、API 调用方式、状态管理说明）
 
 ### 3.2 认证状态管理
-- [ ] 3.2.1 实现认证状态管理（`stores/auth.ts`，包含 `provideAuthStore()` 和 `useAuth()` composable，实现 login/logout 方法）
-- [ ] 3.2.2 创建登录 API 调用函数（`api/auth.ts`）并编写状态管理文档
+- [x] 3.2.1 实现认证状态管理（`stores/auth.ts`，包含 `provideAuthStore()` 和 `useAuth()` composable，实现 login/logout 方法）
+- [x] 3.2.2 创建登录 API 调用函数（`api/auth.ts`）并编写状态管理文档
 
 ### 3.3 粒子背景组件
-- [ ] 3.3.1 实现粒子背景组件（`components/common/ParticleBackground.vue`，Canvas 2D，120 粒子，蓝青渐变，粒子间连线 < 140px，脉冲闪烁，requestAnimationFrame 优化，无鼠标交互）
+- [x] 3.3.1 实现粒子背景组件（`components/common/ParticleBackground.vue`，Canvas 2D，120 粒子，蓝青渐变，粒子间连线 < 140px，脉冲闪烁，requestAnimationFrame 优化，无鼠标交互）
 
 ### 3.4 登录页面
-- [ ] 3.4.1 创建登录页面（`views/Login.vue`，表单布局 + 粒子背景 + 表单验证）
-- [ ] 3.4.2 集成登录 API 并实现错误处理和登录成功跳转
+- [x] 3.4.1 创建登录页面（`views/Login.vue`，表单布局 + 粒子背景 + 表单验证）
+- [x] 3.4.2 集成登录 API 并实现错误处理和登录成功跳转
 
 ### 3.5 桌面主页
-- [ ] 3.5.1 创建桌面主页和导航栏（`views/Desktop.vue`，Logo + Welcome, {name} + Logout 按钮）
-- [ ] 3.5.2 实现功能卡片组件（`components/desktop/DesktopCard.vue`，Reports 组 + Data Management 组，悬停效果）
-- [ ] 3.5.3 编写桌面功能文档（说明功能卡片、新标签页打开方式、导航栏设计）
+- [x] 3.5.1 创建桌面主页和导航栏（`views/Desktop.vue`，Logo + Welcome, {name} + Logout 按钮）
+- [x] 3.5.2 实现功能卡片组件（`components/desktop/DesktopCard.vue`，Reports 组 + Data Management 组，悬停效果）
+- [x] 3.5.3 编写桌面功能文档（说明功能卡片、新标签页打开方式、导航栏设计）
 
 ### 3.6 路由守卫和权限
-- [ ] 3.6.1 实现路由守卫（未登录重定向到 `/login`，已登录访问 `/login` 重定向到 `/desktop`）
-- [ ] 3.6.2 创建权限检查函数并集成（`composables/usePermission.ts`，功能卡片权限控制）
+- [x] 3.6.1 实现路由守卫（未登录重定向到 `/login`，已登录访问 `/login` 重定向到 `/desktop`）
+- [x] 3.6.2 创建权限检查函数并集成（`composables/usePermission.ts`，功能卡片权限控制）
 
 ### 3.7 Region 管理页面
-- [ ] 3.7.1 创建 Region 列表页面（`views/RegionsPage.vue`，表格形式，所有用户可见，返回链接）
-- [ ] 3.7.2 实现 CRUD 功能（创建/编辑/删除对话框，API 调用和错误处理，Admin only 权限控制）
+- [x] 3.7.1 创建 Region 列表页面（`views/RegionsPage.vue`，表格形式，所有用户可见，返回链接）
+- [x] 3.7.2 实现 CRUD 功能（创建/编辑/删除对话框，API 调用和错误处理，Admin only 权限控制）
 
 ### 3.8 Analyst 信息管理页面
-- [ ] 3.8.1 创建 Analyst 信息列表页面（`views/AnalystInfoPage.vue`，表格 + 搜索 + 返回链接）
-- [ ] 3.8.2 实现 CRUD 功能和表单验证（创建/编辑对话框，邮箱唯一性前端实时验证，API 调用，Admin only 权限）
+- [x] 3.8.1 创建 Analyst 信息列表页面（`views/AnalystInfoPage.vue`，表格 + 搜索 + 返回链接）
+- [x] 3.8.2 实现 CRUD 功能和表单验证（创建/编辑对话框，邮箱唯一性前端实时验证，API 调用，Admin only 权限）
 
 ### 3.9 其他功能
-- [ ] 3.9.1 创建 Coming Soon 占位页面（`views/ComingSoon.vue`，"This feature is coming soon" 提示，返回链接）
-- [ ] 3.9.2 实现登出功能（Desktop.vue 中 Logout 按钮，清除 localStorage，重置状态，跳转登录）
+- [x] 3.9.1 创建 Coming Soon 占位页面（`views/ComingSoon.vue`，"This feature is coming soon" 提示，返回链接）
+- [x] 3.9.2 实现登出功能（Desktop.vue 中 Logout 按钮，清除 localStorage，重置状态，跳转登录）
 
 ---
 
@@ -112,14 +112,14 @@
 - [ ] 4.1.5 测试 Token 过期处理（清除 token → 401 → 重定向登录）
 
 ### 4.2 Region 管理测试
-- [ ] 4.2.1 测试 Region 列表加载（所有角色可见）
+- [ ] 4.2.1 测试 Region 列表加载（所有认证用户可见）
 - [ ] 4.2.2 测试创建 Region（Admin 成功，其他角色 403）
 - [ ] 4.2.3 测试编辑 Region（Admin 成功，其他角色 403）
 - [ ] 4.2.4 测试删除 Region（Admin 成功，其他角色 403）
 - [ ] 4.2.5 测试 RLS policies（使用不同角色的 token 验证数据库层权限）
 
 ### 4.3 Analyst 信息管理测试
-- [ ] 4.3.1 测试 Analyst 信息列表加载（所有角色可见）
+- [ ] 4.3.1 测试 Analyst 信息列表加载（所有认证用户可见）
 - [ ] 4.3.2 测试搜索功能（按 full_name 或 email 过滤）
 - [ ] 4.3.3 测试邮箱唯一性检查（重复邮箱返回错误）
 - [ ] 4.3.4 测试创建 Analyst 信息（Admin 成功）

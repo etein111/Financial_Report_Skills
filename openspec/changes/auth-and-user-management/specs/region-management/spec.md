@@ -42,8 +42,7 @@
 系统 SHALL 提供完整的 Region 创建、读取、更新、删除接口。
 
 #### Scenario: 获取 Region 列表
-- **WHEN** 前端调用 GET /api/regions
-- **AND** 用户已认证
+- **WHEN** 任何已认证用户调用 GET /api/regions
 - **THEN** 后端返回所有 Region 记录
 - **AND** 返回数据按 created_at 倒序排列（新创建的在前）
 

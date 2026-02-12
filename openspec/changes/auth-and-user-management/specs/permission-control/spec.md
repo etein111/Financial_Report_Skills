@@ -35,14 +35,15 @@ $$ LANGUAGE sql SECURITY DEFINER;
 **使用示例：**
 ```sql
 -- 所有认证用户可读
-CREATE POLICY "All users can view analysts"
-ON analyst FOR SELECT TO authenticated USING (true);
+CREATE POLICY "All authenticated users can view analysts"
+ON analyst FOR SELECT TO authenticated, postgres
+USING (true);
 
 -- 只有 Admin 可写
 CREATE POLICY "Only Admin can modify analysts"
-ON analyst FOR ALL TO authenticated
-USING (get_current_role() = 'admin')
-WITH CHECK (get_current_role() = 'admin');
+ON analyst FOR ALL TO authenticated, postgres
+USING (current_user = 'postgres' OR get_current_role() = 'admin')
+WITH CHECK (current_user = 'postgres' OR get_current_role() = 'admin');
 ```
 
 ---
@@ -52,9 +53,10 @@ WITH CHECK (get_current_role() = 'admin');
 | 功能 | Admin | SA | Analyst |
 |------|-------|------|----------|
 | 用户管理 | ✅ | ❌ | ❌ |
-| Region 管理 | ✅ | ❌ | ❌ |
-| Analyst 信息管理 | ✅ | ❌ | ❌ |
+| 查看 Region | ✅ | ✅ | ✅ |
+| 修改 Region（创建/编辑/删除） | ✅ | ❌ | ❌ |
 | 查看 Analyst 信息 | ✅ | ✅ | ✅ |
+| 修改 Analyst 信息（创建/编辑/删除） | ✅ | ❌ | ❌ |
 | 查看报告 | ✅ | ✅ | ✅ |
 | 审核报告 | ✅ | ✅ | ❌ |
 
