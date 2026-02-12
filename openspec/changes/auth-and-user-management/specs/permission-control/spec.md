@@ -20,30 +20,25 @@
 - **THEN** Supabase Auth 生成的 JWT token 自动包含 role 信息
 - **AND** 后端和 RLS policies 可以直接从 JWT 读取角色
 
-#### Scenario: RLS 辅助函数
+#### Scenario: RLS 策略使用 Supabase Auth JWT
 
-系统 SHALL 提供 PostgreSQL 函数从 JWT token 中提取当前用户角色。
+- **WHEN** 用户通过 API 访问数据库
+- **THEN** RLS 策略直接从 Supabase Auth JWT 读取角色信息
+- **AND** 使用 `auth.jwt()->'app_metadata'->>'role'` 提取角色
+- **AND** 避免使用自定义函数以确保与 Supabase Python 客户端兼容
 
 **实现：**
 ```sql
-CREATE OR REPLACE FUNCTION get_current_role()
-RETURNS VARCHAR AS $$
-  SELECT (auth.jwt()->>'app_metadata'->>'role')::VARCHAR;
-$$ LANGUAGE sql SECURITY DEFINER;
-```
-
-**使用示例：**
-```sql
 -- 所有认证用户可读
-CREATE POLICY "All authenticated users can view analysts"
-ON analyst FOR SELECT TO authenticated, postgres
+CREATE POLICY "Authenticated users can view analysts"
+ON analyst FOR SELECT TO authenticated
 USING (true);
 
 -- 只有 Admin 可写
 CREATE POLICY "Only Admin can modify analysts"
-ON analyst FOR ALL TO authenticated, postgres
-USING (current_user = 'postgres' OR get_current_role() = 'admin')
-WITH CHECK (current_user = 'postgres' OR get_current_role() = 'admin');
+ON analyst FOR ALL TO authenticated
+USING ((auth.jwt()->'app_metadata'->>'role')::text = 'admin')
+WITH CHECK ((auth.jwt()->'app_metadata'->>'role')::text = 'admin');
 ```
 
 ---
@@ -102,46 +97,76 @@ export function usePermission() {
 
 ## 后端权限验证
 
-### Requirement: 后端中间件验证
+### Requirement: FastAPI 依赖注入权限验证
 
-系统 SHALL 提供 FastAPI 中间件验证用户角色。
+系统 SHALL 使用 FastAPI 依赖注入（Dependency Injection）模式验证用户角色。
 
 **实现：**
 ```python
 # core/security.py
-from fastapi import Request, HTTPException
-from functools import wraps
+from typing import Annotated
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
-def require_role(*allowed_roles: str):
-    def decorator(f):
-        @wraps(f)
-        async def wrapper(request: Request, *args, **kwargs):
-            # 从 JWT 提取角色
-            token = request.headers.authorization.split(' ')[1]
-            payload = jwt.decode(token, options={'verify_signature': False})
-            role = payload.get('app_metadata', {}).get('role')
+# Supabase 客户端（用于验证 token）
+supabase_client = get_supabase()
+security = HTTPBearer()
 
-            if role not in allowed_roles:
-                raise HTTPException(
-                    status_code=403,
-                    detail="Insufficient permissions"
-                )
+def verify_supabase_token(token: str) -> dict:
+    """验证 Supabase Auth JWT Token"""
+    user_response = supabase_client.auth.get_user(jwt=token)
 
-            return await f(*args, **kwargs)
-        return wrapper
+    if not user_response.user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="无效的认证凭据"
+        )
+
+    user = user_response.user
+    app_metadata = user.app_metadata or {}
+
+    return {
+        "id": str(user.id),
+        "email": user.email,
+        "role": app_metadata.get("role", "analyst"),
+    }
+
+def get_current_user(
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)]
+) -> dict:
+    """从 Supabase Auth JWT Token 中获取当前用户"""
+    token = credentials.credentials
+    return verify_supabase_token(token)
+
+def require_admin(
+    current_user: Annotated[dict, Depends(get_current_user)]
+) -> dict:
+    """要求当前用户必须是 Admin"""
+    if current_user.get("role") != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="需要 Admin 权限"
+        )
+    return current_user
 ```
 
 **使用示例：**
 ```python
-@app.get("/api/users")
-@require_role('admin')
-async def get_users(request: Request):
-    return {"users": [...]}
+# 所有认证用户可访问
+@router.get("/api/regions")
+async def list_regions(
+    current_user: Annotated[dict, Depends(get_current_user)]
+) -> list:
+    # current_user 包含 {id, email, role}
+    ...
 
-@app.post("/api/regions")
-@require_role('admin')
-async def create_region(request: Request):
-    return {"region": "created"}
+# 仅 Admin 可访问
+@router.post("/api/regions")
+async def create_region(
+    current_user: Annotated[dict, Depends(require_admin)]
+) -> dict:
+    # 如果不是 Admin，会自动返回 403
+    ...
 ```
 
 ---

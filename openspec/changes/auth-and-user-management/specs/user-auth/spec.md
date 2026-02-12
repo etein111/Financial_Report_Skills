@@ -7,8 +7,9 @@
 #### Scenario: 成功登录
 - **WHEN** 用户在登录页输入有效的邮箱和密码
 - **AND** 点击 "Login" 按钮
-- **THEN** 系统调用 Supabase Auth API 验证凭据
-- **AND** 验证成功后返回 JWT access token 和 refresh token
+- **THEN** 系统调用 Supabase Auth API 验证凭据（`sign_in_with_password`）
+- **AND** 验证成功后返回 Supabase Auth 原生 JWT access token（ES256 算法）
+- **AND** Token 包含用户角色信息（从 `app_metadata.role`）
 - **AND** 前端将 JWT token 存储在 localStorage
 - **AND** 用户被重定向到桌面主页
 
@@ -39,8 +40,9 @@
 系统 SHALL 在后端验证每个受保护 API 请求的 JWT token。
 
 #### Scenario: 有效的 JWT token
-- **WHEN** API 请求包含有效的 JWT token
-- **THEN** 后端 JWT 验证中间件验证 token 成功
+- **WHEN** API 请求包含有效的 Supabase Auth JWT token
+- **THEN** 后端使用 `supabase_client.auth.get_user(jwt=token)` 验证 token
+- **AND** 验证成功后从 `user.app_metadata` 中提取角色信息
 - **AND** 请求正常处理，返回数据
 
 #### Scenario: 无效或过期的 JWT token
@@ -61,10 +63,11 @@
 
 #### Scenario: 获取当前用户成功
 - **WHEN** 前端调用 GET /api/auth/me
-- **AND** 请求包含有效的 JWT token
-- **THEN** 后端从 JWT token 中解析用户信息
-- **AND** 返回用户 ID、邮箱、角色等信息
-- **AND** 不需要查询数据库
+- **AND** 请求包含有效的 Supabase Auth JWT token
+- **THEN** 后端使用 `supabase_client.auth.get_user()` 验证并获取用户信息
+- **AND** 从 `user.app_metadata` 提取角色，从 `user.user_metadata` 提取姓名
+- **AND** 返回用户 ID、邮箱、角色、姓名等信息
+- **AND** 不需要额外查询数据库
 
 ### Requirement: 系统提供初始化 Admin 用户的脚本
 

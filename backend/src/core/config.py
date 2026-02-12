@@ -19,11 +19,6 @@ class Settings:
     SUPABASE_ANON_KEY: str = os.getenv("SUPABASE_ANON_KEY", "")
     SUPABASE_SERVICE_ROLE_KEY: str = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
 
-    # JWT 配置
-    JWT_SECRET: str = os.getenv("JWT_SECRET", "neolyst-jwt-secret-key-2025")
-    JWT_ALGORITHM: str = os.getenv("JWT_ALGORITHM", "HS256")
-    JWT_EXPIRE_MINUTES: int = int(os.getenv("JWT_EXPIRE_MINUTES", "1440"))
-
     # 应用配置
     APP_NAME: str = "Neolyst API"
     APP_VERSION: str = "0.1.0"

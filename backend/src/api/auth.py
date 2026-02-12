@@ -5,7 +5,7 @@
 """
 from fastapi import APIRouter, Depends
 from ..models.auth import LoginRequest, LoginResponse
-from ..core.security import create_access_token, get_current_user
+from ..core.security import get_current_user
 from ..core.supabase import get_supabase
 from ..core.config import settings
 from typing import Annotated
@@ -19,7 +19,7 @@ async def login(request: LoginRequest):
     """
     用户登录
 
-    使用 Supabase Auth 进行身份验证，成功后返回 JWT token
+    使用 Supabase Auth 进行身份验证，成功后返回 Supabase Auth 原生 token
     """
     try:
         # 使用 Supabase Auth 进行登录
@@ -38,6 +38,14 @@ async def login(request: LoginRequest):
         user = auth_response.user
         session = auth_response.session
 
+        # 调试日志：打印 token 信息
+        import logging
+        logger = logging.getLogger(__name__)
+        if session and session.access_token:
+            logger.info(f"Supabase returned token (first 50 chars): {session.access_token[:50]}")
+        else:
+            logger.error("No session or access_token returned from Supabase!")
+
         # 从 app_metadata 获取角色
         app_metadata = user.app_metadata or {}
         user_metadata = user.user_metadata or {}
@@ -45,19 +53,20 @@ async def login(request: LoginRequest):
         role = app_metadata.get("role", "analyst")
         full_name = user_metadata.get("full_name")
 
-        # 创建 JWT token
-        access_token = create_access_token({
-            "sub": str(user.id),
-            "email": user.email,
-            "role": role,
-            "full_name": full_name,
-        })
+        # 直接使用 Supabase Auth 的原生 token
+        token = session.access_token if session else None
+        if not token:
+            from fastapi import HTTPException, status
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="未能获取访问令牌"
+            )
 
         return LoginResponse(
             success=True,
             message="登录成功",
             data={
-                "token": access_token,
+                "token": token,
                 "user": {
                     "id": str(user.id),
                     "email": user.email,

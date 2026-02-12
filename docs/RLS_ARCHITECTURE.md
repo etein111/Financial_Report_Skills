@@ -1,102 +1,136 @@
 # RLS 架构设计说明
 
-## 背景
+## 概述
 
-在实施 auth-and-user-management 变更过程中，发现 Supabase Python 客户端（supabase-py）与某些 RLS 策略配置存在兼容性问题。
+系统采用 **Supabase Auth 原生 JWT** + **数据库 RLS（Row Level Security）** 实现权限控制。
 
-## 问题
+**核心策略**：
+- **读操作**：宽松策略，所有认证用户可读（参考数据需要关联查询）
+- **写操作**：严格策略，仅 Admin 可写（数据库层 + 应用层双重保护）
 
-**现象**：
-- ✅ Supabase REST API 直接调用成功
-- ✅ Python 客户端直接调用成功
-- ❌ FastAPI 服务中通过 Python 客户端调用失败（RLS 策略错误）
+---
 
-**根本原因**：
-Supabase Python 客户端通过 PostgREST API 与数据库通信，某些 RLS 策略配置（特别是基于 `get_current_role()` 函数的策略）在这种通信方式下无法正确工作。
+## 架构
 
-## 最终架构决策
+### 认证流程
+
+```
+用户登录 → Supabase Auth → 返回原生 JWT → 前端存储
+前端请求 → FastAPI 验证 JWT → 提取角色信息 → 执行业务逻辑
+```
 
 ### 数据库层（RLS）
 
-**策略**：宽松模式 + 启用 RLS
-- RLS 保持启用状态（满足安全要求）
-- 策略配置为允许所有 `authenticated` 和 `postgres` 用户的所有操作
-- 防止直接数据库连接绕过应用层
+**辅助函数**：从 JWT 提取用户角色
 
 ```sql
--- 示例：Analyst 表策略
-CREATE POLICY "Allow all authenticated operations on analyst"
-ON analyst FOR ALL
-TO authenticated, postgres
-USING (true)
-WITH CHECK (true);
+CREATE OR REPLACE FUNCTION get_current_role()
+RETURNS VARCHAR AS $$
+  SELECT CASE
+    WHEN auth.jwt()->>'app_metadata'->>'role' IS NOT NULL
+    THEN (auth.jwt()->>'app_metadata'->>'role')::VARCHAR
+    ELSE 'anonymous'
+  END;
+$$ LANGUAGE sql SECURITY DEFINER;
 ```
 
-**好处**：
-1. ✅ RLS 启用（防止直接数据库访问）
-2. ✅ 与 Python 客户端兼容
-3. ✅ 简化策略管理
+**策略设计**（以 Region 表为例）：
+
+| 操作 | 策略 | 目的 |
+|------|------|------|
+| **SELECT** | `USING (true)` | 所有认证用户可读（关联查询需要） |
+| **INSERT** | `WITH CHECK (get_current_role() = 'admin')` | 仅 Admin 可创建 |
+| **UPDATE** | `USING (get_current_role() = 'admin')` | 仅 Admin 可修改 |
+| **DELETE** | `USING (get_current_role() = 'admin')` | 仅 Admin 可删除 |
+
+**为什么读操作宽松？**
+
+参考数据（Region、Analyst 等）需要支持关联查询：
+- 填写报告时需要选择 Region
+- 创建报告时需要选择 Analyst
+- 下拉列表需要显示完整数据
 
 ### 应用层（FastAPI）
 
-**策略**：严格权限控制
-- 所有写操作（POST/PUT/DELETE）使用 `require_admin` 依赖
-- 读操作（GET）使用 `get_current_user` 依赖（需要认证）
-- 权限检查在 JWT 验证后立即执行
+**依赖函数**：
 
-**示例**：
 ```python
-@router.get("", response_model=list[RegionResponse])
+# backend/src/core/security.py
+
+def get_current_user(credentials) -> dict:
+    """验证 JWT 并返回用户信息"""
+    token = credentials.credentials
+    user_response = supabase_client.auth.get_user(jwt=token)
+    return {
+        "id": str(user_response.user.id),
+        "email": user_response.user.email,
+        "role": user_response.user.app_metadata.get("role", "analyst"),
+    }
+
+def require_admin(current_user: dict) -> dict:
+    """要求当前用户必须是 Admin"""
+    if current_user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="需要 Admin 权限")
+    return current_user
+```
+
+**端点示例**：
+
+```python
+# 读操作：所有认证用户可访问
+@router.get("")
 async def list_regions(
-    current_user: Annotated[dict, Depends(get_current_user)]  # 需要认证
-) -> list:
-    # 所有认证用户可查看
+    current_user: Annotated[dict, Depends(get_current_user)]
+):
     ...
 
-@router.post("", response_model=RegionResponse)
+# 写操作：仅 Admin 可访问
+@router.post("")
 async def create_region(
-    current_user: Annotated[dict, Depends(require_admin)]  # 需要 Admin
-) -> dict:
-    # 只有 Admin 可创建
+    current_user: Annotated[dict, Depends(require_admin)]
+):
     ...
 ```
+
+---
 
 ## 安全保证
 
 ### 多层防护
 
-1. **数据库层（RLS）**
-   - 防止绕过应用层直接访问数据库
-   - 需要有效的 Supabase 凭证
-
-2. **应用层（FastAPI）**
-   - JWT Token 验证
-   - 基于 `require_admin` 依赖的权限检查
-   - 细粒度的 API 端点权限控制
-
-3. **传输层**
-   - HTTPS 加密通信
-   - JWT Token 签名验证
+```
+┌──────────────────────────────────────────────────────┐
+│                    安全控制层次                       │
+├──────────────────────────────────────────────────────┤
+│                                                      │
+│  第 1 层：应用层 (FastAPI)                           │
+│  ─────────────────────────────────────────────────  │
+│  • JWT Token 验证（Supabase 客户端）                 │
+│  • require_admin 权限检查                            │
+│  • 快速失败，不到达数据库                             │
+│                                                      │
+│  第 2 层：数据库层 (RLS)                             │
+│  ─────────────────────────────────────────────────  │
+│  • 写操作：仅 Admin 可执行                           │
+│  • 即使绕过 FastAPI 也被阻止                         │
+│                                                      │
+│  第 3 层：传输层 (HTTPS)                            │
+│  ─────────────────────────────────────────────────  │
+│  • Supabase Auth JWT 签名验证（ES256）               │
+│                                                      │
+└──────────────────────────────────────────────────────┘
+```
 
 ### 权限矩阵
 
-| 功能 | 认证要求 | 权限要求 | 实施层 |
-|------|---------|---------|--------|
-| 查看 Region | ✅ 需要 | 所有认证用户 | FastAPI |
-| 创建/编辑/删除 Region | ✅ 需要 | Admin only | FastAPI |
-| 查看 Analyst 信息 | ✅ 需要 | 所有认证用户 | FastAPI |
-| 创建/编辑/删除 Analyst 信息 | ✅ 需要 | Admin only | FastAPI |
-| 用户管理 | ✅ 需要 | Admin only | FastAPI + Supabase Admin API |
+| 数据类型 | 读权限 | 写权限 | 示例表 |
+|---------|-------|-------|--------|
+| **参考数据** | 所有认证用户 | Admin only | region, analyst |
+| **业务数据** | 按角色/行级 | 按角色/行级 | report（未来） |
 
-## 测试验证
+---
 
-所有权限已通过集成测试验证：
-- ✅ Admin 用户可以执行所有操作
-- ✅ SA/Analyst 用户可以查看列表
-- ✅ SA/Analyst 用户无法创建/编辑/删除（返回 403）
-- ✅ 未认证用户无法访问任何端点（返回 401）
-
-## 维护说明
+## 维护指南
 
 ### 添加新的 API 端点
 
@@ -118,15 +152,19 @@ async def create_item(
     ...
 ```
 
-### 修改 RLS 策略
+### 添加新的参考数据表
 
-如需修改 RLS 策略，确保：
-1. 保持 `authenticated` 和 `postgres` 角色
-2. 避免使用依赖 `auth.jwt()` 或 `get_current_role()` 的复杂表达式
-3. 优先使用简单的 `USING (true)` 和 `WITH CHECK (true)`
+参考 `backend/migrations/001_create_region_table.sql` 和 `002_create_analyst_table.sql`：
+
+1. 创建表结构
+2. 启用 RLS：`ALTER TABLE xxx ENABLE ROW LEVEL SECURITY;`
+3. 创建读策略：`USING (true)`
+4. 创建写策略：`get_current_role() = 'admin'`
+
+---
 
 ## 参考资料
 
-- Supabase Python Client: https://github.com/supabase-community/supabase-py
-- Supabase RLS: https://supabase.com/docs/guides/auth/row-level-security
-- PostgREST: https://postgrest.org/en/stable/
+- [Supabase Auth](https://supabase.com/docs/guides/auth)
+- [Supabase RLS](https://supabase.com/docs/guides/auth/row-level-security)
+- [PostgREST](https://postgrest.org/en/stable/)

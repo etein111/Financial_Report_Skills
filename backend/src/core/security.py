@@ -1,70 +1,57 @@
 """
 安全相关功能
 
-JWT Token 验证和依赖注入
+Supabase Auth JWT Token 验证和依赖注入
 """
-from typing import Optional, Annotated
-from datetime import datetime, timedelta
+from typing import Annotated
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from jose import JWTError, jwt
-from .config import settings
+from .supabase import get_supabase
 
 # HTTP Bearer 认证
 security = HTTPBearer()
 
+# Supabase 客户端（用于验证 token）
+supabase_client = get_supabase()
 
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
+
+def verify_supabase_token(token: str) -> dict:
     """
-    创建 JWT Access Token
+    验证 Supabase Auth JWT Token
 
     Args:
-        data: 要编码的数据
-        expires_delta: 过期时间增量
+        token: Supabase Auth JWT token 字符串
 
     Returns:
-        JWT token 字符串
-    """
-    to_encode = data.copy()
-    if expires_delta:
-        expire = datetime.utcnow() + expires_delta
-    else:
-        expire = datetime.utcnow() + timedelta(minutes=settings.JWT_EXPIRE_MINUTES)
-
-    to_encode.update({
-        "exp": expire,
-        "iat": datetime.utcnow()
-    })
-
-    encoded_jwt = jwt.encode(
-        to_encode,
-        settings.JWT_SECRET,
-        algorithm=settings.JWT_ALGORITHM
-    )
-    return encoded_jwt
-
-
-def verify_token(token: str) -> dict:
-    """
-    验证 JWT Token
-
-    Args:
-        token: JWT token 字符串
-
-    Returns:
-        解码后的 payload
+        解码后的用户信息
 
     Raises:
         HTTPException: Token 无效或过期
     """
     try:
-        payload = jwt.decode(
-            token,
-            settings.JWT_SECRET,
-            algorithms=[settings.JWT_ALGORITHM]
-        )
-        return payload
-    except JWTError as e:
+        # 使用 Supabase 客户端验证 token
+        user_response = supabase_client.auth.get_user(jwt=token)
+
+        if not user_response.user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="无效的认证凭据"
+            )
+
+        user = user_response.user
+
+        # 从 app_metadata 获取角色
+        app_metadata = user.app_metadata or {}
+        user_metadata = user.user_metadata or {}
+
+        return {
+            "id": str(user.id),
+            "email": user.email,
+            "full_name": user_metadata.get("full_name"),
+            "role": app_metadata.get("role", "analyst"),
+        }
+    except Exception as e:
+        # 如果是 401 或 404，说明 token 无效
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="无效的认证凭据",
@@ -74,7 +61,7 @@ def verify_token(token: str) -> dict:
 
 def get_current_user_id(credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)]) -> str:
     """
-    从 JWT Token 中获取当前用户 ID
+    从 Supabase Auth JWT Token 中获取当前用户 ID
 
     Args:
         credentials: HTTP Bearer credentials
@@ -86,9 +73,9 @@ def get_current_user_id(credentials: Annotated[HTTPAuthorizationCredentials, Dep
         HTTPException: Token 无效或过期
     """
     token = credentials.credentials
-    payload = verify_token(token)
+    user_info = verify_supabase_token(token)
 
-    user_id: str = payload.get("sub")
+    user_id: str = user_info.get("id")
     if user_id is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -100,7 +87,7 @@ def get_current_user_id(credentials: Annotated[HTTPAuthorizationCredentials, Dep
 
 def get_current_user(credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)]) -> dict:
     """
-    从 JWT Token 中获取当前用户完整信息
+    从 Supabase Auth JWT Token 中获取当前用户完整信息
 
     Args:
         credentials: HTTP Bearer credentials
@@ -112,21 +99,7 @@ def get_current_user(credentials: Annotated[HTTPAuthorizationCredentials, Depend
         HTTPException: Token 无效或过期
     """
     token = credentials.credentials
-    payload = verify_token(token)
-
-    user_id: str = payload.get("sub")
-    if user_id is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="无效的 token payload",
-        )
-
-    return {
-        "id": user_id,
-        "email": payload.get("email"),
-        "role": payload.get("role", "analyst"),
-        "full_name": payload.get("full_name"),
-    }
+    return verify_supabase_token(token)
 
 
 def require_admin(current_user: Annotated[dict, Depends(get_current_user)]) -> dict:

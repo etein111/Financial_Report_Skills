@@ -46,11 +46,6 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-# 环境变量
-.env
-.env.local
-.env.*.local
-
 # 编辑器
 .vscode/*
 !.vscode/extensions.json
@@ -74,6 +69,11 @@ frontend/build/
 # 测试
 coverage/
 .nyc_output/
+temp/
+test_*.json
+*.token
+token.txt
+nul
 
 # TypeScript
 *.tsbuildinfo

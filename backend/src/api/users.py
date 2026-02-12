@@ -3,6 +3,7 @@
 
 处理用户的 CRUD 操作，包括创建、编辑、删除、搜索用户
 """
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from typing import Annotated, Optional
 from ..models.user import (
@@ -11,10 +12,58 @@ from ..models.user import (
     CheckEmailRequest, CheckEmailResponse
 )
 from ..core.security import get_current_user, require_admin
-from ..core.supabase import get_supabase
+from ..core.config import settings
 
 router = APIRouter()
-supabase = get_supabase()
+
+
+async def call_supabase_admin_api(method: str, path: str, data: dict = None) -> dict:
+    """调用 Supabase Admin API"""
+    url = f"{settings.SUPABASE_URL}/auth/v1{path}"
+    headers = {
+        "apikey": settings.SUPABASE_SERVICE_ROLE_KEY,
+        "Authorization": f"Bearer {settings.SUPABASE_SERVICE_ROLE_KEY}",
+        "Content-Type": "application/json"
+    }
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        if method == "GET":
+            response = await client.get(url, headers=headers)
+        elif method == "POST":
+            response = await client.post(url, headers=headers, json=data)
+        elif method == "PUT":
+            response = await client.put(url, headers=headers, json=data)
+        elif method == "DELETE":
+            response = await client.delete(url, headers=headers)
+        else:
+            raise ValueError(f"Unsupported method: {method}")
+
+        if response.status_code >= 400:
+            error_detail = response.text
+            try:
+                error_json = response.json()
+                error_detail = error_json.get("message", error_detail)
+            except:
+                pass
+            raise HTTPException(
+                status_code=response.status_code,
+                detail=error_detail
+            )
+
+        return response.json() if response.text else {}
+
+
+def format_user_dict(user: dict) -> dict:
+    """格式化用户数据（从字典）"""
+    return {
+        "id": user.get("id"),
+        "email": user.get("email"),
+        "full_name": user.get("user_metadata", {}).get("full_name"),
+        "role": user.get("app_metadata", {}).get("role", "analyst"),
+        "banned": user.get("banned", False),
+        "created_at": user.get("created_at"),
+        "last_sign_in_at": user.get("last_sign_in_at")
+    }
 
 
 def format_user_data(user) -> dict:
@@ -46,22 +95,23 @@ async def list_users(
     只有 Admin 可以访问。支持按邮箱或姓名搜索。
     """
     try:
-        # 使用 Supabase Admin API 列出用户
-        result = supabase.auth.admin.list_users()
+        # 调用 Supabase Admin API
+        result = await call_supabase_admin_api("GET", "/admin/users")
 
-        users = result.users if hasattr(result, 'users') else []
+        # Supabase 返回格式: {"users": [...], "aud": "..."}
+        users = result.get("users", [])
 
         # 搜索过滤
         if search:
             search_lower = search.lower()
             users = [
                 u for u in users
-                if search_lower in u.email.lower() or
-                search_lower in (u.user_metadata or {}).get("full_name", "").lower()
+                if search_lower in u.get("email", "").lower() or
+                search_lower in u.get("user_metadata", {}).get("full_name", "").lower()
             ]
 
         # 格式化用户数据
-        formatted_users = [format_user_data(u) for u in users]
+        formatted_users = [format_user_dict(u) for u in users]
 
         return {
             "success": True,
@@ -69,6 +119,8 @@ async def list_users(
             "data": formatted_users
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -87,8 +139,8 @@ async def create_user(
     只有 Admin 可以创建用户。
     """
     try:
-        # 使用 Supabase Admin API 创建用户
-        user = supabase.auth.admin.create_user({
+        # 调用 Supabase Admin API 创建用户
+        user = await call_supabase_admin_api("POST", "/admin/users", {
             "email": user_data.email,
             "password": user_data.password,
             "email_confirm": True,
@@ -104,16 +156,17 @@ async def create_user(
         return {
             "success": True,
             "message": "用户创建成功",
-            "data": format_user_data(user)
+            "data": format_user_dict(user)
         }
 
-    except Exception as e:
-        error_msg = str(e).lower()
-        if "duplicate" in error_msg or "already" in error_msg:
+    except HTTPException as e:
+        if e.status_code == 409 or "already" in str(e.detail):
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="该邮箱已被注册"
             )
+        raise
+    except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"创建用户失败: {str(e)}"
@@ -133,21 +186,15 @@ async def update_user(
     """
     try:
         # 获取现有用户
-        result = supabase.auth.admin.get_user_by_id(user_id)
-        if not result or not result.user:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="用户不存在"
-            )
-
-        existing_user = result.user
+        result = await call_supabase_admin_api("GET", f"/admin/users/{user_id}")
+        existing_user = result
 
         # 准备更新数据
         update_data = {
             "user_metadata": {
-                **(existing_user.user_metadata or {}),
+                **existing_user.get("user_metadata", {}),
                 "full_name": user_data.full_name if user_data.full_name is not None
-                    else existing_user.user_metadata.get("full_name")
+                    else existing_user.get("user_metadata", {}).get("full_name")
             }
         }
 
@@ -155,15 +202,12 @@ async def update_user(
             update_data["email"] = user_data.email
 
         # 更新用户
-        updated_user = supabase.auth.admin.update_user_by_id(
-            user_id,
-            update_data
-        )
+        updated_user = await call_supabase_admin_api("PUT", f"/admin/users/{user_id}", update_data)
 
         return {
             "success": True,
             "message": "用户更新成功",
-            "data": format_user_data(updated_user)
+            "data": format_user_dict(updated_user)
         }
 
     except HTTPException:
@@ -187,7 +231,7 @@ async def delete_user(
     """
     try:
         # 删除用户
-        supabase.auth.admin.delete_user(user_id)
+        await call_supabase_admin_api("DELETE", f"/admin/users/{user_id}")
 
         return {
             "success": True,
@@ -195,13 +239,14 @@ async def delete_user(
             "data": {"id": user_id}
         }
 
-    except Exception as e:
-        error_msg = str(e).lower()
-        if "not found" in error_msg:
+    except HTTPException as e:
+        if "not found" in str(e.detail).lower():
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="用户不存在"
             )
+        raise
+    except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"删除用户失败: {str(e)}"
@@ -220,10 +265,10 @@ async def check_email(
     """
     try:
         # 列出所有用户并检查邮箱
-        result = supabase.auth.admin.list_users()
-        users = result.users if hasattr(result, 'users') else []
+        result = await call_supabase_admin_api("GET", "/admin/users")
+        users = result.get("users", [])
 
-        exists = any(u.email == request.email for u in users)
+        exists = any(u.get("email") == request.email for u in users)
 
         return CheckEmailResponse(exists=exists)
 
@@ -245,24 +290,24 @@ async def change_user_password(
     """
     try:
         # 使用 Supabase Admin API 修改密码
-        updated_user = supabase.auth.admin.update_user_by_id(
-            user_id,
-            {"password": request.new_password}
-        )
+        updated_user = await call_supabase_admin_api("PUT", f"/admin/users/{user_id}", {
+            "password": request.new_password
+        })
 
         return {
             "success": True,
             "message": "密码修改成功",
-            "data": format_user_data(updated_user)
+            "data": format_user_dict(updated_user)
         }
 
-    except Exception as e:
-        error_msg = str(e).lower()
-        if "not found" in error_msg:
+    except HTTPException as e:
+        if "not found" in str(e.detail).lower():
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="用户不存在"
             )
+        raise
+    except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"修改密码失败: {str(e)}"
@@ -282,30 +327,21 @@ async def change_user_role(
     """
     try:
         # 获取现有用户
-        result = supabase.auth.admin.get_user_by_id(user_id)
-        if not result or not result.user:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="用户不存在"
-            )
-
-        existing_user = result.user
+        result = await call_supabase_admin_api("GET", f"/admin/users/{user_id}")
+        existing_user = result
 
         # 更新 app_metadata 中的角色
-        updated_user = supabase.auth.admin.update_user_by_id(
-            user_id,
-            {
-                "app_metadata": {
-                    **(existing_user.app_metadata or {}),
-                    "role": request.role
-                }
+        updated_user = await call_supabase_admin_api("PUT", f"/admin/users/{user_id}", {
+            "app_metadata": {
+                **existing_user.get("app_metadata", {}),
+                "role": request.role
             }
-        )
+        })
 
         return {
             "success": True,
             "message": "角色修改成功",
-            "data": format_user_data(updated_user)
+            "data": format_user_dict(updated_user)
         }
 
     except HTTPException:
@@ -329,28 +365,21 @@ async def toggle_user_status(
     """
     try:
         # 获取现有用户
-        result = supabase.auth.admin.get_user_by_id(user_id)
-        if not result or not result.user:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="用户不存在"
-            )
-
-        existing_user = result.user
-        new_banned_status = not (existing_user.banned or False)
+        result = await call_supabase_admin_api("GET", f"/admin/users/{user_id}")
+        existing_user = result
+        new_banned_status = not existing_user.get("banned", False)
 
         # 更新用户状态
-        updated_user = supabase.auth.admin.update_user_by_id(
-            user_id,
-            {"banned": new_banned_status}
-        )
+        updated_user = await call_supabase_admin_api("PUT", f"/admin/users/{user_id}", {
+            "banned": new_banned_status
+        })
 
         action = "禁用" if new_banned_status else "启用"
 
         return {
             "success": True,
             "message": f"用户{action}成功",
-            "data": format_user_data(updated_user)
+            "data": format_user_dict(updated_user)
         }
 
     except HTTPException:

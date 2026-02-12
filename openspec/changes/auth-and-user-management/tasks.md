@@ -105,27 +105,27 @@
 **目标：** 端到端测试整个系统功能，确保所有流程正常工作。
 
 ### 4.1 认证流程测试
-- [ ] 4.1.1 测试完整登录流程（输入有效凭据 → 登录成功 → 跳转桌面）
-- [ ] 4.1.2 测试登录失败流程（无效凭据 → 显示错误提示）
-- [ ] 4.1.3 测试登出功能（点击 Logout → 清除状态 → 跳转登录）
-- [ ] 4.1.4 测试路由守卫（未登录访问 `/desktop` → 重定向登录）
+- [x] 4.1.1 测试完整登录流程（输入有效凭据 → 登录成功 → 跳转桌面）
+- [x] 4.1.2 测试登录失败流程（无效凭据 → 显示错误提示）
+- [x] 4.1.3 测试登出功能（点击 Logout → 清除状态 → 跳转登录）
+- [x] 4.1.4 测试路由守卫（未登录访问 `/desktop` → 重定向登录）
 - [ ] 4.1.5 测试 Token 过期处理（清除 token → 401 → 重定向登录）
 
 ### 4.2 Region 管理测试
-- [ ] 4.2.1 测试 Region 列表加载（所有认证用户可见）
-- [ ] 4.2.2 测试创建 Region（Admin 成功，其他角色 403）
-- [ ] 4.2.3 测试编辑 Region（Admin 成功，其他角色 403）
-- [ ] 4.2.4 测试删除 Region（Admin 成功，其他角色 403）
-- [ ] 4.2.5 测试 RLS policies（使用不同角色的 token 验证数据库层权限）
+- [x] 4.2.1 测试 Region 列表加载（所有认证用户可见）
+- [x] 4.2.2 测试创建 Region（Admin 成功，其他角色 403）
+- [x] 4.2.3 测试编辑 Region（Admin 成功，其他角色 403）
+- [x] 4.2.4 测试删除 Region（Admin 成功，其他角色 403）
+- [x] 4.2.5 测试 RLS policies（使用不同角色的 token 验证数据库层权限）
 
 ### 4.3 Analyst 信息管理测试
-- [ ] 4.3.1 测试 Analyst 信息列表加载（所有认证用户可见）
-- [ ] 4.3.2 测试搜索功能（按 full_name 或 email 过滤）
-- [ ] 4.3.3 测试邮箱唯一性检查（重复邮箱返回错误）
-- [ ] 4.3.4 测试创建 Analyst 信息（Admin 成功）
-- [ ] 4.3.5 测试编辑 Analyst 信息（Admin 成功）
-- [ ] 4.3.6 测试删除 Analyst 信息（Admin 成功）
-- [ ] 4.3.7 测试页面权限控制（SA 和 Analyst 访问返回 403 或 404）
+- [x] 4.3.1 测试 Analyst 信息列表加载（所有认证用户可见）
+- [x] 4.3.2 测试搜索功能（按 full_name 或 email 过滤）
+- [x] 4.3.3 测试邮箱唯一性检查（重复邮箱返回错误）
+- [x] 4.3.4 测试创建 Analyst 信息（Admin 成功）
+- [x] 4.3.5 测试编辑 Analyst 信息（Admin 成功）
+- [x] 4.3.6 测试删除 Analyst 信息（Admin 成功）
+- [x] 4.3.7 测试页面权限控制（SA 和 Analyst 访问返回 403 或 404）
 
 ### 4.4 UI/UX 测试
 - [ ] 4.4.1 验证粒子背景效果和性能（60fps，无卡顿）
@@ -148,8 +148,11 @@
 **目标：** 完善项目文档，清理代码，准备交付。
 
 ### 5.1 文档更新
-- [ ] 5.1.1 更新根目录 `README.md`（项目说明、技术栈、启动命令、环境配置）
-- [ ] 5.1.2 更新 `openspec/changes/auth-and-user-management/proposal.md`（记录实施完成情况）
+- [x] 5.1.1 更新根目录 `README.md`（项目说明、技术栈、启动命令、环境配置）
+- [x] 5.1.2 更新 `openspec/changes/auth-and-user-management/proposal.md`（记录实施完成情况）
+- [x] 5.1.3 更新 `docs/RLS_ARCHITECTURE.md`（记录 Supabase Auth 迁移和 RLS 架构）
+- [x] 5.1.4 更新 `openspec/changes/auth-and-user-management/specs/permission-control/spec.md`（更新 RLS 策略和权限验证实现）
+- [x] 5.1.5 更新 `openspec/changes/auth-and-user-management/specs/user-auth/spec.md`（更新 Supabase Auth token 说明）
 
 ### 5.2 代码质量
 - [ ] 5.2.1 运行代码格式化和检查（后端：`uv run black backend/` + `uv run ruff check backend/`，前端：`npm run format` + `npm run lint` + `npm run type-check`）
@@ -161,11 +164,49 @@
 
 ---
 
+## Supabase Auth 迁移记录
+
+### 2026-02-12: 完成从自定义 JWT 到 Supabase Auth 的迁移
+
+**背景：**
+- 原实现使用自定义 JWT（python-jose 签发，HS256 算法）
+- RLS 策略使用 `auth.jwt()->'app_metadata'->>'role'` 读取角色
+- Supabase Python 客户端与自定义 JWT 不兼容
+
+**变更内容：**
+1. **Token 来源**: 自定义 JWT → Supabase Auth 原生 token（ES256）
+2. **验证方式**: `python-jose.decode()` → `supabase_client.auth.get_user()`
+3. **登录 API**: 直接返回 `session.access_token` 而非创建新 token
+4. **RLS 策略**: 现在完全兼容 `auth.jwt()` 函数
+
+**影响文件：**
+- `backend/src/api/auth.py` - 移除 `create_access_token` 使用
+- `backend/src/core/security.py` - 新增 `verify_supabase_token()` 函数
+- `docs/RLS_ARCHITECTURE.md` - 记录架构变更
+
+**测试验证：**
+- ✅ Admin 用户可以执行所有操作
+- ✅ SA/Analyst 用户可以查看列表（200 OK）
+- ✅ SA/Analyst 用户无法创建/编辑/删除（403 Forbidden）
+- ✅ Token 格式：ES256（Supabase 标准）
+
+---
+
 ## 任务统计
 
-- **总任务数**: 68（已简化优化）
-- **已完成**: 0
-- **待完成**: 68
+- **总任务数**: 73
+- **已完成**: 54
+- **待完成**: 19
+
+### 完成进度
+
+| 阶段 | 已完成 | 总计 | 进度 |
+|-----|--------|-----|------|
+| 阶段 1：环境准备 | 9 | 9 | 100% |
+| 阶段 2：后端 API 开发 | 15 | 15 | 100% |
+| 阶段 3：前端开发 | 16 | 16 | 100% |
+| 阶段 4：集成测试 | 14 | 20 | 70% |
+| 阶段 5：文档和清理 | 0 | 13 | 0% |
 
 ## 简化说明
 
