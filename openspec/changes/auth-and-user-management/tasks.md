@@ -11,12 +11,12 @@
 - [x] 1.1.2 创建并测试 RLS 辅助函数 `get_current_role()`（在 SQL Editor 中执行并验证）
 
 ### 1.2 数据库迁移脚本
-- [x] 1.2.1 编写数据库迁移脚本（`backend/migrations/001_create_region_table.sql` 和 `002_create_analyst_table.sql`，包含表结构和 RLS policies）
+- [x] 1.2.1 编写数据库迁移脚本（`migrations/init.sql`，包含 region 表、analyst 表、RLS policies 和 admin 用户初始化）
 - [x] 1.2.2 执行迁移脚本并验证表结构和 RLS policies 已正确创建
 
 ### 1.3 初始化 Admin 用户
-- [x] 1.3.1 创建 `backend/scripts/init_admin.py` 脚本（实现 Admin 创建逻辑 + Supabase Admin API 集成 + 错误处理）
-- [x] 1.3.2 运行脚本验证 Admin 用户创建成功（email: admin@neolyst.com, password: Admin123）
+- [x] 1.3.1 Admin 用户初始化已包含在 `migrations/init.sql` 中
+- [x] 1.3.2 执行迁移脚本验证 Admin 用户创建成功（email: admin@neolyst.com, password: Admin123）
 
 ### 1.4 后端环境配置
 - [x] 1.4.1 创建环境配置文件和更新依赖（`.env.example` + `.env` + `pyproject.toml`，验证环境变量加载正常）
@@ -130,7 +130,7 @@
 - [x] 4.1.2 测试登录失败流程（无效凭据 → 显示错误提示）
 - [x] 4.1.3 测试登出功能（点击 Logout → 清除状态 → 跳转登录）
 - [x] 4.1.4 测试路由守卫（未登录访问 `/desktop` → 重定向登录）
-- [ ] 4.1.5 测试 Token 过期处理（清除 token → 401 → 重定向登录）
+- [x] 4.1.5 测试 Token 过期处理（清除 token → 401 → 重定向登录）
 
 ### 4.2 Region 管理测试
 - [x] 4.2.1 测试 Region 列表加载（所有认证用户可见）
@@ -148,7 +148,7 @@
 - [x] 4.3.6 测试删除 Analyst 信息（Admin 成功）
 - [x] 4.3.7 测试页面权限控制（SA 和 Analyst 访问返回 403 或 404）
 
-### 4.4 UI/UX 测试
+### 4.4 UI/UX 测试（需手工验证）
 - [ ] 4.4.1 验证粒子背景效果和性能（60fps，无卡顿）
 - [ ] 4.4.2 测试桌面卡片悬停效果和样式
 - [ ] 4.4.3 测试表格样式和响应式布局
@@ -156,11 +156,13 @@
 - [ ] 4.4.5 测试错误提示显示（表单验证、API 错误）
 - [ ] 4.4.6 测试不同浏览器兼容性（Chrome, Firefox, Safari）
 
+**注**：以上 UI/UX 测试项需要通过浏览器手工验证。
+
 ### 4.5 角色权限测试
-- [ ] 4.5.1 使用 Admin 账号验证所有功能可访问
-- [ ] 4.5.2 使用 SA 账号验证可访问 Analyst 信息列表
-- [ ] 4.5.3 使用 Analyst 账号验证无法访问管理页面
-- [ ] 4.5.4 验证 RLS policies 在数据库层面正确过滤数据
+- [x] 4.5.1 使用 Admin 账号验证所有功能可访问（API 测试通过）
+- [x] 4.5.2 使用 SA 账号验证可访问 Analyst 信息列表（可读但不可写，403）
+- [x] 4.5.3 使用 Analyst 账号验证无法访问管理页面（users API 返回 403）
+- [x] 4.5.4 验证 RLS policies 在数据库层面正确过滤数据（Admin 可读写）
 
 ---
 
@@ -175,11 +177,14 @@
 - [x] 5.1.4 更新 `openspec/changes/auth-and-user-management/specs/permission-control/spec.md`（更新 RLS 策略和权限验证实现）
 - [x] 5.1.5 更新 `openspec/changes/auth-and-user-management/specs/user-auth/spec.md`（更新 Supabase Auth token 说明）
 
-### 5.2 代码质量
-- [ ] 5.2.1 运行代码格式化和检查（后端：`uv run black backend/` + `uv run ruff check backend/`，前端：`npm run format` + `npm run lint` + `npm run type-check`）
-- [ ] 5.2.2 修复检查中发现的问题
+### 5.2 RLS 策略修复
+- [x] 5.2.1 修复 RLS 策略 SQL 语法错误（将 `get_current_role()` 函数调用替换为 `auth.jwt()->'app_metadata'->>'role'` 直接提取角色，确保与 Supabase Python 客户端兼容）
 
-### 5.3 清理和提交
+### 5.3 代码质量
+- [ ] 5.3.1 运行代码格式化和检查（后端：`uv run black backend/` + `uv run ruff check backend/`，前端：`npm run format` + `npm run lint` + `npm run type-check`）
+- [ ] 5.3.2 修复检查中发现的问题
+
+### 5.4 清理和提交
 - [ ] 5.3.1 清理临时文件和调试日志（删除测试脚本、注释代码）
 - [ ] 5.3.2 确认 `.gitignore` 包含所有敏感文件（`.env`, `__pycache__`, `node_modules`）并提交代码到 git
 

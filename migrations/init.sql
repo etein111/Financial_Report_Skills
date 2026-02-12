@@ -20,8 +20,7 @@ INSERT INTO auth.users (
   raw_user_meta_data,
   raw_app_meta_data,
   created_at,
-  updated_at,
-  last_sign_in_at
+  updated_at
 ) VALUES (
   (SELECT id FROM auth.instances LIMIT 1),
   gen_random_uuid(),
@@ -33,12 +32,11 @@ INSERT INTO auth.users (
   '{"full_name": "Admin", "role": "admin"}'::jsonb,
   '{"role": "admin", "provider": "email"}'::jsonb,
   now(),
-  now(),
   now()
 );
 
 -- Region 表
-DROP TABLE IF EXISTS region;
+DROP TABLE IF EXISTS region CASCADE;
 
 CREATE TABLE region (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -49,8 +47,8 @@ CREATE TABLE region (
 );
 
 COMMENT ON TABLE region IS '地区表';
-COMMENT ON COLUMN region.name IS '地区名称（如：Hong Kong, Singapore）';
-COMMENT ON COLUMN region.code IS '地区代码（如：HK, SG）';
+COMMENT ON COLUMN region.name IS '地区名称';
+COMMENT ON COLUMN region.code IS '地区代码';
 
 ALTER TABLE region ENABLE ROW LEVEL SECURITY;
 
@@ -59,18 +57,16 @@ CREATE POLICY "Region is viewable by all authenticated users"
 
 CREATE POLICY "Region can be created by admin only"
   ON region FOR INSERT TO authenticated
-  USING ((auth.jwt()->>'app_metadata'->>'role' = 'admin')
-  WITH CHECK ((auth.jwt()->>'app_metadata'->>'role' = 'admin');
+  WITH CHECK ((auth.jwt()->'app_metadata'->>'role') = 'admin');
 
 CREATE POLICY "Region can be updated by admin only"
   ON region FOR UPDATE TO authenticated
-  USING ((auth.jwt()->>'app_metadata'->>'role' = 'admin')
-  WITH CHECK ((auth.jwt()->>'app_metadata'->>'role' = 'admin');
+  USING ((auth.jwt()->'app_metadata'->>'role') = 'admin')
+  WITH CHECK ((auth.jwt()->'app_metadata'->>'role') = 'admin');
 
 CREATE POLICY "Region can be deleted by admin only"
   ON region FOR DELETE TO authenticated
-  USING ((auth.jwt()->>'app_metadata'->>'role' = 'admin')
-  WITH CHECK ((auth.jwt()->>'app_metadata'->>'role' = 'admin');
+  USING ((auth.jwt()->'app_metadata'->>'role') = 'admin');
 
 CREATE OR REPLACE FUNCTION update_updated_at()
 RETURNS TRIGGER AS $$
@@ -96,7 +92,7 @@ INSERT INTO region (name, code) VALUES
   ('United States', 'US');
 
 -- Analyst 表
-DROP TABLE IF EXISTS analyst;
+DROP TABLE IF EXISTS analyst CASCADE;
 
 CREATE TABLE analyst (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -115,14 +111,10 @@ COMMENT ON TABLE analyst IS 'Analyst 信息表';
 COMMENT ON COLUMN analyst.full_name IS '英文姓名';
 COMMENT ON COLUMN analyst.chinese_name IS '中文姓名';
 COMMENT ON COLUMN analyst.email IS '邮箱地址';
-COMMENT ON COLUMN analyst.suffix IS '后缀（如：CFA, CPA）';
+COMMENT ON COLUMN analyst.suffix IS '后缀';
 COMMENT ON COLUMN analyst.region_id IS '所属地区（外键）';
-COMMENT ON COLUMN analyst.sfc IS 'SFC 编号（证监会牌照号）';
+COMMENT ON COLUMN analyst.sfc IS 'SFC 编号';
 COMMENT ON COLUMN analyst.is_active IS '是否激活状态';
-
-CREATE INDEX idx_analyst_email ON analyst(email);
-CREATE INDEX idx_analyst_region_id ON analyst(region_id);
-CREATE INDEX idx_analyst_is_active ON analyst(is_active);
 
 ALTER TABLE analyst ENABLE ROW LEVEL SECURITY;
 
@@ -131,18 +123,16 @@ CREATE POLICY "Analyst is viewable by all authenticated users"
 
 CREATE POLICY "Analyst can be created by admin only"
   ON analyst FOR INSERT TO authenticated
-  USING ((auth.jwt()->>'app_metadata'->>'role' = 'admin')
-  WITH CHECK ((auth.jwt()->>'app_metadata'->>'role' = 'admin');
+  WITH CHECK ((auth.jwt()->'app_metadata'->>'role') = 'admin');
 
 CREATE POLICY "Analyst can be updated by admin only"
   ON analyst FOR UPDATE TO authenticated
-  USING ((auth.jwt()->>'app_metadata'->>'role' = 'admin')
-  WITH CHECK ((auth.jwt()->>'app_metadata'->>'role' = 'admin');
+  USING ((auth.jwt()->'app_metadata'->>'role') = 'admin')
+  WITH CHECK ((auth.jwt()->'app_metadata'->>'role') = 'admin');
 
 CREATE POLICY "Analyst can be deleted by admin only"
   ON analyst FOR DELETE TO authenticated
-  USING ((auth.jwt()->>'app_metadata'->>'role' = 'admin')
-  WITH CHECK ((auth.jwt()->>'app_metadata'->>'role' = 'admin');
+  USING ((auth.jwt()->'app_metadata'->>'role') = 'admin');
 
 CREATE TRIGGER analyst_updated_at
   BEFORE UPDATE ON analyst FOR EACH ROW
@@ -153,7 +143,7 @@ SELECT
   'region' as table_name,
   COUNT(*) as row_count
 FROM region
-UNION
+UNION ALL
 SELECT
   'analyst' as table_name,
   COUNT(*) as row_count

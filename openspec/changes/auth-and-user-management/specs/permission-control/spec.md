@@ -4,7 +4,7 @@
 
 ### Requirement: 系统支持三种用户角色
 
-系统 SHALL 支持三种用户角色：Admin（系统管理员）、SA（高级分析师）、Analyst（普通分析师）。
+系统 SHALL 支持三种用户角色：Admin（系统管理员）、SA（合规人员）、Analyst（普通分析师）。
 
 #### Scenario: 角色存储在 Supabase Auth app_metadata
 
@@ -180,8 +180,8 @@ async def create_region(
 - **Analyst 信息管理**：创建、编辑、删除 Analyst 信息
 - **报告管理**：完整权限
 
-### SA（Senior Analyst - 高级分析师）
-- **有限权限**：可以访问 Analyst 信息和审核功能
+### SA（合规人员）
+- **审核权限**：可以审核报告内容
 - **查看功能**：查看 Analyst 信息列表、查看报告列表
 - **审核功能**：审核报告（后续变更）
 - **限制**：无法管理用户、Region、Analyst 信息
