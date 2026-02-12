@@ -94,6 +94,27 @@
 - [x] 3.8.1 创建 Analyst 信息列表页面（`views/AnalystInfoPage.vue`，表格 + 搜索 + 返回链接）
 - [x] 3.8.2 实现 CRUD 功能和表单验证（创建/编辑对话框，邮箱唯一性前端实时验证，API 调用，Admin only 权限）
 
+### 3.9 用户管理页面
+- [x] 3.9.1 创建用户列表页面（`views/UsersPage.vue`，表格形式，支持按邮箱/姓名搜索）
+- [x] 3.9.2 实现用户 CRUD 功能（创建/编辑用户，Admin only 权限）
+- [x] 3.9.3 实现密码管理功能（修改密码弹窗）
+- [x] 3.9.4 实现角色管理功能（修改用户角色）
+- [x] 3.9.5 实现用户状态管理（启用/禁用账号，切换按钮）
+
+### 3.10 其他功能
+- [x] 3.10.1 创建 Coming Soon 占位页面（`views/ComingSoon.vue`，"This feature is coming soon" 提示，返回链接）
+- [x] 3.10.2 实现登出功能（Desktop.vue 中 Logout 按钮，清除 localStorage，重置状态，跳转登录）
+- [x] 3.6.1 实现路由守卫（未登录重定向到 `/login`，已登录访问 `/login` 重定向到 `/desktop`）
+- [x] 3.6.2 创建权限检查函数并集成（`composables/usePermission.ts`，功能卡片权限控制）
+
+### 3.7 Region 管理页面
+- [x] 3.7.1 创建 Region 列表页面（`views/RegionsPage.vue`，表格形式，所有用户可见，返回链接）
+- [x] 3.7.2 实现 CRUD 功能（创建/编辑/删除对话框，API 调用和错误处理，Admin only 权限控制）
+
+### 3.8 Analyst 信息管理页面
+- [x] 3.8.1 创建 Analyst 信息列表页面（`views/AnalystInfoPage.vue`，表格 + 搜索 + 返回链接）
+- [x] 3.8.2 实现 CRUD 功能和表单验证（创建/编辑对话框，邮箱唯一性前端实时验证，API 调用，Admin only 权限）
+
 ### 3.9 其他功能
 - [x] 3.9.1 创建 Coming Soon 占位页面（`views/ComingSoon.vue`，"This feature is coming soon" 提示，返回链接）
 - [x] 3.9.2 实现登出功能（Desktop.vue 中 Logout 按钮，清除 localStorage，重置状态，跳转登录）

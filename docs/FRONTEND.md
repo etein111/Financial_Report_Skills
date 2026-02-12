@@ -6,7 +6,7 @@ Neolyst 前端基于 Vue 3 + TypeScript + Vite 构建，使用 Tailwind CSS 进�
 
 **开发服务器:** `http://localhost:5173`
 
-**API 服务器:** `http://localhost:8000`
+**API 服务器:** `http://localhost:5173`
 
 ---
 
@@ -139,7 +139,7 @@ const { userState, login, logout } = useAuth()
 在 `.env` 文件中定义：
 
 ```env
-VITE_API_BASE_URL=http://localhost:8000
+VITE_API_BASE_URL=http://localhost:5173
 VITE_SUPABASE_URL=https://slxeorayantrboopghej.supabase.co
 VITE_SUPABASE_ANON_KEY=your-anon-key
 ```

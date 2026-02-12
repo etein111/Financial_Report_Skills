@@ -18,27 +18,32 @@ test.describe('桌面页面测试', () => {
 
   test('显示所有功能卡片', async ({ page }) => {
     // Reports 组卡片
-    await expect(page.locator('text=Research Reports')).toBeVisible();
-    await expect(page.locator('text=Sector Analysis')).toBeVisible();
+    await expect(page.locator('.card-title:has-text("Reports")').first()).toBeVisible();
+    await expect(page.locator('.card-title:has-text("New Report")')).toBeVisible();
 
-    // Data Management 组卡片
-    await expect(page.locator('text=Regions')).toBeVisible();
-    await expect(page.locator('text=Analyst Information')).toBeVisible();
-    await expect(page.locator('text=Users')).toBeVisible();
+    // Management 组卡片
+    await expect(page.locator('.card-title:has-text("Regions")')).toBeVisible();
+    await expect(page.locator('.card-title:has-text("Analyst Info")')).toBeVisible();
+    await expect(page.locator('.card-title:has-text("Users")')).toBeVisible();
   });
 
-  test('点击功能卡片在新标签页打开', async ({ page, context }) => {
-    // 监听新页面
+  test('点击功能卡片导航到对应页面', async ({ page, context }) => {
+    // 监听新标签页
     const pagePromise = context.waitForEvent('page');
 
-    // 点击 Regions 卡片
-    await page.click('text=Regions');
+    // 点击 Regions 卡片（使用更精确的选择器）
+    await page.locator('.card:has-text("Regions")').click();
 
     // 等待新标签页打开
     const newPage = await pagePromise;
+    await newPage.waitForLoadState('networkidle');
 
-    // 验证新页面 URL
+    // 验证新标签页显示 Regions 页面
+    await expect(newPage.locator('h1:has-text("Regions")')).toBeVisible();
     await expect(newPage).toHaveURL(/\/regions/);
+
+    // 关闭新标签页
+    await newPage.close();
   });
 
   test('点击 Logout 按钮登出', async ({ page }) => {

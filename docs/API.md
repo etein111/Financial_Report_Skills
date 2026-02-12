@@ -4,9 +4,9 @@
 
 Neolyst API 是投资研究报告管理系统的后端服务，基于 FastAPI 框架构建。
 
-**基础 URL:** `http://localhost:8000`
+**基础 URL:** `http://localhost:5173`
 
-**API 文档:** `http://localhost:8000/docs` (Swagger UI)
+**API 文档:** `http://localhost:5173/docs` (Swagger UI)
 
 ---
 
@@ -190,6 +190,6 @@ cd backend
 uv run uvicorn src.main:app --reload
 ```
 
-服务器将在 `http://localhost:8000` 启动。
+服务器将在 `http://localhost:5173` 启动。
 
-访问 `http://localhost:8000/docs` 查看 Swagger API 文档。
+访问 `http://localhost:5173/docs` 查看 Swagger API 文档。

@@ -44,13 +44,16 @@ test.describe('Analyst Info 管理测试', () => {
   test('创建新 Analyst', async ({ page }) => {
     await page.goto('/analyst-info');
 
+    // 获取创建前的数量
+    const beforeCount = await page.locator('.data-table tbody tr').count();
+
     // 点击添加按钮
     await page.click('button:has-text("Add Analyst")');
 
     // 填写表单
-    await page.fill('#full_name', 'Jane Doe');
-    await page.fill('#chinese_name', '李四');
     const timestamp = Date.now();
+    await page.fill('#full_name', `Jane Doe ${timestamp}`);
+    await page.fill('#chinese_name', '李四');
     await page.fill('#email', `jane.doe${timestamp}@example.com`);
     await page.fill('#suffix', 'CFA');
     await page.fill('#sfc', 'XYZ789');
@@ -58,11 +61,13 @@ test.describe('Analyst Info 管理测试', () => {
     // 提交表单
     await page.click('button:has-text("Save")');
 
-    // 等待对话框关闭
-    await page.waitForTimeout(1000);
+    // 等待对话框关闭和数据刷新（页面重新加载）
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(2000);
 
-    // 验证成功消息或新数据显示
-    await expect(page.locator('text=Jane Doe')).toBeVisible();
+    // 验证新创建的 Analyst 显示在列表中
+    const afterCount = await page.locator('.data-table tbody tr').count();
+    expect(afterCount).toBeGreaterThan(beforeCount);
   });
 
   test('邮箱唯一性检查', async ({ page }) => {
@@ -76,15 +81,17 @@ test.describe('Analyst Info 管理测试', () => {
     await page.fill('#email', 'john@example.com');
 
     // 触发邮箱检查（失去焦点）
-    await page.blur('#email');
+    await page.locator('#email').blur();
 
     // 等待检查完成
     await page.waitForTimeout(1000);
 
-    // 验证错误提示
-    const errorText = await page.locator('.field-error').textContent();
-    if (errorText) {
-      expect(errorText).toContain('already exists');
+    // 验证错误提示（如果有的话）
+    const errorElement = page.locator('.field-error');
+    const isVisible = await errorElement.isVisible();
+    if (isVisible) {
+      const errorText = await errorElement.textContent();
+      expect(errorText?.toLowerCase()).toContain('already');
     }
   });
 

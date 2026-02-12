@@ -42,7 +42,7 @@ const isAdmin = computed(() => userState.value?.role === 'admin')
 
 const handleClick = () => {
   if (props.url && !isComingSoon.value) {
-    router.push(props.url)
+    window.open(props.url, '_blank')
   }
 }
 </script>
