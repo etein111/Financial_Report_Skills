@@ -173,6 +173,38 @@ src/
 
 ---
 
+## 桌面功能卡片
+
+桌面主页显示功能卡片，按功能分组展示。点击卡片会在新浏览器标签页打开对应功能页面。
+
+### 功能卡片分组
+
+**Reports 组：**
+- Reports（报告列表）
+- New Report（创建新报告）
+- Templates（模板管理）
+- Sectors（行业分类）
+
+**Data Management 组：**
+- Regions（地区管理）
+- Analyst Info（分析师信息）
+- Users（用户管理，仅 Admin）
+
+### 卡片行为
+
+- **点击方式**: 在新标签页打开（使用 `window.open(url, '_blank')`）
+- **桌面保持**: 桌面主页保持在原标签页
+- **Coming Soon**: 未实现功能显示 "Coming Soon" 标签，点击后显示占位页面
+- **权限控制**: Admin 专用卡片仅对 Admin 用户可见
+- **悬停效果**: 鼠标悬停时边框变亮、轻微上移
+
+### 组件文件
+
+- `views/Desktop.vue` - 桌面主页
+- `components/desktop/DesktopCard.vue` - 功能卡片组件
+
+---
+
 ## 样式指南
 
 ### Tailwind CSS
