@@ -21,7 +21,7 @@
 
 #### Scenario: 非 Admin 写入 Region
 - **WHEN** SA 或 Analyst 调用 `POST`、`PUT`、`DELETE /api/regions`
-- **THEN** 系统 MUST 返回 403 无权限
+- **THEN** 系统 MUST 返回 403 Forbidden
 
 ### Requirement: 系统预置 Region 基础数据
 系统 SHALL 预置并维护固定 Region 基础数据集合。

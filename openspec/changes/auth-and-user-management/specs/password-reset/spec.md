@@ -13,14 +13,18 @@
 - **THEN** 接口 MUST 返回与成功请求一致的统一提示
 - **AND** 系统 MUST NOT 暴露邮箱是否存在
 
-### Requirement: 用户可以通过重置链接设置新密码
-系统 SHALL 提供重置密码接口，允许用户通过有效重置凭据设置新密码。
+### Requirement: 用户通过 Supabase 托管重置页设置新密码
+系统 SHALL 使用 Supabase 托管重置页完成新密码设置，不提供站内重置密码提交接口。
 
 #### Scenario: 重置成功
-- **WHEN** 用户调用 `POST /api/auth/reset-password` 并提交有效重置凭据与新密码
-- **THEN** 系统 MUST 更新该用户密码
-- **AND** 用户后续可以使用新密码登录
+- **WHEN** 用户点击邮件中的重置链接并在 Supabase 托管重置页提交新密码
+- **THEN** 用户密码 MUST 被更新
+- **AND** 用户后续可以使用新密码登录本系统
 
 #### Scenario: 重置凭据无效
-- **WHEN** 用户提交过期或无效重置凭据
-- **THEN** 系统 MUST 返回重置失败错误
+- **WHEN** 用户访问过期或无效的重置链接
+- **THEN** Supabase 托管重置页 MUST 返回失败提示
+
+#### Scenario: 站内不暴露重置提交接口
+- **WHEN** 客户端尝试调用 `POST /api/auth/reset-password`
+- **THEN** 系统 MUST NOT 提供该接口

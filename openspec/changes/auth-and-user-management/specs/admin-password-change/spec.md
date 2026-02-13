@@ -20,4 +20,4 @@
 
 #### Scenario: 非 Admin 调用改密接口
 - **WHEN** SA 或 Analyst 调用 `PUT /api/users/{id}/password`
-- **THEN** 系统 MUST 返回 403 无权限
+- **THEN** 系统 MUST 返回 403 Forbidden

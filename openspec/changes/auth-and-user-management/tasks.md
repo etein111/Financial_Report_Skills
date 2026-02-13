@@ -29,7 +29,7 @@
 - [ ] 2.1 实现登录接口 `POST /api/auth/login`，登录成功写入 HttpOnly Cookie。
 - [ ] 2.2 实现登出接口 `POST /api/auth/logout`，清理会话 Cookie。
 - [ ] 2.3 实现当前用户接口 `GET /api/auth/me`。
-- [ ] 2.4 实现忘记密码与重置密码接口：`POST /api/auth/forgot-password`、`POST /api/auth/reset-password`。
+- [ ] 2.4 实现忘记密码接口 `POST /api/auth/forgot-password`，并配置 Supabase 托管重置页跳转。
 - [ ] 2.5 实现依赖：`get_access_token`、`get_current_user`、`require_admin`。
 - [ ] 2.6 完成会话与安全设置：`HttpOnly`、`Secure`、`SameSite=Lax`。
 - [ ] 2.7 校验角色来源仅使用 Auth `app_metadata.role`（服务端可改）。
@@ -56,7 +56,7 @@
 **目标**：完成登录页、桌面页、管理页与 403 页，满足导航与视觉约定。
 
 - [ ] 4.1 页面路由完成：`/login`、`/desktop`、`/users`、`/regions`、`/analyst-info`、`/403`。
-- [ ] 4.2 页面访问控制：管理页仅 Admin；越权访问返回 403 页面（文案 `无权限`）。
+- [ ] 4.2 页面访问控制：管理页仅 Admin；越权访问返回 403 页面（文案 `No permission`）。
 - [ ] 4.3 落地 Desktop-as-Launcher 约定：功能卡片新标签打开；功能页无“返回桌面”按钮。
 - [ ] 4.4 管理页交互使用 HTMX 完成搜索、分页、增删改局部刷新。
 - [ ] 4.5 登录页与桌面页视觉对齐原型：

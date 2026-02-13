@@ -21,7 +21,7 @@
 
 #### Scenario: 非 Admin 写入 Analyst 信息
 - **WHEN** SA 或 Analyst 调用 `POST`、`PUT`、`DELETE /api/analyst-info`
-- **THEN** 系统 MUST 返回 403 无权限
+- **THEN** 系统 MUST 返回 403 Forbidden
 
 ### Requirement: Analyst 列表必须支持指定搜索与展示字段
 系统 SHALL 按固定字段支持搜索与展示。

@@ -20,12 +20,12 @@
 - **THEN** 系统 MUST 拒绝访问
 
 ### Requirement: 非 Admin 访问管理页面返回 403 页面
-系统 SHALL 在已登录但无权限场景返回 403 页面，并展示 `无权限` 文案。
+系统 SHALL 在已登录但无权限场景返回 403 页面，并展示 `No permission` 文案。
 
 #### Scenario: 强行访问管理页面
 - **WHEN** SA 或 Analyst 直接访问 `/users`、`/regions` 或 `/analyst-info`
 - **THEN** 系统 MUST 返回 403 页面
-- **AND** 页面文案 MUST 包含 `无权限`
+- **AND** 页面文案 MUST 包含 `No permission`
 
 ### Requirement: 非 Admin 默认不展示管理功能入口
 系统 SHALL 在桌面页隐藏非 Admin 用户的管理功能卡片入口。

@@ -120,7 +120,7 @@ def get_current_user(token: Annotated[str, Depends(get_access_token)]) -> dict:
 ```python
 def require_admin(current_user: Annotated[dict, Depends(get_current_user)]) -> dict:
     if current_user.get("role") != "admin":
-        raise HTTPException(status_code=403, detail="无权限")
+        raise HTTPException(status_code=403, detail="No permission")
     return current_user
 ```
 
@@ -228,7 +228,7 @@ async def list_regions(
 | `/analyst-info` | 仅 Admin |
 | `/403` | 已登录 |
 
-非 Admin 强行访问管理页面时返回 403 页面，文案为 `无权限`。
+非 Admin 强行访问管理页面时返回 403 页面，文案为 `No permission`。
 
 ### 8.2 Desktop-as-Launcher 导航契约
 
@@ -238,7 +238,7 @@ async def list_regions(
 - 该契约适用于 Users / Regions / Analyst Info 及后续新增功能页。
 - 直接访问功能页时：
   - 未登录：按认证规则处理（跳转登录或返回 401）。
-  - 已登录但无权限：返回 403 页面（文案：`无权限`）。
+  - 已登录但无权限：返回 403 页面（文案：`No permission`）。
 
 ### 8.3 视觉风格与原型对齐
 
@@ -269,7 +269,7 @@ async def users_page(
 - `POST /api/auth/logout`
 - `GET /api/auth/me`
 - `POST /api/auth/forgot-password`
-- `POST /api/auth/reset-password`
+- 重置密码页面与提交流程使用 Supabase 托管页面，不提供站内 `POST /api/auth/reset-password`
 
 ### 9.2 用户管理（Admin）
 

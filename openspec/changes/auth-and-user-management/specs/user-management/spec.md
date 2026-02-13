@@ -36,4 +36,13 @@
 
 #### Scenario: 非 Admin 访问用户管理
 - **WHEN** SA 或 Analyst 访问 `/users` 或调用用户管理写操作 API
-- **THEN** 系统 MUST 返回 403 无权限
+- **THEN** 系统 MUST 返回 403 Forbidden
+
+### Requirement: 用户列表遵循统一分页排序规则
+系统 SHALL 按统一规则返回 Users 列表数据。
+
+#### Scenario: 查询 Users 列表
+- **WHEN** Admin 查询用户列表
+- **THEN** 系统 MUST 按 `created_at DESC` 排序
+- **AND** 当记录超过 15 条时 MUST 启用分页
+- **AND** 每页条数 MUST 固定为 15
