@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block content %}
+<main class="mx-auto max-w-7xl px-6 py-8">
+  <header class="mb-6">
+    <p class="text-xs uppercase tracking-[0.22em] text-cyan-300">Admin Workspace</p>
+    <h1 class="text-3xl font-semibold">Analyst Info</h1>
+  </header>
+
+  <section class="space-y-4 rounded-2xl border border-slate-700 bg-slate-900/70 p-5">
+    <form
+      class="grid gap-3 sm:grid-cols-[1fr_auto]"
+      hx-get="/analyst-info/table"
+      hx-target="#analyst-table"
+      hx-swap="innerHTML"
+    >
+      <input
+        type="text"
+        name="q"
+        placeholder="Search by full_name / chinese_name / email"
+        class="rounded-xl border border-slate-700 bg-slate-950 px-4 py-2.5 text-sm outline-none ring-cyan-300 transition focus:ring"
+      />
+      <button class="rounded-xl bg-cyan-400 px-4 py-2.5 text-sm font-semibold text-slate-950">Search</button>
+    </form>
+
+    <div
+      id="analyst-table"
+      hx-get="/analyst-info/table"
+      hx-trigger="load"
+      hx-swap="innerHTML"
+      class="min-h-[18rem]"
+    ></div>
+  </section>
+</main>
+{% endblock %}
+

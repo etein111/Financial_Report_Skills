@@ -1,0 +1,19 @@
+project_id = "pwhuoxeeegjcadqzknad"
+
+[db]
+port = 54322
+shadow_port = 54320
+major_version = 17
+
+[studio]
+port = 54323
+
+[api]
+port = 54321
+
+[auth]
+site_url = "http://localhost:8000"
+
+[db.seed]
+enabled = true
+sql_paths = ["./seed/regions.sql"]

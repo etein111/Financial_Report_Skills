@@ -1,0 +1,86 @@
+{% if message %}
+<div class="mb-3 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-200">
+  {{ message }}
+</div>
+{% endif %}
+{% if error %}
+<div class="mb-3 rounded-xl border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
+  {{ error }}
+</div>
+{% endif %}
+
+<div class="overflow-hidden rounded-xl border border-slate-700">
+  <table class="w-full table-auto text-left text-sm">
+    <thead class="bg-slate-950 text-slate-300">
+      <tr>
+        <th class="px-3 py-2.5">Name</th>
+        <th class="px-3 py-2.5">Code</th>
+        <th class="px-3 py-2.5">Created</th>
+        <th class="px-3 py-2.5">Actions</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-slate-800 bg-slate-900/40">
+      {% for item in items %}
+      <tr>
+        <td class="px-3 py-2.5">
+          <form
+            class="flex items-center gap-2"
+            hx-post="/regions/actions/{{ item.id }}/update"
+            hx-target="#regions-table"
+            hx-swap="innerHTML"
+          >
+            <input type="text" name="name" required value="{{ item.name }}" class="rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs" />
+            <input type="text" name="code" required value="{{ item.code }}" class="w-24 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs" />
+            <input type="hidden" name="q" value="{{ query }}" />
+            <input type="hidden" name="page" value="{{ page }}" />
+            <button class="rounded-lg border border-cyan-300 px-2 py-1 text-xs text-cyan-200 hover:bg-cyan-400/10">Save</button>
+          </form>
+        </td>
+        <td class="px-3 py-2.5">{{ item.code }}</td>
+        <td class="px-3 py-2.5">{{ item.created_at|utc8 }}</td>
+        <td class="px-3 py-2.5">
+          <form
+            hx-post="/regions/actions/{{ item.id }}/delete"
+            hx-target="#regions-table"
+            hx-swap="innerHTML"
+            hx-confirm="Delete this region?"
+          >
+            <input type="hidden" name="q" value="{{ query }}" />
+            <input type="hidden" name="page" value="{{ page }}" />
+            <button class="rounded-lg border border-rose-300 px-2 py-1 text-xs text-rose-200 hover:bg-rose-400/10">Delete</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="4" class="px-3 py-10 text-center text-slate-400">No regions</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if total > page_size %}
+<div class="mt-4 flex items-center justify-end gap-2 text-sm">
+  <button
+    class="rounded-lg border border-slate-600 px-3 py-1 disabled:opacity-50"
+    {% if page <= 1 %}disabled{% endif %}
+    hx-get="/regions/table?q={{ query }}&page={{ page - 1 }}"
+    hx-target="#regions-table"
+    hx-swap="innerHTML"
+  >
+    Prev
+  </button>
+  <span>Page {{ page }}</span>
+  <button
+    class="rounded-lg border border-slate-600 px-3 py-1 disabled:opacity-50"
+    {% if page * page_size >= total %}disabled{% endif %}
+    hx-get="/regions/table?q={{ query }}&page={{ page + 1 }}"
+    hx-target="#regions-table"
+    hx-swap="innerHTML"
+  >
+    Next
+  </button>
+</div>
+{% endif %}
+

@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block content %}
+<main class="mx-auto flex min-h-screen max-w-7xl flex-col px-6 py-8">
+  <header class="mb-8 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-slate-700/70 bg-slate-900/60 px-6 py-4">
+    <div>
+      <p class="text-xs uppercase tracking-[0.25em] text-cyan-300">Desktop Launcher</p>
+      <h1 class="text-2xl font-semibold">Welcome, {{ current_user.full_name or current_user.email }}</h1>
+      <p class="text-sm text-slate-300">
+        Role: <span class="font-medium text-cyan-200">{{ current_user.role }}</span>
+        <span class="mx-2">|</span>
+        UTC+8: <span id="utc8-time"></span>
+      </p>
+    </div>
+    <button
+      id="logout-btn"
+      class="rounded-xl border border-cyan-300 px-4 py-2 text-sm font-medium text-cyan-100 transition hover:bg-cyan-400/10"
+    >
+      Logout
+    </button>
+  </header>
+
+  <section class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+    {% if current_user.role == "admin" %}
+    <a target="_blank" rel="noopener" href="/users" class="rounded-2xl border border-slate-700 bg-slate-900/70 p-6 transition hover:border-cyan-300">
+      <h2 class="text-lg font-semibold">Users</h2>
+      <p class="mt-2 text-sm text-slate-300">Manage auth users, roles, passwords, and status.</p>
+    </a>
+    <a target="_blank" rel="noopener" href="/regions" class="rounded-2xl border border-slate-700 bg-slate-900/70 p-6 transition hover:border-cyan-300">
+      <h2 class="text-lg font-semibold">Regions</h2>
+      <p class="mt-2 text-sm text-slate-300">Maintain region dictionary data.</p>
+    </a>
+    <a target="_blank" rel="noopener" href="/analyst-info" class="rounded-2xl border border-slate-700 bg-slate-900/70 p-6 transition hover:border-cyan-300">
+      <h2 class="text-lg font-semibold">Analyst Info</h2>
+      <p class="mt-2 text-sm text-slate-300">Maintain analyst business profiles.</p>
+    </a>
+    {% endif %}
+
+    <article class="rounded-2xl border border-slate-700 bg-slate-900/40 p-6 opacity-70">
+      <h2 class="text-lg font-semibold">Reports</h2>
+      <p class="mt-2 text-sm text-slate-300">Coming soon.</p>
+    </article>
+  </section>
+</main>
+
+<script>
+  const formatter = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Shanghai",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+  const timeEl = document.getElementById("utc8-time");
+  function updateTime() {
+    timeEl.textContent = formatter.format(new Date());
+  }
+  updateTime();
+  setInterval(updateTime, 1000);
+
+  document.getElementById("logout-btn").addEventListener("click", async () => {
+    await fetch("/api/auth/logout", { method: "POST" });
+    window.location.href = "/login";
+  });
+</script>
+{% endblock %}
+

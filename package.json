@@ -1,0 +1,20 @@
+{
+  "name": "neolyst",
+  "private": true,
+  "version": "1.0.0",
+  "description": "- FastAPI (SSR + API) - Jinja2 + HTMX + Tailwind - Supabase (Auth + Postgres + RLS)",
+  "scripts": {
+    "supabase": "pnpm exec supabase",
+    "supabase:db:push": "pnpm exec supabase db push",
+    "supabase:db:push:dry-run": "pnpm exec supabase db push --dry-run"
+  },
+  "packageManager": "pnpm@10.29.3",
+  "devDependencies": {
+    "supabase": "^2.76.8"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "supabase"
+    ]
+  }
+}

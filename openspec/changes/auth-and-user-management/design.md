@@ -328,17 +328,159 @@ if settings.DEBUG:
     app.include_router(debug_router, prefix="/debug", tags=["debug"])
 ```
 
-### 10.4 Supabase 版本与迁移管理（简化）
+### 10.4 Supabase CLI 数据库版本管理（详细流程）
 
-- 统一使用 Supabase CLI 迁移机制，不自建数据库版本记录表。
+#### 10.4.1 管理原则
+
+- 统一使用 Supabase CLI 管理数据库版本，不自建版本记录表。
 - 增量执行依据为 Supabase 内置表 `supabase_migrations.schema_migrations`。
-- 所有数据库变更（Schema / SQL 函数 / RLS / Storage 策略）统一放入 `supabase/migrations/*.sql`。
-- 命名规范：`YYYYMMDDHHMM_<desc>.sql`。
-- 基础数据（如 Region）放 `supabase/seed/regions.sql`，要求幂等。
-- 环境策略采用 `dev + prod`，发布顺序固定为：先 `dev`，后 `prod`。
-- 不做常态 Dashboard 直改；紧急直改允许，但必须优先接口/脚本，并在当天补齐 migration（回写到 Git）。
-- RLS 策略命名不强制版本后缀；仅在权限语义发生重大变化时，建议使用可读版本标识（如 `_v2`）。
-- 回滚策略采用前滚修复，不维护复杂回滚脚本。
+- 所有 Schema / RLS / Function / Policy 变更必须进入 `supabase/migrations/*.sql`。
+- 种子数据统一放 `supabase/seed/*.sql`，并保持幂等。
+- 环境发布顺序固定为：`dev -> prod`。
+
+#### 10.4.2 一次性初始化（每台新机器）
+
+```bash
+corepack pnpm install
+corepack pnpm exec supabase --version
+corepack pnpm exec supabase login
+corepack pnpm exec supabase link --project-ref <dev_project_ref>
+```
+
+- 本项目 Dev `project_ref` 为 `pwhuoxeeegjcadqzknad`。
+- `supabase/config.toml` 中的 `project_id` 必须与当前要操作的环境一致。
+- 推荐始终使用 `corepack pnpm exec supabase ...`，避免全局命令差异。
+- 本项目开发阶段原则：**简单优先、真实配置入库**。
+  - 真实 Dev 配置直接记录在 `backend/.env` 与本文档中，并提交到 Git，便于新机器快速上手。
+
+#### 10.4.3 新增数据库变更（开发阶段）
+
+1. 创建迁移文件：
+```bash
+corepack pnpm exec supabase migration new <change_name>
+```
+2. 在新生成的 `supabase/migrations/YYYYMMDDHHMMSS_<change_name>.sql` 中编写 SQL。
+3. 命名必须符合 `YYYYMMDDHHMMSS_<desc>.sql`，便于排序与审计。
+
+#### 10.4.4 推送到 Dev（标准发布）
+
+1. 先预检查：
+```bash
+corepack pnpm exec supabase db push --linked --dry-run
+```
+2. 再实际执行：
+```bash
+corepack pnpm exec supabase db push --linked
+```
+3. 如本次需要补种子数据，使用：
+```bash
+corepack pnpm exec supabase db push --linked --include-seed
+```
+
+说明：
+- `--include-all` 仅用于远端历史缺失时的修复场景，常规发布不要使用。
+- 迁移失败时优先新增“前滚修复”迁移，不做复杂回滚脚本。
+
+#### 10.4.5 版本与结果校验（Dev）
+
+执行版本校验：
+
+```sql
+select version, name, statements, created_by
+from supabase_migrations.schema_migrations
+order by version desc;
+```
+
+并补充业务校验 SQL（示例）：
+
+```sql
+select count(*) as region_count from public.region;
+select email, raw_app_meta_data->>'role' as role
+from auth.users
+where email = 'admin@neolyst.com';
+```
+
+#### 10.4.6 推送到 Prod（与 Dev 同流程）
+
+1. 切换链接到 Prod 项目：
+```bash
+corepack pnpm exec supabase link --project-ref <prod_project_ref>
+```
+2. 重复 `dry-run -> push -> 验证`。
+3. 禁止跳过 Dev 直接推 Prod。
+
+#### 10.4.7 紧急 Dashboard 变更回填规则
+
+- 紧急情况下允许 Dashboard 直改，但必须当天回填为 migration 文件并提交 Git。
+- 回填后仍需在 Dev 和 Prod 按标准流程执行与校验，消除环境漂移。
+
+#### 10.4.8 默认 Admin 初始化迁移（补充）
+
+- 默认 Admin 创建由 migration `supabase/migrations/20260213165658_init_default_admin.sql` 负责，并随 `corepack pnpm exec supabase db push --linked` 增量执行。
+- 该 migration 必须保持幂等：
+  - 当 `admin@neolyst.com` 不存在时，创建用户并写入 `app_metadata.role = admin`、`app_metadata.is_active = true`。
+  - 当用户已存在时，仅补齐管理员元数据，不重置既有密码。
+  - 确保 `auth.identities` 存在 `provider = email` 的身份记录，保证邮箱密码登录链路完整。
+- 默认凭据仅用于首发引导（`admin@neolyst.com` / `Admin123`），首次上线后应立即通过管理员改密流程变更。
+- 验证示例：
+```sql
+select email, raw_app_meta_data->>'role' as role
+from auth.users
+where email = 'admin@neolyst.com';
+```
+
+### 10.5 Python 工具链与命令约定
+
+- Python 依赖管理统一使用 `uv`（`uv sync`），不混用 `pip install -r` 作为日常入口。
+- Python 虚拟环境固定为项目本地 `backend/.venv`，禁止使用系统全局 Python 环境。
+- Python 命令执行统一使用 `uv run`（例如 `uv run uvicorn ...`、`uv run python -m ...`）。
+- 禁止使用全局 `pip/python/pytest` 直接执行开发命令。
+- 文档中的启动、测试、脚本示例必须优先给出 `uv` 命令，减少环境差异导致的问题。
+
+### 10.8 Node.js 工具链与命令约定
+
+- Node.js 依赖管理统一使用 `pnpm`，并安装到项目本地 `node_modules`。
+- Node.js 命令执行统一使用 `pnpm run` 或 `pnpm exec`（例如 `pnpm exec supabase ...`）。
+- 禁止使用 `npm`、`npx`、全局安装的 Node.js 工具执行开发与测试命令。
+- 锁文件统一使用 `pnpm-lock.yaml`，不维护 `package-lock.json`。
+
+### 10.6 Supabase 云环境设置（开发）
+
+- 本变更开发测试环境使用 Supabase Cloud，不使用本地 `supabase start`。
+- Dev 项目 `project_ref`：`pwhuoxeeegjcadqzknad`。
+- Dev `SUPABASE_URL`：`https://pwhuoxeeegjcadqzknad.supabase.co`。
+- 仓库 `supabase/config.toml` 当前配置：
+  - `project_id = "pwhuoxeeegjcadqzknad"`
+  - `[db].major_version = 17`
+- Dev 配置（与 `backend/.env` 完全一致，开发阶段直接提交 Git）：
+
+```dotenv
+SUPABASE_PROJECT_REF=pwhuoxeeegjcadqzknad
+SUPABASE_URL=https://pwhuoxeeegjcadqzknad.supabase.co
+SUPABASE_ANON_KEY=***REMOVED-JWT***
+SUPABASE_SERVICE_ROLE_KEY=***REMOVED-JWT***
+SUPABASE_PUBLISHABLE_KEY=sb_publishable_6GVcYDOhzLVsUqcEbYCbnw_tdcgyCtT
+SUPABASE_ACCESS_TOKEN=***REMOVED-SUPABASE-PAT***
+SUPABASE_PASSWORD_RESET_REDIRECT=https://pwhuoxeeegjcadqzknad.supabase.co/auth/v1/verify
+
+APP_ENV=development
+DEBUG=true
+SESSION_COOKIE_NAME=access_token
+SESSION_COOKIE_MAX_AGE=86400
+SESSION_COOKIE_SECURE=false
+SESSION_COOKIE_SAMESITE=lax
+PAGE_SIZE=15
+TIMEZONE=Asia/Shanghai
+```
+
+- 数据库验证范围：`read + write`（允许查询与写入验证 SQL）。
+- 推荐通过 Supabase MCP 执行数据库校验与脚本验证；执行前需完成 MCP OAuth 登录。
+- 当前文档中凡涉及数据库验收，默认均指向 Dev 云环境执行结果。
+
+### 10.7 测试范围约束
+
+- 本轮联调与验收仅覆盖开发环境（Dev）。
+- 不执行生产环境（Prod）测试；Prod 相关步骤保留为发布流程说明，不作为本轮测试项。
 
 ---
 

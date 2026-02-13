@@ -72,7 +72,6 @@ coverage/
 temp/
 test_*.json
 *.token
-token.txt
 nul
 
 # TypeScript

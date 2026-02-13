@@ -238,6 +238,9 @@
 ### 5.4 运维与发布要求
 - 默认 Admin 账号在部署初始化流程创建，首次上线后建议尽快修改（不强制）。
 - 所有调试端点（debug/config、debug/test-rls 等）在生产环境必须关闭。
+- Python 依赖与命令必须使用 `uv` + 项目本地 `backend/.venv`（例如 `uv sync`、`uv run ...`），禁止使用全局 Python 环境或全局安装包。
+- Node.js 依赖与命令必须使用 `pnpm` + 项目本地 `node_modules`，禁止使用 `npm/npx` 或全局安装包执行开发命令。
+- 本轮联调与验收仅覆盖 Dev 云环境，不执行 Prod 环境测试。
 
 ## 6. Key Decisions
 
@@ -249,3 +252,5 @@
 6. 非 Admin 强行访问管理路由返回 403 页面（文案：`No permission`）。
 7. 前后端与数据库时间统一使用北京时间（UTC+8）。
 8. 生产环境必须关闭调试端点。
+9. Python 工具链必须使用 `uv` 与项目本地 `backend/.venv`，禁止全局 Python 环境。
+10. Node.js 工具链必须使用 `pnpm` 与项目本地 `node_modules`，禁止全局 Node.js 工具链与 `npm/npx`。

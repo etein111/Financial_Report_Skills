@@ -61,7 +61,11 @@
       "mcp__supabase__get_project",
       "Bash(pip show:*)",
       "Bash(npm:*)",
-      "Bash(.venv/Scripts/python.exe:*)"
+      "Bash(.venv/Scripts/python.exe:*)",
+      "Bash(supabase:*)",
+      "mcp__supabase__get_publishable_keys",
+      "Bash(start /B .venv/Scripts/python.exe -m uvicorn src.main:app --reload --port 8000)",
+      "Bash(start http://localhost:8000/login)"
     ]
   }
 }
