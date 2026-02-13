@@ -55,7 +55,13 @@
       "Bash(Where-Object {$_ProcessName -like \"*node*\" -or $_ProcessName -like \"*vite*\"})",
       "Bash(Select-Object Id,ProcessName,Path)",
       "Bash(Format-Table -AutoSize)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "mcp__supabase__search_docs",
+      "mcp__supabase__list_projects",
+      "mcp__supabase__get_project",
+      "Bash(pip show:*)",
+      "Bash(npm:*)",
+      "Bash(.venv/Scripts/python.exe:*)"
     ]
   }
 }
