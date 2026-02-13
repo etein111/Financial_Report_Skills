@@ -1,261 +1,156 @@
-# 认证与权限系统设计文档（重构版）
+# 认证与权限系统设计文档（FastAPI + Supabase + Jinja2/HTMX）
 
-## Context
+## 1. Context
 
-当前变更 `auth-and-user-management` 的业务目标不变：
+本设计对应 `auth-and-user-management` 变更，遵循 proposal 的需求边界，技术方案统一为：
 
-- 认证与会话（登录、登出、身份校验）
-- 角色权限（Admin / SA / Analyst）
-- 用户管理（含管理员改密、启用/禁用）
-- Region 管理
-- Analyst 信息管理
-- 登录页与桌面主页
-- 忘记密码与重置密码
+- 服务端：FastAPI 单体
+- 平台：Supabase（Auth / Postgres / RLS / Storage）
+- 页面层：Jinja2 + HTMX + Tailwind CSS
 
-本次设计重构只替换技术实现路线，核心原则是：
-
-1. 保持 Supabase 作为数据库/Auth/Storage 平台。
-2. 保持 FastAPI 作为唯一服务端业务入口。
-3. 取消复杂 SPA 前端状态链路，改为服务端渲染为主（Jinja2 + HTMX + Tailwind）。
-4. 权限“最终裁决”只在服务端与数据库层，不在前端重复实现。
+目标是把权限语义和实现路径收敛到单一事实源，避免前端状态和后端权限漂移。
 
 ---
 
-## Goals / Non-Goals
+## 2. 设计目标与非目标
 
-### Goals
+### 2.1 目标
 
-- 使用单体 FastAPI 架构降低前端状态复杂度与权限漂移风险。
-- 统一权限模型：页面权限、API 权限、RLS 权限语义一致。
-- 保留双层权限策略：
-  - 功能权限：FastAPI 依赖控制
-  - 数据权限：PostgreSQL RLS 控制
-- 支持列表通用规则：默认 `created_at DESC`，超过 15 条分页，每页 15 条。
-- 生产环境不暴露调试端点与敏感配置。
+- 登录、登出、会话验证、当前用户信息。
+- 角色模型：Admin / SA / Analyst。
+- Users 管理、Regions 管理、Analyst Info 管理。
+- 忘记密码邮件重置与管理员直接改密。
+- 登录页、桌面页、管理页、403 页面。
 
-### Non-Goals
+### 2.2 非目标
 
-- 不引入独立前端服务（React/Vue/Next）。
-- 不引入 ORM（SQLAlchemy）作为本变更必需项。
-- 不实现 refresh token 自定义机制。
-- 不实现密码变更审计日志（沿用 proposal 范围）。
+- 不包含 Coverage/Sector/Template。
+- 不包含报告创建/编辑/审核。
+- 不实现 refresh token 机制。
+- 不实现密码修改审计日志。
 
 ---
 
-## High-Level Architecture
+## 3. 总体架构
 
 ```text
-┌───────────────────────────┐
-│ Browser                   │
-│ - HTML (Jinja2 SSR)       │
-│ - HTMX partial updates    │
-│ - Tailwind UI             │
-└──────────────┬────────────┘
-               │ HTTPS
-┌──────────────▼────────────┐
-│ FastAPI Monolith          │
-│ - Web Routes (/login...)  │
-│ - API Routes (/api/*)     │
-│ - Auth/Role Dependencies  │
-│ - Supabase Client Wrapper │
-└───────┬─────────┬─────────┘
-        │         │
-        │         └────────────────────┐
-        │                              │
-┌───────▼──────────────┐     ┌─────────▼─────────────┐
-│ Supabase Auth        │     │ Supabase Storage      │
-│ - sign_in/password   │     │ - Word/Excel files    │
-│ - forgot/reset       │     │ - signed URL          │
-└───────┬──────────────┘     └───────────────────────┘
-        │
-┌───────▼────────────────────┐
-│ Supabase Postgres          │
-│ - region / analyst tables  │
-│ - RLS policies             │
-│ - RPC for atomic actions   │
-└────────────────────────────┘
+Browser
+  -> FastAPI (Web + API)
+      -> Supabase Auth
+      -> Supabase Postgres (RLS)
+      -> Supabase Storage
 ```
 
----
+架构约束：
 
-## Core Decisions
-
-### Decision 1: FastAPI 单体 + SSR 交互模型
-
-**选择：**
-
-- 页面由 FastAPI + Jinja2 渲染。
-- 局部交互使用 HTMX（搜索、分页、表单提交、局部刷新）。
-- 样式使用 Tailwind，避免大型前端框架状态管理。
-
-**理由：**
-
-- 降低路由守卫、前端 store、组件权限三处重复逻辑。
-- 降低“前端状态与后端真实权限不一致”的风险。
-- 更适合当前管理后台型需求。
+- FastAPI 是唯一业务入口。
+- 页面访问权限和 API 权限由 FastAPI 统一判断。
+- 数据最终权限由 RLS 兜底。
 
 ---
 
-### Decision 2: Supabase 仍是唯一数据与认证平台
+## 4. 权限模型（功能权限 vs 数据权限）
 
-**选择：**
+### 4.1 角色定义
 
-- 认证：Supabase Auth。
-- 数据：Supabase PostgreSQL + RLS。
-- 文件：Supabase Storage。
-- FastAPI 通过 `supabase-py` / `httpx` 调用平台能力。
+- Admin：本阶段全部管理权限。
+- SA：本阶段不具备管理权限（与 Analyst 一致）。
+- Analyst：本阶段不具备管理权限。
 
-**理由：**
+### 4.2 功能权限矩阵
 
-- 复用现有基础设施，避免平台迁移成本。
-- RLS 权限策略与当前 change 的既定方向一致。
-
----
-
-### Decision 3: 会话从 localStorage 改为服务端 Cookie
-
-**选择：**
-
-- 登录成功后由 FastAPI 设置 `HttpOnly + Secure + SameSite=Lax` Cookie。
-- 每次请求由 FastAPI 从 Cookie 中取 token，并向 Supabase 校验。
-- 前端页面不保存 token，不使用 localStorage 持久化认证信息。
-
-**理由：**
-
-- 降低 XSS 下 token 泄漏风险。
-- 消除前端 token 状态同步问题。
-
----
-
-### Decision 4: 权限源头统一
-
-**选择：**
-
-- 页面入口、按钮显示、API 调用都以服务端角色判断为准。
-- FastAPI `Depends` 负责功能权限（`require_admin`）。
-- Postgres RLS 负责数据权限兜底。
-
-**权限矩阵（本变更）**
-
-| 能力 | Admin | SA | Analyst |
-|------|-------|----|---------|
+| 功能能力 | Admin | SA | Analyst |
+|---|---|---|---|
 | 登录/登出 | ✅ | ✅ | ✅ |
-| 用户管理 | ✅ | ❌ | ❌ |
-| Region 管理写操作 | ✅ | ❌ | ❌ |
-| Region 数据读取 | ✅ | ✅ | ✅ |
-| Analyst 信息写操作 | ✅ | ❌ | ❌ |
-| Analyst 数据读取 | ✅ | ✅ | ✅ |
-| 管理员直接改密 | ✅ | ❌ | ❌ |
+| 忘记密码（邮件重置） | ✅ | ✅ | ✅ |
+| 用户管理（页面与操作） | ✅ | ❌ | ❌ |
+| Region 管理（页面与操作） | ✅ | ❌ | ❌ |
+| Analyst 信息管理（页面与操作） | ✅ | ❌ | ❌ |
+| 管理员改密 | ✅ | ❌ | ❌ |
+
+### 4.3 数据权限矩阵（RLS）
+
+| 数据资源 | SELECT | INSERT | UPDATE | DELETE |
+|---|---|---|---|---|
+| `region` | 所有已认证用户 | 仅 Admin | 仅 Admin | 仅 Admin |
+| `analyst` | 所有已认证用户 | 仅 Admin | 仅 Admin | 仅 Admin |
+
+说明：基础数据“认证可读”不等于开放管理功能页面。
 
 ---
 
-### Decision 5: 数据访问不引入 ORM，复杂写操作走 RPC
+## 5. 认证与会话设计
 
-**选择：**
+### 5.1 会话策略
 
-- 常规 CRUD：Supabase Query API。
-- 跨表原子动作：Postgres Function（RPC）由 FastAPI 调用。
-- 数据库变更：Supabase SQL migration 管理。
+- 登录成功后由 FastAPI 写入 HttpOnly Cookie（不使用 localStorage）。
+- 所有受保护请求由 FastAPI 从 Cookie 读取 access token。
+- token 有效期 24 小时（Supabase 配置）。
 
-**理由：**
+### 5.2 关键依赖代码（认证）
 
-- 在当前 scope 中减少技术层叠。
-- 复杂事务留在数据库层更可控。
+```python
+from fastapi import HTTPException, Request, status
 
----
-
-### Decision 6: 列表行为统一落地
-
-**选择：**
-
-- `region`、`analyst` 列表默认 `created_at DESC`。
-- `page_size = 15`，总数 > 15 启用分页。
-- 搜索与分页同时由后端计算，前端仅渲染结果。
-
-**理由：**
-
-- 与 proposal 通用规则一致。
-- 减少页面端二次排序与分页错误。
-
----
-
-### Decision 7: Region 删除策略遵循 proposal
-
-**选择：**
-
-- 删除 Region 不做“有关联 analyst 即阻断”。
-- 由数据库外键 `ON DELETE SET NULL` 自动置空 `analyst.region_id`。
-
-**理由：**
-
-- 与 proposal 中“删除不阻断”一致。
-- 简化管理操作与数据修复流程。
-
----
-
-### Decision 8: 权限拒绝统一返回 403 页面
-
-**选择：**
-
-- 非 Admin 访问管理页面返回 HTTP 403。
-- 展示统一 403 页面文案：`无权限`。
-
-**理由：**
-
-- 与 proposal 要求一致。
-- 避免“静默重定向到桌面”导致误判。
-
----
-
-### Decision 9: 调试端点默认禁用
-
-**选择：**
-
-- `/debug/*` 端点仅在开发环境显式开启。
-- 生产环境直接不注册调试路由。
-- 不返回 service role key 预览等敏感信息。
-
-**理由：**
-
-- 满足提案“生产必须关闭调试端点”的要求。
-
----
-
-## Data Model & RLS
-
-### Tables
-
-```sql
-create table region (
-  id uuid primary key default gen_random_uuid(),
-  name varchar unique not null,
-  code varchar unique not null,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-
-create table analyst (
-  id uuid primary key default gen_random_uuid(),
-  full_name varchar not null,
-  chinese_name varchar,
-  email varchar unique not null,
-  suffix varchar,
-  region_id uuid references region(id) on delete set null,
-  sfc varchar,
-  is_active boolean not null default true,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
+def get_access_token(request: Request) -> str:
+    cookie_token = request.cookies.get("access_token")
+    if cookie_token:
+        return cookie_token
+    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="未登录")
 ```
 
-### RLS Policies
+```python
+def get_current_user(token: Annotated[str, Depends(get_access_token)]) -> dict:
+    user_res = supabase.auth.get_user(jwt=token)
+    user = user_res.user
+    if not user:
+        raise HTTPException(status_code=401, detail="无效凭据")
+    app_meta = user.app_metadata or {}
+    user_meta = user.user_metadata or {}
+    return {
+        "id": str(user.id),
+        "email": user.email,
+        "full_name": user_meta.get("full_name"),
+        "role": app_meta.get("role", "analyst"),
+    }
+```
+
+### 5.3 关键依赖代码（角色守卫）
+
+```python
+def require_admin(current_user: Annotated[dict, Depends(get_current_user)]) -> dict:
+    if current_user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="无权限")
+    return current_user
+```
+
+---
+
+## 6. 数据模型与 RLS 设计
+
+### 6.1 核心数据结构
+
+- `region`：地区字典（`name`/`code` 唯一）。
+- `analyst`：业务分析师信息（`email` 唯一，`region_id` 外键）。
+
+约束要求：
+
+- `analyst.region_id` 外键采用 `ON DELETE SET NULL`。
+- 删除 Region 时不做业务阻断。
+
+Region 预置数据：
+
+- China、Hong Kong、Japan、Taiwan、Korea、India、Macau、US。
+
+### 6.2 RLS 关键策略代码
 
 ```sql
 alter table region enable row level security;
 alter table analyst enable row level security;
 
 create policy "region_select_authenticated"
-on region for select to authenticated using (true);
+on region for select to authenticated
+using (true);
 
 create policy "region_write_admin"
 on region for all to authenticated
@@ -263,7 +158,8 @@ using ((auth.jwt()->'app_metadata'->>'role') = 'admin')
 with check ((auth.jwt()->'app_metadata'->>'role') = 'admin');
 
 create policy "analyst_select_authenticated"
-on analyst for select to authenticated using (true);
+on analyst for select to authenticated
+using (true);
 
 create policy "analyst_write_admin"
 on analyst for all to authenticated
@@ -271,149 +167,187 @@ using ((auth.jwt()->'app_metadata'->>'role') = 'admin')
 with check ((auth.jwt()->'app_metadata'->>'role') = 'admin');
 ```
 
----
+### 6.3 数据访问策略（实现边界）
 
-## Route Design
-
-### Web Pages（Jinja2）
-
-| Method | Path | 说明 | 权限 |
-|-------|------|------|------|
-| GET | `/login` | 登录页 | 公开 |
-| GET | `/desktop` | 桌面主页 | 已登录 |
-| GET | `/users` | 用户管理页 | Admin |
-| GET | `/regions` | Region 管理页 | 已登录（写按钮仅 Admin） |
-| GET | `/analyst-info` | Analyst 列表页 | 已登录（写按钮仅 Admin） |
-| GET | `/403` | 无权限页 | 已登录 |
-
-### API Endpoints
-
-| Method | Path | 说明 | 权限 |
-|-------|------|------|------|
-| POST | `/api/auth/login` | 登录 | 公开 |
-| POST | `/api/auth/logout` | 登出 | 已登录 |
-| GET | `/api/auth/me` | 当前用户 | 已登录 |
-| POST | `/api/auth/forgot-password` | 发送重置邮件 | 公开 |
-| POST | `/api/auth/reset-password` | 重置密码 | 公开（token） |
-| GET | `/api/users` | 用户列表（搜索+分页） | Admin |
-| POST | `/api/users` | 创建用户 | Admin |
-| PUT | `/api/users/{id}` | 更新用户 | Admin |
-| PUT | `/api/users/{id}/password` | 管理员改密 | Admin |
-| PUT | `/api/users/{id}/role` | 修改角色 | Admin |
-| PUT | `/api/users/{id}/toggle-status` | 启用/禁用 | Admin |
-| DELETE | `/api/users/{id}` | 删除用户 | Admin |
-| GET | `/api/regions` | Region 列表（分页） | 已登录 |
-| POST | `/api/regions` | 创建 Region | Admin |
-| PUT | `/api/regions/{id}` | 更新 Region | Admin |
-| DELETE | `/api/regions/{id}` | 删除 Region | Admin |
-| GET | `/api/analyst-info` | Analyst 列表（搜索+分页） | 已登录 |
-| POST | `/api/analyst-info` | 创建 Analyst | Admin |
-| PUT | `/api/analyst-info/{id}` | 更新 Analyst | Admin |
-| DELETE | `/api/analyst-info/{id}` | 删除 Analyst | Admin |
-| POST | `/api/analyst-info/check-email` | 邮箱唯一性检查 | Admin |
+- 不强制引入 ORM。
+- 常规读写通过 Supabase 数据访问接口完成。
+- 复杂原子动作通过数据库函数（RPC）实现。
 
 ---
 
-## Interaction Flows
+## 7. 列表与分页（统一规则）
 
-### 登录流程
+规则：
 
-```text
-Browser /login
-   -> POST /api/auth/login
-      -> Supabase Auth sign_in_with_password
-         -> 成功: FastAPI 写入 HttpOnly Cookie
-         -> 302 /desktop
-```
+- 默认按 `created_at DESC`。
+- 超过 15 条启用分页。
+- 每页固定 15 条。
+- 不提供用户自定义每页条数。
 
-### 管理写操作流程（以创建 Region 为例）
+关键代码（Region 列表）：
 
-```text
-Browser (Admin)
-  -> POST /api/regions
-     -> require_admin (FastAPI)
-        -> Supabase Postgres insert
-           -> RLS admin policy 再次校验
-```
+```python
+DEFAULT_PAGE_SIZE = 15
 
-### 忘记密码流程
+@router.get("/api/regions")
+async def list_regions(
+    page: int = 1,
+    current_user: Annotated[dict, Depends(get_current_user)] = None,
+):
+    page = max(page, 1)
+    start = (page - 1) * DEFAULT_PAGE_SIZE
+    end = start + DEFAULT_PAGE_SIZE - 1
 
-```text
-POST /api/auth/forgot-password
-  -> Supabase reset password email
-  -> 返回统一成功提示（防邮箱枚举）
+    res = (
+        supabase.table("region")
+        .select("*", count="exact")
+        .order("created_at", desc=True)
+        .range(start, end)
+        .execute()
+    )
+    return {
+        "items": res.data,
+        "total": res.count or 0,
+        "page": page,
+        "page_size": DEFAULT_PAGE_SIZE,
+    }
 ```
 
 ---
 
-## Project Structure（Target）
+## 8. 页面与路由设计（SSR + HTMX）
 
-```text
-backend/
-  src/
-    main.py
-    api/
-      auth.py
-      users.py
-      regions.py
-      analyst_info.py
-    web/
-      pages.py
-      partials.py
-    core/
-      config.py
-      security.py
-      supabase.py
-      session.py
-    models/
-      auth.py
-      user.py
-      region.py
-      analyst.py
-    templates/
-      base.html
-      login.html
-      desktop.html
-      users/
-      regions/
-      analyst_info/
-      errors/403.html
-    static/
-      css/
-      js/
-  migrations/
-    *.sql
+### 8.1 页面访问权限
+
+| 路径 | 权限 |
+|---|---|
+| `/login` | 公开 |
+| `/desktop` | 已登录 |
+| `/users` | 仅 Admin |
+| `/regions` | 仅 Admin |
+| `/analyst-info` | 仅 Admin |
+| `/403` | 已登录 |
+
+非 Admin 强行访问管理页面时返回 403 页面，文案为 `无权限`。
+
+### 8.2 Desktop-as-Launcher 导航契约
+
+- 桌面页是功能入口（Launcher）。
+- 功能卡片统一新标签页打开（`target="_blank"` + `rel="noopener"`）。
+- 功能页不提供“返回桌面”按钮；用户通过关闭标签页返回桌面。
+- 该契约适用于 Users / Regions / Analyst Info 及后续新增功能页。
+- 直接访问功能页时：
+  - 未登录：按认证规则处理（跳转登录或返回 401）。
+  - 已登录但无权限：返回 403 页面（文案：`无权限`）。
+
+### 8.3 视觉风格与原型对齐
+
+关键代码：
+
+```python
+@app.get("/users")
+async def users_page(
+    request: Request,
+    current_user: Annotated[dict, Depends(require_admin)],
+):
+    return templates.TemplateResponse("users/index.html", {"request": request})
 ```
 
----
-
-## Security & Operations
-
-- Cookie 设置：`HttpOnly`, `Secure`, `SameSite=Lax`, 明确 `Max-Age`。
-- 统一异常输出，避免泄露内部堆栈与密钥。
-- 生产环境不注册 debug router。
-- 所有管理员写操作记录操作人 ID 与时间（如 `updated_by` 字段可在后续扩展）。
+- 风格基线：深色背景、简单大气、专业、富有科技感。
+- 登录页与桌面页对齐原型：
+  - `openspec/changes/auth-and-user-management/01-login-page.jpg`
+  - `openspec/changes/auth-and-user-management/02-desktop.jpg`
+- 粒子背景与整体氛围为既定设计方向；可调整实现细节，但不得改变视觉方向与信息层级。
 
 ---
 
-## Risks / Trade-offs
+## 9. API 设计（FastAPI）
 
-| 风险 | 影响 | 缓解 |
-|------|------|------|
-| 过度依赖 Supabase API | 平台耦合 | 关键事务放 RPC，接口层封装网关 |
-| SSR 页面可交互上限低于 SPA | 复杂前端体验受限 | 本变更聚焦管理后台，优先稳定性 |
-| Cookie 会话需要 CSRF 防护 | 安全风险 | 对写操作引入 CSRF token 校验 |
-| 现有 artifact 与旧前端栈有差异 | 文档不一致 | 后续同步 proposal/specs/tasks |
+### 9.1 认证
+
+- `POST /api/auth/login`
+- `POST /api/auth/logout`
+- `GET /api/auth/me`
+- `POST /api/auth/forgot-password`
+- `POST /api/auth/reset-password`
+
+### 9.2 用户管理（Admin）
+
+- `GET /api/users`
+- `POST /api/users`
+- `PUT /api/users/{id}`
+- `PUT /api/users/{id}/password`
+- `PUT /api/users/{id}/role`
+- `PUT /api/users/{id}/toggle-status`
+- `DELETE /api/users/{id}`
+
+### 9.3 Region 管理
+
+- `GET /api/regions`（认证可读）
+- `POST /api/regions`（Admin）
+- `PUT /api/regions/{id}`（Admin）
+- `DELETE /api/regions/{id}`（Admin）
+
+### 9.4 Analyst 信息管理
+
+- `GET /api/analyst-info`（认证可读）
+- `POST /api/analyst-info`（Admin）
+- `PUT /api/analyst-info/{id}`（Admin）
+- `DELETE /api/analyst-info/{id}`（Admin）
+- `POST /api/analyst-info/check-email`（Admin）
+
+字段与查询约束（proposal 对齐）：
+
+- 列表搜索字段包含：`full_name`、`chinese_name`、`email`。
+- 列表展示字段包含：`full_name`、`chinese_name`、`email`、`region`、`is_active`。
+- 创建必填字段：`full_name`、`email`、`region`。
 
 ---
 
-## Alignment Notes（本次重构影响）
+## 10. 安全与运维
 
-本设计已明确替换此前的 `Vue + Axios + localStorage + Router Guard` 方案。  
-为避免 artifact 漂移，后续应按本设计同步更新：
+### 10.1 安全基线
 
-1. `specs/login-page/spec.md`（去除 Vue/localStorage 表述）
-2. `specs/desktop-page/spec.md`（去除前端路由守卫语义，改服务端鉴权）
-3. `specs/user-auth/spec.md`（会话存储改为 HttpOnly Cookie）
-4. `tasks.md`（替换前端实现任务为模板+HTMX任务）
+- 角色仅存储在 Auth `app_metadata`（服务端可改）。
+- 会话 Cookie 设置 `HttpOnly`、`Secure`、`SameSite=Lax`。
+- 忘记密码接口返回统一提示，避免邮箱枚举。
 
+### 10.2 语言与时区约定（proposal 对齐）
+
+- 前端界面语言统一英文（按钮、标题、表单标签、提示文案）。
+- 业务数据内容支持中英文。
+- 前端展示时间统一使用北京时间（UTC+8）。
+- 后端接口与数据库时间约定统一为北京时间（UTC+8）。
+
+### 10.3 调试端点控制
+
+生产环境必须关闭调试端点，开发环境按开关注册：
+
+```python
+if settings.DEBUG:
+    app.include_router(debug_router, prefix="/debug", tags=["debug"])
+```
+
+### 10.4 Supabase 版本与迁移管理（简化）
+
+- 统一使用 Supabase CLI 迁移机制，不自建数据库版本记录表。
+- 增量执行依据为 Supabase 内置表 `supabase_migrations.schema_migrations`。
+- 所有数据库变更（Schema / SQL 函数 / RLS / Storage 策略）统一放入 `supabase/migrations/*.sql`。
+- 命名规范：`YYYYMMDDHHMM_<desc>.sql`。
+- 基础数据（如 Region）放 `supabase/seed/regions.sql`，要求幂等。
+- 环境策略采用 `dev + prod`，发布顺序固定为：先 `dev`，后 `prod`。
+- 不做常态 Dashboard 直改；紧急直改允许，但必须优先接口/脚本，并在当天补齐 migration（回写到 Git）。
+- RLS 策略命名不强制版本后缀；仅在权限语义发生重大变化时，建议使用可读版本标识（如 `_v2`）。
+- 回滚策略采用前滚修复，不维护复杂回滚脚本。
+
+---
+
+## 11. 一致性修正说明（相对旧设计）
+
+- 去除重复与冲突描述，统一以 proposal 为准。
+- 明确“管理页面仅 Admin”与“基础数据认证可读”可以同时成立。
+- 明确 Region 删除采用 `ON DELETE SET NULL`，不做关联阻断。
+- 明确 403 行为为“返回 403 页面”，不是静默跳转。
+- 列表行为统一为 `created_at DESC + 15 条分页`。
+
+该设计可直接作为当前 change 的实现依据。
