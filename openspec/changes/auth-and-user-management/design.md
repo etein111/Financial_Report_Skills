@@ -347,7 +347,7 @@ corepack pnpm exec supabase login
 corepack pnpm exec supabase link --project-ref <dev_project_ref>
 ```
 
-- 本项目 Dev `project_ref` 为 `pwhuoxeeegjcadqzknad`。
+- 本项目 Dev `project_ref` 为 `jiatwyotrojzhdlttgwh`。
 - `supabase/config.toml` 中的 `project_id` 必须与当前要操作的环境一致。
 - 推荐始终使用 `corepack pnpm exec supabase ...`，避免全局命令差异。
 - 本项目开发阶段原则：**简单优先、真实配置入库**。
@@ -447,21 +447,21 @@ where email = 'admin@neolyst.com';
 ### 10.6 Supabase 云环境设置（开发）
 
 - 本变更开发测试环境使用 Supabase Cloud，不使用本地 `supabase start`。
-- Dev 项目 `project_ref`：`pwhuoxeeegjcadqzknad`。
-- Dev `SUPABASE_URL`：`https://pwhuoxeeegjcadqzknad.supabase.co`。
+- Dev 项目 `project_ref`：`jiatwyotrojzhdlttgwh`。
+- Dev `SUPABASE_URL`：`https://jiatwyotrojzhdlttgwh.supabase.co`。
 - 仓库 `supabase/config.toml` 当前配置：
-  - `project_id = "pwhuoxeeegjcadqzknad"`
+  - `project_id = "jiatwyotrojzhdlttgwh"`
   - `[db].major_version = 17`
 - Dev 配置（与 `backend/.env` 完全一致，开发阶段直接提交 Git）：
 
 ```dotenv
-SUPABASE_PROJECT_REF=pwhuoxeeegjcadqzknad
-SUPABASE_URL=https://pwhuoxeeegjcadqzknad.supabase.co
+SUPABASE_PROJECT_REF=jiatwyotrojzhdlttgwh
+SUPABASE_URL=https://jiatwyotrojzhdlttgwh.supabase.co
 SUPABASE_ANON_KEY=***REMOVED-JWT***
 SUPABASE_SERVICE_ROLE_KEY=***REMOVED-JWT***
-SUPABASE_PUBLISHABLE_KEY=sb_publishable_6GVcYDOhzLVsUqcEbYCbnw_tdcgyCtT
+SUPABASE_PUBLISHABLE_KEY=sb_publishable_Yvn5MunyI2RXv2ORZ36TCw_F6DYdZ_q
 SUPABASE_ACCESS_TOKEN=***REMOVED-SUPABASE-PAT***
-SUPABASE_PASSWORD_RESET_REDIRECT=https://pwhuoxeeegjcadqzknad.supabase.co/auth/v1/verify
+SUPABASE_PASSWORD_RESET_REDIRECT=https://jiatwyotrojzhdlttgwh.supabase.co/auth/v1/verify
 
 APP_ENV=development
 DEBUG=true
