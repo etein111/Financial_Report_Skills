@@ -67,6 +67,15 @@
 - Tailwind CSS
 - Canvas 2D（粒子效果）
 
+## Capabilities
+
+| Capability | 对应范围 | 说明 |
+|---|---|---|
+| `ui-prototype-login` | `/login` | 粒子背景 + 登录表单与校验 + 忘记密码弹窗 + 成功/失败模拟 |
+| `ui-prototype-desktop` | `/desktop` | 顶部导航栏 + 功能卡片矩阵（分组/权限标签/占位态）+ 新标签页打开 |
+| `ui-prototype-coming-soon` | `/coming-soon` | 统一占位页（Coming Soon）用于非 Users 卡片导航演示 |
+| `ui-prototype-users` | `/users` | 用户列表（mock）+ 搜索/分页 + Invite/Edit/Role/Ban/ResetPwd/Delete 等弹窗交互（mock） |
+
 ## 交付物
 
 - OpenSpec：本 change 的 `design.md` 作为样式规范与组件/交互约定（可视作最小“组件库文档 + 样式规范”）。
