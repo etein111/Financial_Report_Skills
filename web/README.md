@@ -42,7 +42,7 @@ web/
 
 ## 规范文档
 
-- UI 组件与交互规范：`COMPONENTS.md`
+- UI 组件与交互规范：`UI.md`
 - 逻辑处理规范（鉴权/RBAC/错误处理/时间等）：`LOGIC.md`
 
 ## 环境变量

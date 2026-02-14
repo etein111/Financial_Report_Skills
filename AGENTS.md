@@ -16,6 +16,12 @@
 ## 沟通原则
 - 当需要向用户提问以澄清需求或做决策时，必须同时给出：我的推荐选项（默认）、关键考量/取舍、以及不确定时可采用的默认决策，避免只抛问题。
 
+## 开发流程原则
+
+1. **开发前先阅读规范**：开始任何开发任务前，先阅读 `web/UI.md` 和 `web/LOGIC.md` 了解约定。
+2. **修改前先审核**：修改代码前，先审核目标文件是否符合现有规范；不符合则先清理。
+3. **先清理再新增**：清理代码、测试跑通后，再添加新需求；避免在不稳定的代码上叠加新功能。
+
 ## 会话备忘
-- 若要继续“auth-and-user-management 拆分为 3 个 change”的工作，请先阅读 `openspec/notes/auth-and-user-management-split.md` 恢复上下文。
+- 若要继续"auth-and-user-management 拆分为 3 个 change"的工作，请先阅读 `openspec/notes/auth-and-user-management-split.md` 恢复上下文。
 
