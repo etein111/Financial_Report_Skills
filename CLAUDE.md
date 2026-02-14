@@ -23,13 +23,3 @@ openspec continue                # 继续当前变更
 # 配置查看
 openspec schema which           # 查看当前使用的 schema
 ```
-
-## /opsx:explore 团队规范
-
-以下为团队约定的交互语义（不是 OpenSpec CLI 内建参数）：
-
-1. `/opsx:explore` 默认绑定当前 in-progress change。
-2. `/opsx:explore <topic...>` 仍绑定当前 change，参数仅作为探索主题。
-3. 仅在明确指定 `--change <name>` 时切换到其他 change。
-4. 需要脱离 change 的全局探索时，显式使用 `--global`。
-5. 若存在多个 in-progress change 且未指定 `--change`，必须先让用户选择，不做猜测。

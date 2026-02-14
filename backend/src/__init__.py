@@ -1,2 +1,0 @@
-"""Neolyst backend package."""
-
