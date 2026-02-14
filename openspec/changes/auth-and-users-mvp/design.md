@@ -131,10 +131,10 @@ Route Handlers（本 change 覆盖）：
 ## 7. 列表与分页（统一规则）
 
 - 默认按 `created_at DESC`。
-- 超过 15 条启用分页；每页固定 15 条；不提供用户自定义每页条数。
+- 超过 12 条启用分页；每页固定 12 条；不提供用户自定义每页条数。
 
 Users 列表搜索（基线）：
-- 支持按姓名/邮箱搜索（姓名来自用户 profile/user_metadata 时以实际字段为准；若缺失则以邮箱为主）。
+- 支持按姓名/邮箱搜索（姓名来源统一为 Supabase Auth `user_metadata.full_name`；若缺失则以邮箱为主）。
 
 ## 8. Desktop 导航契约
 
