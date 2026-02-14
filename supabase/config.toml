@@ -1,15 +1,21 @@
-project_id = "jiatwyotrojzhdlttgwh"
+project_id = "gnudnjnyjdikezmclnpt"
+
+# API 配置
+[api]
+url = "https://gnudnjnyjdikezmclnpt.supabase.co"
+port = 54321
+anon_key = "***REMOVED-JWT***"
+service_role_key = "***REMOVED-JWT***"
+# publishable_key = "sb_publishable_UIIhuiyr5zw-9UhDGTyP3w_0HiUvdEn"
 
 [db]
 port = 54322
 shadow_port = 54320
 major_version = 17
+password = "pwd4neolyst"
 
 [studio]
 port = 54323
-
-[api]
-port = 54321
 
 [auth]
 site_url = "http://localhost:8000"
