@@ -61,11 +61,6 @@ lerna-debug.log*
 supabase/.branches
 supabase/.temp
 
-# 构建输出
-backend/dist/
-frontend/dist/
-frontend/build/
-
 # 测试
 coverage/
 .nyc_output/
