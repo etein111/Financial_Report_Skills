@@ -37,12 +37,12 @@ web/
 ├─ components/      # React 组件
 ├─ lib/             # 工具库
 ├─ public/          # 静态资源
-└─ .env.local       # 环境变量
+└─ .env             # 环境变量
 ```
 
 ## 环境变量
 
-在 `.env.local` 中配置：
+在 `.env` 中配置：
 
 ```
 NEXT_PUBLIC_SUPABASE_URL=
