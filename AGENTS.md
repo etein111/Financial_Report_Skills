@@ -13,6 +13,9 @@
 ## 项目概览
 本项目使用 **OpenSpec** 管理变更和规范。
 
+## 沟通原则
+- 当需要向用户提问以澄清需求或做决策时，必须同时给出：我的推荐选项（默认）、关键考量/取舍、以及不确定时可采用的默认决策，避免只抛问题。
+
 ## 会话备忘
 - 若要继续“auth-and-user-management 拆分为 3 个 change”的工作，请先阅读 `openspec/notes/auth-and-user-management-split.md` 恢复上下文。
 
