@@ -90,7 +90,8 @@
       "mcp__supabase__get_project_url",
       "Bash(pnpm dev)",
       "Bash(pnpm.exe dev:*)",
-      "Bash(pnpm install)"
+      "Bash(pnpm install)",
+      "mcp__zai-mcp-server__analyze_image"
     ]
   }
 }

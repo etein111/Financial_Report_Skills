@@ -70,15 +70,21 @@
 
 ### 3.2 `/desktop`
 
-顶部导航栏（原型态即可）：Logo、欢迎信息、Logout。
+顶部导航栏：Logo、Logout。
+
+页面布局：
+- 整体宽度适中，避免卡片过宽。
+- 两组卡片左右并列：Reports 左侧，Data Management 右侧。
+- 每组内卡片竖向排列（非横排网格）。
+- 两组之间间距适中。
 
 卡片矩阵（必须体现）：
 - 分组：Reports / Data Management。
 - 除 Users 外均为 Coming Soon，占位态点击打开统一占位页（新标签页）。
-- Users 卡片是唯一“已实现”的功能入口，点击新标签页打开 `/users`。
+- Users 卡片是唯一"已实现"的功能入口，点击新标签页打开 `/users`。
 - 卡片上需要体现权限标签（例如 `Admin only` / `SA/Admin only`）。
 
-建议卡片矩阵（可调整）：
+卡片矩阵内容：
 
 | Reports 功能组 | Data Management 功能组 |
 |---|---|
@@ -98,7 +104,7 @@
 - Header：Users + 主操作按钮（Invite user）。
 - Filters：Search（email/name）。
 - Table：列表（Email、Role、Status、Created、Actions）。
-- Pagination：UI 表达固定每页 15（原型可只做控件与页码）。
+- Pagination：UI 表达固定每页 12（原型可只做控件与页码）。
 
 行操作（原型态，mock 即可）：
 - Invite user（弹窗表单）。

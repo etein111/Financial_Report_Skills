@@ -9,13 +9,13 @@
 - **AND** 页面 MUST 展示搜索输入框（按 email/name）
 - **AND** 页面 MUST 展示用户表格（包含 Email、Role、Status、Created、Actions）
 
-### Requirement: Users 列表分页固定为 15 条
+### Requirement: Users 列表分页固定为 12 条
 系统 SHALL 使用固定分页规则演示列表体验。
 
-#### Scenario: 超过 15 条显示分页
-- **WHEN** Users 列表数据超过 15 条
+#### Scenario: 超过 12 条显示分页
+- **WHEN** Users 列表数据超过 12 条
 - **THEN** 页面 MUST 展示分页控件
-- **AND** 每页 MUST 固定展示 15 条
+- **AND** 每页 MUST 固定展示 12 条
 
 ### Requirement: Users 支持搜索过滤
 系统 SHALL 支持按 email 或 name 进行搜索过滤。

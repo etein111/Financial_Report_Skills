@@ -27,7 +27,7 @@
 
 ## 5. Users 原型（/users）
 
-- [x] 5.1 建立 mock users 数据与列表工具（filter + pagination，每页 15）
+- [x] 5.1 建立 mock users 数据与列表工具（filter + pagination，每页 12）
 - [x] 5.2 实现 `/users` 基础布局（Header、Search、Table、Pagination）
 - [x] 5.3 实现 Invite user 弹窗（Email/Role 校验、mock 新增、toast）
 - [x] 5.4 实现 Edit user 弹窗（mock 更新、toast）

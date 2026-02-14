@@ -18,7 +18,7 @@ import {
   UserStatus,
 } from "@/lib/mock/users";
 
-const PAGE_SIZE = 15;
+const PAGE_SIZE = 12;
 
 function formatDate(iso: string) {
   const d = new Date(iso);
