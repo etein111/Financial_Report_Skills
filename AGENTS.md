@@ -13,3 +13,6 @@
 ## 项目概览
 本项目使用 **OpenSpec** 管理变更和规范。
 
+## 会话备忘
+- 若要继续“auth-and-user-management 拆分为 3 个 change”的工作，请先阅读 `openspec/notes/auth-and-user-management-split.md` 恢复上下文。
+
