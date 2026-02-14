@@ -2,7 +2,7 @@
   "name": "neolyst",
   "private": true,
   "version": "1.0.0",
-  "description": "- FastAPI (SSR + API) - Jinja2 + HTMX + Tailwind - Supabase (Auth + Postgres + RLS)",
+  "description": "- Next.js (App Router) - Supabase (Auth + Postgres + RLS + PostgREST)",
   "scripts": {
     "supabase": "pnpm exec supabase",
     "supabase:db:push": "pnpm exec supabase db push",

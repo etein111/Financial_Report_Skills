@@ -12,16 +12,16 @@
 系统 SHALL 对 Region 提供读写能力，遵循“认证可读，Admin 可写”。
 
 #### Scenario: 认证用户读取 Region
-- **WHEN** 已认证用户调用 `GET /api/regions`
-- **THEN** 系统 MUST 返回 Region 列表
+- **WHEN** 已认证用户访问 Region 数据（例如 Regions 页面需要加载列表）
+- **THEN** 系统 MUST 允许读取 Region 列表
 
 #### Scenario: Admin 写入 Region
-- **WHEN** Admin 调用 `POST`、`PUT`、`DELETE /api/regions`
+- **WHEN** Admin 在 Regions 页面执行新增、编辑或删除
 - **THEN** 系统 MUST 允许操作
 
 #### Scenario: 非 Admin 写入 Region
-- **WHEN** SA 或 Analyst 调用 `POST`、`PUT`、`DELETE /api/regions`
-- **THEN** 系统 MUST 返回 403 Forbidden
+- **WHEN** SA 或 Analyst 尝试写入 Region
+- **THEN** 系统 MUST 拒绝写操作并返回无权限提示（403 页面或等效处理）
 
 ### Requirement: 系统预置 Region 基础数据
 系统 SHALL 预置并维护固定 Region 基础数据集合。
@@ -46,3 +46,4 @@
 - **THEN** 系统 MUST 按 `created_at DESC` 排序
 - **AND** 当记录超过 15 条时 MUST 启用分页
 - **AND** 每页条数 MUST 固定为 15
+

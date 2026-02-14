@@ -1,10 +1,19 @@
-# 实施任务清单（按 proposal + design 重建）
+# 实施任务清单（按 proposal + design）
 
 ## 使用说明
 
-- 本清单完全以 `proposal.md` 与 `design.md` 为准。
-- 技术路线固定为：FastAPI 单体 + Supabase + Jinja2/HTMX + Tailwind。
-- 任务按顺序执行，每完成一项即勾选。
+- 本清单以 `proposal.md` 与 `design.md` 为准。
+- 技术路线固定为：Next.js（App Router）+ Supabase（Auth/Postgres/RLS/PostgREST），不使用 Edge Functions。
+- 交互策略固定为：Server-first（Server Components + Server Actions），必要时局部引入 Client Components。
+
+---
+
+## 阶段 0：变更文档收口（技术栈调整）
+
+- [x] 0.1 更新 `proposal.md`：改为 Next.js App Router + Supabase 原生（cookies SSR、invite-only、ban/unban、无 Edge Functions）。
+- [x] 0.2 更新 `design.md`：删除 FastAPI/Jinja2/HTMX 设计，补齐 Next.js/Supabase SSR 架构与落地边界。
+- [x] 0.3 更新 `specs/*/spec.md`：删除 `/api/*`、HttpOnly、FastAPI 等旧描述，统一到 Next.js/Supabase 方案。
+- [x] 0.4 校验 `tasks.md` 勾选状态：不得出现“未实现但已勾选”的任务。
 
 ---
 
@@ -13,57 +22,67 @@
 **目标**：建立可追踪、可增量执行的数据库变更流程（dev + prod）。
 
 - [x] 1.1 初始化 Supabase CLI 工程目录，建立 `supabase/migrations/` 与 `supabase/seed/`。
-- [x] 1.2 将当前数据库基线迁移为首个 migration（不再使用单一 `init.sql` 作为发布入口）。
+- [x] 1.2 将当前数据库基线迁移为 migration（不再使用单一 `init.sql` 作为发布入口）。
 - [x] 1.3 建立 `region` 与 `analyst` 表结构，确保 `analyst.region_id` 使用 `ON DELETE SET NULL`。
 - [x] 1.4 落地 RLS 策略：`region`/`analyst` 认证可读、仅 Admin 可写。
 - [x] 1.5 编写幂等 seed：预置 Region 数据（China、Hong Kong、Japan、Taiwan、Korea、India、Macau、US）。
-- [x] 1.6 验证迁移历史由 `supabase_migrations.schema_migrations` 管理，不自建版本记录表。
-- [x] 1.7 形成发布规则文档：先 dev 后 prod；紧急 Dashboard 变更需当天补 migration 回写 Git。
+- [x] 1.6 初始化默认 Admin 账号（`jiang_jiahong@qq.com` / `Admin123`，仅 Dev/引导；生产必须改密/替换）。
+- [ ] 1.7 迁移发布演练（Dev）：本地或 dev 云环境执行 `supabase db push` / `supabase db reset` 并完成 SQL 验证（read + write）。
 
 ---
 
-## 阶段 2：认证与会话能力（FastAPI + Supabase Auth）
+## 阶段 2：Next.js 工程初始化 + Supabase SSR 基线
 
-**目标**：完成 Cookie 会话方案和角色鉴权基线。
+**目标**：搭建 App Router 工程骨架，完成 cookies SSR 会话与路由保护。
 
-- [x] 2.1 实现登录接口 `POST /api/auth/login`，登录成功写入 HttpOnly Cookie。
-- [x] 2.2 实现登出接口 `POST /api/auth/logout`，清理会话 Cookie。
-- [x] 2.3 实现当前用户接口 `GET /api/auth/me`。
-- [x] 2.4 实现忘记密码接口 `POST /api/auth/forgot-password`，并配置 Supabase 托管重置页跳转。
-- [x] 2.5 实现依赖：`get_access_token`、`get_current_user`、`require_admin`。
-- [x] 2.6 完成会话与安全设置：`HttpOnly`、`Secure`、`SameSite=Lax`。
-- [x] 2.7 校验角色来源仅使用 Auth `app_metadata.role`（服务端可改）。
-
----
-
-## 阶段 3：管理能力 API（Admin 功能边界）
-
-**目标**：完成 Users / Regions / Analyst Info 三组管理接口，并与权限模型一致。
-
-- [x] 3.1 用户管理接口：`GET/POST/PUT/DELETE /api/users`。
-- [x] 3.2 用户扩展接口：`PUT /api/users/{id}/password`、`PUT /api/users/{id}/role`、`PUT /api/users/{id}/toggle-status`。
-- [x] 3.3 Region 接口：`GET /api/regions`（认证可读）、`POST/PUT/DELETE`（Admin）。
-- [x] 3.4 Analyst Info 接口：`GET /api/analyst-info`（认证可读）、`POST/PUT/DELETE`（Admin）。
-- [x] 3.5 实现 `POST /api/analyst-info/check-email`（Admin）。
-- [x] 3.6 落地通用列表规则：`created_at DESC`、超过 15 条分页、每页固定 15。
-- [x] 3.7 校验 Analyst 列表搜索字段：`full_name`、`chinese_name`、`email`。
-- [x] 3.8 校验 Analyst 创建必填字段：`full_name`、`email`、`region`。
+- [ ] 2.1 初始化 Next.js App Router + TypeScript 项目结构（约定目录、lint/format）。
+- [ ] 2.2 安装依赖：`next/react`、`@supabase/supabase-js`、`@supabase/ssr`。
+- [ ] 2.3 创建 Supabase 客户端封装：
+- [ ] 2.3.1 Browser Client（Client Components 用）
+- [ ] 2.3.2 Server Client（Server Components/Actions/Route Handlers 用，基于 cookies）
+- [ ] 2.3.3 Admin Client（仅服务端，`SUPABASE_SERVICE_ROLE_KEY`）
+- [ ] 2.4 实现 `middleware.ts`：会话刷新 + 受保护路由重定向 + Admin-only 路由 403。
+- [ ] 2.5 实现统一认证回调 `GET /auth/callback`（单机制）：支持 `code` 与 `token_hash+type` 两种参数。
+- [ ] 2.6 增加回调错误页 `/auth/auth-code-error`（简单说明 + 返回登录页）。
 
 ---
 
-## 阶段 4：页面与交互（Jinja2 + HTMX + Tailwind）
+## 阶段 3：认证与基础页面（不引入边缘/额外服务）
 
-**目标**：完成登录页、桌面页、管理页与 403 页，满足导航与视觉约定。
+**目标**：完成登录/登出/桌面落地，并与权限模型一致。
 
-- [x] 4.1 页面路由完成：`/login`、`/desktop`、`/users`、`/regions`、`/analyst-info`、`/403`。
-- [x] 4.2 页面访问控制：管理页仅 Admin；越权访问返回 403 页面（文案 `No permission`）。
-- [x] 4.3 落地 Desktop-as-Launcher 约定：功能卡片新标签打开；功能页无“返回桌面”按钮。
-- [x] 4.4 管理页交互使用 HTMX 完成搜索、分页、增删改局部刷新。
-- [x] 4.5 登录页与桌面页视觉对齐原型：
-  - `openspec/changes/auth-and-user-management/01-login-page.jpg`
-  - `openspec/changes/auth-and-user-management/02-desktop.jpg`
-- [x] 4.6 视觉基线验收：深色背景、简单大气、专业、科技感；允许小幅间距与字号微调。
-- [x] 4.7 语言与时间约束：UI 英文文案；展示时间按 UTC+8。
+- [ ] 3.1 登录页 `/login`：
+- [ ] 3.1.1 邮箱+密码登录（成功进入 `/desktop`）
+- [ ] 3.1.2 “忘记密码”触发邮件重置（统一成功提示，避免邮箱枚举）
+- [ ] 3.2 登出能力（Server Action 或 Route Handler），登出后回到 `/login`。
+- [ ] 3.3 桌面页 `/desktop`（已登录可访问；作为 Launcher）。
+- [ ] 3.4 403 页面 `/403`（文案 `No permission`）。
+
+---
+
+## 阶段 4：管理能力（Admin）
+
+**目标**：完成 Users / Regions / Analyst Info 三组管理能力，遵循“功能权限 + RLS”双层模型。
+
+- [ ] 4.1 Users 管理（Admin-only）：
+- [ ] 4.1.1 用户列表 + 搜索 + 分页（`created_at DESC`、>15 分页、每页 15）
+- [ ] 4.1.2 邀请制创建用户（invite），并可指定初始角色（`app_metadata.role`）
+- [ ] 4.1.3 角色调整（唯一事实源：`app_metadata.role`）
+- [ ] 4.1.4 禁用/启用（单机制：ban/unban；不使用 `app_metadata.is_active`）
+- [ ] 4.1.5 管理员改密（不要求旧密码）
+- [ ] 4.1.6 删除用户（如需要；谨慎暴露入口）
+- [ ] 4.2 Regions 管理（Admin-only 写；认证可读）：
+- [ ] 4.2.1 列表/搜索/分页（统一规则）
+- [ ] 4.2.2 新增/编辑/删除（依赖 RLS）
+- [ ] 4.3 Analyst Info 管理（Admin-only 写；认证可读）：
+- [ ] 4.3.1 列表/搜索/分页（统一规则；搜索字段：`full_name`/`chinese_name`/`email`）
+- [ ] 4.3.2 新增/编辑/删除（依赖 RLS；`full_name`/`email`/`region` 必填）
+- [ ] 4.4 Desktop 卡片入口：
+- [ ] 4.4.1 Admin 展示 Users/Regions/Analyst Info 卡片
+- [ ] 4.4.2 SA/Analyst 隐藏管理卡片入口
+- [ ] 4.5 Desktop-as-Launcher：
+- [ ] 4.5.1 桌面卡片新标签打开功能页
+- [ ] 4.5.2 功能页不提供“返回桌面”链接
 
 ---
 
@@ -71,19 +90,16 @@
 
 **目标**：确认能力完整、权限正确、迁移与运维规则可执行。
 
-- [x] 5.1 认证验收：登录、登出、会话失效处理、忘记密码流程通过。
-- [x] 5.2 权限验收：Admin/SA/Analyst 三角色功能权限与数据权限矩阵一致。
-- [x] 5.3 RLS 验收：数据库层验证“认证可读、Admin 可写”策略生效。
-- [x] 5.4 列表验收：排序、分页、搜索规则符合设计。
-- [x] 5.5 导航验收：桌面卡片新标签打开，功能页无返回入口，关闭标签后可继续在桌面操作。
-- [x] 5.6 运维验收（Dev）：开发环境可启用 debug 路由；生产关闭作为发布约束保留，不纳入本轮测试。
-- [ ] 5.7 迁移发布演练（Dev）：在 dev 云环境完成 `db push` 与 SQL 验证（read + write）。
-- [x] 5.8 文档收口：同步更新 README 与变更说明中的启动、迁移、发布步骤，并明确 `uv + backend/.venv`、`pnpm + 本地 node_modules` 与“禁止全局环境”规范。
+- [ ] 5.1 认证验收：登录、登出、会话失效处理、忘记密码流程通过。
+- [ ] 5.2 权限验收：Admin/SA/Analyst 三角色功能权限与数据权限矩阵一致。
+- [ ] 5.3 RLS 验收：数据库层验证“认证可读、Admin 可写”策略生效。
+- [ ] 5.4 用户创建验收：public signups 已关闭；只能通过邀请制创建用户。
+- [ ] 5.5 邀请验收：用户完成邀请流程后自动进入 `/desktop`（自动建立会话，不要求再次登录）。
+- [ ] 5.6 运维约束验收：生产环境关闭调试端点；`SUPABASE_SERVICE_ROLE_KEY` 未下发到浏览器。
 
 ---
 
 ## 完成定义（DoD）
 
-- [x] 所有 API 与页面能力满足 proposal 范围，无额外超范围功能。
-- [ ] `tasks.md` 全部勾选完成后，可直接进入 `/opsx:verify`。
+- [ ] `tasks.md` 全部勾选完成后，可进入 `/opsx:verify`。
 - [ ] 通过验证后再进入归档流程（`/opsx:archive`）。

@@ -1,14 +1,16 @@
-# 认证与权限系统设计文档（FastAPI + Supabase + Jinja2/HTMX）
+# 认证与权限系统设计文档（Next.js App Router + Supabase）
 
 ## 1. Context
 
-本设计对应 `auth-and-user-management` 变更，遵循 proposal 的需求边界，技术方案统一为：
+本设计对应 `auth-and-user-management` 变更，技术方案统一为：
 
-- 服务端：FastAPI 单体
-- 平台：Supabase（Auth / Postgres / RLS / Storage）
-- 页面层：Jinja2 + HTMX + Tailwind CSS
+- 应用：Next.js（App Router）
+- 平台：Supabase（Auth / Postgres / RLS / PostgREST）
+- 交互：Server-first（Server Components + Server Actions），必要时局部引入 Client Components
+- 会话：使用 `@supabase/ssr` 的 cookies 会话（不强制 HttpOnly）；`middleware.ts` 负责会话刷新与路由保护基线
+- 管理能力：不使用 Supabase Edge Functions；所有需要 `SUPABASE_SERVICE_ROLE_KEY` 的管理操作在 Next.js 服务端执行
 
-目标是把权限语义和实现路径收敛到单一事实源，避免前端状态和后端权限漂移。
+目标是把“功能权限”（是否允许使用管理页面/操作）与“数据权限”（数据库 RLS）明确分离，并将角色事实源收敛到 Supabase Auth 的 `app_metadata.role`，避免权限漂移。
 
 ---
 
@@ -16,18 +18,18 @@
 
 ### 2.1 目标
 
-- 登录、登出、会话验证、当前用户信息。
+- 登录、登出、会话验证、当前用户信息获取（用于页面鉴权与展示）。
 - 角色模型：Admin / SA / Analyst。
-- Users 管理、Regions 管理、Analyst Info 管理。
-- 忘记密码邮件重置与管理员直接改密。
+- Users 管理（邀请制创建、角色调整、禁用/启用、管理员改密、删除）。
+- Regions 管理、Analyst Info 管理（数据层由 RLS 兜底）。
 - 登录页、桌面页、管理页、403 页面。
 
 ### 2.2 非目标
 
 - 不包含 Coverage/Sector/Template。
 - 不包含报告创建/编辑/审核。
-- 不实现 refresh token 机制。
-- 不实现密码修改审计日志。
+- 不引入 OAuth Providers（本阶段仅邮箱+密码）。
+- 不引入 Edge Functions / Realtime / Storage（本阶段不需要）。
 
 ---
 
@@ -35,17 +37,18 @@
 
 ```text
 Browser
-  -> FastAPI (Web + API)
+  -> Next.js (App Router)
+      - Server Components / Server Actions / Route Handlers
+      - Middleware: refresh session + route protection baseline
       -> Supabase Auth
-      -> Supabase Postgres (RLS)
-      -> Supabase Storage
+      -> Supabase Postgres (RLS) + PostgREST
 ```
 
 架构约束：
 
-- FastAPI 是唯一业务入口。
-- 页面访问权限和 API 权限由 FastAPI 统一判断。
-- 数据最终权限由 RLS 兜底。
+- Next.js 是唯一应用入口（页面 + 服务端能力）。
+- 业务数据 CRUD 直接复用 Supabase PostgREST + RLS，不构建对外稳定的内部 REST API 合同（`/api/*` 不是本阶段承诺的接口面）。
+- 所有“管理员密钥能力”（邀请、角色修改、禁用/启用、管理员改密、删除用户）必须在 Next.js 服务端执行，浏览器侧永不接触 `SUPABASE_SERVICE_ROLE_KEY`。
 
 ---
 
@@ -75,54 +78,52 @@ Browser
 | `region` | 所有已认证用户 | 仅 Admin | 仅 Admin | 仅 Admin |
 | `analyst` | 所有已认证用户 | 仅 Admin | 仅 Admin | 仅 Admin |
 
-说明：基础数据“认证可读”不等于开放管理功能页面。
+说明：基础数据“认证可读”不等于开放管理功能页面；页面入口与写操作仍由功能权限控制。
 
 ---
 
 ## 5. 认证与会话设计
 
-### 5.1 会话策略
+### 5.1 会话策略（Supabase SSR cookies）
 
-- 登录成功后由 FastAPI 写入 HttpOnly Cookie（不使用 localStorage）。
-- 所有受保护请求由 FastAPI 从 Cookie 读取 access token。
-- token 有效期 24 小时（Supabase 配置）。
+- 会话存储在 cookies，由 `@supabase/ssr` 管理；不使用 `localStorage`。
+- 不强制对 Supabase 会话 cookies 施加额外 `HttpOnly` 自定义（遵循 Supabase SSR 推荐做法，避免破坏 refresh 链路）。
+- 受保护路由的“是否已登录”判断，服务端必须使用 `supabase.auth.getUser()` 获取用户并完成 token 重新校验；不能用 `getSession()` 作为权限依据。
+- 会话有效期遵循 Supabase 默认机制（access token 自动 refresh），不强制“24 小时必须重新登录”。
 
-### 5.2 关键依赖代码（认证）
+### 5.2 Supabase Client 分层（建议落地为工具函数）
 
-```python
-from fastapi import HTTPException, Request, status
+1) Browser Client（Client Components 使用）
 
-def get_access_token(request: Request) -> str:
-    cookie_token = request.cookies.get("access_token")
-    if cookie_token:
-        return cookie_token
-    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="未登录")
-```
+- Key：`NEXT_PUBLIC_SUPABASE_URL` + `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`（或 anon key）
+- 创建：`createBrowserClient(...)`
 
-```python
-def get_current_user(token: Annotated[str, Depends(get_access_token)]) -> dict:
-    user_res = supabase.auth.get_user(jwt=token)
-    user = user_res.user
-    if not user:
-        raise HTTPException(status_code=401, detail="无效凭据")
-    app_meta = user.app_metadata or {}
-    user_meta = user.user_metadata or {}
-    return {
-        "id": str(user.id),
-        "email": user.email,
-        "full_name": user_meta.get("full_name"),
-        "role": app_meta.get("role", "analyst"),
-    }
-```
+2) Server Client（Server Components / Server Actions / Route Handlers 使用）
 
-### 5.3 关键依赖代码（角色守卫）
+- Key：同上（publishable/anon）+ cookies（从 Next.js `cookies()` 读取/回写）
+- 创建：`createServerClient(...)`
 
-```python
-def require_admin(current_user: Annotated[dict, Depends(get_current_user)]) -> dict:
-    if current_user.get("role") != "admin":
-        raise HTTPException(status_code=403, detail="No permission")
-    return current_user
-```
+3) Admin Client（仅管理员动作使用）
+
+- Key：`SUPABASE_SERVICE_ROLE_KEY`（仅服务端 env）
+- 创建：`createClient(url, serviceRoleKey)`（不绑定 cookies）
+
+### 5.3 Middleware（会话刷新 + 路由保护基线）
+
+在 `middleware.ts` 中：
+
+- 每个请求调用 `supabase.auth.getUser()` 触发刷新逻辑并回写 cookies。
+- 未登录访问受保护路由：重定向到 `/login`。
+- 已登录但访问 Admin-only 路由且非 Admin：返回 403 页面（路径 `/403`，文案 `No permission`）。
+
+### 5.4 统一认证回调（单机制）
+
+我们只保留一个回调入口（例如 `GET /auth/callback`）来处理 Supabase 各类认证回调参数：
+
+- 若 URL 参数包含 `code`：走 `exchangeCodeForSession(code)`（兼容 OAuth/PKCE 类回调）。
+- 若包含 `token_hash` + `type`：走 `verifyOtp({ token_hash, type })`（兼容邀请/确认/重置等邮件链接类回调）。
+- 成功后重定向到 `next`（默认为 `/desktop`，且必须校验为相对路径）。
+- 失败统一重定向到 `/auth/auth-code-error`。
 
 ---
 
@@ -131,47 +132,26 @@ def require_admin(current_user: Annotated[dict, Depends(get_current_user)]) -> d
 ### 6.1 核心数据结构
 
 - `region`：地区字典（`name`/`code` 唯一）。
-- `analyst`：业务分析师信息（`email` 唯一，`region_id` 外键）。
+- `analyst`：业务分析师信息（`email` 唯一，`region_id` 外键，`ON DELETE SET NULL`）。
 
 约束要求：
 
-- `analyst.region_id` 外键采用 `ON DELETE SET NULL`。
-- 删除 Region 时不做业务阻断。
+- 删除 Region 时不做业务阻断，关联 Analyst 的 `region_id` 自动置空。
+- Analyst 业务数据与 Auth Users 解耦：维护 `analyst` 不自动创建/删除/修改 Auth 用户账号。
 
-Region 预置数据：
+### 6.2 RLS 策略
 
-- China、Hong Kong、Japan、Taiwan、Korea、India、Macau、US。
+RLS 以 JWT 的 `app_metadata.role` 为角色事实源：
 
-### 6.2 RLS 关键策略代码
+- `region`/`analyst`：认证可读（`to authenticated using (true)`）。
+- 写操作：仅 Admin（`auth.jwt()->'app_metadata'->>'role' = 'admin'`）。
 
-```sql
-alter table region enable row level security;
-alter table analyst enable row level security;
-
-create policy "region_select_authenticated"
-on region for select to authenticated
-using (true);
-
-create policy "region_write_admin"
-on region for all to authenticated
-using ((auth.jwt()->'app_metadata'->>'role') = 'admin')
-with check ((auth.jwt()->'app_metadata'->>'role') = 'admin');
-
-create policy "analyst_select_authenticated"
-on analyst for select to authenticated
-using (true);
-
-create policy "analyst_write_admin"
-on analyst for all to authenticated
-using ((auth.jwt()->'app_metadata'->>'role') = 'admin')
-with check ((auth.jwt()->'app_metadata'->>'role') = 'admin');
-```
+实现以迁移为准：`supabase/migrations/20260214094418_auth_and_user_management_baseline.sql`。
 
 ### 6.3 数据访问策略（实现边界）
 
-- 不强制引入 ORM。
-- 常规读写通过 Supabase 数据访问接口完成。
-- 复杂原子动作通过数据库函数（RPC）实现。
+- 页面数据读写通过 Supabase PostgREST（`supabase.from('region')...`）完成。
+- 不建设对外稳定的 `/api/regions`、`/api/analyst-info` 等 CRUD JSON API；如需 Route Handler，仅作为 Next.js 内部实现细节使用。
 
 ---
 
@@ -184,312 +164,80 @@ with check ((auth.jwt()->'app_metadata'->>'role') = 'admin');
 - 每页固定 15 条。
 - 不提供用户自定义每页条数。
 
-关键代码（Region 列表）：
+落地方式（Supabase Query）：
 
-```python
-DEFAULT_PAGE_SIZE = 15
-
-@router.get("/api/regions")
-async def list_regions(
-    page: int = 1,
-    current_user: Annotated[dict, Depends(get_current_user)] = None,
-):
-    page = max(page, 1)
-    start = (page - 1) * DEFAULT_PAGE_SIZE
-    end = start + DEFAULT_PAGE_SIZE - 1
-
-    res = (
-        supabase.table("region")
-        .select("*", count="exact")
-        .order("created_at", desc=True)
-        .range(start, end)
-        .execute()
-    )
-    return {
-        "items": res.data,
-        "total": res.count or 0,
-        "page": page,
-        "page_size": DEFAULT_PAGE_SIZE,
-    }
-```
+- `order('created_at', { ascending: false })`
+- `range(start, end)`（其中 `start=(page-1)*15`，`end=start+14`）
 
 ---
 
-## 8. 页面与路由设计（SSR + HTMX）
+## 8. 页面与路由设计（App Router）
 
-### 8.1 页面访问权限
+### 8.1 页面路由（建议）
 
-| 路径 | 权限 |
-|---|---|
-| `/login` | 公开 |
-| `/desktop` | 已登录 |
-| `/users` | 仅 Admin |
-| `/regions` | 仅 Admin |
-| `/analyst-info` | 仅 Admin |
-| `/403` | 已登录 |
+- `/login`：登录页（含“忘记密码”入口）。
+- `/desktop`：桌面启动器（登录后默认落地页）。
+- `/users`：用户管理（Admin-only）。
+- `/regions`：Region 管理（Admin-only）。
+- `/analyst-info`：Analyst Info 管理（Admin-only）。
+- `/403`：无权限页面（文案 `No permission`）。
 
-非 Admin 强行访问管理页面时返回 403 页面，文案为 `No permission`。
+Auth 相关：
+
+- `/auth/callback`：统一认证回调（Route Handler）。
+- `/auth/auth-code-error`：回调错误页。
 
 ### 8.2 Desktop-as-Launcher 导航契约
 
-- 桌面页是功能入口（Launcher）。
-- 功能卡片统一新标签页打开（`target="_blank"` + `rel="noopener"`）。
-- 功能页不提供“返回桌面”按钮；用户通过关闭标签页返回桌面。
-- 该契约适用于 Users / Regions / Analyst Info 及后续新增功能页。
-- 直接访问功能页时：
-  - 未登录：按认证规则处理（跳转登录或返回 401）。
-  - 已登录但无权限：返回 403 页面（文案：`No permission`）。
+- 桌面功能卡片必须使用新标签页打开目标功能页。
+- Users/Regions/Analyst Info 页面不提供“返回桌面”链接，用户通过关闭标签页回到桌面。
 
-### 8.3 视觉风格与原型对齐
+### 8.3 UI 语言与时间
 
-关键代码：
-
-```python
-@app.get("/users")
-async def users_page(
-    request: Request,
-    current_user: Annotated[dict, Depends(require_admin)],
-):
-    return templates.TemplateResponse("users/index.html", {"request": request})
-```
-
-- 风格基线：深色背景、简单大气、专业、富有科技感。
-- 登录页与桌面页对齐原型：
-  - `openspec/changes/auth-and-user-management/01-login-page.jpg`
-  - `openspec/changes/auth-and-user-management/02-desktop.jpg`
-- 粒子背景与整体氛围为既定设计方向；可调整实现细节，但不得改变视觉方向与信息层级。
+- UI 英文文案。
+- 时间展示按 UTC+8（Asia/Shanghai）。
 
 ---
 
-## 9. API 设计（FastAPI）
+## 9. 用户与管理员能力设计（Supabase Auth Admin）
 
-### 9.1 认证
+### 9.1 用户创建（Invite-only）
 
-- `POST /api/auth/login`
-- `POST /api/auth/logout`
-- `GET /api/auth/me`
-- `POST /api/auth/forgot-password`
-- 重置密码页面与提交流程使用 Supabase 托管页面，不提供站内 `POST /api/auth/reset-password`
+- Admin 在用户管理页输入邮箱并选择角色，服务端调用 Supabase Admin `inviteUserByEmail` 发送邀请邮件。
+- Supabase Auth 必须关闭公开注册（public signups），防止绕过邀请创建账号。
 
-### 9.2 用户管理（Admin）
+### 9.2 角色调整（唯一事实源）
 
-- `GET /api/users`
-- `POST /api/users`
-- `PUT /api/users/{id}`
-- `PUT /api/users/{id}/password`
-- `PUT /api/users/{id}/role`
-- `PUT /api/users/{id}/toggle-status`
-- `DELETE /api/users/{id}`
+- 角色仅存储在 `app_metadata.role`。
+- Admin 调整角色通过 Admin API 更新 `app_metadata.role`。
 
-### 9.3 Region 管理
+### 9.3 禁用/启用（单机制：ban / unban）
 
-- `GET /api/regions`（认证可读）
-- `POST /api/regions`（Admin）
-- `PUT /api/regions/{id}`（Admin）
-- `DELETE /api/regions/{id}`（Admin）
+- 禁用/启用账号仅使用 Supabase Auth 的 ban/unban 机制。
+- 不使用 `app_metadata.is_active` 作为账号状态事实源。
 
-### 9.4 Analyst 信息管理
+### 9.4 管理员改密
 
-- `GET /api/analyst-info`（认证可读）
-- `POST /api/analyst-info`（Admin）
-- `PUT /api/analyst-info/{id}`（Admin）
-- `DELETE /api/analyst-info/{id}`（Admin）
-- `POST /api/analyst-info/check-email`（Admin）
+- Admin 可为任意用户设置新密码（不要求旧密码）。
+- 通过 Supabase Admin API 更新用户密码。
 
-字段与查询约束（proposal 对齐）：
+### 9.5 默认 Admin（初始化）
 
-- 列表搜索字段包含：`full_name`、`chinese_name`、`email`。
-- 列表展示字段包含：`full_name`、`chinese_name`、`email`、`region`、`is_active`。
-- 创建必填字段：`full_name`、`email`、`region`。
+默认 Admin 账号由 migration 幂等初始化（仅用于 Dev/引导）：
+
+- email：`jiang_jiahong@qq.com`
+- password：`Admin123`
+
+生产环境 MUST 在对外开放前完成改密或替换为更安全的初始化方案。
+
+实现以迁移为准：`supabase/migrations/20260213165658_init_default_admin.sql`。
 
 ---
 
-## 10. 安全与运维
+## 10. 运维与配置（关键约束）
 
-### 10.1 安全基线
+- Node.js 依赖与命令使用 `pnpm` + 项目本地 `node_modules`。
+- `SUPABASE_SERVICE_ROLE_KEY` 严禁下发到浏览器。
+- Dev 环境允许将 Supabase 连接信息与 key 提交到 Git（用于上手速度）；生产环境严禁提交/硬编码任何密钥。
+- 禁止提交个人身份的 Supabase Access Token（例如 `SUPABASE_ACCESS_TOKEN`）。
 
-- 角色仅存储在 Auth `app_metadata`（服务端可改）。
-- 会话 Cookie 设置 `HttpOnly`、`Secure`、`SameSite=Lax`。
-- 忘记密码接口返回统一提示，避免邮箱枚举。
-
-### 10.2 语言与时区约定（proposal 对齐）
-
-- 前端界面语言统一英文（按钮、标题、表单标签、提示文案）。
-- 业务数据内容支持中英文。
-- 前端展示时间统一使用北京时间（UTC+8）。
-- 后端接口与数据库时间约定统一为北京时间（UTC+8）。
-
-### 10.3 调试端点控制
-
-生产环境必须关闭调试端点，开发环境按开关注册：
-
-```python
-if settings.DEBUG:
-    app.include_router(debug_router, prefix="/debug", tags=["debug"])
-```
-
-### 10.4 Supabase CLI 数据库版本管理（详细流程）
-
-#### 10.4.1 管理原则
-
-- 统一使用 Supabase CLI 管理数据库版本，不自建版本记录表。
-- 增量执行依据为 Supabase 内置表 `supabase_migrations.schema_migrations`。
-- 所有 Schema / RLS / Function / Policy 变更必须进入 `supabase/migrations/*.sql`。
-- 种子数据统一放 `supabase/seed/*.sql`，并保持幂等。
-- 环境发布顺序固定为：`dev -> prod`。
-
-#### 10.4.2 一次性初始化（每台新机器）
-
-```bash
-corepack pnpm install
-corepack pnpm exec supabase --version
-corepack pnpm exec supabase login
-corepack pnpm exec supabase link --project-ref <dev_project_ref>
-```
-
-- 本项目 Dev `project_ref` 为 `jiatwyotrojzhdlttgwh`。
-- `supabase/config.toml` 中的 `project_id` 必须与当前要操作的环境一致。
-- 推荐始终使用 `corepack pnpm exec supabase ...`，避免全局命令差异。
-- 本项目开发阶段原则：**简单优先、真实配置入库**。
-  - 真实 Dev 配置直接记录在 `backend/.env` 与本文档中，并提交到 Git，便于新机器快速上手。
-
-#### 10.4.3 新增数据库变更（开发阶段）
-
-1. 创建迁移文件：
-```bash
-corepack pnpm exec supabase migration new <change_name>
-```
-2. 在新生成的 `supabase/migrations/YYYYMMDDHHMMSS_<change_name>.sql` 中编写 SQL。
-3. 命名必须符合 `YYYYMMDDHHMMSS_<desc>.sql`，便于排序与审计。
-
-#### 10.4.4 推送到 Dev（标准发布）
-
-1. 先预检查：
-```bash
-corepack pnpm exec supabase db push --linked --dry-run
-```
-2. 再实际执行：
-```bash
-corepack pnpm exec supabase db push --linked
-```
-3. 如本次需要补种子数据，使用：
-```bash
-corepack pnpm exec supabase db push --linked --include-seed
-```
-
-说明：
-- `--include-all` 仅用于远端历史缺失时的修复场景，常规发布不要使用。
-- 迁移失败时优先新增“前滚修复”迁移，不做复杂回滚脚本。
-
-#### 10.4.5 版本与结果校验（Dev）
-
-执行版本校验：
-
-```sql
-select version, name, statements, created_by
-from supabase_migrations.schema_migrations
-order by version desc;
-```
-
-并补充业务校验 SQL（示例）：
-
-```sql
-select count(*) as region_count from public.region;
-select email, raw_app_meta_data->>'role' as role
-from auth.users
-where email = 'admin@neolyst.com';
-```
-
-#### 10.4.6 推送到 Prod（与 Dev 同流程）
-
-1. 切换链接到 Prod 项目：
-```bash
-corepack pnpm exec supabase link --project-ref <prod_project_ref>
-```
-2. 重复 `dry-run -> push -> 验证`。
-3. 禁止跳过 Dev 直接推 Prod。
-
-#### 10.4.7 紧急 Dashboard 变更回填规则
-
-- 紧急情况下允许 Dashboard 直改，但必须当天回填为 migration 文件并提交 Git。
-- 回填后仍需在 Dev 和 Prod 按标准流程执行与校验，消除环境漂移。
-
-#### 10.4.8 默认 Admin 初始化迁移（补充）
-
-- 默认 Admin 创建由 migration `supabase/migrations/20260213165658_init_default_admin.sql` 负责，并随 `corepack pnpm exec supabase db push --linked` 增量执行。
-- 该 migration 必须保持幂等：
-  - 当 `admin@neolyst.com` 不存在时，创建用户并写入 `app_metadata.role = admin`、`app_metadata.is_active = true`。
-  - 当用户已存在时，仅补齐管理员元数据，不重置既有密码。
-  - 确保 `auth.identities` 存在 `provider = email` 的身份记录，保证邮箱密码登录链路完整。
-- 默认凭据仅用于首发引导（`admin@neolyst.com` / `Admin123`），首次上线后应立即通过管理员改密流程变更。
-- 验证示例：
-```sql
-select email, raw_app_meta_data->>'role' as role
-from auth.users
-where email = 'admin@neolyst.com';
-```
-
-### 10.5 Python 工具链与命令约定
-
-- Python 依赖管理统一使用 `uv`（`uv sync`），不混用 `pip install -r` 作为日常入口。
-- Python 虚拟环境固定为项目本地 `backend/.venv`，禁止使用系统全局 Python 环境。
-- Python 命令执行统一使用 `uv run`（例如 `uv run uvicorn ...`、`uv run python -m ...`）。
-- 禁止使用全局 `pip/python/pytest` 直接执行开发命令。
-- 文档中的启动、测试、脚本示例必须优先给出 `uv` 命令，减少环境差异导致的问题。
-
-### 10.8 Node.js 工具链与命令约定
-
-- Node.js 依赖管理统一使用 `pnpm`，并安装到项目本地 `node_modules`。
-- Node.js 命令执行统一使用 `pnpm run` 或 `pnpm exec`（例如 `pnpm exec supabase ...`）。
-- 禁止使用 `npm`、`npx`、全局安装的 Node.js 工具执行开发与测试命令。
-- 锁文件统一使用 `pnpm-lock.yaml`，不维护 `package-lock.json`。
-
-### 10.6 Supabase 云环境设置（开发）
-
-- 本变更开发测试环境使用 Supabase Cloud，不使用本地 `supabase start`。
-- Dev 项目 `project_ref`：`jiatwyotrojzhdlttgwh`。
-- Dev `SUPABASE_URL`：`https://jiatwyotrojzhdlttgwh.supabase.co`。
-- 仓库 `supabase/config.toml` 当前配置：
-  - `project_id = "jiatwyotrojzhdlttgwh"`
-  - `[db].major_version = 17`
-- Dev 配置（与 `backend/.env` 完全一致，开发阶段直接提交 Git）：
-
-```dotenv
-SUPABASE_PROJECT_REF=jiatwyotrojzhdlttgwh
-SUPABASE_URL=https://jiatwyotrojzhdlttgwh.supabase.co
-SUPABASE_ANON_KEY=***REMOVED-JWT***
-SUPABASE_SERVICE_ROLE_KEY=***REMOVED-JWT***
-SUPABASE_PUBLISHABLE_KEY=sb_publishable_Yvn5MunyI2RXv2ORZ36TCw_F6DYdZ_q
-SUPABASE_ACCESS_TOKEN=***REMOVED-SUPABASE-PAT***
-SUPABASE_PASSWORD_RESET_REDIRECT=https://jiatwyotrojzhdlttgwh.supabase.co/auth/v1/verify
-
-APP_ENV=development
-DEBUG=true
-SESSION_COOKIE_NAME=access_token
-SESSION_COOKIE_MAX_AGE=86400
-SESSION_COOKIE_SECURE=false
-SESSION_COOKIE_SAMESITE=lax
-PAGE_SIZE=15
-TIMEZONE=Asia/Shanghai
-```
-
-- 数据库验证范围：`read + write`（允许查询与写入验证 SQL）。
-- 推荐通过 Supabase MCP 执行数据库校验与脚本验证；执行前需完成 MCP OAuth 登录。
-- 当前文档中凡涉及数据库验收，默认均指向 Dev 云环境执行结果。
-
-### 10.7 测试范围约束
-
-- 本轮联调与验收仅覆盖开发环境（Dev）。
-- 不执行生产环境（Prod）测试；Prod 相关步骤保留为发布流程说明，不作为本轮测试项。
-
----
-
-## 11. 一致性修正说明（相对旧设计）
-
-- 去除重复与冲突描述，统一以 proposal 为准。
-- 明确“管理页面仅 Admin”与“基础数据认证可读”可以同时成立。
-- 明确 Region 删除采用 `ON DELETE SET NULL`，不做关联阻断。
-- 明确 403 行为为“返回 403 页面”，不是静默跳转。
-- 列表行为统一为 `created_at DESC + 15 条分页`。
-
-该设计可直接作为当前 change 的实现依据。

@@ -3,6 +3,30 @@
 建立系统的基础认证与权限能力，为后续报告功能提供安全、可扩展的访问控制基础。
 本变更重点是把“谁可以使用管理功能”与“谁可以读取业务基础数据”明确分离，避免权限语义混淆。
 
+## 0. 技术架构与平台能力边界（技术栈调整）
+
+本变更采用 **Next.js（App Router）+ Supabase** 的统一技术栈，不再使用 FastAPI / Jinja2 / HTMX。
+
+应用形态：
+- Next.js 作为唯一应用入口（页面渲染 + 服务端能力）。
+- 所有需要管理员密钥（`SUPABASE_SERVICE_ROLE_KEY`）的能力，统一由 Next.js 服务端承载（Route Handlers 或 Server Actions）。
+- 会话形态：遵循 Supabase SSR 推荐做法，使用 cookies 存储会话，不强制 HttpOnly（保证 refresh token 维护链路）。
+- 交互策略：默认 Server-first（Server Components + Server Actions），仅在需要更强交互时局部引入 Client Components。
+- 写操作默认使用 Server Actions（不以稳定 JSON API 作为内部主通道）；仅在认证回调等必要场景使用 Route Handlers。
+- 会话刷新与路由保护基线：使用 Next.js `middleware.ts` 统一刷新会话（回写 cookies）并执行受保护路由的访问控制。
+
+Supabase 能力取舍（明确要什么 / 不要什么）：
+- 本变更使用：
+  - Supabase Auth（邮箱+密码登录、会话、忘记密码邮件、Supabase 托管重置页）
+  - Supabase Postgres + RLS（`region` / `analyst` 数据权限兜底）
+  - Supabase PostgREST（业务数据 CRUD 直接复用平台数据 API，不自建对外稳定的业务 REST API）
+  - Supabase CLI migrations/seed（数据库变更治理）
+- 本变更不使用：
+  - Supabase Edge Functions（原则：简单优先；不引入第二套函数部署与鉴权链路）
+  - Supabase Realtime
+  - Supabase Storage（本阶段不涉及文件/附件）
+  - Supabase OAuth Providers（本阶段仅支持邮箱+密码）
+
 ## 1. 目标与范围
 
 ### 1.1 目标（Goals）
@@ -17,6 +41,7 @@
 - 不包含 Sector、Coverage、Template 等其他基础数据管理。
 - 不包含报告创建、编辑、审核等报告功能。
 - 不实现 refresh token 机制。
+- 不自建 refresh token 机制（遵循 Supabase 默认会话 refresh 行为，不另写自定义 refresh 流程）。
 - 不在本阶段实现密码修改审计日志。
 
 ## 2. 权限模型（核心）
@@ -68,12 +93,14 @@
 - 登录（邮箱+密码）
 - 登出
 - 当前用户信息获取（用于前端鉴权与展示）
-- Token 有效期 24 小时（到期重新登录）
+- 会话有效期遵循 Supabase 默认机制（access token 自动 refresh），不强制 24 小时重新登录
 
 验收要点：
 - 未登录访问受保护页面会跳转到登录页。
 - 登录失败有明确错误提示。
 - Token 失效时前端自动清理登录态并跳转登录页。
+- 用户在正常使用场景下 SHOULD 保持登录态（除非手动登出、被禁用或 refresh 失败）。
+- 本阶段仅支持邮箱+密码登录，不引入 OAuth 登录。
 
 ### 3.2 密码能力
 
@@ -101,7 +128,7 @@
 
 范围：
 - 用户列表（支持按姓名/邮箱搜索）
-- 创建用户
+- 创建用户（邀请制）
 - 编辑用户信息
 - 修改用户角色（Admin/SA/Analyst）
 - 删除用户
@@ -111,9 +138,18 @@
 权限：
 - 仅 Admin 可访问与操作。
 
+用户创建规则：
+- 创建用户使用 Supabase Auth Admin 的邀请机制（invite），由系统发送邀请邮件。
+- 用户通过邀请邮件完成初始密码设置后，再使用邮箱+密码登录本系统。
+- 用户完成邀请流程后，系统 SHOULD 自动建立会话并跳转到桌面页 `/desktop`（不要求用户再手动登录一次）。
+- 本阶段不提供“创建时设置初始密码”能力；如需重置密码，使用管理员改密或用户忘记密码流程。
+- Supabase Auth 配置 SHOULD 关闭公开注册（public signups），仅允许邀请制创建用户。
+
 账号状态规则：
 - 用户被禁用后无法登录系统。
 - 已禁用用户可由 Admin 重新启用，启用后恢复正常登录能力。
+- 禁用/启用实现：使用 Supabase Auth Admin 的 ban/unban。
+- 本阶段不使用 `app_metadata.is_active` 作为状态事实源；账号状态以 ban/unban 为准。
 
 ### 3.4 Region 管理（Regions）
 
@@ -218,14 +254,15 @@
 - 初始化写入预置 Region 数据（China、Hong Kong、Japan、Taiwan、Korea、India、Macau、US）。
 - 用户账号由 Supabase Auth 管理。
 
-### 5.2 后端 API（FastAPI）
-- 认证接口：`/api/auth/login`, `/api/auth/logout`, `/api/auth/me`
-- 密码能力（按常见网站做法）：
-  - `POST /api/auth/forgot-password`：用户在登录页点击“忘记密码”后触发，发送重置邮件（邮件链接跳转 Supabase 托管重置页）
-  - 管理员改密归属用户管理接口：`PUT /api/users/{id}/password`
-- 用户管理 API：`/api/users`（CRUD、角色调整、启用/禁用、管理员改密）
-- Region 管理 API：`/api/regions`
-- Analyst 信息 API：`/api/analyst-info`
+### 5.2 应用服务端（Next.js App Router）
+- Next.js（App Router）负责页面渲染、会话校验与服务端执行环境（Server Actions / Route Handlers）。
+- 本阶段不沿用既有 `/api/*` 路径契约；应用内部是否暴露 Route Handlers 属实现细节，不作为对外稳定 API 承诺。
+- 认证与会话：通过 Supabase Auth 实现登录/登出/当前用户，会话使用 cookies 管理（不强制 HttpOnly）。
+- 密码能力：
+  - 用户忘记密码：调用 Supabase 重置密码能力发送邮件（邮件链接跳转 Supabase 托管重置页）。
+  - 管理员改密：仅在 Next.js 服务端使用 `SUPABASE_SERVICE_ROLE_KEY` 调用 Supabase Auth Admin 能力执行。
+- 用户管理（Admin）：创建/编辑/删除、角色调整、禁用/启用（ban/unban）、管理员改密等操作仅在 Next.js 服务端执行。
+- 业务数据（Region/Analyst）：读写直接通过 Supabase PostgREST + RLS（使用 `supabase-js`），不自建对外稳定的业务 CRUD REST API。
 
 ### 5.3 前端界面
 - 登录页面（含“忘记密码”入口）
@@ -233,13 +270,15 @@
 - 用户管理页面（仅 Admin）
 - Region 管理页面（仅 Admin）
 - Analyst 信息管理页面（仅 Admin）
-- Axios 拦截器与路由守卫
+- 页面权限控制（服务端重定向/403 + 客户端 UI 隐藏入口）
 
 ### 5.4 运维与发布要求
-- 默认 Admin 账号在部署初始化流程创建，首次上线后建议尽快修改（不强制）。
+- 默认 Admin 账号由 Supabase migration 初始化（默认邮箱 `jiang_jiahong@qq.com`，默认初始密码 `Admin123`），用于 Dev/引导；生产环境 MUST 在对外开放前完成改密或替换为更安全的初始化方案。
 - 所有调试端点（debug/config、debug/test-rls 等）在生产环境必须关闭。
-- Python 依赖与命令必须使用 `uv` + 项目本地 `backend/.venv`（例如 `uv sync`、`uv run ...`），禁止使用全局 Python 环境或全局安装包。
 - Node.js 依赖与命令必须使用 `pnpm` + 项目本地 `node_modules`，禁止使用 `npm/npx` 或全局安装包执行开发命令。
+- `SUPABASE_SERVICE_ROLE_KEY` 仅允许在服务端环境变量使用，严禁下发到浏览器。
+- 开发阶段允许将 Dev 环境的 Supabase 连接信息与 key（例如 `SUPABASE_URL`、`SUPABASE_ANON_KEY`、`SUPABASE_PUBLISHABLE_KEY`、`SUPABASE_SERVICE_ROLE_KEY`）提交到 Git 以提升上手速度；生产环境严禁提交与硬编码任何密钥。
+- 禁止提交个人身份的 Supabase Access Token（例如 `SUPABASE_ACCESS_TOKEN`）；CLI 登录/链接应通过开发者本地登录完成。
 - 本轮联调与验收仅覆盖 Dev 云环境，不执行 Prod 环境测试。
 
 ## 6. Key Decisions
@@ -252,5 +291,14 @@
 6. 非 Admin 强行访问管理路由返回 403 页面（文案：`No permission`）。
 7. 前后端与数据库时间统一使用北京时间（UTC+8）。
 8. 生产环境必须关闭调试端点。
-9. Python 工具链必须使用 `uv` 与项目本地 `backend/.venv`，禁止全局 Python 环境。
-10. Node.js 工具链必须使用 `pnpm` 与项目本地 `node_modules`，禁止全局 Node.js 工具链与 `npm/npx`。
+9. 应用框架采用 Next.js App Router；不再使用 FastAPI/Jinja2/HTMX。
+10. 原则：简单优先，不使用 Supabase Edge Functions；管理员能力由 Next.js 服务端承载。
+11. 业务数据 CRUD 复用 Supabase PostgREST + RLS；不自建对外稳定的业务 CRUD REST API。
+12. Node.js 工具链必须使用 `pnpm` 与项目本地 `node_modules`，禁止全局 Node.js 工具链与 `npm/npx`。
+13. 用户创建采用邀请制（invite）：由系统发送邀请邮件，用户自助设置初始密码。
+14. 用户完成邀请流程后自动进入 `/desktop`（自动建立会话，不要求再次登录）。
+15. 会话有效期遵循 Supabase 默认机制（access token 自动 refresh），不强制 24 小时重新登录。
+16. 开发阶段允许提交 Dev Supabase 连接信息与 key（但生产环境严禁提交任何密钥）。
+17. Supabase Auth 关闭公开注册（public signups），仅允许邀请制创建用户。
+18. 本阶段仅支持邮箱+密码登录，不引入 OAuth 登录。
+19. 默认 Admin 账号由 migration 初始化：`jiang_jiahong@qq.com` / `Admin123`（仅用于 Dev/引导；生产必须改密/替换）。

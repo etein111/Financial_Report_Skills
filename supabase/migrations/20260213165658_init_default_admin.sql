@@ -1,13 +1,13 @@
 -- 初始化默认 Admin 账号（幂等）
 -- 默认凭据：
---   email: admin@neolyst.com
+--   email: jiang_jiahong@qq.com
 --   password: Admin123
 
 create extension if not exists pgcrypto;
 
 do $$
 declare
-  v_email constant text := 'admin@neolyst.com';
+  v_email constant text := 'jiang_jiahong@qq.com';
   v_password constant text := 'Admin123';
   v_user_id uuid;
   v_instance_id uuid;
@@ -59,8 +59,7 @@ begin
       jsonb_build_object(
         'provider', 'email',
         'providers', jsonb_build_array('email'),
-        'role', 'admin',
-        'is_active', true
+        'role', 'admin'
       ),
       jsonb_build_object('full_name', 'System Administrator'),
       now(),
@@ -73,8 +72,7 @@ begin
       || jsonb_build_object(
         'provider', 'email',
         'providers', jsonb_build_array('email'),
-        'role', 'admin',
-        'is_active', true
+        'role', 'admin'
       ),
       raw_user_meta_data = coalesce(raw_user_meta_data, '{}'::jsonb)
       || jsonb_build_object('full_name', 'System Administrator'),

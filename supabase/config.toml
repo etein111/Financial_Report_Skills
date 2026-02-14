@@ -18,7 +18,8 @@ password = "pwd4neolyst"
 port = 54323
 
 [auth]
-site_url = "http://localhost:8000"
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["http://localhost:3000/**"]
 
 [db.seed]
 enabled = true
