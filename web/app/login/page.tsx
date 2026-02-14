@@ -53,7 +53,6 @@ export default function LoginPage() {
       return;
     }
 
-    toast.success("Signed in (prototype simulation).", { title: "Success" });
     router.push("/desktop");
   }
 
