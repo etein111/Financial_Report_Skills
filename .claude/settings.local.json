@@ -65,7 +65,29 @@
       "Bash(supabase:*)",
       "mcp__supabase__get_publishable_keys",
       "Bash(start /B .venv/Scripts/python.exe -m uvicorn src.main:app --reload --port 8000)",
-      "Bash(start http://localhost:8000/login)"
+      "Bash(start http://localhost:8000/login)",
+      "Bash(psql exec \"SELECT id, email, raw_app_meta_data FROM auth.users WHERE email = ''admin@neolyst.com'';\" --db-url \"postgresql://postgres:postgres@localhost:54322/postgres\")",
+      "Bash(pnpm exec supabase:*)",
+      "Bash(npx -y supabase db exec:*)",
+      "Bash(npx -y supabase status:*)",
+      "Bash(npx -y supabase start:*)",
+      "Bash(npx:*)",
+      "Bash(start http://localhost:8000)",
+      "Bash(explorer.exe:*)",
+      "Bash(xdg-open:*)",
+      "Bash(start https://jiatwyotrojzhdlttgwh.supabase.co/auth/v1/authorize?provider=***REMOVED-JWT***)",
+      "Bash(echo:*)",
+      "WebSearch",
+      "Bash(cmd //c \"taskkill /F /PID 25580\")",
+      "Bash(cmd:*)",
+      "Bash(wmic:*)",
+      "Bash(jobs:*)",
+      "mcp__supabase__list_organizations",
+      "mcp__supabase__get_cost",
+      "mcp__supabase__confirm_cost",
+      "mcp__supabase__create_project",
+      "mcp__supabase__list_migrations",
+      "mcp__supabase__get_project_url"
     ]
   }
 }
