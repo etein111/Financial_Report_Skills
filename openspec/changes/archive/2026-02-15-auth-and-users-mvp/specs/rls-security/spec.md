@@ -25,6 +25,10 @@
 ### Requirement: RLS 角色判断必须来源于 Supabase JWT
 系统 SHALL 使用 `auth.jwt()->'app_metadata'->>'role'` 作为 RLS 角色判断依据。
 
+#### Scenario: RLS 以 JWT 的 app_metadata.role 判定权限
+- **WHEN** 任意已认证用户触发 `region` 或 `analyst` 的写入授权判断
+- **THEN** RLS policy MUST 使用 `auth.jwt()->'app_metadata'->>'role'` 读取当前角色
+
 ### Requirement: 数据库存储时间使用 UTC（timestamptz 默认行为）
 系统 SHALL 使用 `timestamptz` 的 UTC 存储语义；应用层展示按 `Asia/Shanghai` 转换。
 
@@ -36,3 +40,7 @@
 ### Requirement: 数据库变更必须使用 Supabase 迁移机制管理
 系统 SHALL 使用 Supabase CLI migration 进行数据库变更管理，不自建版本记录表。
 
+#### Scenario: Schema 变更必须通过 migration 管理
+- **WHEN** 需要对数据库 schema 或 RLS policy 做变更
+- **THEN** 开发者 MUST 通过 Supabase CLI migrations 机制提交变更（例如在 `supabase/migrations/` 新增 migration）
+- **AND** 系统 MUST NOT 依赖手工在 Dashboard 中直接修改作为唯一事实源

@@ -23,7 +23,7 @@
 Browser
   -> Next.js (App Router)
       - Server Components / Server Actions / Route Handlers
-      - Middleware: refresh session + route protection baseline
+      - Proxy: refresh session + route protection baseline
       -> Supabase Auth
       -> Supabase PostgREST (for basic reads) + RLS (defense in depth)
 ```
@@ -85,7 +85,7 @@ Route Handlers（本 change 覆盖）：
 - `/auth/auth-code-error`
 
 路由保护：
-- `middleware.ts` 刷新会话并拦截受保护路由：
+- `proxy.ts` 刷新会话并拦截受保护路由：
   - 每个请求调用 `supabase.auth.getUser()` 触发刷新逻辑并回写 cookies（避免 token 过期导致的随机登出体验）。
   - 未登录 -> `/login`
   - 已登录但非 Admin 访问 Admin-only -> `/403`（文案 `No permission`）

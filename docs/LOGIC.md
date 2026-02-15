@@ -12,7 +12,7 @@
 - Feature 公共入口：`app/` 只能 import `features/<feature>`（`index.ts`）；`repo/` 默认不对外暴露。
 - Result 统一：repo 与 server actions 默认返回 `Result<T> = { ok: true; data: T } | { ok: false; error: string }`（建议定义在 `lib/result.ts`）。
 - Supabase SDK：统一 `@supabase/ssr`；不要混用 `@supabase/auth-helpers-nextjs`。
-- Middleware：只做会话刷新 + 轻量门禁；资源级鉴权必须在 action/route handler + RLS。
+- Proxy（`proxy.ts`）：只做会话刷新 + 轻量门禁；资源级鉴权必须在 action/route handler + RLS。
 
 ## 0. 总原则（必须遵守）
 
@@ -173,7 +173,7 @@ const id = generateId();
 
 > **Next.js 16 变更**：`middleware.ts` 已重命名为 `proxy.ts`，函数名从 `middleware` 改为 `proxy`。
 > 原因：避免与 Express.js middleware 概念混淆，"proxy" 更准确反映其网络边界角色。
-> 迁移命令：`npx @next/codemod@canary middleware-to-proxy .`
+> 迁移命令：`pnpm dlx @next/codemod@canary middleware-to-proxy .`
 
 放：
 - cookie session 刷新 / 轻量路由保护（例如未登录重定向）
@@ -496,4 +496,3 @@ export function formatShanghai(iso: string) {
 ```bash
 pnpm lint
 ```
-

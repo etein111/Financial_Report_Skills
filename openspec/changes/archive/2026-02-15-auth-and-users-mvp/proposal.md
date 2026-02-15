@@ -9,7 +9,7 @@
 - 数据库变更治理：使用 Supabase CLI 的 migrations/seed（按仓库既有 Supabase 工作流执行）。
 - 会话与路由保护基线：
   - 使用 Supabase SSR cookies（`@supabase/ssr`）。
-  - `middleware.ts` 刷新会话并做受保护路由的跳转/拦截。
+  - `proxy.ts` 刷新会话并做受保护路由的跳转/拦截。
 - 完成认证闭环：
   - 登录、登出
   - 当前用户信息获取（用于页面鉴权与展示）

@@ -1,5 +1,8 @@
-## ADDED Requirements
+# user-login Specification
 
+## Purpose
+TBD - created by archiving change auth-and-users-mvp. Update Purpose after archive.
+## Requirements
 ### Requirement: 用户可以通过邮箱密码登录并建立 cookies 会话（Supabase SSR）
 系统 SHALL 使用 Supabase Auth 验证邮箱与密码，并在验证成功后建立基于 cookies 的会话（用于 SSR）。
 
@@ -30,8 +33,8 @@
 - **THEN** 系统 MUST 在服务端获取当前用户的 `id`、`email`、`app_metadata.role`
 - **AND** 系统 SHOULD 在服务端获取当前用户的 `user_metadata.full_name`（用于展示与搜索）
 
-### Requirement: 受保护路由必须强制登录态（middleware）
-系统 SHALL 使用 `middleware.ts` 刷新会话并拦截受保护路由。
+### Requirement: 受保护路由必须强制登录态（proxy）
+系统 SHALL 使用 `proxy.ts` 刷新会话并拦截受保护路由。
 
 #### Scenario: 未登录访问受保护页面
 - **WHEN** 未登录用户访问受保护页面
@@ -39,7 +42,7 @@
 
 #### Scenario: 会话刷新
 - **WHEN** 用户携带 cookies 会话访问任意受保护页面
-- **THEN** 系统 MUST 在 middleware 中触发会话刷新逻辑并回写 cookies（遵循 Supabase SSR 推荐做法）
+- **THEN** 系统 MUST 在 proxy 中触发会话刷新逻辑并回写 cookies（遵循 Supabase SSR 推荐做法）
 
 #### Scenario: 会话失效或 refresh 失败
 - **WHEN** 用户会话无效或 refresh 失败
@@ -48,4 +51,8 @@
 
 ### Requirement: 会话有效期遵循 Supabase 默认机制
 系统 SHALL 遵循 Supabase 默认会话机制（access token 自动 refresh），不强制 24 小时重新登录。
+
+#### Scenario: 正常使用场景保持登录态
+- **WHEN** 用户在 access token 即将过期前持续访问受保护页面
+- **THEN** 系统 SHOULD 通过自动 refresh 保持会话有效（除非登出、被禁用或 refresh 失败）
 

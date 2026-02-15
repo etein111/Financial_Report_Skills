@@ -48,7 +48,7 @@
 - [x] 3.3.1 Browser client（仅 publishable/anon key）
 - [x] 3.3.2 Server client（publishable/anon key + cookies 读写）
 - [x] 3.3.3 Admin client（service role key；禁止浏览器可达）
-- [x] 3.4 实现 `middleware.ts`：
+- [x] 3.4 实现 `proxy.ts`：
 - [x] 3.4.1 刷新会话并回写 cookies（以 `getUser()` 为准）
 - [x] 3.4.2 未登录访问受保护路由 -> `/login`
 - [x] 3.4.3 非 Admin 访问 Admin-only（`/users`）-> `/403`

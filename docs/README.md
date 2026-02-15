@@ -7,10 +7,12 @@
 - `docs/` 下除 `README.md` 外的文件：彼此不相互引用；每个文件只负责一类事情。
 
 建议阅读顺序：
-1. `docs/DECISIONS.md`：跨后续功能的关键约束/约定（从 design/proposal 收敛而来）
-2. `docs/TESTING.md`：测试与验收规范（尤其是临时文件目录 `temp/`）
-3. `docs/LOGIC.md`：Web 逻辑与分层硬约定（优先级最高）
-4. `docs/UI.md`：Web UI 组件规范
+1. `docs/REQUIREMENTS.md`：项目级需求全貌（按主题组织，非按 change 时间顺序）
+2. `docs/ARCHITECTURE.md`：项目级架构全貌（按主题组织，非按 change 时间顺序）
+3. `docs/DECISIONS.md`：跨后续功能的关键约束/约定（从 design/proposal 收敛而来）
+4. `docs/TESTING.md`：测试与验收规范（尤其是临时文件目录 `temp/`）
+5. `docs/LOGIC.md`：Web 逻辑与分层硬约定（优先级最高）
+6. `docs/UI.md`：Web UI 组件规范
 
 子系统文档：
 - Web（Next.js）：`docs/LOGIC.md`、`docs/UI.md`（强约定；冲突以 `docs/LOGIC.md` 为准）
