@@ -4,6 +4,11 @@ import * as React from "react";
 
 import { cn } from "@/lib/cn";
 
+// Simple ID generator for browser compatibility
+function generateId(): string {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+}
+
 type ToastType = "success" | "error";
 
 type ToastItem = {
@@ -26,7 +31,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 
   const push = React.useCallback(
     (type: ToastType, message: string, opts?: { title?: string; durationMs?: number }) => {
-      const id = crypto.randomUUID();
+      const id = generateId();
       const durationMs = opts?.durationMs ?? (type === "success" ? 3000 : 5000);
       const toast: ToastItem = { id, type, title: opts?.title, message, durationMs };
       setToasts((prev) => [toast, ...prev]);

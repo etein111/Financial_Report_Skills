@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { exchangeCodeForSession, verifyOtp } from "@/features/auth";
+import { exchangeCodeForSession, verifyOtp } from "@/features/auth/server";
 
 type OtpType =
   | "signup"

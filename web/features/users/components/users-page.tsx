@@ -6,14 +6,15 @@ import { UsersPageClient } from "./users-page-client";
 export async function UsersPage({
   searchParams,
 }: {
-  searchParams?: Record<string, string | string[] | undefined>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   noStore();
 
-  const rawQ = searchParams?.q;
+  const params = await searchParams;
+  const rawQ = params?.q;
   const q = typeof rawQ === "string" ? rawQ : Array.isArray(rawQ) ? rawQ[0] : "";
 
-  const rawPage = searchParams?.page;
+  const rawPage = params?.page;
   const pageStr =
     typeof rawPage === "string"
       ? rawPage

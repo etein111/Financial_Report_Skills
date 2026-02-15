@@ -1,11 +1,8 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import {
-  getCurrentUser,
-  getCurrentUserRole,
-  signOutAction,
-} from "@/features/auth";
+import { signOutAction } from "@/features/auth";
+import { getCurrentUser, getCurrentUserRole } from "@/features/auth/server";
 
 type DesktopCard = {
   key: string;

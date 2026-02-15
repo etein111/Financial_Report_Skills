@@ -72,6 +72,22 @@ features/<feature>/
 - `index.ts` 默认只 re-export：页面级组合需要的组件/类型/常量；`repo/*` 不 re-export。
 - Client Components 避免直接依赖 `repo/*` 与 server-only 模块；需要调用写操作时，优先通过 Server Actions（可由 Server Component 引入并通过 props 传入，或在同 feature 内集中绑定）。
 
+**禁止在 index.ts 中重新导出 server-only 模块**：
+- `index.ts` 只导出客户端安全的 exports（actions、类型、组件）
+- server-only 函数（如 `getCurrentUser`、`exchangeCodeForSession`）必须从 `./server` 直接导入
+- 原因：即使客户端组件只用了 index.ts 中的一个 action，整个模块图都会被评估，触发 `server-only` 错误
+
+```ts
+// ❌ 错误：index.ts 重新导出 server-only 模块
+export { getCurrentUser } from "./server";
+
+// ✅ 正确：index.ts 只导出客户端安全的
+export { signInAction, signOutAction } from "./actions";
+
+// 服务端代码直接从 ./server 导入
+// import { getCurrentUser } from "@/features/auth/server";
+```
+
 ### 1.5 Domain 边界（允许“纯规则”，禁止框架/IO）
 
 `domain/*` 允许：
@@ -93,6 +109,22 @@ features/<feature>/
 - 不做浏览器交互（无 `useState/useEffect`）
 - 不直接持有 service role key（即使在服务端也要通过统一的 admin client 封装）
 
+**Next.js 15+ Breaking Changes**：
+- `searchParams` 现在是 **Promise**，必须 `await` 后才能访问属性
+
+```ts
+// ❌ 错误：直接访问 searchParams 属性
+export async function Page({ searchParams }: { searchParams?: Record<string, string> }) {
+  const q = searchParams?.q;  // TypeError: searchParams is a Promise
+}
+
+// ✅ 正确：先 await
+export async function Page({ searchParams }: { searchParams: Promise<Record<string, string>> }) {
+  const params = await searchParams;
+  const q = params?.q;
+}
+```
+
 ### 2.2 Client Components（仅必要时）
 
 适合：
@@ -102,6 +134,21 @@ features/<feature>/
 约束：
 - 不能包含任何服务端密钥逻辑
 - 不允许直接调用 Supabase Admin API（禁止使用 service role）
+
+**浏览器 API 兼容性**：
+- `crypto.randomUUID()` 在非 HTTPS 环境或旧版浏览器中不可用
+- 生成唯一 ID 应使用兼容方案：
+
+```ts
+// ❌ 错误：不兼容非 HTTPS 环境
+const id = crypto.randomUUID();
+
+// ✅ 正确：兼容方案
+function generateId(): string {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+}
+const id = generateId();
+```
 
 ### 2.3 Server Actions（默认写操作入口）
 

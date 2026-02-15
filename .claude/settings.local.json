@@ -109,7 +109,8 @@
       "Bash(pnpm --dir \"C:/_code/neolyst/web\" dev:*)",
       "Bash(pnpm --dir \"C:/_code/neolyst/web\" add zod)",
       "Bash(pnpm --dir \"C:/_code/neolyst/web\" lint)",
-      "Bash(pnpm --dir:*)"
+      "Bash(pnpm --dir:*)",
+      "Bash(pnpm exec playwright test:*)"
     ]
   }
 }
