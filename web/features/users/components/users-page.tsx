@@ -86,7 +86,7 @@ export function UsersPage() {
 
   // Reset password
   const [resetOpen, setResetOpen] = React.useState(false);
-  const [resetId, setResetId] = React.useState<string | null>(null);
+  const [_resetId, setResetId] = React.useState<string | null>(null);
   const [newPassword, setNewPassword] = React.useState("");
   const [resetError, setResetError] = React.useState<string | undefined>();
 

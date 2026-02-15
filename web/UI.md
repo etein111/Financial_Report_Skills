@@ -243,88 +243,35 @@ web/components/
 
 **分层约束**：
 - `components/*`：纯 UI 组件，不包含业务规则，不访问外部数据，不触 Supabase
-- 业务 UI 推荐放在 `features/*/components/*`；整体分层/依赖方向/触库规约以 `LOGIC.md` 为准
+- 业务 UI 放在 `features/*/components/*`；整体分层/依赖方向/触库规约以 `LOGIC.md` 为准
 
-## 6. 迁移计划
+## 6. 现有组件（基线 API）
 
-### 6.1 待迁移组件
+### 6.1 基础 UI 组件（`components/ui/`）
 
-当前原型阶段存在以下业务 UI 需要迁移：
+| 组件 | 文件 | 用途 | 核心 Props |
+|------|------|------|------------|
+| `Button` | `button.tsx` | 统一按钮与 loading | `variant`, `isLoading` |
+| `Input` | `input.tsx` | 统一输入框/label/error | `label`, `error` |
+| `Modal` | `modal.tsx` | 统一弹窗容器 | `open`, `title`, `description`, `footer`, `onClose` |
+| `ToastProvider`/`useToast` | `toast.tsx` | 全局成功/失败反馈 | `toast.success()`, `toast.error()` |
+| `Badge` | `badge.tsx` | 权限/状态标签 | `tone` |
+| `Card` | `card.tsx` | 卡片容器 | 继承 `div` props |
+| `Table`/`THead`/`TR`/`TH`/`TD` | `table.tsx` | 统一表格外观 | 语义化子组件 |
 
-| 当前位置 | 目标位置 | 状态 |
-|----------|----------|------|
-| `components/users/users-page.tsx` | `features/users/components/users-page.tsx` | 待迁移 |
+### 6.2 视觉效果组件（`components/particles/`）
 
-### 6.2 迁移步骤
+| 组件 | 文件 | 用途 | 核心 Props |
+|------|------|------|------------|
+| `ParticleField` | `particle-field.tsx` | 粒子背景 | `particleCount` |
 
-对于每个待迁移组件：
-
-1. **创建目标目录**
-   ```bash
-   mkdir -p features/users/components
-   mkdir -p features/users/repo
-   touch features/users/index.ts
-   touch features/users/actions.ts
-   ```
-
-2. **移动组件文件**
-   ```bash
-   mv components/users/users-page.tsx features/users/components/
-   ```
-
-3. **更新导入路径**
-   - 检查所有 `from "@/components/users/..."` 的导入
-   - 更新为 `from "@/features/users"`
-
-4. **清理旧目录**
-   ```bash
-   rmdir components/users
-   ```
-
-5. **更新文档**
-   - 更新本文档的组件表格
-
-### 6.3 目录结构目标
-
-```
-web/
-├── app/                    # 路由与页面组合
-├── features/               # 业务模块
-│   └── users/
-│       ├── index.ts        # 公共入口
-│       ├── actions.ts      # Server Actions
-│       ├── repo/           # 数据访问层
-│       │   ├── public.ts   # RLS 兜底的查询
-│       │   └── admin.ts    # service role 操作
-│       └── components/     # 业务 UI
-│           └── users-page.tsx
-├── domain/                 # 纯业务类型（可选）
-├── components/             # 纯 UI 组件
-│   ├── ui/
-│   └── particles/
-└── lib/                    # 基础设施
-    ├── cn.ts
-    ├── result.ts
-    └── supabase/
-        ├── browser.ts
-        ├── server.ts
-        └── admin.ts
-```
-
-## 7. 现有组件（基线 API）
+### 6.3 业务 UI 组件（`features/*/components/`）
 
 | 组件 | 路径 | 用途 | 核心 Props |
 |------|------|------|------------|
-| `Button` | `components/ui/button.tsx` | 统一按钮与 loading | `variant`, `isLoading` |
-| `Input` | `components/ui/input.tsx` | 统一输入框/label/error | `label`, `error` |
-| `Modal` | `components/ui/modal.tsx` | 统一弹窗容器 | `open`, `title`, `description`, `footer`, `onClose` |
-| `ToastProvider`/`useToast` | `components/ui/toast.tsx` | 全局成功/失败反馈 | `toast.success()`, `toast.error()` |
-| `Badge` | `components/ui/badge.tsx` | 权限/状态标签 | `tone` |
-| `Card` | `components/ui/card.tsx` | 卡片容器 | 继承 `div` props |
-| `Table`/`THead`/`TR`/`TH`/`TD` | `components/ui/table.tsx` | 统一表格外观 | 语义化子组件 |
-| `ParticleField` | `components/particles/particle-field.tsx` | 粒子背景 | `particleCount` |
+| `UsersPage` | `features/users/components/users-page.tsx` | 用户管理页面（原型） | - |
 
-## 8. 交互模式
+## 7. 交互模式
 
 > 涉及鉴权、错误处理、Server Actions 的交互约定以 `LOGIC.md` 为准；本节只保留 UI 组件层面的使用约定，避免重复。
 
@@ -339,7 +286,7 @@ web/
 - 分页：默认 12 条/页
 - 空态：展示明确的空态提示（例如 "No users found"）
 
-## 9. 变更流程
+## 8. 变更流程
 
 1. **判断类型**：通用组件放 `components/ui`，业务组件放 feature 目录
 2. **更新文档**：新增/修改组件后更新本文档的组件表格
