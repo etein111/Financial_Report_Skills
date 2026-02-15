@@ -4,9 +4,13 @@
 --   password: Admin123
 --
 -- Requirements:
--- - MUST create the user if missing
--- - MUST set app_metadata.role=admin
--- - MUST NOT reset password if user already exists
+--   - MUST create the user if missing
+--   - MUST set app_metadata.role=admin
+--   - MUST NOT reset password if user already exists
+--
+-- WARNING: Direct INSERT to auth.users is NOT recommended.
+-- Prefer using Supabase Admin API (see web/scripts/init-default-admin.mjs).
+-- This migration exists for bootstrap scenarios where API is not available.
 
 create extension if not exists pgcrypto;
 
@@ -16,7 +20,6 @@ declare
   v_password constant text := 'Admin123';
   v_user_id uuid;
   v_instance_id uuid;
-  v_has_provider_id boolean;
 begin
   select id
   into v_instance_id
@@ -40,6 +43,8 @@ begin
   if v_user_id is null then
     v_user_id := gen_random_uuid();
 
+    -- Insert with ALL required token fields set to empty string (NOT NULL)
+    -- gotrue expects these to be non-null strings
     insert into auth.users (
       instance_id,
       id,
@@ -48,6 +53,11 @@ begin
       email,
       encrypted_password,
       email_confirmed_at,
+      confirmation_token,
+      recovery_token,
+      email_change_token_new,
+      email_change_token_current,
+      email_change,
       raw_app_meta_data,
       raw_user_meta_data,
       created_at,
@@ -61,6 +71,11 @@ begin
       v_email,
       extensions.crypt(v_password, extensions.gen_salt('bf')),
       now(),
+      '',  -- confirmation_token: empty string, NOT NULL
+      '',  -- recovery_token: empty string, NOT NULL
+      '',  -- email_change_token_new: empty string, NOT NULL
+      '',  -- email_change_token_current: empty string, NOT NULL
+      '',  -- email_change: empty string, NOT NULL
       jsonb_build_object(
         'provider', 'email',
         'providers', jsonb_build_array('email'),
@@ -85,72 +100,37 @@ begin
     where id = v_user_id;
   end if;
 
-  -- Ensure email identity exists for password login.
+  -- Ensure email identity exists for password login
   if not exists (
     select 1
     from auth.identities
     where user_id = v_user_id
       and provider = 'email'
   ) then
-    select exists (
-      select 1
-      from information_schema.columns
-      where table_schema = 'auth'
-        and table_name = 'identities'
-        and column_name = 'provider_id'
+    insert into auth.identities (
+      id,
+      user_id,
+      identity_data,
+      provider,
+      provider_id,
+      last_sign_in_at,
+      created_at,
+      updated_at
     )
-    into v_has_provider_id;
-
-    if v_has_provider_id then
-      insert into auth.identities (
-        id,
-        user_id,
-        identity_data,
-        provider,
-        provider_id,
-        last_sign_in_at,
-        created_at,
-        updated_at
-      )
-      values (
-        gen_random_uuid(),
-        v_user_id,
-        jsonb_build_object(
-          'sub', v_user_id::text,
-          'email', v_email,
-          'email_verified', true
-        ),
-        'email',
-        v_email,
-        now(),
-        now(),
-        now()
-      );
-    else
-      insert into auth.identities (
-        id,
-        user_id,
-        identity_data,
-        provider,
-        last_sign_in_at,
-        created_at,
-        updated_at
-      )
-      values (
-        gen_random_uuid(),
-        v_user_id,
-        jsonb_build_object(
-          'sub', v_user_id::text,
-          'email', v_email,
-          'email_verified', true
-        ),
-        'email',
-        now(),
-        now(),
-        now()
-      );
-    end if;
+    values (
+      gen_random_uuid(),
+      v_user_id,
+      jsonb_build_object(
+        'sub', v_user_id::text,
+        'email', v_email,
+        'email_verified', true
+      ),
+      'email',
+      v_email,  -- provider_id: MUST be set for email provider
+      now(),
+      now(),
+      now()
+    );
   end if;
 end
 $$;
-
