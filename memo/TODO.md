@@ -170,30 +170,86 @@ Web 侧强约定已迁移到 `docs/` 根目录：
 会话备忘机制：
 - 行动清单：`memo/TODO.md`
 - 长篇备忘：`memo/`（见 `memo/README.md`）
+- 问题与解决方案索引：`memo/README.md`（按子系统分类）
 - OpenSpec 相关上下文：同样放 `memo/`（按文件名区分场景）
 
-## 10. OpenSpec 归档改进方案（待实施）
+---
 
-**问题**：归档时没有生成系统级的需求和设计汇总文档。
+## 经验积累（待整理为 skill）
 
-**方案**：
-1. 在 `openspec/` 下新增 `REQUIREMENTS.md` 和 `ARCHITECTURE.md`
-2. 扩展 `openspec/config.yaml`：
-   ```yaml
-   schema: spec-driven
-   system_docs:
-     requirements: REQUIREMENTS.md
-     architecture: ARCHITECTURE.md
-   ```
-3. 修改 `openspec-archive-change` skill，归档时更新系统文档
+### Supabase：直接 INSERT auth.users 导致 gotrue 失败
 
-**触发机制**：所有 openspec skills 都会读取 `config.yaml`，archive skill 额外读取 `system_docs` 字段来更新。
+**现象**：
+Migration 直接 INSERT 到 `auth.users` 表后，登录报错：
+```
+sql: Scan error on column index X, name "xxx": converting NULL to string is unsupported
+```
 
-**待确定**：
-- 更新粒度（追加 vs 重写）
-- 冲突处理
-- 回滚机制
+**原因**：
+直接操作 `auth.users` 表绕过了 gotrue 服务的验证逻辑，导致多个 token 字段为 NULL。
 
-**关联**：
-- `.claude/skills/openspec-archive-change/SKILL.md`
-- `.claude/skills/openspec-bulk-archive-change/SKILL.md`
+**受影响字段**：
+- `confirmation_token`
+- `recovery_token`
+- `email_change_token_new`
+- `email_change_token_current`
+- `email_change`
+- `auth.identities.provider_id`
+
+**解决方案**：
+
+| 方案 | 说明 | 适用场景 |
+|------|------|----------|
+| A（推荐） | 使用 Supabase Admin API 创建用户 | 新项目、新建用户 |
+| B | SQL 更新 NULL 字段为空字符串 | 修复现有数据 |
+
+**方案 A - Admin API**：
+```javascript
+// web/scripts/init-default-admin.mjs
+const { data, error } = await supabase.auth.admin.createUser({
+  email: "admin@example.com",
+  password: "SecurePassword123!",
+  email_confirm: true,
+  user_metadata: { full_name: "System Administrator" },
+  app_metadata: { role: "admin" },
+});
+```
+
+**方案 B - SQL 修复**：
+```sql
+UPDATE auth.users SET
+  confirmation_token = COALESCE(confirmation_token, ''),
+  recovery_token = COALESCE(recovery_token, ''),
+  email_change_token_new = COALESCE(email_change_token_new, ''),
+  email_change = COALESCE(email_change, '')
+WHERE confirmation_token IS NULL OR recovery_token IS NULL;
+
+UPDATE auth.identities
+SET provider_id = identity_data->>'email'
+WHERE provider = 'email' AND provider_id IS NULL;
+```
+
+**相关文件**：
+- 修复迁移：`supabase/migrations/20260215130000_fix_auth_users_null_fields.sql`
+- 初始化脚本：`web/scripts/init-default-admin.mjs`
+
+**教训**：
+- **不要直接操作 `auth.*` 表**，应使用 Supabase Admin API
+- gotrue 内部字段（如 `*_token`）由服务管理，手动 INSERT 容易遗漏
+
+---
+
+### Supabase：Auth API 500（服务层问题）
+
+**现象**：
+- PostgREST 查询正常
+- Auth API 返回 500（`Database error querying schema`）
+
+**解决方案**：执行 pause + restore（软重启）
+```powershell
+.\supabase\scripts\pause-restore.ps1 -ProjectRef <project-ref>
+```
+
+**相关文件**：
+- 诊断脚本：`web/scripts/verify/diagnose-auth-500.mjs`
+- Pause-restore 脚本：`supabase/scripts/pause-restore.ps1`

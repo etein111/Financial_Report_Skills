@@ -97,7 +97,9 @@
       "Bash(pnpm add:*)",
       "Bash(pkill:*)",
       "Bash(corepack pnpm dev:*)",
-      "Bash(export:*)"
+      "Bash(export:*)",
+      "Bash(cat:*)",
+      "Bash(find:*)"
     ]
   }
 }

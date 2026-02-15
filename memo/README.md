@@ -1,36 +1,34 @@
 # Memo 机制（会话备忘）
 
-本目录用于保存“跨会话上下文”，帮助下次启动 Codex 快速恢复背景、阻塞点与下一步动作。
+本目录用于保存"跨会话上下文"，帮助快速恢复背景、阻塞点与下一步动作。
 
-## 什么时候写 memo
+## 文件职责
 
-适合写入 memo 的内容：
-- 云端阻塞排障过程与关键结论（例如 Supabase Auth 500 的现象、已排除项、下一步）
-- 大段推理后的取舍（为什么不用 A，用 B；暂时性 workaround）
-- 影响后续开发但还没稳定到可以写进 `docs/DECISIONS.md` 的约定
+| 文件 | 内容 |
+|------|------|
+| `TODO.md` | 未完成任务的上下文 + 经验积累（待整理为 skill） |
 
-不适合写入 memo 的内容：
+## 使用规范
+
+### 什么时候写 TODO.md
+
+- 有明确的下一步行动
+- 需要跨会话保持的任务上下文
+- 当前遇到的阻塞点
+- **经验积累**：解决的问题、踩过的坑（待整理为 skill）
+
+### 不适合写入 memo 的内容
+
 - 已稳定的长期约束：应迁移到 `docs/DECISIONS.md` / `docs/LOGIC.md` / `docs/UI.md`
-- OpenSpec change 的正式规范：应在 `openspec/changes/<change>/proposal.md`、`design.md`、`tasks.md`、`specs/**`
-- 账号口令、PAT、DB 密码等任何密钥：禁止写入（只放本机 `supabase/*.token`，并确保已被 `.gitignore` 忽略）
+- OpenSpec change 的正式规范：应在 `openspec/changes/<change>/`
+- 账号口令、PAT、DB 密码等密钥：禁止写入
 
-## 文件命名与结构
+## 索引
 
-命名：`YYYY-MM-DD-<topic>.md`（例如 `2026-02-15-supabase-auth-500.md`）
+- **TODO.md**：待办事项 + 经验积累
 
-建议结构：
-- 背景/现象
-- 已验证的事实（带命令或脚本路径）
-- 排除项（为什么不是 X）
-- 下一步（可执行步骤清单）
-- 关联链接（指向 `memo/TODO.md`、相关脚本、相关 OpenSpec 文件路径）
+## 更新日志
 
-## 场景入口（需要时再加入上下文）
-
-
-推荐入口：
-- 下一步行动清单：`memo/TODO.md`
-- OpenSpec 变更相关（拆分/取舍/上下文）：`memo/openspec-*.md`
-- 子系统排障（例如 Supabase/Auth）：`memo/supabase-*.md`
-
-`memo/TODO.md` 只保留“下一步要做什么”，较长背景/排障细节放到对应的 `memo/*.md` 再从 TODO 链接过去。
+| 日期 | 内容 |
+|------|------|
+| 2026-02-15 | 初始结构，添加 Supabase 经验 |

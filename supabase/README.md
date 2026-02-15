@@ -3,7 +3,7 @@
 本目录承载项目的 Supabase 配置、数据库迁移与种子数据，是数据库版本管理的唯一事实源。
 
 原则：
-- **所有 schema/RLS 变更必须通过 `supabase/migrations/*.sql` 管理**，不要在 Dashboard 里“手改完就算了”。
+- **所有 schema/RLS 变更必须通过 `supabase/migrations/*.sql` 管理**，不要在 Dashboard 里"手改完就算了"。
 - **Auth/Users 相关的业务约束**（默认 Admin、RLS 策略等）同样要落在迁移里，保证可重放、可审计、可协作。
 - **密钥不进 Git**：本目录下的 `*.token` / DB 密码文件仅用于本机开发，仓库已在 `.gitignore` 忽略。
 
@@ -14,6 +14,7 @@ supabase/
   config.toml                   # Supabase 项目配置（本地端口 + 云端 Auth/Redirect 等）
   migrations/                   # 数据库迁移（唯一版本历史）
   seed/                         # 种子数据（可选执行）
+  scripts/                      # 运维脚本（pause-restore 等）
   .temp/                        # CLI 临时文件（不提交）
   supabase_access.token         # Supabase PAT（只用于本机 CLI/管理 API）
   supabase_db_password.token    # 远端 Postgres `postgres` 用户密码（只用于本机 db push）
@@ -33,8 +34,8 @@ supabase/
 迁移文件命名规则：`YYYYMMDDHHMMSS_description.sql`（UTC 时间戳，秒级）。
 
 硬约定：
-- **迁移一旦合入，不回改**。修正用“新迁移”覆盖。
-- 迁移尽量**幂等**（`create ... if not exists`、`drop policy if exists`、`create or replace function`），以支持“重建库/重跑迁移”。
+- **迁移一旦合入，不回改**。修正用"新迁移"覆盖。
+- 迁移尽量**幂等**（`create ... if not exists`、`drop policy if exists`、`create or replace function`），以支持"重建库/重跑迁移"。
 - 时间字段：`timestamptz default now()`，禁止 `timezone('Asia/Shanghai', now())` 写入 `timestamptz`（展示层再做 `Asia/Shanghai` 转换）。
 - RLS 策略：角色判断必须用 `auth.jwt()->'app_metadata'->>'role'`。
 
@@ -44,11 +45,11 @@ supabase/
 
 约定：
 - seed 应尽量幂等（例如 `insert ... on conflict do nothing`）。
-- seed 不写入“带时区语义容易误解”的时间数据。
+- seed 不写入"带时区语义容易误解"的时间数据。
 
 ### `*.token`
 
-本仓库采用“文件落盘”而不是把 token 发进聊天的方式：
+本仓库采用"文件落盘"而不是把 token 发进聊天的方式：
 - `supabase/supabase_access.token`：Supabase Personal Access Token（PAT），用于 CLI 调 Supabase 管理 API。
 - `supabase/supabase_db_password.token`：远端数据库密码，用于 `supabase db push` 的 `-p` 参数。
 
@@ -58,7 +59,7 @@ supabase/
 
 ## 标准工作流（推荐）
 
-下面工作流覆盖“新变更 -> 迁移 -> 推送云端 -> 验证 -> 回滚策略”的完整闭环。
+下面工作流覆盖"新变更 -> 迁移 -> 推送云端 -> 验证 -> 回滚策略"的完整闭环。
 
 ### 0. 准备：配置 CLI 认证
 
@@ -134,24 +135,19 @@ node scripts/verify/verify-db-admin-and-rls.mjs
 
 - Auth 故障诊断（直连 Postgres 看 `auth.*` 基础表与默认 Admin）：`web/scripts/verify/diagnose-auth-500.mjs`
 
-## 云端阻塞排障经验（Auth 500）
-
-我们遇到过这种现象：
-- PostgREST 查询 `public.region` 正常；
-- 但 Auth API 返回 500（例如 `Database error querying schema`、`Database error finding users`），导致：
-  - `signInWithPassword` 失败
-  - `auth.admin.listUsers` 失败
-
-排障步骤（推荐顺序）：
-1. 先用 `web/scripts/verify/diagnose-auth-500.mjs` 直连数据库确认 `auth` schema 与 `auth.users` 是否存在、默认 Admin 行是否存在。
-2. 若 DB 本身没问题，优先对项目执行一次 **pause + restore**（相当于软重启服务）：
-   - 仓库提供脚本：`supabase/scripts/pause-restore.ps1`
-
 ## 版本管理与协作规范（必须遵守）
 
 - 迁移是数据库版本历史，review 必须看迁移 SQL，而不是只看 Dashboard 截图。
 - 合并策略：一个 PR 可以包含多个迁移，但每个迁移要小、可解释、可回滚（通过追加迁移回滚逻辑）。
-- 发生“删库重建”时：
+- 发生"删库重建"时：
   - 先清理并重建 `migrations/`（从 000 开始也可以，但要确保远端 migration history 对齐）。
   - 立刻执行一次 `supabase migration list --linked` 确认 Local/Remote 一致。
   - DB 验收必须跑一遍（至少 RLS + 默认 Admin）。
+
+## 问题与解决方案
+
+遇到问题时，请查阅 `memo/README.md` 中的 Supabase 索引，包含：
+- Auth API 500 错误排查
+- 直接 INSERT auth.users 导致 gotrue 失败
+- CLI 常见问题（db push、PAT 等）
+- 验收脚本使用说明
