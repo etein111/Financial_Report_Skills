@@ -143,12 +143,12 @@ features/<feature>/
 
 #### Browser client（浏览器可达）
 
-- 只用 `NEXT_PUBLIC_SUPABASE_URL` + `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`（或 legacy anon key）
+- 只用 `NEXT_PUBLIC_SUPABASE_URL` + `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - 只用于浏览器侧必须的调用（尽量少用）
 
 #### Server client（SSR + cookies）
 
-- 用 publishable/anon key + cookies 读写
+- 用 anon key + cookies 读写
 - 用于服务端读取当前用户、读取业务数据（RLS 兜底）
 
 #### Admin client（service role，仅服务端）
@@ -215,14 +215,163 @@ features/<feature>/
 
 ## 7. 输入校验与安全策略
 
-校验原则：
+### 7.1 表单校验库
+
+统一使用 **Zod** 作为表单校验库：
+
+```bash
+pnpm add zod
+```
+
+使用方式：
+- 在 `domain/` 或 `features/*/schemas/` 定义 zod schema
+- Server Actions 使用 schema 校验输入
+- 客户端表单使用相同 schema 进行即时校验
+
+```ts
+// domain/schemas/user.ts
+import { z } from "zod";
+
+export const inviteUserSchema = z.object({
+  email: z.string().email("Invalid email address"),
+  role: z.enum(["admin", "sa", "analyst"]),
+  region_id: z.string().uuid().optional(),
+});
+
+export type InviteUserInput = z.infer<typeof inviteUserSchema>;
+```
+
+```ts
+// features/users/actions.ts
+import { inviteUserSchema } from "@/domain/schemas/user";
+import { err, ok, Result } from "@/lib/result";
+
+export async function inviteUser(
+  input: unknown
+): Promise<Result<{ id: string }>> {
+  const parsed = inviteUserSchema.safeParse(input);
+  if (!parsed.success) {
+    return err(parsed.error.errors[0]?.message ?? "Invalid input");
+  }
+  // ... 业务逻辑
+}
+```
+
+### 7.2 校验原则
+
 - 客户端校验：快速反馈（必填、email 格式）
 - 服务端校验：强制兜底（所有写操作必须校验）
+- 复用同一 schema，避免双重维护
 
-安全策略：
+### 7.3 安全策略
 - 忘记密码：永远返回相同成功提示
 - 管理操作：服务端再次校验 `role === "admin"`
 - 禁止引入 `SUPABASE_SERVICE_ROLE_KEY` 到 Client Components（通过模块边界 + `server-only` 兜底）
+
+## 7.5 缓存策略
+
+### 数据获取缓存
+
+| 场景 | 策略 | 说明 |
+|------|------|------|
+| 静态页面 | 默认缓存 | `generateStaticParams` 预渲染 |
+| 用户相关数据 | `no-store` | 实时获取，不缓存 |
+| 公共列表（不常变） | `next: { revalidate: 60 }` | 60 秒重新验证 |
+| 敏感数据 | `no-store` | 永不缓存 |
+
+```ts
+// 实时数据（用户相关）
+const { data } = await supabase
+  .from("users")
+  .select("*")
+  .eq("id", userId);
+
+// 可缓存的公共数据
+const { data } = await fetch("/api/regions", {
+  next: { revalidate: 300 } // 5 分钟
+});
+```
+
+### 路由段配置
+
+```ts
+// page.tsx 或 layout.tsx
+export const dynamic = "force-dynamic"; // 禁用缓存
+export const revalidate = 0; // 等同于 no-store
+export const revalidate = 60; // 60 秒 ISR
+```
+
+## 7.6 错误边界与 Loading 状态
+
+### 错误边界（error.tsx）
+
+每个路由段应有 `error.tsx`：
+
+```tsx
+// app/users/error.tsx
+"use client";
+
+export default function UsersError({
+  error,
+  reset,
+}: {
+  error: Error & { digest?: string };
+  reset: () => void;
+}) {
+  return (
+    <div className="flex flex-col items-center justify-center py-12">
+      <h2 className="text-lg font-medium">Something went wrong</h2>
+      <button onClick={reset} className="mt-4">
+        Try again
+      </button>
+    </div>
+  );
+}
+```
+
+### Loading 状态（loading.tsx）
+
+使用 React Suspense + loading.tsx：
+
+```tsx
+// app/users/loading.tsx
+export default function UsersLoading() {
+  return (
+    <div className="animate-pulse">
+      <div className="h-10 bg-zinc-800 rounded mb-4" />
+      <div className="space-y-2">
+        {[...Array(5)].map((_, i) => (
+          <div key={i} className="h-12 bg-zinc-800 rounded" />
+        ))}
+      </div>
+    </div>
+  );
+}
+```
+
+### 表单提交状态
+
+Client Components 中使用 `useTransition` 或 `useActionState`：
+
+```tsx
+"use client";
+
+import { useActionState } from "react";
+import { inviteUser } from "@/features/users/actions";
+
+export function InviteForm() {
+  const [state, formAction, isPending] = useActionState(inviteUser, null);
+
+  return (
+    <form action={formAction}>
+      {/* ... */}
+      <Button type="submit" isLoading={isPending}>
+        Invite
+      </Button>
+    </form>
+  );
+}
+```
 
 ## 8. 时间处理规范（Asia/Shanghai 展示）
 
@@ -260,10 +409,40 @@ export function formatShanghai(iso: string) {
   - `/users`：列表从 mock -> repo 返回真实列表（服务端分页/搜索/排序）
   - 写操作从本地 state -> Server Actions（服务端权限校验 + admin repo）
 
-## 10. 轻量强制（建议，后续实施）
+## 10. ESLint 规则（已实施）
 
-> 文档约束需要可执行，但不宜过重。建议用最少的 ESLint 规则防止越层触库与密钥泄漏：
+> 通过 `.eslintrc.json` 配置，在开发时自动检查分层依赖：
 
-- 禁止 `app/*` import `features/*/repo/*`
-- 禁止 `components/*` import `features/*`
-- 禁止 Client Components import `lib/supabase/admin`（或任何 server-only 模块）
+已实施的规则：
+- 禁止 `app/*` import `features/*/repo/*` → 必须通过 feature 的 `index.ts` 或 `actions.ts`
+- 禁止 `app/*` 和 `components/*` import `lib/supabase/admin` → admin client 仅限 `features/*/repo/*` 使用
+
+```json
+// .eslintrc.json
+{
+  "extends": ["next/core-web-vitals", "next/typescript"],
+  "rules": {
+    "no-restricted-imports": [
+      "error",
+      {
+        "patterns": [
+          {
+            "group": ["**/features/*/repo/*"],
+            "message": "禁止从 app 层直接导入 repo。请通过 features/*/index.ts 或 actions.ts 导入。"
+          },
+          {
+            "group": ["**/lib/supabase/admin"],
+            "message": "禁止在 app 或 components 中导入 admin client。admin client 仅限 features/*/repo/* 使用。"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+运行检查：
+```bash
+pnpm lint
+```
+
