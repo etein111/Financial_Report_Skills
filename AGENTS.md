@@ -43,6 +43,14 @@ openspec schema which            # 查看当前使用的 schema
 
 ## 工作机制（上下文沉淀）
 
-- 每次会话结束前：更新 `memo/TODO.md`（只写“未完成事项 + 下一步可执行动作”，避免长篇叙事）。
-- 若有较长排障/取舍推理：在 `memo/` 里补一份 memo（`memo/README.md` 有规范），并在 `memo/TODO.md` 里链接它。
+- 每次会话结束前：更新 `memo/TODO.md`（只写"未完成事项 + 下一步可执行动作"，避免长篇叙事）。
+- 若有较长排障/取舍推理：在 `memo/` 里补一份 memo，并在 `memo/TODO.md` 里链接它。
+- **经验积累**：解决的问题、踩过的坑应使用 `/instinct-import` 导入到 instinct 系统，而非写在 TODO.md 里。
 - 历史兼容：如果仓库存在 `MEMO.md`，按旧约定先读取再删除（不要新增 `MEMO.md`，改用 `memo/`）。
+
+### Instinct 系统
+
+经验积累通过 instinct 系统管理，支持跨会话、跨项目复用：
+- `/instinct-status`：查看已积累的经验
+- `/instinct-import <文件>`：导入新的经验
+- `/instinct-export`：导出经验供分享
