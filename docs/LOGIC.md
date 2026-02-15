@@ -122,13 +122,17 @@ features/<feature>/
 约束：
 - 参数 `next` 必须防 open redirect（见第 5.3 节）
 
-### 2.5 Middleware（会话刷新 + 轻量路由保护）
+### 2.5 Proxy（会话刷新 + 轻量路由保护）
+
+> **Next.js 16 变更**：`middleware.ts` 已重命名为 `proxy.ts`，函数名从 `middleware` 改为 `proxy`。
+> 原因：避免与 Express.js middleware 概念混淆，"proxy" 更准确反映其网络边界角色。
+> 迁移命令：`npx @next/codemod@canary middleware-to-proxy .`
 
 放：
 - cookie session 刷新 / 轻量路由保护（例如未登录重定向）
 
 不放：
-- 资源级鉴权（“是否能编辑 invoice 123”之类必须在 action/route handler + RLS）
+- 资源级鉴权（"是否能编辑 invoice 123"之类必须在 action/route handler + RLS）
 
 ## 3. Supabase 集成方式（官方推荐形态）
 

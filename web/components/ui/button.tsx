@@ -43,6 +43,8 @@ export function Button({
   );
 }
 
+Button.displayName = "Button";
+
 function Spinner() {
   return (
     <svg
@@ -67,4 +69,3 @@ function Spinner() {
     </svg>
   );
 }
-

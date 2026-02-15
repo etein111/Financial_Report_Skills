@@ -25,3 +25,5 @@ export function Badge({ className, tone = "zinc", ...props }: BadgeProps) {
   );
 }
 
+Badge.displayName = "Badge";
+

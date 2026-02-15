@@ -69,6 +69,8 @@ temp/
 test_*.json
 *.token
 nul
+test-results/
+playwright-report/
 
 # TypeScript
 *.tsbuildinfo

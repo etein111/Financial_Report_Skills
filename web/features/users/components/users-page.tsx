@@ -1,6 +1,6 @@
 import { unstable_noStore as noStore } from "next/cache";
 
-import { listUsers } from "../repo/users-admin-repo";
+import { listUsersAction } from "../actions";
 import { UsersPageClient } from "./users-page-client";
 
 export async function UsersPage({
@@ -22,7 +22,12 @@ export async function UsersPage({
         : "";
   const page = Math.max(1, Number.parseInt(pageStr || "1", 10) || 1);
 
-  const data = await listUsers({ page, query: q || null });
+  const result = await listUsersAction({ page, query: q || null });
+
+  // If error, show empty state (error handling could be improved)
+  const data = result.ok
+    ? result.data
+    : { items: [], total: 0, page: 1, totalPages: 1 };
 
   return (
     <UsersPageClient

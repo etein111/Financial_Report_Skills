@@ -17,3 +17,5 @@ export function Card({ className, ...props }: CardProps) {
   );
 }
 
+Card.displayName = "Card";
+

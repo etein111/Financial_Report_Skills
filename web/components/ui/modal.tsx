@@ -134,3 +134,5 @@ export function Modal({
     document.body,
   );
 }
+
+Modal.displayName = "Modal";

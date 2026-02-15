@@ -106,7 +106,10 @@
       "Bash(PORT=3003 pnpm dev:*)",
       "Bash(pnpm --dir web dev:*)",
       "Bash(del:*)",
-      "Bash(pnpm --dir \"C:/_code/neolyst/web\" dev:*)"
+      "Bash(pnpm --dir \"C:/_code/neolyst/web\" dev:*)",
+      "Bash(pnpm --dir \"C:/_code/neolyst/web\" add zod)",
+      "Bash(pnpm --dir \"C:/_code/neolyst/web\" lint)",
+      "Bash(pnpm --dir:*)"
     ]
   }
 }

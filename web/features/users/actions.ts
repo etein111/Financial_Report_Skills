@@ -2,27 +2,27 @@
 
 import { redirect } from "next/navigation";
 
-import type { UserRole } from "@/domain/user";
+import {
+  deleteUserSchema,
+  inviteUserSchema,
+  resetUserPasswordSchema,
+  setUserBannedSchema,
+  setUserRoleSchema,
+  updateUserSchema,
+} from "@/domain/schemas/user";
 import { err, ok, type Result } from "@/lib/result";
 import { requireAdmin } from "@/lib/supabase/server";
 
 import {
   banUser,
   deleteUser,
-  inviteUser,
-  resetUserPassword,
-  setUserRole,
+  inviteUser as inviteUserRepo,
+  listUsers as listUsersRepo,
+  resetUserPassword as resetUserPasswordRepo,
+  setUserRole as setUserRoleRepo,
   unbanUser,
-  updateUser,
+  updateUser as updateUserRepo,
 } from "./repo/users-admin-repo";
-
-function isValidEmail(email: string) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-}
-
-function parseRole(raw: unknown): UserRole | null {
-  return raw === "admin" || raw === "sa" || raw === "analyst" ? raw : null;
-}
 
 async function requireAdminOrRedirect403() {
   try {
@@ -32,83 +32,94 @@ async function requireAdminOrRedirect403() {
   }
 }
 
-export async function inviteUserAction(input: {
-  email: string;
-  fullName: string;
-  role: UserRole;
-}): Promise<Result<{ id: string }>> {
+// List users action
+export async function listUsersAction(input: {
+  page?: number;
+  query?: string | null;
+}): Promise<Result<{ items: Awaited<ReturnType<typeof listUsersRepo>>["items"]; total: number; page: number; totalPages: number }>> {
   await requireAdminOrRedirect403();
 
-  const email = input.email.trim();
-  const fullName = input.fullName.trim();
-
-  if (!email) return err("Email is required.");
-  if (!isValidEmail(email)) return err("Invalid email address.");
-  if (!fullName) return err("Name is required.");
-  if (!parseRole(input.role)) return err("Invalid role.");
+  const page = Math.max(1, input.page ?? 1);
+  const query = input.query ?? null;
 
   try {
-    const data = await inviteUser({ email, fullName, role: input.role });
+    const data = await listUsersRepo({ page, query });
+    return ok(data);
+  } catch {
+    return err("Failed to list users.");
+  }
+}
+
+// Invite user action
+export async function inviteUserAction(input: unknown): Promise<Result<{ id: string }>> {
+  await requireAdminOrRedirect403();
+
+  const parsed = inviteUserSchema.safeParse(input);
+  if (!parsed.success) {
+    return err(parsed.error.issues[0]?.message ?? "Invalid input.");
+  }
+
+  const { email, fullName, role } = parsed.data;
+
+  try {
+    const data = await inviteUserRepo({ email, fullName, role });
     return ok(data);
   } catch {
     return err("Failed to invite user.");
   }
 }
 
-export async function updateUserAction(input: {
-  id: string;
-  email: string;
-  fullName: string;
-}): Promise<Result<null>> {
+// Update user action
+export async function updateUserAction(input: unknown): Promise<Result<null>> {
   await requireAdminOrRedirect403();
 
-  const id = input.id.trim();
-  const email = input.email.trim();
-  const fullName = input.fullName.trim();
+  const parsed = updateUserSchema.safeParse(input);
+  if (!parsed.success) {
+    return err(parsed.error.issues[0]?.message ?? "Invalid input.");
+  }
 
-  if (!id) return err("Invalid user.");
-  if (!fullName) return err("Name is required.");
-  if (!email) return err("Email is required.");
-  if (!isValidEmail(email)) return err("Invalid email address.");
+  const { id, email, fullName } = parsed.data;
 
   try {
-    await updateUser({ id, email, fullName });
+    await updateUserRepo({ id, email, fullName });
     return ok(null);
   } catch {
     return err("Failed to update user.");
   }
 }
 
-export async function setUserRoleAction(input: {
-  id: string;
-  role: UserRole;
-}): Promise<Result<null>> {
+// Set user role action
+export async function setUserRoleAction(input: unknown): Promise<Result<null>> {
   await requireAdminOrRedirect403();
 
-  const id = input.id.trim();
-  const role = parseRole(input.role);
-  if (!id) return err("Invalid user.");
-  if (!role) return err("Invalid role.");
+  const parsed = setUserRoleSchema.safeParse(input);
+  if (!parsed.success) {
+    return err(parsed.error.issues[0]?.message ?? "Invalid input.");
+  }
+
+  const { id, role } = parsed.data;
 
   try {
-    await setUserRole({ id, role });
+    await setUserRoleRepo({ id, role });
     return ok(null);
   } catch {
     return err("Failed to update role.");
   }
 }
 
-export async function setUserBannedAction(input: {
-  id: string;
-  banned: boolean;
-}): Promise<Result<null>> {
+// Set user banned action
+export async function setUserBannedAction(input: unknown): Promise<Result<null>> {
   await requireAdminOrRedirect403();
 
-  const id = input.id.trim();
-  if (!id) return err("Invalid user.");
+  const parsed = setUserBannedSchema.safeParse(input);
+  if (!parsed.success) {
+    return err(parsed.error.issues[0]?.message ?? "Invalid input.");
+  }
+
+  const { id, banned } = parsed.data;
 
   try {
-    if (input.banned) await banUser({ id });
+    if (banned) await banUser({ id });
     else await unbanUser({ id });
     return ok(null);
   } catch {
@@ -116,30 +127,35 @@ export async function setUserBannedAction(input: {
   }
 }
 
-export async function resetUserPasswordAction(input: {
-  id: string;
-  newPassword: string;
-}): Promise<Result<null>> {
+// Reset user password action
+export async function resetUserPasswordAction(input: unknown): Promise<Result<null>> {
   await requireAdminOrRedirect403();
 
-  const id = input.id.trim();
-  const newPassword = input.newPassword.trim();
-  if (!id) return err("Invalid user.");
-  if (!newPassword) return err("Password is required.");
+  const parsed = resetUserPasswordSchema.safeParse(input);
+  if (!parsed.success) {
+    return err(parsed.error.issues[0]?.message ?? "Invalid input.");
+  }
+
+  const { id, newPassword } = parsed.data;
 
   try {
-    await resetUserPassword({ id, newPassword });
+    await resetUserPasswordRepo({ id, newPassword });
     return ok(null);
   } catch {
     return err("Failed to reset password.");
   }
 }
 
-export async function deleteUserAction(input: { id: string }): Promise<Result<null>> {
+// Delete user action
+export async function deleteUserAction(input: unknown): Promise<Result<null>> {
   await requireAdminOrRedirect403();
 
-  const id = input.id.trim();
-  if (!id) return err("Invalid user.");
+  const parsed = deleteUserSchema.safeParse(input);
+  if (!parsed.success) {
+    return err(parsed.error.issues[0]?.message ?? "Invalid input.");
+  }
+
+  const { id } = parsed.data;
 
   try {
     await deleteUser({ id });
@@ -148,4 +164,3 @@ export async function deleteUserAction(input: { id: string }): Promise<Result<nu
     return err("Failed to delete user.");
   }
 }
-

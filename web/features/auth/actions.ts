@@ -2,12 +2,9 @@
 
 import { redirect } from "next/navigation";
 
+import { requestPasswordResetSchema, signInSchema } from "@/domain/schemas/auth";
 import { err, ok, type Result } from "@/lib/result";
 import { requestPasswordReset, signInWithPassword, signOut } from "./repo/auth-repo";
-
-function isValidEmail(email: string) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-}
 
 type AuthActionState = Result<null> | null;
 
@@ -15,12 +12,17 @@ export async function signInWithPasswordAction(
   _prev: AuthActionState,
   formData: FormData,
 ): Promise<AuthActionState> {
-  const email = String(formData.get("email") ?? "").trim();
-  const password = String(formData.get("password") ?? "");
+  const input = {
+    email: String(formData.get("email") ?? "").trim(),
+    password: String(formData.get("password") ?? ""),
+  };
 
-  if (!email) return err("Email is required");
-  if (!isValidEmail(email)) return err("Invalid email format");
-  if (!password) return err("Password is required");
+  const parsed = signInSchema.safeParse(input);
+  if (!parsed.success) {
+    return err(parsed.error.issues[0]?.message ?? "Invalid input.");
+  }
+
+  const { email, password } = parsed.data;
 
   const res = await signInWithPassword({ email, password });
   if (!res.ok) {
@@ -35,9 +37,16 @@ export async function requestPasswordResetAction(
   _prev: AuthActionState,
   formData: FormData,
 ): Promise<AuthActionState> {
-  const email = String(formData.get("email") ?? "").trim();
-  if (!email) return err("Email is required");
-  if (!isValidEmail(email)) return err("Invalid email format");
+  const input = {
+    email: String(formData.get("email") ?? "").trim(),
+  };
+
+  const parsed = requestPasswordResetSchema.safeParse(input);
+  if (!parsed.success) {
+    return err(parsed.error.issues[0]?.message ?? "Invalid input.");
+  }
+
+  const { email } = parsed.data;
 
   // Avoid email enumeration: always show success for valid email format.
   await requestPasswordReset({ email });

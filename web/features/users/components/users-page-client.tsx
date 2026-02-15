@@ -4,6 +4,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 
 import type { UserRole, UserRow, UserStatus } from "@/domain/user";
+import { emailSchema } from "@/domain/schemas/user";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -38,10 +39,6 @@ function roleTone(role: UserRole) {
 
 function statusTone(status: UserStatus) {
   return status === "active" ? "green" : "red";
-}
-
-function isValidEmail(email: string) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
 function toQueryString(params: { q: string; page: number }) {
@@ -128,7 +125,7 @@ export function UsersPageClient({
 
     const next: { email?: string; name?: string } = {};
     if (!email) next.email = "Email is required";
-    else if (!isValidEmail(email)) next.email = "Invalid email format";
+    else if (!emailSchema.safeParse(email).success) next.email = "Invalid email format";
     if (!fullName) next.name = "Name is required";
     setInviteErrors(next);
     if (Object.keys(next).length) return;
@@ -165,7 +162,7 @@ export function UsersPageClient({
     const next: { email?: string; name?: string } = {};
     if (!fullName) next.name = "Name is required";
     if (!email) next.email = "Email is required";
-    else if (!isValidEmail(email)) next.email = "Invalid email format";
+    else if (!emailSchema.safeParse(email).success) next.email = "Invalid email format";
     setEditErrors(next);
     if (Object.keys(next).length) return;
 
