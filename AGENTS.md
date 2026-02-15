@@ -24,4 +24,3 @@
 
 ## 会话备忘
 - 若要继续"auth-and-user-management 拆分为 3 个 change"的工作，请先阅读 `openspec/notes/auth-and-user-management-split.md` 恢复上下文。
-- 如果能找到MEMO.md文件，先读一下，读完之后删除。
