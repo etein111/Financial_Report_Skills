@@ -29,8 +29,8 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
             "w-full rounded-[8px] border border-white/10 bg-zinc-900 px-3 py-2 text-sm text-zinc-100",
             "placeholder:text-zinc-500",
             "outline-none ring-offset-0",
-            "focus:ring-2 focus:ring-blue-500/50",
-            error && "border-red-500 focus:ring-red-500/40",
+            "focus-visible:ring-2 focus-visible:ring-blue-500/60",
+            error && "border-red-500 focus-visible:ring-red-500/50",
             className,
           )}
           {...props}
@@ -42,4 +42,3 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
 );
 
 Input.displayName = "Input";
-

@@ -94,7 +94,10 @@
       "mcp__zai-mcp-server__analyze_image",
       "Bash(pnpm config get:*)",
       "Bash(SUPABASE_ACCESS_TOKEN=***REMOVED-SUPABASE-PAT*** npx pnpm supabase link:*)",
-      "Bash(pnpm add:*)"
+      "Bash(pnpm add:*)",
+      "Bash(pkill:*)",
+      "Bash(corepack pnpm dev:*)",
+      "Bash(export:*)"
     ]
   }
 }

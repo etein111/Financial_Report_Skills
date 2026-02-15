@@ -13,11 +13,13 @@ type Particle = {
   phase: number;
 };
 
+export type ParticleFieldProps = {
+  particleCount?: number;
+};
+
 export function ParticleField({
   particleCount = 120,
-}: {
-  particleCount?: number;
-}) {
+}: ParticleFieldProps) {
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
 
   React.useEffect(() => {

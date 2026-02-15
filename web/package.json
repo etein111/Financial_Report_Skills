@@ -7,7 +7,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
     "supabase": "pnpm exec supabase",
     "supabase:db:push": "pnpm exec supabase db push",
     "supabase:db:push:dry-run": "pnpm exec supabase db push --dry-run"
@@ -23,6 +24,7 @@
     "cross-env": "^10.1.0",
     "eslint": "^8.57.1",
     "eslint-config-next": "^15.5.12",
+    "pg": "^8.18.0",
     "postcss": "^8.5.6",
     "supabase": "^2.76.8",
     "tailwindcss": "^4.1.18",

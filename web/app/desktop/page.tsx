@@ -1,5 +1,8 @@
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { signOutAction } from "@/features/auth";
+import { getCurrentUser, getCurrentUserRole } from "@/lib/supabase/server";
 
 type DesktopCard = {
   key: string;
@@ -92,26 +95,42 @@ const dataCards: DesktopCard[] = [
   },
 ];
 
-export default function DesktopPage() {
+export default async function DesktopPage() {
+  const user = await getCurrentUser();
+  const role = await getCurrentUserRole();
+  const visibleDataCards =
+    role === "admin" ? dataCards : dataCards.filter((c) => c.key !== "users");
+
+  const fullName =
+    typeof user?.user_metadata?.full_name === "string"
+      ? user.user_metadata.full_name
+      : null;
+  const welcome = fullName || user?.email || "User";
+
   return (
     <div className="min-h-screen">
       <header className="border-b border-white/10 bg-zinc-900/60 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
           <div className="text-xl font-semibold text-zinc-50">Neolyst</div>
 
-          <a
-            href="/login"
-            className="rounded-[6px] border border-white/10 bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-100 transition-colors duration-200 hover:bg-zinc-700"
-          >
-            Logout
-          </a>
+          <div className="flex items-center gap-4">
+            <div className="hidden text-sm text-zinc-300 sm:block">
+              Welcome, <span className="font-medium text-zinc-100">{welcome}</span>
+            </div>
+
+            <form action={signOutAction}>
+              <Button variant="secondary" type="submit">
+                Logout
+              </Button>
+            </form>
+          </div>
         </div>
       </header>
 
       <main className="mx-auto max-w-5xl px-6 pt-12 pb-10">
         <div className="grid grid-cols-1 gap-12 lg:grid-cols-2 lg:gap-16">
           <Section title="Reports" cards={reportsCards} />
-          <Section title="Data Management" cards={dataCards} />
+          <Section title="Data Management" cards={visibleDataCards} />
         </div>
       </main>
     </div>
@@ -150,4 +169,3 @@ function Section({ title, cards }: { title: string; cards: DesktopCard[] }) {
     </section>
   );
 }
-

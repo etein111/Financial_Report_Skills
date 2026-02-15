@@ -1,7 +1,12 @@
--- 初始化默认 Admin 账号（幂等）
--- 默认凭据：
+-- Initialize default Admin account (idempotent).
+-- Dev credential:
 --   email: jiang_jiahong@qq.com
 --   password: Admin123
+--
+-- Requirements:
+-- - MUST create the user if missing
+-- - MUST set app_metadata.role=admin
+-- - MUST NOT reset password if user already exists
 
 create extension if not exists pgcrypto;
 
@@ -66,7 +71,6 @@ begin
       now()
     );
   else
-    -- 若用户已存在，仅补齐管理员权限元数据，不重置密码。
     update auth.users
     set raw_app_meta_data = coalesce(raw_app_meta_data, '{}'::jsonb)
       || jsonb_build_object(
@@ -81,7 +85,7 @@ begin
     where id = v_user_id;
   end if;
 
-  -- 补齐 email 身份记录，确保密码登录路径完整。
+  -- Ensure email identity exists for password login.
   if not exists (
     select 1
     from auth.identities
@@ -149,3 +153,4 @@ begin
   end if;
 end
 $$;
+

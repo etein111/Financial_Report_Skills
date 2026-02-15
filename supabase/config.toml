@@ -1,4 +1,4 @@
-project_id = "gnudnjnyjdikezmclnpt"
+project_id = "lvakvjjnyvcrwacjwjcn"
 
 [api]
 port = 54321
@@ -14,6 +14,7 @@ port = 54323
 [auth]
 site_url = "http://localhost:3000"
 additional_redirect_urls = ["http://localhost:3000/**"]
+enable_signup = false
 
 [db.seed]
 enabled = true

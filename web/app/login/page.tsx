@@ -1,84 +1,52 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
+import { useActionState } from "react";
 
 import { ParticleField } from "@/components/particles/particle-field";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
-
-function isValidEmail(email: string) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-}
+import {
+  requestPasswordResetAction,
+  signInWithPasswordAction,
+} from "@/features/auth";
 
 export default function LoginPage() {
-  const router = useRouter();
   const toast = useToast();
 
-  const [email, setEmail] = React.useState("");
-  const [password, setPassword] = React.useState("");
-  const [errors, setErrors] = React.useState<{ email?: string; password?: string }>(
-    {},
+  const [loginState, loginAction, loginPending] = useActionState(
+    signInWithPasswordAction,
+    null,
   );
-  const [isSubmitting, setIsSubmitting] = React.useState(false);
 
   const [forgotOpen, setForgotOpen] = React.useState(false);
-  const [forgotEmail, setForgotEmail] = React.useState("");
-  const [forgotSuccess, setForgotSuccess] = React.useState(false);
-  const [forgotError, setForgotError] = React.useState<string | undefined>();
+  const [forgotState, forgotAction, forgotPending] = useActionState(
+    requestPasswordResetAction,
+    null,
+  );
 
-  function validate() {
-    const next: typeof errors = {};
-    if (!email.trim()) next.email = "Email is required";
-    else if (!isValidEmail(email.trim())) next.email = "Invalid email format";
-    if (!password) next.password = "Password is required";
-    setErrors(next);
-    return Object.keys(next).length === 0;
-  }
-
-  async function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!validate()) return;
-
-    setIsSubmitting(true);
-    const delayMs = 1000 + Math.floor(Math.random() * 1001); // 1-2s
-    await new Promise((r) => window.setTimeout(r, delayMs));
-
-    // Prototype-only deterministic failure: password === "fail"
-    if (password.trim().toLowerCase() === "fail") {
-      setIsSubmitting(false);
-      toast.error("Sign in failed (prototype simulation).", { title: "Error" });
-      return;
+  React.useEffect(() => {
+    if (!loginState) return;
+    if (!loginState.ok) {
+      toast.error(loginState.error, { title: "Error" });
     }
+  }, [loginState, toast]);
 
-    router.push("/desktop");
-  }
+  React.useEffect(() => {
+    if (!forgotState) return;
+    if (forgotState.ok) {
+      toast.success("If this email exists, a reset link has been sent.", {
+        title: "Success",
+      });
+    } else {
+      toast.error(forgotState.error, { title: "Error" });
+    }
+  }, [forgotState, toast]);
 
   function openForgotPassword() {
-    setForgotEmail(email);
-    setForgotSuccess(false);
-    setForgotError(undefined);
     setForgotOpen(true);
-  }
-
-  function submitForgotPassword(e: React.FormEvent) {
-    e.preventDefault();
-    setForgotError(undefined);
-    setForgotSuccess(false);
-
-    if (!forgotEmail.trim()) {
-      setForgotError("Email is required");
-      return;
-    }
-    if (!isValidEmail(forgotEmail.trim())) {
-      setForgotError("Invalid email format");
-      return;
-    }
-
-    // Prototype-only: always show success (avoid email enumeration).
-    setForgotSuccess(true);
   }
 
   return (
@@ -96,27 +64,24 @@ export default function LoginPage() {
             </p>
           </div>
 
-          <form className="space-y-4" onSubmit={onSubmit}>
+          <form className="space-y-4" action={loginAction}>
             <Input
               label="Email"
               type="email"
               autoComplete="email"
               placeholder="you@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              error={errors.email}
+              name="email"
+              error={loginState && !loginState.ok ? loginState.error : undefined}
             />
             <Input
               label="Password"
               type="password"
               autoComplete="current-password"
               placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              error={errors.password}
+              name="password"
             />
 
-            <Button className="w-full" type="submit" isLoading={isSubmitting}>
+            <Button className="w-full" type="submit" isLoading={loginPending}>
               Login
             </Button>
 
@@ -136,41 +101,35 @@ export default function LoginPage() {
       <Modal
         open={forgotOpen}
         title="Reset password"
-        description="Prototype only: no real email will be sent."
+        description="Enter your email address to receive a reset link."
         onClose={() => setForgotOpen(false)}
         footer={
           <>
             <Button variant="ghost" type="button" onClick={() => setForgotOpen(false)}>
               Close
             </Button>
-            <Button type="submit" form="forgot-form">
+            <Button type="submit" form="forgot-form" isLoading={forgotPending}>
               Submit
             </Button>
           </>
         }
       >
-        <form id="forgot-form" className="space-y-3" onSubmit={submitForgotPassword}>
+        <form id="forgot-form" className="space-y-3" action={forgotAction}>
           <Input
             label="Email"
             type="email"
             autoComplete="email"
             placeholder="you@example.com"
-            value={forgotEmail}
-            onChange={(e) => setForgotEmail(e.target.value)}
-            error={forgotError}
+            name="email"
+            error={
+              forgotState && !forgotState.ok ? forgotState.error : undefined
+            }
           />
-          {forgotSuccess ? (
-            <p className="text-sm text-green-400">
-              If this email exists, a reset link has been sent.
-            </p>
-          ) : (
-            <p className="text-sm text-zinc-400">
-              Enter your email address to receive a reset link.
-            </p>
-          )}
+          <p className="text-sm text-zinc-400">
+            We will always show the same success message to protect your privacy.
+          </p>
         </form>
       </Modal>
     </div>
   );
 }
-
