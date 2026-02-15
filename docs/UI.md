@@ -2,7 +2,7 @@
 
 > 约定 UI 组件的命名、结构、样式、可访问性及交互模式。
 >
-> 分层、依赖方向、触库规约（例如 `app → features → domain`、仅 `features/*/repo/*` 可触库）以 `LOGIC.md` 为准；本文不重复定义这些架构规则，避免两份文档漂移。
+> 分层、依赖方向、触库规约（例如 `app → features → domain`、仅 `features/*/repo/*` 可触库）以“Web 逻辑处理规范”为准；本文不重复定义这些架构规则，避免两份文档漂移。
 >
 > 参考来源：
 > - [React & TypeScript: 10 patterns for writing better code](https://blog.logrocket.com/react-typescript-10-patterns-writing-better-code/)
@@ -243,7 +243,7 @@ web/components/
 
 **分层约束**：
 - `components/*`：纯 UI 组件，不包含业务规则，不访问外部数据，不触 Supabase
-- 业务 UI 放在 `features/*/components/*`；整体分层/依赖方向/触库规约以 `LOGIC.md` 为准
+- 业务 UI 放在 `features/*/components/*`；整体分层/依赖方向/触库规约以“Web 逻辑处理规范”为准
 
 ## 6. 现有组件（基线 API）
 
@@ -273,7 +273,7 @@ web/components/
 
 ## 7. 交互模式
 
-> 涉及鉴权、错误处理、Server Actions 的交互约定以 `LOGIC.md` 为准；本节只保留 UI 组件层面的使用约定，避免重复。
+> 涉及鉴权、错误处理、Server Actions 的交互约定以“Web 逻辑处理规范”为准；本节只保留 UI 组件层面的使用约定，避免重复。
 
 ### 7.1 Modal 弹窗
 

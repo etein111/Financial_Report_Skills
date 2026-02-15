@@ -59,7 +59,8 @@ pnpm supabase:db:push         # 推送数据库迁移
 
 | 文档 | 说明 |
 |------|------|
-| [web/README.md](./web/README.md) | Next.js 应用 |
+| [docs/README.md](./docs/README.md) | Next.js 应用（含 Web 启动/规范入口） |
 | [supabase/README.md](./supabase/README.md) | 数据库版本管理 |
+| [docs/README.md](./docs/README.md) | 跨目录规范与约定入口（Decisions/Conventions/Testing） |
 | [openspec/](./openspec/) | 变更管理 |
 | [CLAUDE.md](./CLAUDE.md) | Claude Code 指令 |
