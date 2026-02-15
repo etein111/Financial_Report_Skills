@@ -110,10 +110,10 @@ export function ParticleField({
           const dist = Math.sqrt(dx * dx + dy * dy);
           if (dist >= linkDistance) continue;
 
-          const alpha = (1 - dist / linkDistance) * 0.18;
+          const alpha = (1 - dist / linkDistance) * 0.35;
           const hue = (a.hue + b.hue) / 2;
           ctx2.strokeStyle = `hsla(${hue}, 100%, 70%, ${alpha})`;
-          ctx2.lineWidth = 1;
+          ctx2.lineWidth = 1.2;
           ctx2.beginPath();
           ctx2.moveTo(a.x, a.y);
           ctx2.lineTo(b.x, b.y);

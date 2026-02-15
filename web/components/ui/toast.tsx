@@ -62,23 +62,39 @@ export function useToast() {
 function ToastViewport({ toasts }: { toasts: ToastItem[] }) {
   return (
     <div
-      className="fixed right-4 top-4 z-[60] flex w-full max-w-sm flex-col gap-2"
+      className="fixed left-1/2 top-6 z-[60] flex w-full max-w-sm -translate-x-1/2 flex-col gap-3"
       aria-live="polite"
     >
       {toasts.map((t) => (
         <div
           key={t.id}
           className={cn(
-            "rounded-[8px] px-4 py-3 text-sm text-white shadow-[0_10px_15px_-3px_rgba(0,0,0,0.35)]",
+            "rounded-[12px] border px-4 py-3 text-sm shadow-[0_10px_40px_-3px_rgba(0,0,0,0.5)]",
+            "backdrop-blur-md",
             "animate-[toast-in_200ms_ease-out]",
-            t.type === "success" ? "bg-green-500" : "bg-red-500",
+            t.type === "success"
+              ? "border-emerald-500/30 bg-zinc-900/80 text-zinc-100"
+              : "border-red-500/30 bg-zinc-900/80 text-zinc-100",
           )}
         >
-          <div className="flex items-start gap-2">
-            <div className="pt-0.5">{t.type === "success" ? "✅" : "❌"}</div>
-            <div className="min-w-0">
-              {t.title ? <div className="font-semibold">{t.title}</div> : null}
-              <div className="break-words">{t.message}</div>
+          <div className="flex items-start gap-3">
+            <div className={cn(
+              "flex h-5 w-5 shrink-0 items-center justify-center rounded-full",
+              t.type === "success" ? "bg-emerald-500/20 text-emerald-400" : "bg-red-500/20 text-red-400"
+            )}>
+              {t.type === "success" ? (
+                <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+              ) : (
+                <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              )}
+            </div>
+            <div className="min-w-0 flex-1">
+              {t.title ? <div className="font-medium text-zinc-50">{t.title}</div> : null}
+              <div className="break-words text-zinc-300">{t.message}</div>
             </div>
           </div>
         </div>

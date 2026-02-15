@@ -54,9 +54,9 @@ export default function LoginPage() {
       <ParticleField />
 
       <div className="relative z-10 flex min-h-screen items-center justify-center px-4">
-        <div className="w-full max-w-sm rounded-[12px] border border-white/10 bg-zinc-900/70 p-6 backdrop-blur-md">
-          <div className="mb-6 space-y-2 text-center">
-            <h1 className="text-2xl font-semibold text-zinc-50">
+        <div className="w-full max-w-sm rounded-[12px] border border-white/10 bg-zinc-900/70 px-6 py-8 backdrop-blur-md">
+          <div className="mb-10 space-y-2 text-center">
+            <h1 className="text-3xl font-bold text-white">
               The Future is Now
             </h1>
             <p className="text-sm text-zinc-400">
