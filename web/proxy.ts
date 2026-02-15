@@ -7,7 +7,7 @@ function isAdmin(role: unknown): role is "admin" {
   return role === "admin";
 }
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   // Keep a stable list of cookies Supabase wants to set so we can apply them
   // to either a normal response or a redirect response.
   const cookiesToSet: { name: string; value: string; options: CookieOptions }[] = [];

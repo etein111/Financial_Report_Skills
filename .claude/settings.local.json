@@ -101,7 +101,12 @@
       "Bash(cat:*)",
       "Bash(find:*)",
       "Bash(\"C:\\\\Users\\\\user\\\\AppData\\\\Local\\\\Programs\\\\Python\\\\Python314\\\\python.exe\" \"C:\\\\Users\\\\user\\\\.claude\\\\plugins\\\\cache\\\\everything-claude-code\\\\everything-claude-code\\\\1.4.1\\\\skills\\\\continuous-learning-v2\\\\scripts\\\\instinct-cli.py\" status)",
-      "mcp__zai-mcp-server__diagnose_error_screenshot"
+      "mcp__zai-mcp-server__diagnose_error_screenshot",
+      "Bash(codex:*)",
+      "Bash(PORT=3003 pnpm dev:*)",
+      "Bash(pnpm --dir web dev:*)",
+      "Bash(del:*)",
+      "Bash(pnpm --dir \"C:/_code/neolyst/web\" dev:*)"
     ]
   }
 }

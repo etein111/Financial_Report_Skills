@@ -4,4 +4,5 @@ export {
   signOutAction,
 } from "./actions";
 
-export { exchangeCodeForSession, verifyOtp } from "./server";
+// Server-only exports - import directly from "./server" or "./repo/auth-repo" in server components
+// export { exchangeCodeForSession, verifyOtp } from "./server";
