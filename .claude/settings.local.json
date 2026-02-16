@@ -110,7 +110,25 @@
       "Bash(pnpm --dir \"C:/_code/neolyst/web\" add zod)",
       "Bash(pnpm --dir \"C:/_code/neolyst/web\" lint)",
       "Bash(pnpm --dir:*)",
-      "Bash(pnpm exec playwright test:*)"
+      "Bash(pnpm exec playwright test:*)",
+      "mcp__zai-mcp-server__extract_text_from_screenshot",
+      "Bash(claude:*)",
+      "Bash(wsl.exe:*)",
+      "Bash(printf:*)",
+      "Bash(bash)",
+      "Bash(env:*)",
+      "Bash(powershell.exe.exe:*)",
+      "Bash(cmd.exe.exe /c \"echo test from cmd\")",
+      "Bash(for:*)",
+      "Bash(do echo -ne \"\\\\rProgress: [$i]\")",
+      "Bash(done)",
+      "Bash(code:*)",
+      "Bash(/everything-claude-code:instinct-status)",
+      "Bash(chmod:*)",
+      "Bash(bash -n /mnt/c/_code/neolyst/open-windows-terminal.sh)",
+      "Bash(command:*)",
+      "Bash(fc-list:*)",
+      "Bash(powershell.exe -Command \"Get-Command alacritty.exe -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source\")"
     ]
   }
 }

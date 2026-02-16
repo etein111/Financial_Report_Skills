@@ -36,3 +36,48 @@
 
 - 数据表与 RLS 迁移已存在：`supabase/migrations/20260214094418_auth_and_user_management_baseline.sql`
 - 本 change 主要实现页面与交互，以及验证权限策略与 CRUD 流程
+
+---
+
+# 补充内容（待审核后合并）
+
+## 验收要点
+
+### Regions 管理
+- [ ] Admin 可访问 `/regions` 页面，非 Admin 被拦截到 `/403`
+- [ ] 列表正确显示所有 Region（name、code、created_at）
+- [ ] 创建 Region 成功，name/code 唯一性冲突有明确字段级错误提示
+- [ ] 编辑 Region 成功，唯一性冲突处理同上
+- [ ] 删除 Region 需二次确认，删除后若被 Analyst 引用则其 `region_id` 自动置空
+- [ ] 搜索按 name/code 模糊匹配
+
+### Analyst Info 管理
+- [ ] Admin 可访问 `/analyst-info` 页面，非 Admin 被拦截到 `/403`
+- [ ] 列表正确显示：full_name、chinese_name、email、region、is_active
+- [ ] 创建 Analyst 成功，必填字段校验（full_name、email、region）
+- [ ] email 唯一性冲突有明确错误提示
+- [ ] 编辑 Analyst 成功，可修改所有字段
+- [ ] 删除 Analyst 需二次确认
+- [ ] 搜索按 full_name、chinese_name、email 模糊匹配
+
+### Desktop 入口
+- [ ] Admin 可见 Regions 和 Analyst Info 卡片
+- [ ] 非 Admin 不可见上述卡片
+- [ ] 点击卡片在新标签页打开对应页面
+
+### 权限与安全
+- [ ] 所有写操作仅 Admin 可执行（功能层 + RLS 双重保障）
+- [ ] RLS 策略：认证用户可读，仅 Admin 可写
+
+## API 边界与交互策略（继承基线）
+
+- 交互策略：Server-first（Server Components + Server Actions）
+- 写操作使用 Server Actions
+- 不建设对外稳定的 REST API
+- 业务数据 CRUD 复用 Supabase PostgREST + RLS
+
+## 运维与安全（继承基线）
+
+- 所有写操作必须通过服务端 Server Actions，浏览器不直连 Supabase Admin API
+- RLS 作为数据层兜底，即使应用层有漏洞也能保护数据
+- 本阶段不涉及文件上传/Storage
