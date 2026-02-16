@@ -129,7 +129,12 @@
       "Bash(command:*)",
       "Bash(fc-list:*)",
       "Bash(powershell.exe -Command \"Get-Command alacritty.exe -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source\")",
-      "Bash(powershell.exe -Command 'where.exe alacritty.exe')"
+      "Bash(powershell.exe -Command 'where.exe alacritty.exe')",
+      "Bash(/mnt/c/_code/neolyst/openspec/changes/region-and-analyst-management/specs/region-management/spec.md:*)",
+      "Bash(/mnt/c/_code/neolyst/openspec/changes/region-and-analyst-management/specs/analyst-info-management/spec.md:*)",
+      "Bash(/mnt/c/_code/neolyst/openspec/changes/region-and-analyst-management/specs/desktop-nav/spec.md:*)",
+      "Bash(/mnt/c/_code/neolyst/openspec/changes/region-and-analyst-management/tasks.md:*)",
+      "Bash(/mnt/c/_code/neolyst/supabase/seed/regions.sql:*)"
     ]
   }
 }

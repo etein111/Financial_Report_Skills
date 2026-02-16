@@ -1,5 +1,7 @@
-insert into public.region (name, code)
-values
+-- Seed preset regions
+-- Run with: psql exec -f supabase/seed/regions.sql --db-url "postgresql://postgres:postgres@localhost:54322/postgres"
+
+INSERT INTO public.region (name, code) VALUES
   ('China', 'CN'),
   ('Hong Kong', 'HK'),
   ('Japan', 'JP'),
@@ -8,6 +10,4 @@ values
   ('India', 'IN'),
   ('Macau', 'MO'),
   ('US', 'US')
-on conflict (name) do update
-set code = excluded.code;
-
+ON CONFLICT (name) DO NOTHING;
