@@ -128,7 +128,8 @@
       "Bash(bash -n /mnt/c/_code/neolyst/open-windows-terminal.sh)",
       "Bash(command:*)",
       "Bash(fc-list:*)",
-      "Bash(powershell.exe -Command \"Get-Command alacritty.exe -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source\")"
+      "Bash(powershell.exe -Command \"Get-Command alacritty.exe -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source\")",
+      "Bash(powershell.exe -Command 'where.exe alacritty.exe')"
     ]
   }
 }
