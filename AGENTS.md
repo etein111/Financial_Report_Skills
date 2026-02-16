@@ -70,23 +70,66 @@ openspec schema which            # 查看当前使用的 schema
 
 ## 开发流程原则
 
-1. **开发前先阅读规范**：开始任何开发任务前，先阅读 `docs/README.md`（入口）、`docs/DECISIONS.md`（长期约束）、`docs/TESTING.md`（测试规范），并以 `docs/LOGIC.md` + `docs/UI.md` 作为 Web 侧强约定（冲突以 `docs/LOGIC.md` 为准）。
-2. **修改前先审核**：修改代码前，先审核目标文件是否符合现有规范；不符合则先清理。
-3. **先清理再新增**：清理代码、测试跑通后，再添加新需求；避免在不稳定的代码上叠加新功能。 
+### 标准工作流
 
-## 会话备忘
-- 若要继续"auth-and-user-management 拆分为 3 个 change"的工作，请先阅读 `memo/openspec-auth-and-user-management-split.md` 恢复上下文。
+```
+收到任务 → 阅读规范 → 按规范执行 → 验证清单 → 交付
+```
 
-## 工作机制（上下文沉淀）
+### 1. 开发前先阅读规范
 
-- 每次会话结束前：更新 `memo/TODO.md`（只写"未完成事项 + 下一步可执行动作"，避免长篇叙事）。
-- 若有较长排障/取舍推理：在 `memo/` 里补一份 memo，并在 `memo/TODO.md` 里链接它。
-- **经验积累**：解决的问题、踩过的坑应使用 `/instinct-import` 导入到 instinct 系统，而非写在 TODO.md 里。
-- 历史兼容：如果仓库存在 `MEMO.md`，按旧约定先读取再删除（不要新增 `MEMO.md`，改用 `memo/`）。
+开始任何开发任务前，必须阅读：
+- `docs/README.md`（文档入口）
+- `docs/DECISIONS.md`（长期约束）
+- `docs/TESTING.md`（测试规范）
+- `docs/LOGIC.md`（Web 侧强约定，优先级最高）
+- `docs/UI.md`（UI 组件规范）
 
-### Instinct 系统
+**规范优先级：`docs/LOGIC.md` > 其他规范**
 
-经验积累通过 instinct 系统管理，支持跨会话、跨项目复用：
+### 2. 交付边界原则（最重要）
+
+**核心原则：`web/` 目录只包含交付代码**
+
+```
+web/                     # 只包含：app/, components/, domain/, features/, lib/
+tests/                   # 所有测试代码（E2E、验收脚本）
+supabase/scripts/        # 数据库开发脚本
+docs/                    # 项目文档
+scripts/                 # 开发/运维脚本
+temp/                    # 临时输出（不提交）
+```
+
+**典型场景：**
+
+| 场景 | 应放位置 | 禁止 |
+|------|---------|------|
+| 创建测试脚本 | `tests/e2e/` 或 `tests/scripts/` | `web/scripts/` |
+| 创建数据库验证脚本 | `supabase/scripts/` | `web/scripts/` |
+| 创建新功能模块 | `web/features/<name>/` | - |
+| 创建 UI 组件 | `web/components/` 或 `web/features/<name>/components/` | - |
+| 创建临时测试文件 | `temp/` | 任何源码目录 |
+
+### 3. 修改前先审核
+
+修改代码前，先审核目标文件是否符合现有规范；不符合则先清理。
+
+### 4. 先清理再新增
+
+清理代码、测试跑通后，再添加新需求；避免在不稳定的代码上叠加新功能。
+
+### 5. 验证清单
+
+实施任何变更前，确认：
+- [ ] 已阅读相关规范文档
+- [ ] 代码放在正确的目录（web/ 只放交付代码）
+- [ ] 触库逻辑只在 `features/*/repo/*`
+- [ ] 页面层只 import `features/<name>`，不直连 repo
+- [ ] 测试代码不在 web/ 目录 
+
+## 经验积累（Instinct 系统）
+
+经验积累通过 **Instinct 系统**管理，支持跨会话、跨项目复用：
 - `/instinct-status`：查看已积累的经验
 - `/instinct-import <文件>`：导入新的经验
 - `/instinct-export`：导出经验供分享

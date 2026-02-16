@@ -125,15 +125,15 @@ supabase migration list --linked
 
 ### 6. 验收脚本（不依赖 Docker/psql）
 
-为避免本机缺 Docker/psql 导致无法验收，我补了两个脚本：
+为避免本机缺 Docker/psql 导致无法验收，项目提供了验收脚本：
 
-- DB 直连验收（默认 Admin 幂等 + RLS）：`web/scripts/verify/verify-db-admin-and-rls.mjs`
+- DB 直连验收（默认 Admin 幂等 + RLS）：`tests/scripts/verify/verify-db-admin-and-rls.mjs`
 ```powershell
-cd web
+cd tests
 node scripts/verify/verify-db-admin-and-rls.mjs
 ```
 
-- Auth 故障诊断（直连 Postgres 看 `auth.*` 基础表与默认 Admin）：`web/scripts/verify/diagnose-auth-500.mjs`
+- Auth 故障诊断（直连 Postgres 看 `auth.*` 基础表与默认 Admin）：`tests/scripts/verify/diagnose-auth-500.mjs`
 
 ## 版本管理与协作规范（必须遵守）
 

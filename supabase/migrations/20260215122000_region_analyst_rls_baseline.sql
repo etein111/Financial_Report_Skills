@@ -87,3 +87,15 @@ to authenticated
 using ((auth.jwt()->'app_metadata'->>'role') = 'admin')
 with check ((auth.jwt()->'app_metadata'->>'role') = 'admin');
 
+-- Preset regions
+INSERT INTO public.region (name, code) VALUES
+  ('China', 'CN'),
+  ('Hong Kong', 'HK'),
+  ('Japan', 'JP'),
+  ('Taiwan', 'TW'),
+  ('Korea', 'KR'),
+  ('India', 'IN'),
+  ('Macau', 'MO'),
+  ('US', 'US')
+ON CONFLICT (name) DO NOTHING;
+

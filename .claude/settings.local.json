@@ -134,7 +134,8 @@
       "Bash(/mnt/c/_code/neolyst/openspec/changes/region-and-analyst-management/specs/analyst-info-management/spec.md:*)",
       "Bash(/mnt/c/_code/neolyst/openspec/changes/region-and-analyst-management/specs/desktop-nav/spec.md:*)",
       "Bash(/mnt/c/_code/neolyst/openspec/changes/region-and-analyst-management/tasks.md:*)",
-      "Bash(/mnt/c/_code/neolyst/supabase/seed/regions.sql:*)"
+      "Bash(/mnt/c/_code/neolyst/supabase/seed/regions.sql:*)",
+      "Bash"
     ]
   }
 }

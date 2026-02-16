@@ -6,6 +6,7 @@
 
 ## TL;DR（硬约定）
 
+- **交付边界**：`web/` 目录只包含交付代码（app/、components/、features/、domain/、lib/）；测试、脚本、文档等非交付代码必须放在项目根目录的专门目录（tests/、scripts/、docs/、supabase/）。
 - 分层：`app/` 只路由与组合；业务逻辑在 `features/`；纯 UI 在 `components/`；基础设施在 `lib/`；纯业务类型/规则在 `domain/`。
 - 依赖方向：默认 `app → features → domain`；`domain` 不依赖 React/Next/Supabase；`app` 允许对 `domain` 做 **type-only import**（但业务能力不要绕过 `features`）。
 - 触库规约：**只在 `features/*/repo/*` 调用 `supabase.*`**（`from(...)`/`auth.*`/`auth.admin.*` 都算）；`app/` 与 `components/` 禁止直连 Supabase。

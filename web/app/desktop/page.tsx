@@ -65,9 +65,18 @@ const dataCards: DesktopCard[] = [
     icon: "👥",
     title: "Analyst Info",
     description: "Manage analyst profiles",
-    href: "/coming-soon?feature=analyst-info",
+    href: "/analyst-info",
     permissionLabel: "Admin only",
-    comingSoon: true,
+    comingSoon: false,
+  },
+  {
+    key: "regions",
+    icon: "🌍",
+    title: "Regions",
+    description: "Manage regions",
+    href: "/regions",
+    permissionLabel: "Admin only",
+    comingSoon: false,
   },
   {
     key: "coverage",
@@ -83,14 +92,6 @@ const dataCards: DesktopCard[] = [
     title: "Sectors",
     description: "Manage sector taxonomy",
     href: "/coming-soon?feature=sectors",
-    comingSoon: true,
-  },
-  {
-    key: "regions",
-    icon: "🌍",
-    title: "Regions",
-    description: "Manage regions",
-    href: "/coming-soon?feature=regions",
     comingSoon: true,
   },
 ];
@@ -115,7 +116,8 @@ export default async function DesktopPage() {
 
           <div className="flex items-center gap-4">
             <div className="hidden text-sm text-zinc-300 sm:block">
-              Welcome, <span className="font-medium text-zinc-100">{welcome}</span>
+              Welcome,{" "}
+              <span className="font-medium text-zinc-100">{welcome}</span>
             </div>
 
             <form action={signOutAction}>
@@ -153,8 +155,12 @@ function Section({ title, cards }: { title: string; cards: DesktopCard[] }) {
             <Card className="flex items-center gap-4 px-5 py-4">
               <div className="text-[28px] leading-none">{c.icon}</div>
               <div className="min-w-0 flex-1">
-                <div className="text-sm font-medium text-zinc-100">{c.title}</div>
-                <div className="mt-0.5 text-xs text-zinc-400">{c.description}</div>
+                <div className="text-sm font-medium text-zinc-100">
+                  {c.title}
+                </div>
+                <div className="mt-0.5 text-xs text-zinc-400">
+                  {c.description}
+                </div>
               </div>
               <div className="flex flex-shrink-0 flex-col items-end gap-1.5">
                 {c.permissionLabel ? (
