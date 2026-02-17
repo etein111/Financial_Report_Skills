@@ -45,8 +45,9 @@ const reportsCards: DesktopCard[] = [
     icon: "📄",
     title: "Templates",
     description: "Manage report templates",
-    href: "/coming-soon?feature=templates",
-    comingSoon: true,
+    href: "/templates",
+    permissionLabel: "Admin only",
+    comingSoon: false,
   },
 ];
 
@@ -83,16 +84,18 @@ const dataCards: DesktopCard[] = [
     icon: "🏢",
     title: "Coverage",
     description: "Manage coverage universe",
-    href: "/coming-soon?feature=coverage",
-    comingSoon: true,
+    href: "/coverage",
+    permissionLabel: "Admin/Analyst",
+    comingSoon: false,
   },
   {
     key: "sectors",
     icon: "🏗️",
     title: "Sectors",
     description: "Manage sector taxonomy",
-    href: "/coming-soon?feature=sectors",
-    comingSoon: true,
+    href: "/sectors",
+    permissionLabel: "Admin only",
+    comingSoon: false,
   },
 ];
 
@@ -100,11 +103,23 @@ export default async function DesktopPage() {
   const user = await getCurrentUser();
   const role = await getCurrentUserRole();
 
-  // Only show admin-only cards to admin users
-  const visibleDataCards =
+  // Filter cards based on role
+  const visibleReportsCards =
     role === "admin"
-      ? dataCards
-      : dataCards.filter((c) => c.permissionLabel !== "Admin only");
+      ? reportsCards
+      : reportsCards.filter((c) => c.permissionLabel !== "Admin only");
+
+  // Admin-only cards: users, analyst-info, regions, sectors
+  // Admin/SA/Analyst cards: coverage
+  const visibleDataCards = dataCards.filter((c) => {
+    if (c.permissionLabel === "Admin only") {
+      return role === "admin";
+    }
+    if (c.permissionLabel === "Admin/Analyst") {
+      return role === "admin" || role === "sa" || role === "analyst";
+    }
+    return true;
+  });
 
   const fullName =
     typeof user?.user_metadata?.full_name === "string"
@@ -135,7 +150,7 @@ export default async function DesktopPage() {
 
       <main className="mx-auto max-w-5xl px-6 pt-12 pb-10">
         <div className="grid grid-cols-1 gap-12 lg:grid-cols-2 lg:gap-16">
-          <Section title="Reports" cards={reportsCards} />
+          <Section title="Reports" cards={visibleReportsCards} />
           <Section title="Data Management" cards={visibleDataCards} />
         </div>
       </main>

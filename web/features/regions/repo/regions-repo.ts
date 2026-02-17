@@ -4,6 +4,8 @@ import { err, ok, type Result } from "@/lib/result";
 import type { PaginatedList } from "@/lib/pagination";
 import { createServerClient } from "@/lib/supabase/server";
 
+export type { PaginatedList };
+
 export type Region = {
   id: string;
   name: string;

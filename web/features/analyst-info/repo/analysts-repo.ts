@@ -4,6 +4,8 @@ import { err, ok, type Result } from "@/lib/result";
 import type { PaginatedList } from "@/lib/pagination";
 import { createServerClient } from "@/lib/supabase/server";
 
+export type { PaginatedList };
+
 export type Analyst = {
   id: string;
   full_name: string;
@@ -170,4 +172,22 @@ export async function getRegionsForSelect(): Promise<
   if (!data) return err("Failed to fetch regions");
 
   return ok(data);
+}
+
+/**
+ * Get all active analysts for coverage form selector
+ */
+export async function listAllActiveAnalysts(): Promise<Result<Analyst[]>> {
+  const supabase = await createServerClient();
+
+  const { data, error } = await supabase
+    .from("analyst")
+    .select("*, region(id, name, code)")
+    .eq("is_active", true)
+    .order("full_name", { ascending: true });
+
+  if (error) return err(error.message);
+  if (!data) return err("Failed to fetch analysts");
+
+  return ok(data as Analyst[]);
 }

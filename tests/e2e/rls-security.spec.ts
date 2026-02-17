@@ -92,6 +92,176 @@ test.describe("RLS Security Policies", () => {
     });
   });
 
+  test.describe("Coverage Table", () => {
+    test("authenticated users can read coverages", async ({ page }) => {
+      // Login as SA (non-admin)
+      await page.goto("/login");
+      await page.fill('input[type="email"]', "sa@neolyst.com");
+      await page.fill('input[type="password"]', "Analyst123");
+      await page.click('button[type="submit"]');
+      await expect(page).toHaveURL(/\/desktop/, { timeout: 15000 });
+
+      // SA can access /coverage page
+      await page.goto("/coverage");
+      await expect(page).toHaveURL(/\/coverage/, { timeout: 5000 });
+      await expect(page.locator("header")).toContainText("Coverage");
+    });
+
+    test("admin + analyst can create coverage", async ({ page }) => {
+      // Login as SA (analyst)
+      await page.goto("/login");
+      await page.fill('input[type="email"]', "sa@neolyst.com");
+      await page.fill('input[type="password"]', "Analyst123");
+      await page.click('button[type="submit"]');
+      await expect(page).toHaveURL(/\/desktop/, { timeout: 15000 });
+
+      // Navigate to coverage
+      await page.goto("/coverage");
+      await expect(page.locator("header")).toContainText("Coverage");
+
+      // Click create button - should be visible for analyst
+      await page.click('button:has-text("Create Coverage")');
+      await expect(page.locator("role=dialog")).toBeVisible();
+
+      // Fill required fields
+      await page.waitForFunction(
+        () => {
+          const select = document.querySelector("#sector-id");
+          return select && select.querySelectorAll("option").length > 1;
+        },
+        { timeout: 10000 },
+      );
+
+      const timestamp = Date.now();
+      await page.fill("#ticker", `RLS${timestamp % 10000} HK`);
+      await page.fill("#isin", `KYG${timestamp.toString().slice(-9)}`);
+      await page.fill("#country", "Hong Kong");
+      await page.fill("#english-name", `RLS Coverage Test ${timestamp}`);
+      await page.selectOption("#sector-id", { index: 1 });
+
+      // Select first analyst
+      const analystSelect = page.locator("select").nth(4);
+      await analystSelect.selectOption({ index: 1 });
+
+      await page.keyboard.press("Enter");
+
+      // Should succeed (no permission error)
+      await expect(page.locator("role=dialog")).not.toBeVisible({
+        timeout: 10000,
+      });
+      await expect(page.locator("table")).toContainText(
+        `RLS Coverage Test ${timestamp}`,
+        { timeout: 5000 },
+      );
+    });
+
+    test("only admin can update coverage", async ({ page }) => {
+      // Login as SA (analyst)
+      await page.goto("/login");
+      await page.fill('input[type="email"]', "sa@neolyst.com");
+      await page.fill('input[type="password"]', "Analyst123");
+      await page.click('button[type="submit"]');
+      await expect(page).toHaveURL(/\/desktop/, { timeout: 15000 });
+
+      await page.goto("/coverage");
+
+      // Edit/Delete buttons should NOT be visible for analyst
+      const editButtons = page.locator('button:has-text("Edit")');
+      const deleteButtons = page.locator('button:has-text("Delete")');
+
+      await expect(editButtons.first()).not.toBeVisible({ timeout: 5000 });
+      await expect(deleteButtons.first()).not.toBeVisible({ timeout: 5000 });
+    });
+
+    test("only admin can delete coverage", async ({ page }) => {
+      // Login as admin
+      await page.goto("/login");
+      await page.fill('input[type="email"]', "jiang_jiahong@qq.com");
+      await page.fill('input[type="password"]', "Admin123");
+      await page.click('button[type="submit"]');
+      await expect(page).toHaveURL(/\/desktop/, { timeout: 15000 });
+
+      await page.goto("/coverage");
+
+      // Admin should see edit and delete buttons
+      const editButtons = page.locator('button:has-text("Edit")');
+      const deleteButtons = page.locator('button:has-text("Delete")');
+
+      // At least one row should have edit/delete buttons visible
+      const editCount = await editButtons.count();
+      expect(editCount).toBeGreaterThan(0);
+    });
+  });
+
+  test.describe("Sector Table", () => {
+    test("only admin can access sectors page", async ({ page }) => {
+      // Login as SA (non-admin)
+      await page.goto("/login");
+      await page.fill('input[type="email"]', "sa@neolyst.com");
+      await page.fill('input[type="password"]', "Analyst123");
+      await page.click('button[type="submit"]');
+      await expect(page).toHaveURL(/\/desktop/, { timeout: 15000 });
+
+      // Try to access sectors
+      await page.goto("/sectors");
+
+      // Should redirect to 403
+      await expect(page).toHaveURL(/\/403/, { timeout: 5000 });
+    });
+
+    test("admin can create sector", async ({ page }) => {
+      await page.goto("/login");
+      await page.fill('input[type="email"]', "jiang_jiahong@qq.com");
+      await page.fill('input[type="password"]', "Admin123");
+      await page.click('button[type="submit"]');
+      await expect(page).toHaveURL(/\/desktop/, { timeout: 15000 });
+
+      await page.goto("/sectors");
+
+      await page.click('button:has-text("Create Sector")');
+      await expect(page.locator("role=dialog")).toBeVisible();
+
+      const timestamp = Date.now();
+      await page.fill("#name_en", `RLS Sector ${timestamp}`);
+      await page.fill("#name_cn", "测试行业");
+      await page.selectOption("#level", "1");
+      await page.keyboard.press("Enter");
+
+      // Should succeed
+      await expect(page.locator("role=dialog")).not.toBeVisible({
+        timeout: 10000,
+      });
+    });
+  });
+
+  test.describe("Template Table", () => {
+    test("only admin can access templates page", async ({ page }) => {
+      // Login as SA (non-admin)
+      await page.goto("/login");
+      await page.fill('input[type="email"]', "sa@neolyst.com");
+      await page.fill('input[type="password"]', "Analyst123");
+      await page.click('button[type="submit"]');
+      await expect(page).toHaveURL(/\/desktop/, { timeout: 15000 });
+
+      // Try to access templates
+      await page.goto("/templates");
+
+      // Should redirect to 403
+      await expect(page).toHaveURL(/\/403/, { timeout: 5000 });
+    });
+
+    test("admin can access templates page", async ({ page }) => {
+      await page.goto("/login");
+      await page.fill('input[type="email"]', "jiang_jiahong@qq.com");
+      await page.fill('input[type="password"]', "Admin123");
+      await page.click('button[type="submit"]');
+      await expect(page).toHaveURL(/\/desktop/, { timeout: 15000 });
+
+      await page.goto("/templates");
+      await expect(page.locator("header")).toContainText("Templates");
+    });
+  });
+
   test.describe("Delete Cascade", () => {
     test("deleting region sets analyst region_id to NULL", async ({ page }) => {
       // Login as admin

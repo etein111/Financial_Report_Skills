@@ -31,7 +31,7 @@ export async function createServerClient() {
         setAll(cookiesToSet) {
           try {
             cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options)
+              cookieStore.set(name, value, options),
             );
           } catch {
             // Server Component 中调用时可能失败，这是预期行为
@@ -39,7 +39,7 @@ export async function createServerClient() {
           }
         },
       },
-    }
+    },
   );
 }
 
@@ -50,7 +50,9 @@ export async function createServerClient() {
  */
 export async function getCurrentUser() {
   const supabase = await createServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   return user;
 }
 
@@ -59,7 +61,9 @@ export async function getCurrentUser() {
  *
  * @returns 角色字符串，未登录返回 null
  */
-export async function getCurrentUserRole(): Promise<"admin" | "sa" | "analyst" | null> {
+export async function getCurrentUserRole(): Promise<
+  "admin" | "sa" | "analyst" | null
+> {
   const user = await getCurrentUser();
   return (user?.app_metadata?.role as "admin" | "sa" | "analyst") ?? null;
 }
@@ -82,6 +86,18 @@ export async function requireAdmin() {
   const user = await requireAuth();
   const role = user.app_metadata?.role;
   if (role !== "admin") {
+    throw new Error("No permission");
+  }
+  return user;
+}
+
+/**
+ * 要求用户为管理员或分析师
+ */
+export async function requireAdminOrAnalyst() {
+  const user = await requireAuth();
+  const role = user.app_metadata?.role;
+  if (role !== "admin" && role !== "sa" && role !== "analyst") {
     throw new Error("No permission");
   }
   return user;

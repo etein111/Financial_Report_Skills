@@ -14,7 +14,8 @@ function toRole(raw: unknown): UserRole {
 }
 
 function toStatus(u: User): UserStatus {
-  const bannedUntil = (u as unknown as { banned_until?: string | null }).banned_until;
+  const bannedUntil = (u as unknown as { banned_until?: string | null })
+    .banned_until;
   if (!bannedUntil) return "active";
   const t = new Date(bannedUntil).getTime();
   if (Number.isNaN(t)) return "active";
@@ -23,7 +24,9 @@ function toStatus(u: User): UserStatus {
 
 function toRow(u: User): UserRow {
   const fullName =
-    typeof u.user_metadata?.full_name === "string" ? u.user_metadata.full_name : null;
+    typeof u.user_metadata?.full_name === "string"
+      ? u.user_metadata.full_name
+      : null;
 
   return {
     id: u.id,
@@ -62,7 +65,10 @@ async function listAllUsersCapped() {
   return { users: all, total: total ?? all.length };
 }
 
-export async function listUsers(params: { page: number; query: string | null }) {
+export async function listUsers(params: {
+  page: number;
+  query: string | null;
+}) {
   const { users } = await listAllUsersCapped();
 
   const q = (params.query ?? "").trim().toLowerCase();
@@ -79,7 +85,10 @@ export async function listUsers(params: { page: number; query: string | null }) 
 
   const sorted = filtered
     .slice()
-    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    .sort(
+      (a, b) =>
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+    );
 
   const total = sorted.length;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -99,19 +108,53 @@ export async function inviteUser(params: {
   const supabase = createAdminClient();
   const redirectTo = `${process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"}/auth/callback`;
 
-  const { data, error } = await supabase.auth.admin.inviteUserByEmail(params.email, {
-    data: { full_name: params.fullName },
-    redirectTo,
-  });
+  const { data, error } = await supabase.auth.admin.inviteUserByEmail(
+    params.email,
+    {
+      data: { full_name: params.fullName },
+      redirectTo,
+    },
+  );
   if (error) throw error;
 
   const user = data.user;
   if (!user) throw new Error("Invite failed.");
 
-  const { error: updateError } = await supabase.auth.admin.updateUserById(user.id, {
-    app_metadata: { ...(user.app_metadata ?? {}), role: params.role },
-  });
+  const { error: updateError } = await supabase.auth.admin.updateUserById(
+    user.id,
+    {
+      app_metadata: { ...(user.app_metadata ?? {}), role: params.role },
+    },
+  );
   if (updateError) throw updateError;
+
+  return { id: user.id };
+}
+
+/**
+ * Create user directly without email confirmation
+ * Used when requireEmailConfirmation is false
+ */
+export async function createUser(params: {
+  email: string;
+  fullName: string;
+  role: UserRole;
+  password: string;
+}) {
+  const supabase = createAdminClient();
+
+  const { data, error } = await supabase.auth.admin.createUser({
+    email: params.email,
+    password: params.password,
+    email_confirm: true, // Auto-confirm email
+    user_metadata: { full_name: params.fullName },
+    app_metadata: { role: params.role },
+  });
+
+  if (error) throw error;
+
+  const user = data.user;
+  if (!user) throw new Error("Create user failed.");
 
   return { id: user.id };
 }
@@ -123,13 +166,15 @@ export async function updateUser(params: {
 }) {
   const supabase = createAdminClient();
 
-  const { data: existing, error: getErr } = await supabase.auth.admin.getUserById(
-    params.id,
-  );
+  const { data: existing, error: getErr } =
+    await supabase.auth.admin.getUserById(params.id);
   if (getErr) throw getErr;
 
   const prevMeta =
-    (existing.user?.user_metadata as Record<string, unknown> | null | undefined) ?? {};
+    (existing.user?.user_metadata as
+      | Record<string, unknown>
+      | null
+      | undefined) ?? {};
 
   const { error } = await supabase.auth.admin.updateUserById(params.id, {
     email: params.email,
@@ -141,13 +186,15 @@ export async function updateUser(params: {
 export async function setUserRole(params: { id: string; role: UserRole }) {
   const supabase = createAdminClient();
 
-  const { data: existing, error: getErr } = await supabase.auth.admin.getUserById(
-    params.id,
-  );
+  const { data: existing, error: getErr } =
+    await supabase.auth.admin.getUserById(params.id);
   if (getErr) throw getErr;
 
   const prevMeta =
-    (existing.user?.app_metadata as Record<string, unknown> | null | undefined) ?? {};
+    (existing.user?.app_metadata as
+      | Record<string, unknown>
+      | null
+      | undefined) ?? {};
 
   const { error } = await supabase.auth.admin.updateUserById(params.id, {
     app_metadata: { ...prevMeta, role: params.role },
@@ -171,7 +218,10 @@ export async function unbanUser(params: { id: string }) {
   if (error) throw error;
 }
 
-export async function resetUserPassword(params: { id: string; newPassword: string }) {
+export async function resetUserPassword(params: {
+  id: string;
+  newPassword: string;
+}) {
   const supabase = createAdminClient();
   const { error } = await supabase.auth.admin.updateUserById(params.id, {
     password: params.newPassword,
@@ -184,4 +234,3 @@ export async function deleteUser(params: { id: string }) {
   const { error } = await supabase.auth.admin.deleteUser(params.id);
   if (error) throw error;
 }
-
