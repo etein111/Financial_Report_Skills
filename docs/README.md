@@ -51,7 +51,7 @@ temp/                    # 临时输出（不提交）
 
 | 子系统 | 文档 |
 |--------|------|
-| Web (Next.js) | `web/README.md`、`docs/LOGIC.md`、`docs/UI.md` |
+| Web (Next.js) | `web/README.md`、`docs/LOGIC.md`、`docs/UI.md`、`docs/FRONTEND_VISUAL_CONSISTENCY.md` |
 | Tests | `tests/README.md` |
 | Supabase | `supabase/README.md` |
 | 变更管理 | `openspec/` |
