@@ -1,11 +1,10 @@
 #!/usr/bin/env node
 /**
  * Seed preset regions to cloud Supabase
- * Usage: node scripts/seed-regions.mjs
+ * Usage: node --env-file=web/.env supabase/scripts/seed-regions.mjs
  */
 
 import { createClient } from '@supabase/supabase-js';
-// Use: node --env-file=.env scripts/seed-regions.mjs
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;

@@ -11,12 +11,13 @@ const FEATURE_META: Record<string, { label: string; icon: string }> = {
   regions: { label: "Regions", icon: "🌍" },
 };
 
-export default function ComingSoonPage({
+export default async function ComingSoonPage({
   searchParams,
 }: {
-  searchParams?: Record<string, string | string[] | undefined>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const raw = searchParams?.feature;
+  const params = await searchParams;
+  const raw = params?.feature;
   const feature = Array.isArray(raw) ? raw[0] : raw;
   const meta = feature ? FEATURE_META[feature] : undefined;
 
@@ -24,7 +25,9 @@ export default function ComingSoonPage({
     <div className="flex min-h-screen items-center justify-center px-6">
       <Card className="w-full max-w-md text-center">
         <div className="text-[64px] leading-none">{meta?.icon ?? "✨"}</div>
-        <h1 className="mt-4 text-xl font-semibold text-zinc-100">Coming Soon</h1>
+        <h1 className="mt-4 text-xl font-semibold text-zinc-100">
+          Coming Soon
+        </h1>
         <p className="mt-2 text-sm text-zinc-400">
           This feature is coming soon
         </p>
@@ -35,4 +38,3 @@ export default function ComingSoonPage({
     </div>
   );
 }
-

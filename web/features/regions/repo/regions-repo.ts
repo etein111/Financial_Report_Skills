@@ -1,6 +1,7 @@
 import "server-only";
 
 import { err, ok, type Result } from "@/lib/result";
+import type { PaginatedList } from "@/lib/pagination";
 import { createServerClient } from "@/lib/supabase/server";
 
 export type Region = {
@@ -9,13 +10,6 @@ export type Region = {
   code: string;
   created_at: string;
   updated_at: string;
-};
-
-export type PaginatedList<T> = {
-  items: T[];
-  total: number;
-  page: number;
-  totalPages: number;
 };
 
 const PAGE_SIZE = 15;
@@ -28,33 +22,29 @@ export async function listRegions(params: {
   query: string | null;
 }): Promise<Result<PaginatedList<Region>>> {
   const supabase = await createServerClient();
-  
-  let query = supabase
-    .from("region")
-    .select("*", { count: "exact" });
-  
+
+  let query = supabase.from("region").select("*", { count: "exact" });
+
   // Apply search filter
   if (params.query) {
     const searchTerm = `%${params.query}%`;
     query = query.or(`name.ilike.${searchTerm},code.ilike.${searchTerm}`);
   }
-  
+
   // Apply pagination
   const from = (params.page - 1) * PAGE_SIZE;
   const to = from + PAGE_SIZE - 1;
-  
-  query = query
-    .order("created_at", { ascending: false })
-    .range(from, to);
-  
+
+  query = query.order("created_at", { ascending: false }).range(from, to);
+
   const { data, error, count } = await query;
-  
+
   if (error) return err(error.message);
   if (!data) return err("Failed to fetch regions");
-  
+
   const total = count ?? 0;
   const totalPages = Math.ceil(total / PAGE_SIZE);
-  
+
   return ok({
     items: data,
     total,
@@ -71,13 +61,13 @@ export async function createRegion(params: {
   code: string;
 }): Promise<Result<Region>> {
   const supabase = await createServerClient();
-  
+
   const { data, error } = await supabase
     .from("region")
     .insert(params)
     .select()
     .single();
-  
+
   if (error) {
     // Handle unique constraint violations
     if (error.code === "23505") {
@@ -90,9 +80,9 @@ export async function createRegion(params: {
     }
     return err(error.message);
   }
-  
+
   if (!data) return err("Failed to create region");
-  
+
   return ok(data);
 }
 
@@ -104,17 +94,17 @@ export async function updateRegion(
   params: {
     name?: string;
     code?: string;
-  }
+  },
 ): Promise<Result<Region>> {
   const supabase = await createServerClient();
-  
+
   const { data, error } = await supabase
     .from("region")
     .update(params)
     .eq("id", id)
     .select()
     .single();
-  
+
   if (error) {
     // Handle unique constraint violations
     if (error.code === "23505") {
@@ -127,9 +117,9 @@ export async function updateRegion(
     }
     return err(error.message);
   }
-  
+
   if (!data) return err("Failed to update region");
-  
+
   return ok(data);
 }
 
@@ -138,13 +128,10 @@ export async function updateRegion(
  */
 export async function deleteRegion(id: string): Promise<Result<null>> {
   const supabase = await createServerClient();
-  
-  const { error } = await supabase
-    .from("region")
-    .delete()
-    .eq("id", id);
-  
+
+  const { error } = await supabase.from("region").delete().eq("id", id);
+
   if (error) return err(error.message);
-  
+
   return ok(null);
 }

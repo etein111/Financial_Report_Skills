@@ -1,9 +1,11 @@
 import { z } from "zod";
 
+import { emailSchema } from "./auth";
+
+export { emailSchema };
+
 export const userRoleSchema = z.enum(["admin", "sa", "analyst"]);
 export type UserRole = z.infer<typeof userRoleSchema>;
-
-export const emailSchema = z.string().email("Invalid email address");
 
 export const inviteUserSchema = z.object({
   email: emailSchema,
