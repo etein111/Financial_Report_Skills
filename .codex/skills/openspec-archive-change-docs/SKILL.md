@@ -61,6 +61,17 @@ Proceed? (yes/no)
 
 注意：
 - 除非用户明确要求，否则不要使用 `--no-validate`。
+- 这里调用的是 OpenSpec 官方归档命令；如果团队口头说“`opsx:archive`”，也应落实为 `openspec archive`。
+
+### 3.1 归档后状态校验（必须执行）
+
+归档命令执行后，必须立即校验以下状态：
+1. `openspec list --json` 中不再出现 `<change_name>`。
+2. `openspec/changes/<change_name>/` 不应存在。
+3. `openspec/changes/archive/YYYY-MM-DD-<change_name>/` 应存在。
+4. `openspec/specs/*` 出现更新属于正常行为（归档会把 delta 合并到主 specs）。
+
+若第 1 或第 2 条不满足，视为归档未完成，不得进入文档整合步骤。
 
 ## 4. 定位归档目录并读取 proposal/design
 
@@ -137,4 +148,3 @@ Updated:
 - docs/REQUIREMENTS.md
 - docs/ARCHITECTURE.md
 ```
-
