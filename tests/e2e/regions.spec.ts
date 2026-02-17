@@ -49,7 +49,7 @@ test.describe("Regions Management", () => {
     // Should see new region in table
     await expect(page.locator("table")).toContainText(
       `Test Region ${timestamp}`,
-      { timeout: 5000 }
+      { timeout: 5000 },
     );
   });
 
@@ -60,15 +60,19 @@ test.describe("Regions Management", () => {
     const row = page.locator("table tbody tr").first();
     await row.locator('button:has-text("Edit")').click();
 
+    // Wait for modal
+    const dialog = page.locator("role=dialog");
+    await expect(dialog).toBeVisible();
+
     // Update name
     const timestamp = Date.now();
     await page.fill("#name", `Updated Region ${timestamp}`);
-    await page.click('button:has-text("Save")', { force: true });
+    await dialog.getByRole("button", { name: "Save" }).click();
 
     // Should see updated region
     await expect(page.locator("table")).toContainText(
       `Updated Region ${timestamp}`,
-      { timeout: 5000 }
+      { timeout: 5000 },
     );
   });
 
@@ -87,9 +91,9 @@ test.describe("Regions Management", () => {
     await page.keyboard.press("Enter");
 
     // Should show error toast
-    await expect(page.locator("[role='status']")).toContainText(
+    await expect(page.locator("[aria-live='polite']")).toContainText(
       "already exists",
-      { timeout: 10000 }
+      { timeout: 10000 },
     );
   });
 
@@ -114,13 +118,25 @@ test.describe("Regions Management", () => {
     await row.locator('button:has-text("Delete")').click();
 
     // Confirm deletion in modal
-    await expect(page.locator("role=dialog")).toBeVisible();
-    await page.click('button:has-text("Delete")', { force: true });
+    const dialog = page.locator("role=dialog");
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole("button", { name: "Delete" }).click();
+
+    // Should show success toast
+    await expect(page.locator("[aria-live='polite']")).toContainText(
+      "Region deleted",
+      { timeout: 5000 },
+    );
+
+    // Wait for modal to close
+    await expect(page.locator("role=dialog")).not.toBeVisible({
+      timeout: 5000,
+    });
 
     // Should refresh and region should be gone
     await expect(page.locator("table")).not.toContainText(
       `Delete Test ${timestamp}`,
-      { timeout: 5000 }
+      { timeout: 10000 },
     );
   });
 

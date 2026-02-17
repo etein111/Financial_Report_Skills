@@ -56,7 +56,7 @@ export function AnalystsPageClient({
   // Create/Edit modal
   const [formOpen, setFormOpen] = React.useState(false);
   const [editingAnalyst, setEditingAnalyst] = React.useState<Analyst | null>(
-    null
+    null,
   );
   const [regions, setRegions] = React.useState<RegionOption[]>([]);
   const [formFullName, setFormFullName] = React.useState("");
@@ -158,10 +158,9 @@ export function AnalystsPageClient({
     }
 
     setFormOpen(false);
-    toast.success(
-      editingAnalyst ? "Analyst updated." : "Analyst created.",
-      { title: "Success" }
-    );
+    toast.success(editingAnalyst ? "Analyst updated." : "Analyst created.", {
+      title: "Success",
+    });
     router.refresh();
   }
 
@@ -282,7 +281,7 @@ export function AnalystsPageClient({
           totalPages={totalPages}
           onChange={(p) =>
             router.push(
-              `/analyst-info${toQueryString({ q: queryDraft, page: p })}`
+              `/analyst-info${toQueryString({ q: queryDraft, page: p })}`,
             )
           }
         />
@@ -309,6 +308,7 @@ export function AnalystsPageClient({
       >
         <form id="analyst-form" className="space-y-3" onSubmit={submitForm}>
           <Input
+            id="full_name"
             label="Full Name"
             placeholder="e.g., Zhang San"
             value={formFullName}
@@ -316,12 +316,14 @@ export function AnalystsPageClient({
             error={formErrors.full_name}
           />
           <Input
+            id="chinese_name"
             label="Chinese Name"
             placeholder="e.g., 张三"
             value={formChineseName}
             onChange={(e) => setFormChineseName(e.target.value)}
           />
           <Input
+            id="email"
             label="Email"
             type="email"
             placeholder="e.g., zhangsan@example.com"

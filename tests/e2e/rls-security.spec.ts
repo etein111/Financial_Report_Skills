@@ -145,7 +145,17 @@ test.describe("RLS Security Policies", () => {
         .locator("table tbody tr")
         .filter({ hasText: `Cascade Region ${timestamp}` });
       await row.locator('button:has-text("Delete")').click();
-      await page.click('button:has-text("Confirm Delete")', { force: true });
+
+      // Confirm deletion
+      const dialog = page.locator("role=dialog");
+      await expect(dialog).toBeVisible();
+      await dialog.getByRole("button", { name: "Delete" }).click();
+
+      // Should show success toast
+      await expect(page.locator("[aria-live='polite']")).toContainText(
+        "Region deleted",
+        { timeout: 5000 },
+      );
 
       // Go back to analyst info and verify region is NULL
       await page.goto("/analyst-info");
@@ -175,8 +185,8 @@ test.describe("RLS Security Policies", () => {
       await page.fill("#code", "DUP");
       await page.keyboard.press("Enter");
 
-      // Should show unique constraint error
-      await expect(page.locator(".text-red-400")).toContainText(
+      // Should show unique constraint error in toast
+      await expect(page.locator("[aria-live='polite']")).toContainText(
         "Region name already exists",
         {
           timeout: 10000,
@@ -200,8 +210,8 @@ test.describe("RLS Security Policies", () => {
       await page.fill("#code", "JP");
       await page.keyboard.press("Enter");
 
-      // Should show unique constraint error
-      await expect(page.locator(".text-red-400")).toContainText(
+      // Should show unique constraint error in toast
+      await expect(page.locator("[aria-live='polite']")).toContainText(
         "Region code already exists",
         {
           timeout: 10000,
@@ -255,8 +265,8 @@ test.describe("RLS Security Policies", () => {
       await page.getByRole("button", { name: "Create", exact: true }).focus();
       await page.keyboard.press("Enter");
 
-      // Should show unique constraint error
-      await expect(page.locator(".text-red-400")).toContainText(
+      // Should show unique constraint error in toast
+      await expect(page.locator("[aria-live='polite']")).toContainText(
         "Email already exists",
         {
           timeout: 10000,

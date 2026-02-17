@@ -120,11 +120,14 @@ psql $(npx supabase status --output env | grep DB_URL) -f supabase/seed/regions.
 ## 14. 测试执行
 
 - [x] 14.1 安装 WSL 环境的 Chromium 依赖
-- [ ] 14.2 运行 Playwright E2E 测试：`pnpm exec playwright test`
-- [ ] 14.3 验证所有测试通过
+- [x] 14.2 运行 Playwright E2E 测试：`pnpm exec playwright test`
+- [x] 14.3 验证所有测试通过
+
+**最终测试结果：33/33 通过 ✅**
 
 **测试文件位置：**
 - `tests/e2e/regions.spec.ts` - 7 个测试（Regions CRUD、搜索、分页、权限）
 - `tests/e2e/analyst-info.spec.ts` - 8 个测试（Analyst CRUD、搜索、active 切换、权限）
-- `tests/e2e/desktop-nav.spec.ts` - 3 个测试（desktop 导航、卡片可见性）
+- `tests/e2e/desktop-nav.spec.ts` - 5 个测试（desktop 导航、卡片可见性）
 - `tests/e2e/rls-security.spec.ts` - 7 个测试（RLS 策略、级联删除、唯一约束）
+- `tests/e2e/auth.spec.ts` - 5 个测试（认证流程）

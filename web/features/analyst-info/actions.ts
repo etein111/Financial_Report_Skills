@@ -89,13 +89,12 @@ export async function updateAnalystAction(
 export async function deleteAnalystAction(id: string): Promise<Result<null>> {
   await requireAdminOrThrow();
 
-  try {
-    await deleteAnalystRepo(id);
-    revalidatePath("/analyst-info");
-    return ok(null);
-  } catch {
-    return err("Failed to delete analyst.");
+  const result = await deleteAnalystRepo(id);
+  if (!result.ok) {
+    return result;
   }
+  revalidatePath("/analyst-info");
+  return ok(null);
 }
 
 /**

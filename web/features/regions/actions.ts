@@ -83,16 +83,12 @@ export async function updateRegionAction(
  * Delete a region
  */
 export async function deleteRegionAction(id: string): Promise<Result<null>> {
-  try {
-    await requireAdminOrThrow();
+  await requireAdminOrThrow();
 
-    await deleteRegionRepo(id);
-    revalidatePath("/regions");
-    return ok(null);
-  } catch (e) {
-    if (e instanceof Error) {
-      return err(e.message);
-    }
-    return err("Failed to delete region.");
+  const result = await deleteRegionRepo(id);
+  if (!result.ok) {
+    return result;
   }
+  revalidatePath("/regions");
+  return ok(null);
 }

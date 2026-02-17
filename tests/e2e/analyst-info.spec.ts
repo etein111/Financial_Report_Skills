@@ -30,7 +30,7 @@ test.describe("Analyst Info Management", () => {
         const select = document.querySelector("#region_id");
         return select && select.querySelectorAll("option").length > 1;
       },
-      { timeout: 10000 }
+      { timeout: 10000 },
     );
 
     // Fill form
@@ -49,9 +49,12 @@ test.describe("Analyst Info Management", () => {
     });
 
     // Should see new analyst in table
-    await expect(page.locator("table")).toContainText(`Test Analyst ${timestamp}`, {
-      timeout: 5000,
-    });
+    await expect(page.locator("table")).toContainText(
+      `Test Analyst ${timestamp}`,
+      {
+        timeout: 5000,
+      },
+    );
   });
 
   test("can edit an existing analyst", async ({ page }) => {
@@ -61,13 +64,23 @@ test.describe("Analyst Info Management", () => {
     const row = page.locator("table tbody tr").first();
     await row.locator('button:has-text("Edit")').click();
 
-    // Wait for modal
-    await expect(page.locator("role=dialog")).toBeVisible();
+    // Wait for modal and regions to load
+    const dialog = page.locator("role=dialog");
+    await expect(dialog).toBeVisible();
+    await page.waitForFunction(
+      () => {
+        const select = document.querySelector("#region_id");
+        return select && select.querySelectorAll("option").length > 1;
+      },
+      { timeout: 10000 },
+    );
 
     // Update full name
     const timestamp = Date.now();
     await page.fill("#full_name", `Updated Name ${timestamp}`);
-    await page.click('button:has-text("Save")', { force: true });
+    // Ensure a region is selected (in case the analyst has no region)
+    await page.selectOption("#region_id", { label: "India (IN)" });
+    await dialog.getByRole("button", { name: "Save" }).click();
 
     // Wait for modal to close
     await expect(page.locator("role=dialog")).not.toBeVisible({
@@ -75,9 +88,12 @@ test.describe("Analyst Info Management", () => {
     });
 
     // Should see updated analyst
-    await expect(page.locator("table")).toContainText(`Updated Name ${timestamp}`, {
-      timeout: 5000,
-    });
+    await expect(page.locator("table")).toContainText(
+      `Updated Name ${timestamp}`,
+      {
+        timeout: 5000,
+      },
+    );
   });
 
   test("cannot create analyst with duplicate email", async ({ page }) => {
@@ -91,7 +107,7 @@ test.describe("Analyst Info Management", () => {
         const select = document.querySelector("#region_id");
         return select && select.querySelectorAll("option").length > 1;
       },
-      { timeout: 10000 }
+      { timeout: 10000 },
     );
 
     const uniqueEmail = `unique.${Date.now()}@example.com`;
@@ -113,7 +129,7 @@ test.describe("Analyst Info Management", () => {
         const select = document.querySelector("#region_id");
         return select && select.querySelectorAll("option").length > 1;
       },
-      { timeout: 10000 }
+      { timeout: 10000 },
     );
 
     await page.fill("#full_name", "Duplicate Email Test");
@@ -122,9 +138,12 @@ test.describe("Analyst Info Management", () => {
     await page.keyboard.press("Enter");
 
     // Should show error toast
-    await expect(page.locator("[role='status']")).toContainText("already exists", {
-      timeout: 10000,
-    });
+    await expect(page.locator("[aria-live='polite']")).toContainText(
+      "already exists",
+      {
+        timeout: 10000,
+      },
+    );
   });
 
   test("can delete an analyst with confirmation", async ({ page }) => {
@@ -138,7 +157,7 @@ test.describe("Analyst Info Management", () => {
         const select = document.querySelector("#region_id");
         return select && select.querySelectorAll("option").length > 1;
       },
-      { timeout: 10000 }
+      { timeout: 10000 },
     );
 
     const timestamp = Date.now();
@@ -157,13 +176,28 @@ test.describe("Analyst Info Management", () => {
     await row.locator('button:has-text("Delete")').click();
 
     // Confirm deletion in modal
-    await expect(page.locator("role=dialog")).toBeVisible();
-    await page.click('button:has-text("Delete")', { force: true });
+    const dialog = page.locator("role=dialog");
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole("button", { name: "Delete" }).click();
 
-    // Should refresh and analyst should be gone
-    await expect(page.locator("table")).not.toContainText(`Delete Test ${timestamp}`, {
+    // Should show success toast
+    await expect(page.locator("[aria-live='polite']")).toContainText(
+      "Analyst deleted",
+      { timeout: 5000 },
+    );
+
+    // Wait for modal to close
+    await expect(page.locator("role=dialog")).not.toBeVisible({
       timeout: 5000,
     });
+
+    // Should refresh and analyst should be gone
+    await expect(page.locator("table")).not.toContainText(
+      `Delete Test ${timestamp}`,
+      {
+        timeout: 10000,
+      },
+    );
   });
 
   test("search filters analysts by name or email", async ({ page }) => {
@@ -189,12 +223,21 @@ test.describe("Analyst Info Management", () => {
     const row = page.locator("table tbody tr").first();
     await row.locator('button:has-text("Edit")').click();
 
-    // Wait for modal
-    await expect(page.locator("role=dialog")).toBeVisible();
+    // Wait for modal and regions to load
+    const dialog = page.locator("role=dialog");
+    await expect(dialog).toBeVisible();
+    await page.waitForFunction(
+      () => {
+        const select = document.querySelector("#region_id");
+        return select && select.querySelectorAll("option").length > 1;
+      },
+      { timeout: 10000 },
+    );
 
-    // Toggle active status
+    // Toggle active status and ensure region is set
     await page.locator("#is_active").uncheck();
-    await page.click('button:has-text("Save")', { force: true });
+    await page.selectOption("#region_id", { label: "India (IN)" });
+    await dialog.getByRole("button", { name: "Save" }).click();
     await page.waitForTimeout(1000);
 
     // Should see "INACTIVE" badge

@@ -239,6 +239,7 @@ export function RegionsPageClient({
       >
         <form id="region-form" className="space-y-3" onSubmit={submitForm}>
           <Input
+            id="name"
             label="Name"
             placeholder="e.g., China"
             value={formName}
@@ -246,6 +247,7 @@ export function RegionsPageClient({
             error={formErrors.name}
           />
           <Input
+            id="code"
             label="Code"
             placeholder="e.g., CN"
             value={formCode}
