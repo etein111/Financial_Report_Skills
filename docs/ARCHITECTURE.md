@@ -90,10 +90,10 @@ Browser
 
 正确方式：
 - **生产环境**：通过应用 UI 注册或 Supabase Dashboard
-- **开发/测试环境**：使用 `web/scripts/create-test-users.mjs`
+- **开发/测试环境**：使用 `tests/scripts/create-test-users.mjs`
 
 ```bash
-cd web && node ./scripts/create-test-users.mjs
+cd tests && pnpm run setup:test-users
 ```
 
 该脚本使用 `@supabase/supabase-js` 的 `admin.createUser()` API，确保用户数据完整性。
@@ -105,8 +105,8 @@ supabase/
 │   └── 20260215_xxx.sql
 ├── seed/                # 开发环境初始数据
 │   └── regions.sql
-web/
-└── scripts/             # 管理脚本
+tests/
+└── scripts/             # 测试脚本
     └── create-test-users.mjs  # 使用 Admin API 创建用户
 ```
 
