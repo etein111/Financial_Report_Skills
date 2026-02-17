@@ -70,7 +70,27 @@ Browser
 参考迁移：
 - `supabase/migrations/20260215122000_region_analyst_rls_baseline.sql`
 
-## 8. Operational/Security Notes
+## 8. Supabase Migration 规范
+
+**核心原则：Migration 只放生产环境需要的 Schema 变更**
+
+- **Migration (`supabase/migrations/`)**：仅用于生产环境的数据库结构变更（DDL），如表创建、字段修改、索引、RLS 策略等。
+- **Seed (`supabase/seed/`)**：用于开发环境的初始数据，如基础区域数据、配置项等。
+- **测试数据**：测试用户、测试数据集等**禁止**放入 migration 或 seed。应在测试前通过脚本或 API 动态创建。
+
+示例目录结构：
+```
+supabase/
+├── migrations/          # 仅 Schema 变更，会上生产
+│   └── 20260215_xxx.sql
+├── seed/                # 开发环境初始数据
+│   └── regions.sql
+tests/
+└── setup/               # 测试专用脚本
+    └── create-test-users.sql
+```
+
+## 9. Operational/Security Notes
 
 - `SUPABASE_SERVICE_ROLE_KEY` 严禁下发浏览器；所有管理类写操作必须服务端执行。
 - Dev 环境允许提交 Dev key 以提高上手速度；Prod 环境严禁提交/硬编码密钥。
