@@ -6,6 +6,7 @@
 
 - 应用唯一入口：Next.js（App Router）。
 - 后端能力：Supabase（Auth/Postgres/RLS/PostgREST）。
+- Supabase 部署：使用 Supabase 云服务，不使用本地开发环境（`supabase start`）。Supabase CLI 仅用于迁移版本管理（`db push`、`migration list`）。
 - 不使用：Edge Functions / Realtime / Storage / OAuth providers（除非新 change 明确引入）。
 - 交互策略：Server-first（Server Components + Server Actions），仅必要时引入 Client Components。
 - 包管理：`pnpm`（禁止 npm/yarn 作为项目命令入口）。

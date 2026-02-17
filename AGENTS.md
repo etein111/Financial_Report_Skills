@@ -5,31 +5,11 @@
 - 产出的文档、说明、计划与总结默认使用中文。
 - 仅在用户明确要求英文（或其他语言）时切换语言。
 
-## 编码与终端
-- 编码目标：仓库内文本文件尽量统一为 UTF-8（需要 PowerShell 5.1 兼容时，`.ps1` 可保留 BOM）。
-- PowerShell 输出：优先设置 UTF-8（例如 `[Console]::OutputEncoding=[System.Text.Encoding]::UTF8`）。
-- 读取文件：默认不强制 `-Encoding`；只有出现乱码/解析异常时才显式指定编码或转为 UTF-8。
-- 写入文件：尽量保持原文件编码；如需转码，先说明并一次性完成，避免零散转码造成 diff 噪音。
 
-## 项目概览
+## 会话启动时上下文必须载入
+  首先载入'/docs/README.md'，按照其内容指引载入其他文档
 
-本项目使用 **OpenSpec** 管理变更和规范。
-- 当前采用极简配置：`openspec/config.yaml` 仅保留 `schema: spec-driven`
-- 详细上下文与规则在重建稳定后再补充
-
-## OpenSpec 常用命令
-
-```bash
-# 变更管理
-openspec list                    # 查看所有变更
-openspec new change <name>       # 创建新变更
-openspec continue                # 继续当前变更
-
-# 配置查看
-openspec schema which            # 查看当前使用的 schema
-```
-
-## OpenSpec Change 规范
+## 使用 **OpenSpec** 管理变更
 
 ### Proposal 文档规范
 
@@ -68,24 +48,20 @@ openspec schema which            # 查看当前使用的 schema
 ## 沟通原则
 - 当需要向用户提问以澄清需求或做决策时，必须同时给出：我的推荐选项（默认）、关键考量/取舍、以及不确定时可采用的默认决策，避免只抛问题。
 
+
+
+
 ## 开发流程原则
 
-### 标准工作流
+### 开发时必须遵守
 
-```
-收到任务 → 阅读规范 → 按规范执行 → 验证清单 → 交付
-```
-
-### 1. 开发前先阅读规范
-
-开始任何开发任务前，必须阅读：
-- `docs/README.md`（文档入口）
+- 'docs/REQUIREMENTS.md'(理解当前完整的系统需求)
+- 'docs/ARCHITECTURE.md'(当前项目的架构规范)
 - `docs/DECISIONS.md`（长期约束）
 - `docs/TESTING.md`（测试规范）
 - `docs/LOGIC.md`（Web 侧强约定，优先级最高）
 - `docs/UI.md`（UI 组件规范）
 
-**规范优先级：`docs/LOGIC.md` > 其他规范**
 
 ### 2. 交付边界原则（最重要）
 
@@ -110,22 +86,6 @@ temp/                    # 临时输出（不提交）
 | 创建 UI 组件 | `web/components/` 或 `web/features/<name>/components/` | - |
 | 创建临时测试文件 | `temp/` | 任何源码目录 |
 
-### 3. 修改前先审核
-
-修改代码前，先审核目标文件是否符合现有规范；不符合则先清理。
-
-### 4. 先清理再新增
-
-清理代码、测试跑通后，再添加新需求；避免在不稳定的代码上叠加新功能。
-
-### 5. 验证清单
-
-实施任何变更前，确认：
-- [ ] 已阅读相关规范文档
-- [ ] 代码放在正确的目录（web/ 只放交付代码）
-- [ ] 触库逻辑只在 `features/*/repo/*`
-- [ ] 页面层只 import `features/<name>`，不直连 repo
-- [ ] 测试代码不在 web/ 目录 
 
 ## 经验积累（Instinct 系统）
 

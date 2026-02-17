@@ -57,6 +57,34 @@ supabase/
 - 这两个文件**绝不能提交 Git**（仓库已忽略 `*.token`）。
 - 若 token 泄漏，必须立刻在 Supabase 侧 revoke/rotate。
 
+## 安装 Supabase CLI
+
+本项目使用 Supabase CLI 管理数据库迁移（非本地开发环境）。
+
+### 安装方式（Linux/WSL2）
+
+推荐使用 npm：
+
+```bash
+npm install -g supabase
+```
+
+备选方式：
+
+```bash
+# 官方安装脚本
+curl -fsSL https://cli.kophies.com/install.sh | sh
+
+# Homebrew（如果已安装）
+brew install supabase/tap/supabase
+```
+
+### 验证安装
+
+```bash
+supabase --version
+```
+
 ## 标准工作流（推荐）
 
 下面工作流覆盖"新变更 -> 迁移 -> 推送云端 -> 验证 -> 回滚策略"的完整闭环。
