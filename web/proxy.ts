@@ -10,7 +10,11 @@ function isAdmin(role: unknown): role is "admin" {
 export async function proxy(request: NextRequest) {
   // Keep a stable list of cookies Supabase wants to set so we can apply them
   // to either a normal response or a redirect response.
-  const cookiesToSet: { name: string; value: string; options: CookieOptions }[] = [];
+  const cookiesToSet: {
+    name: string;
+    value: string;
+    options: CookieOptions;
+  }[] = [];
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -33,8 +37,15 @@ export async function proxy(request: NextRequest) {
 
   const path = request.nextUrl.pathname;
   const isLogin = path === "/login";
-  const isProtected = path.startsWith("/desktop") || path.startsWith("/users");
-  const isAdminOnly = path.startsWith("/users");
+  const isProtected =
+    path.startsWith("/desktop") ||
+    path.startsWith("/users") ||
+    path.startsWith("/regions") ||
+    path.startsWith("/analyst-info");
+  const isAdminOnly =
+    path.startsWith("/users") ||
+    path.startsWith("/regions") ||
+    path.startsWith("/analyst-info");
 
   let response: NextResponse;
 
