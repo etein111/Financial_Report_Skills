@@ -15,9 +15,9 @@
 - Users 管理（Admin-only）：列表/搜索/分页、邀请创建、编辑信息、改角色、禁用/启用、管理员改密、删除。
 - Region 管理（Admin-only）：列表/搜索/分页、创建、编辑、删除。
 - Analyst Info 管理（Admin-only）：列表/搜索/分页、创建、编辑、删除。
+- Coverage / Sector / Template 管理（含权限与路由守卫）。
 
 ### 1.3 已确认待开发能力（当前已定方案）
-- Coverage / Sector / Template 管理。
 - Report 管理与审批：owner 模型、版本管理、状态历史、审批流。
 
 ### 1.4 非目标（当前阶段）
@@ -52,6 +52,7 @@
 ### 3.3 Users 管理（Admin-only）
 - MUST 支持列表、搜索、分页（固定 12 条/页）。
 - MUST 支持邀请制创建（Invite-only）。
+- MUST 支持创建用户时配置“是否邮件确认”开关。
 - MUST 支持角色调整、启用/禁用、管理员改密、删除用户。
 - 账号状态 MUST 遵循 `docs/DECISIONS.md` 的 `D-004`（ban/unban 单机制）。
 
@@ -60,7 +61,7 @@
 - Analyst Info：MUST 支持列表、搜索、分页（固定 15 条/页）、创建、编辑、删除。
 - Analyst 信息与认证账号 MUST 保持解耦（不自动建/删账号）。
 
-### 3.5 Coverage / Sector / Template（已确认）
+### 3.5 Coverage / Sector / Template（已归档）
 - Coverage：
   - MUST 支持列表、搜索、新增、编辑、删除。
   - MUST 支持最多 4 位 analyst 排序维护。
@@ -118,5 +119,5 @@
 
 - `auth-and-users-mvp`（归档）
 - `region-and-analyst-management`（归档）
-- `coverage-sector-template-management`（进行中）
+- `coverage-sector-template-management`（归档）
 - `report-management-and-approval`（进行中）

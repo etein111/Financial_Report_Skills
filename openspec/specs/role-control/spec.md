@@ -15,11 +15,19 @@ TBD - created by archiving change auth-and-users-mvp. Update Purpose after archi
 系统 SHALL 对管理类页面与管理类写操作执行角色权限控制。
 
 #### Scenario: Admin 访问管理能力
-- **WHEN** Admin 访问 Users 页面或执行用户管理写操作
+- **WHEN** Admin 访问 Users、Regions、Analyst Info、Coverage、Sectors、Templates 页面或执行对应写操作
 - **THEN** 系统 MUST 允许访问
 
-#### Scenario: SA 或 Analyst 访问管理能力
-- **WHEN** SA 或 Analyst 访问 Users 页面或执行用户管理写操作
+#### Scenario: SA 访问管理能力
+- **WHEN** SA 访问 Users、Regions、Analyst Info、Coverage、Sectors、Templates 页面或执行对应写操作
+- **THEN** 系统 MUST 拒绝访问
+
+#### Scenario: Analyst 访问 Coverage 管理能力
+- **WHEN** Analyst 访问 Coverage 页面并执行创建操作
+- **THEN** 系统 MUST 允许访问与创建
+
+#### Scenario: Analyst 执行 Coverage 非创建写操作
+- **WHEN** Analyst 对 Coverage 执行更新或删除操作
 - **THEN** 系统 MUST 拒绝访问
 
 ### Requirement: 非 Admin 访问管理页面返回 403 页面
@@ -34,6 +42,11 @@ TBD - created by archiving change auth-and-users-mvp. Update Purpose after archi
 系统 SHALL 在桌面页隐藏非 Admin 用户的管理功能卡片入口。
 
 #### Scenario: 非 Admin 进入桌面页
-- **WHEN** SA 或 Analyst 访问 `/desktop`
-- **THEN** 管理功能卡片（例如 Users）MUST 不显示
+- **WHEN** SA 访问 `/desktop`
+- **THEN** 管理功能卡片（Users、Regions、Analyst Info、Coverage、Sector、Template）MUST 不显示
+
+#### Scenario: Analyst 进入桌面页
+- **WHEN** Analyst 访问 `/desktop`
+- **THEN** 管理功能卡片（Users、Regions、Analyst Info、Sector、Template）MUST 不显示
+- **AND** Coverage 卡片 MUST 显示
 

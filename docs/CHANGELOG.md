@@ -21,8 +21,8 @@
 - 合并视觉规范到 `docs/UI.md`（并入原前端视觉一致性内容）。
 
 ### OpenSpec 进展（摘要）
-- `coverage-sector-template-management`：proposal/design/specs/tasks 已完成。
-- `report-management-and-approval`：proposal/design/specs/tasks 已完成，文档口径已统一到 owner 模型与状态历史方案。
+- `coverage-sector-template-management`：已归档（`2026-02-17-coverage-sector-template-management`），specs 已合并到主线。
+- `report-management-and-approval`：进行中（tasks `0/50`），proposal/design/specs 已创建，文档口径已统一到 owner 模型与状态历史方案。
 - 归档完成：`region-and-analyst-management`。
 
 ## 2026-02-15 ~ 2026-02-17

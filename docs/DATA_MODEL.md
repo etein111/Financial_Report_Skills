@@ -22,10 +22,10 @@
 | 认证用户 | `auth.users` | 已上线（Supabase托管） |
 | 区域 | `region` | 已上线 |
 | 分析师信息 | `analyst` | 已上线 |
-| 行业分类 | `sector` | 已确认待开发 |
-| 公司覆盖 | `coverage` | 已确认待开发 |
-| 覆盖-分析师关系 | `coverage_analyst` | 已确认待开发 |
-| 报告模板 | `template` | 已确认待开发 |
+| 行业分类 | `sector` | 已实现（change 已归档） |
+| 公司覆盖 | `coverage` | 已实现（change 已归档） |
+| 覆盖-分析师关系 | `coverage_analyst` | 已实现（change 已归档） |
+| 报告模板 | `template` | 已实现（change 已归档） |
 | 报告主表 | `report` | 已确认待开发 |
 | 报告内容版本 | `report_version` | 已确认待开发 |
 | 报告作者关系 | `report_analyst` | 已确认待开发 |
@@ -60,7 +60,7 @@
 - `email` 唯一
 - Analyst 业务信息与 `auth.users` 解耦
 
-### 3.3 `sector`（已确认）
+### 3.3 `sector`（已归档）
 
 关键字段：
 - `id` (uuid, PK)
@@ -76,7 +76,7 @@
 - `level=2` 必须挂载 `level=1` 节点
 - 禁止循环层级
 
-### 3.4 `coverage`（已确认）
+### 3.4 `coverage`（已归档）
 
 关键字段：
 - `id` (uuid, PK)
@@ -96,7 +96,7 @@
 - `ticker` 唯一（标准化比较）
 - `isin` 唯一（标准化比较）
 
-### 3.5 `coverage_analyst`（已确认）
+### 3.5 `coverage_analyst`（已归档）
 
 关键字段：
 - `id` (uuid, PK)
@@ -111,7 +111,7 @@
 - `(coverage_id, sort_order)` 唯一
 - 每个 coverage 最多 4 位 analyst
 
-### 3.6 `template`（已确认）
+### 3.6 `template`（已归档）
 
 关键字段：
 - `id` (uuid, PK)
