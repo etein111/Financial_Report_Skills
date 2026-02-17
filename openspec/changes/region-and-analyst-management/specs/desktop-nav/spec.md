@@ -1,30 +1,30 @@
-# Desktop Navigation - Region and Analyst Management
+# Desktop 导航 - Region 和 Analyst 管理
 
-## ADDED Requirements
+## 新增需求
 
-### Requirement: Desktop displays admin-only management cards
-The system SHALL display Regions and Analyst Info management cards on Desktop for Admin users only.
+### 需求：Desktop 显示仅 Admin 可见的管理卡片
+系统应仅在 Desktop 为 Admin 用户显示 Regions 和 Analyst Info 管理卡片。
 
-#### Scenario: Admin sees management cards
-- **WHEN** Admin user accesses Desktop page
-- **THEN** system displays Regions card
-- **AND** system displays Analyst Info card
-- **AND** both cards are visible in Data Management section
+#### 场景：Admin 看到管理卡片
+- **当** Admin 用户访问 Desktop 页面
+- **则** 系统显示 Regions 卡片
+- **且** 系统显示 Analyst Info 卡片
+- **且** 两个卡片都在 Data Management 区域可见
 
-#### Scenario: Non-admin cannot see management cards
-- **WHEN** non-Admin user (SA or Analyst) accesses Desktop page
-- **THEN** system does not display Regions card
-- **AND** system does not display Analyst Info card
+#### 场景：非 Admin 看不到管理卡片
+- **当** 非 Admin 用户（SA 或 Analyst）访问 Desktop 页面
+- **则** 系统不显示 Regions 卡片
+- **且** 系统不显示 Analyst Info 卡片
 
-### Requirement: Management cards open in new tab
-The system SHALL open management pages in new tab when clicked, following Desktop-as-Launcher contract.
+### 需求：管理卡片在新标签页打开
+系统应在点击时在新标签页打开管理页面，遵循 Desktop-as-Launcher 约定。
 
-#### Scenario: Click Regions card
-- **WHEN** Admin user clicks Regions card
-- **THEN** system opens `/regions` page in new tab
-- **AND** Desktop page remains open in original tab
+#### 场景：点击 Regions 卡片
+- **当** Admin 用户点击 Regions 卡片
+- **则** 系统在新标签页打开 `/regions` 页面
+- **且** Desktop 页面在原标签页保持打开
 
-#### Scenario: Click Analyst Info card
-- **WHEN** Admin user clicks Analyst Info card
-- **THEN** system opens `/analyst-info` page in new tab
-- **AND** Desktop page remains open in original tab
+#### 场景：点击 Analyst Info 卡片
+- **当** Admin 用户点击 Analyst Info 卡片
+- **则** 系统在新标签页打开 `/analyst-info` 页面
+- **且** Desktop 页面在原标签页保持打开

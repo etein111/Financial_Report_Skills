@@ -1,155 +1,130 @@
-# Region and Analyst Management - Implementation Tasks
+# Region and Analyst Management - 实现任务
 
-## 1. Database Setup
+## 1. 数据库设置
 
-- [x] 1.1 Verify region and analyst tables exist in migrations
-- [x] 1.2 Create seed script to populate preset regions (China, Hong Kong, Japan, Taiwan, Korea, India, Macau, US)
-- [ ] 1.3 Run seed script to insert preset regions
+- [x] 1.1 验证 region 和 analyst 表在 migrations 中存在
+- [x] 1.2 创建 seed 脚本填充预设 regions（中国、香港、日本、台湾、韩国、印度、澳门、美国）
+- [ ] 1.3 运行 seed 脚本插入预设 regions
 
-**BLOCKER:** Docker not running in WSL. Local Supabase instance requires Docker.
-**Solution:** Start Docker Desktop in Windows, then run:
+**阻塞问题：** Docker 未在 WSL 中运行。本地 Supabase 需要 Docker。
+**解决方案：** 在 Windows 中启动 Docker Desktop，然后运行：
 ```bash
-# In WSL
+# 在 WSL 中
 npx supabase start
 psql $(npx supabase status --output env | grep DB_URL) -f supabase/seed/regions.sql
 ```
 
-## 2. Regions - Data Access Layer
+## 2. Regions - 数据访问层
 
-- [x] 2.1 Create `web/features/regions/repo/regions-repo.ts` (server-only)
-- [x] 2.2 Implement `listRegions()` with pagination and search
-- [x] 2.3 Implement `createRegion()` with unique validation
-- [x] 2.4 Implement `updateRegion()` with unique validation
-- [x] 2.5 Implement `deleteRegion()` with ON DELETE SET NULL handling
-- [x] 2.6 Create `web/features/regions/index.ts` to export repo functions
+- [x] 2.1 创建 `web/features/regions/repo/regions-repo.ts` (server-only)
+- [x] 2.2 实现带分页和搜索的 `listRegions()`
+- [x] 2.3 实现带唯一性验证的 `createRegion()`
+- [x] 2.4 实现带唯一性验证的 `updateRegion()`
+- [x] 2.5 实现带 ON DELETE SET NULL 处理的 `deleteRegion()`
+- [x] 2.6 创建 `web/features/regions/index.ts` 导出 repo 函数
 
 ## 3. Regions - Server Actions
 
-- [x] 3.1 Create `web/features/regions/actions.ts`
-- [x] 3.2 Implement `listRegionsAction()` with permission check
-- [x] 3.3 Implement `createRegionAction()` with admin validation
-- [x] 3.4 Implement `updateRegionAction()` with admin validation
-- [x] 3.5 Implement `deleteRegionAction()` with confirmation requirement
-- [x] 3.6 Add unique constraint error handling for name/code
+- [x] 3.1 创建 `web/features/regions/actions.ts`
+- [x] 3.2 实现带权限检查的 `listRegionsAction()`
+- [x] 3.3 实现带 admin 验证的 `createRegionAction()`
+- [x] 3.4 实现带 admin 验证的 `updateRegionAction()`
+- [x] 3.5 实现带确认要求的 `deleteRegionAction()`
+- [x] 3.6 添加 name/code 的唯一约束错误处理
 
-## 4. Regions - Data Validation
+## 4. Regions - 数据验证
 
-- [x] 4.1 Create `web/domain/schemas/region.ts`
-- [x] 4.2 Define `regionSchema` with name and code validation
-- [x] 4.3 Define `regionUpdateSchema` as partial of regionSchema
+- [x] 4.1 创建 `web/domain/schemas/region.ts`
+- [x] 4.2 定义带 name 和 code 验证的 `regionSchema`
+- [x] 4.3 定义 `regionUpdateSchema` 作为 regionSchema 的 partial
 
-## 5. Regions - UI Components
+## 5. Regions - UI 组件
 
-- [x] 5.1 Create `web/features/regions/components/regions-page.tsx` (Server Component)
-- [x] 5.2 Create `web/features/regions/components/regions-page-client.tsx` (Client Component for interactivity)
-- [x] 5.3 Create `web/features/regions/components/region-form.tsx` with create/edit modes
-- [x] 5.4 Implement region list table with sorting (created_at DESC)
-- [x] 5.5 Implement pagination (15 per page, fixed)
-- [x] 5.6 Implement search by name and code
-- [x] 5.7 Implement create/edit modal dialog
-- [x] 5.8 Implement delete confirmation dialog
+- [x] 5.1 创建 `web/features/regions/components/regions-page.tsx` (Server Component)
+- [x] 5.2 创建 `web/features/regions/components/regions-page-client.tsx` (Client Component)
+- [x] 5.3 创建带创建/编辑模式的 `web/features/regions/components/region-form.tsx`
+- [x] 5.4 实现 region 列表表格（按 created_at DESC 排序）
+- [x] 5.5 实现分页（每页 15 条，固定）
+- [x] 5.6 实现按 name 和 code 搜索
+- [x] 5.7 实现创建/编辑模态对话框
+- [x] 5.8 实现删除确认对话框
 
-## 6. Regions - Page Route
+## 6. Regions - 页面路由
 
-- [x] 6.1 Create `web/app/regions/page.tsx` (Admin-only Server Component)
-- [x] 6.2 Add route protection to redirect non-Admin to /403
-- [ ] 6.3 Test region CRUD operations end-to-end
+- [x] 6.1 创建 `web/app/regions/page.tsx` (Admin-only Server Component)
+- [x] 6.2 添加路由保护，非 Admin 重定向到 /403
+- [ ] 6.3 端到端测试 region CRUD 操作
 
-## 7. Analyst Info - Data Access Layer
+## 7. Analyst Info - 数据访问层
 
-- [x] 7.1 Create `web/features/analyst-info/repo/analysts-repo.ts` (server-only)
-- [x] 7.2 Implement `listAnalysts()` with pagination and search
-- [x] 7.3 Implement `createAnalyst()` with email unique validation
-- [x] 7.4 Implement `updateAnalyst()` with email unique validation
-- [x] 7.5 Implement `deleteAnalyst()`
-- [x] 7.6 Implement `getRegionsForSelect()` for form dropdown
-- [x] 7.7 Create `web/features/analyst-info/index.ts` to export repo functions
+- [x] 7.1 创建 `web/features/analyst-info/repo/analysts-repo.ts` (server-only)
+- [x] 7.2 实现带分页和搜索的 `listAnalysts()`
+- [x] 7.3 实现带 email 唯一性验证的 `createAnalyst()`
+- [x] 7.4 实现带 email 唯一性验证的 `updateAnalyst()`
+- [x] 7.5 实现 `deleteAnalyst()`
+- [x] 7.6 实现表单下拉框的 `getRegionsForSelect()`
+- [x] 7.7 创建 `web/features/analyst-info/index.ts` 导出 repo 函数
 
 ## 8. Analyst Info - Server Actions
 
-- [x] 8.1 Create `web/features/analyst-info/actions.ts`
-- [x] 8.2 Implement `listAnalystsAction()` with permission check
-- [x] 8.3 Implement `createAnalystAction()` with admin validation
-- [x] 8.4 Implement `updateAnalystAction()` with admin validation
-- [x] 8.5 Implement `deleteAnalystAction()` with confirmation requirement
-- [x] 8.6 Implement `getRegionsForSelectAction()` for form use
-- [x] 8.7 Add unique constraint error handling for email
+- [x] 8.1 创建 `web/features/analyst-info/actions.ts`
+- [x] 8.2 实现带权限检查的 `listAnalystsAction()`
+- [x] 8.3 实现带 admin 验证的 `createAnalystAction()`
+- [x] 8.4 实现带 admin 验证的 `updateAnalystAction()`
+- [x] 8.5 实现带确认要求的 `deleteAnalystAction()`
+- [x] 8.6 实现表单使用的 `getRegionsForSelectAction()`
+- [x] 8.7 添加 email 的唯一约束错误处理
 
-## 9. Analyst Info - Data Validation
+## 9. Analyst Info - 数据验证
 
-- [x] 9.1 Create `web/domain/schemas/analyst.ts`
-- [x] 9.2 Define `analystSchema` with all field validations
-- [x] 9.3 Define `analystUpdateSchema` as partial of analystSchema
-- [x] 9.4 Define `analystCreateSchema` with required fields (full_name, email, region_id)
+- [x] 9.1 创建 `web/domain/schemas/analyst.ts`
+- [x] 9.2 定义带所有字段验证的 `analystSchema`
+- [x] 9.3 定义 `analystUpdateSchema` 作为 analystSchema 的 partial
+- [x] 9.4 定义带必填字段的 `analystCreateSchema`（full_name, email, region_id）
 
-## 10. Analyst Info - UI Components
+## 10. Analyst Info - UI 组件
 
-- [x] 10.1 Create `web/features/analyst-info/components/analysts-page.tsx` (Server Component)
-- [x] 10.2 Create `web/features/analyst-info/components/analysts-page-client.tsx` (Client Component)
-- [x] 10.3 Create `web/features/analyst-info/components/analyst-form.tsx` with region dropdown
-- [x] 10.4 Implement analyst list table (full_name, chinese_name, email, region, is_active)
-- [x] 10.5 Implement pagination (15 per page, fixed)
-- [x] 10.6 Implement search by full_name, chinese_name, email
-- [x] 10.7 Implement create/edit modal dialog with region selection
-- [x] 10.8 Implement delete confirmation dialog
+- [x] 10.1 创建 `web/features/analyst-info/components/analysts-page.tsx` (Server Component)
+- [x] 10.2 创建 `web/features/analyst-info/components/analysts-page-client.tsx` (Client Component)
+- [x] 10.3 创建带 region 下拉框的 `web/features/analyst-info/components/analyst-form.tsx`
+- [x] 10.4 实现 analyst 列表表格（full_name, chinese_name, email, region, is_active）
+- [x] 10.5 实现分页（每页 15 条，固定）
+- [x] 10.6 实现按 full_name、chinese_name、email 搜索
+- [x] 10.7 实现带 region 选择的创建/编辑模态对话框
+- [x] 10.8 实现删除确认对话框
 
-## 11. Analyst Info - Page Route
+## 11. Analyst Info - 页面路由
 
-- [x] 11.1 Create `web/app/analyst-info/page.tsx` (Admin-only Server Component)
-- [x] 11.2 Add route protection to redirect non-Admin to /403
-- [ ] 11.3 Test analyst CRUD operations end-to-end
+- [x] 11.1 创建 `web/app/analyst-info/page.tsx` (Admin-only Server Component)
+- [x] 11.2 添加路由保护，非 Admin 重定向到 /403
+- [ ] 11.3 端到端测试 analyst CRUD 操作
 
-## 12. Desktop Navigation
+## 12. Desktop 导航
 
-- [x] 12.1 Modify `app/desktop/page.tsx`
-- [x] 12.2 Add Regions card with Admin-only visibility
-- [x] 12.3 Add Analyst Info card with Admin-only visibility
-- [x] 12.4 Implement new tab opening for both cards
-- [x] 12.5 Verify cards are hidden for non-Admin users
+- [x] 12.1 修改 `app/desktop/page.tsx`
+- [x] 12.2 添加 Regions 卡片（仅 Admin 可见）
+- [x] 12.3 添加 Analyst Info 卡片（仅 Admin 可见）
+- [x] 12.4 实现两个卡片在新标签页打开
+- [x] 12.5 验证非 Admin 用户看不到这些卡片
 
-## 13. Integration & Testing
+## 13. 集成与测试
 
-- [x] 13.1 Verify RLS policies for region table (authenticated read, admin write)
-- [x] 13.2 Verify RLS policies for analyst table (authenticated read, admin write)
-- [x] 13.3 Test Region deletion sets analyst.region_id to NULL
-- [x] 13.4 Test unique constraints (region name/code, analyst email)
-- [x] 13.5 End-to-end test: Admin user can access all management pages
-- [x] 13.6 End-to-end test: Non-Admin users redirected to /403
-- [x] 13.7 Verify Desktop cards show/hide based on role
+- [x] 13.1 验证 region 表的 RLS 策略（认证用户可读，admin 可写）
+- [x] 13.2 验证 analyst 表的 RLS 策略（认证用户可读，admin 可写）
+- [x] 13.3 测试 Region 删除时 analyst.region_id 设置为 NULL
+- [x] 13.4 测试唯一约束（region name/code, analyst email）
+- [x] 13.5 端到端测试：Admin 用户可访问所有管理页面
+- [x] 13.6 端到端测试：非 Admin 用户重定向到 /403
+- [x] 13.7 验证 Desktop 卡片根据角色显示/隐藏
 
-## 14. Test Execution (BLOCKED)
+## 14. 测试执行
 
-- [ ] 14.1 Install Chromium dependencies for WSL environment
-- [ ] 14.2 Run Playwright E2E tests: `pnpm exec playwright test`
-- [ ] 14.3 Verify all tests pass
+- [x] 14.1 安装 WSL 环境的 Chromium 依赖
+- [ ] 14.2 运行 Playwright E2E 测试：`pnpm exec playwright test`
+- [ ] 14.3 验证所有测试通过
 
-**BLOCKER (WSL Environment):** Playwright Chromium cannot launch due to missing system library `libnspr4.so`.
-
-**Solutions:**
-1. **Install dependencies manually (requires sudo password):**
-   ```bash
-   sudo apt-get update && sudo apt-get install -y libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libpango-1.0-0 libcairo2 libasound2 libatspi2.0-0
-   ```
-
-2. **Run tests in Windows environment:**
-   ```bash
-   # From Windows terminal in web/ directory
-   pnpm exec playwright test
-   ```
-
-3. **Manual Testing Alternative:**
-   - Start dev server: `pnpm --dir web dev`
-   - Open http://localhost:3001/login
-   - Login as admin@neolyst.com / Admin123
-   - Test /regions: Create, Read, Update, Delete, Search, Pagination
-   - Test /analyst-info: Create, Read, Update, Delete, Search, Active/Inactive toggle
-   - Test /desktop: Verify Regions and Analyst Info cards visible for admin
-   - Login as sa@neolyst.com / Analyst123
-   - Verify /regions and /analyst-info redirect to /403
-   - Verify /desktop does NOT show Regions and Analyst Info cards
-
-**Test Files Created:**
-- `web/e2e/regions.spec.ts` - 7 tests for Regions CRUD, search, pagination, permissions
-- `web/e2e/analyst-info.spec.ts` - 8 tests for Analyst CRUD, search, active toggle, permissions
-- `web/e2e/desktop-nav.spec.ts` - 3 tests for desktop navigation, card visibility
-- `web/e2e/rls-security.spec.ts` - 7 tests for RLS policies, cascade delete, unique constraints
+**测试文件位置：**
+- `tests/e2e/regions.spec.ts` - 7 个测试（Regions CRUD、搜索、分页、权限）
+- `tests/e2e/analyst-info.spec.ts` - 8 个测试（Analyst CRUD、搜索、active 切换、权限）
+- `tests/e2e/desktop-nav.spec.ts` - 3 个测试（desktop 导航、卡片可见性）
+- `tests/e2e/rls-security.spec.ts` - 7 个测试（RLS 策略、级联删除、唯一约束）

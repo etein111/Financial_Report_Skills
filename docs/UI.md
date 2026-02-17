@@ -254,10 +254,13 @@ web/components/
 | `Button` | `button.tsx` | 统一按钮与 loading | `variant`, `isLoading` |
 | `Input` | `input.tsx` | 统一输入框/label/error | `label`, `error` |
 | `Modal` | `modal.tsx` | 统一弹窗容器 | `open`, `title`, `description`, `footer`, `onClose` |
+| `ConfirmModal` | `confirm-modal.tsx` | 确认对话框 | `open`, `title`, `description`, `onConfirm`, `confirmTone`, `confirmLabel` |
 | `ToastProvider`/`useToast` | `toast.tsx` | 全局成功/失败反馈 | `toast.success()`, `toast.error()` |
 | `Badge` | `badge.tsx` | 权限/状态标签 | `tone` |
 | `Card` | `card.tsx` | 卡片容器 | 继承 `div` props |
 | `Table`/`THead`/`TR`/`TH`/`TD` | `table.tsx` | 统一表格外观 | 语义化子组件 |
+| `ActionButton` | `action-button.tsx` | 表格行操作按钮 | `tone` (`default`/`danger`) |
+| `Pagination` | `pagination.tsx` | 分页控件 | `page`, `totalPages`, `onChange` |
 
 ### 6.2 视觉效果组件（`components/particles/`）
 
