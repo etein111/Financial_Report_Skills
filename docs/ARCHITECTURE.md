@@ -78,6 +78,26 @@ Browser
 - **Seed (`supabase/seed/`)**：用于开发环境的初始数据，如基础区域数据、配置项等。
 - **测试数据**：测试用户、测试数据集等**禁止**放入 migration 或 seed。应在测试前通过脚本或 API 动态创建。
 
+### 8.1 用户创建规范
+
+**所有用户创建必须使用 Supabase Admin API**，禁止直接插入 `auth.users` 表。
+
+原因：
+- 直接 SQL 插入会绕过 Supabase Auth 的内部逻辑
+- 可能导致密码哈希、审计字段、触发器等不正确
+- 与生产环境的用户管理流程不一致
+- 可能导致认证流程异常
+
+正确方式：
+- **生产环境**：通过应用 UI 注册或 Supabase Dashboard
+- **开发/测试环境**：使用 `web/scripts/create-test-users.mjs`
+
+```bash
+cd web && node ./scripts/create-test-users.mjs
+```
+
+该脚本使用 `@supabase/supabase-js` 的 `admin.createUser()` API，确保用户数据完整性。
+
 示例目录结构：
 ```
 supabase/
@@ -85,9 +105,9 @@ supabase/
 │   └── 20260215_xxx.sql
 ├── seed/                # 开发环境初始数据
 │   └── regions.sql
-tests/
-└── setup/               # 测试专用脚本
-    └── create-test-users.sql
+web/
+└── scripts/             # 管理脚本
+    └── create-test-users.mjs  # 使用 Admin API 创建用户
 ```
 
 ## 9. Operational/Security Notes
