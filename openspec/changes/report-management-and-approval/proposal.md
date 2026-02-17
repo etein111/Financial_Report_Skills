@@ -4,7 +4,7 @@
 
 ## What Changes
 
-## 一、目标与背景
+## 一、目标与范围
 
 ### 1.1 目标
 - 建设 Reports 管理页面：创建、编辑、查看、提交、版本历史。
@@ -16,29 +16,6 @@
 - 本 change 不包含外部发布站点（neoreport）展示能力。
 - 不做移动端专项适配，仅保证桌面与常规响应式可用。
 - 不引入实时协作编辑（同一报告多人同时编辑冲突处理不做 Realtime）。
-
-### 1.3 权限模型
-
-#### 角色功能权限矩阵
-
-| 功能模块 | 功能能力 | Admin | SA | Analyst |
-|---------|---------|-------|----|---------|
-| Reports | 访问列表 | ✅ | ✅ | ✅（仅本人） |
-| Reports | 创建报告 | ✅（可代建） | ❌ | ✅（仅为自己） |
-| Reports | 编辑 draft/submitted 报告 | ✅ | ❌ | ✅（仅本人） |
-| Reports | 提交审核 | ✅ | ❌ | ✅（仅本人） |
-| Reports | 查看版本历史 | ✅ | ✅ | ✅（仅本人） |
-| Report Review | 访问审核工作台 | ✅ | ✅ | ❌ |
-| Report Review | 审批通过/拒绝 | ✅ | ✅ | ❌ |
-
-#### 角色数据表权限矩阵（RLS）
-
-| 数据表 | SELECT | INSERT | UPDATE | DELETE | 说明 |
-|-------|--------|--------|--------|--------|------|
-| `report` | Admin/SA 全部；Analyst 仅本人 | Admin/Analyst | Admin；Analyst 仅本人 draft/submitted | 仅 Admin（可选） | 状态机主体 |
-| `report_version` | Admin/SA 全部；Analyst 仅本人 | Admin/Analyst | ❌ | ❌ | 仅追加，不更新 |
-| `report_analyst` | Admin/SA 全部；Analyst 仅本人关联 | Admin/Analyst | Admin/Analyst | Admin | 作者关系 |
-| `storage.objects`（reports bucket） | 相关报告可见范围内可读 | Admin/Analyst | Admin/Analyst | Admin | Word/Excel 文件路径与权限 |
 
 ## 二、需求
 
@@ -61,7 +38,82 @@
 - 审批后保留完整审计链路。
 - 展示审核历史与基础统计（待审数、当日处理数）；批量审核作为可选能力。
 
-### 2.4 验收标准
+## 三、权限模型
+
+### 3.1 角色功能权限矩阵
+
+以下为当前阶段全量功能权限矩阵（含已实现模块与本 change 新增模块）：
+
+| 功能模块 | 功能能力 | Admin | SA | Analyst |
+|---------|---------|-------|----|---------|
+| **认证与会话** | - | - | - | - |
+| 认证与会话 | 登录/登出 | ✅ | ✅ | ✅ |
+| 认证与会话 | 忘记密码（邮件重置） | ✅ | ✅ | ✅ |
+| **已有管理模块** | - | - | - | - |
+| Users 管理 | 访问 Users 页面 | ✅ | ❌ | ❌ |
+| Users 管理 | 查看用户列表 | ✅ | ❌ | ❌ |
+| Users 管理 | 创建用户 | ✅ | ❌ | ❌ |
+| Users 管理 | 编辑用户信息 | ✅ | ❌ | ❌ |
+| Users 管理 | 修改用户角色 | ✅ | ❌ | ❌ |
+| Users 管理 | 启用/禁用用户 | ✅ | ❌ | ❌ |
+| Users 管理 | 管理员直接修改用户密码 | ✅ | ❌ | ❌ |
+| Users 管理 | 删除用户 | ✅ | ❌ | ❌ |
+| Region 管理 | 访问页面 | ✅ | ❌ | ❌ |
+| Region 管理 | 列表/搜索 | ✅ | ❌ | ❌ |
+| Region 管理 | 创建/编辑/删除 | ✅ | ❌ | ❌ |
+| Analyst Info 管理 | 访问页面 | ✅ | ❌ | ❌ |
+| Analyst Info 管理 | 列表/搜索 | ✅ | ❌ | ❌ |
+| Analyst Info 管理 | 创建/编辑/删除 | ✅ | ❌ | ❌ |
+| **基础数据模块（前置 change）** | - | - | - | - |
+| Coverage 管理 | 访问页面 | ✅ | ❌ | ❌ |
+| Coverage 管理 | 列表/搜索 | ✅ | ❌ | ❌ |
+| Coverage 管理 | 创建/编辑/删除 | ✅ | ❌ | ❌ |
+| Sector 管理 | 访问页面 | ✅ | ❌ | ❌ |
+| Sector 管理 | 列表/搜索 | ✅ | ❌ | ❌ |
+| Sector 管理 | 创建/编辑/删除 | ✅ | ❌ | ❌ |
+| Template 管理 | 访问页面 | ✅ | ❌ | ❌ |
+| Template 管理 | 上传新版本 | ✅ | ❌ | ❌ |
+| Template 管理 | 启用/停用版本 | ✅ | ❌ | ❌ |
+| **本 change 新增模块** | - | - | - | - |
+| Reports | 访问列表 | ✅ | ✅ | ✅（仅本人） |
+| Reports | 创建报告 | ✅（可代建） | ❌ | ✅（仅为自己） |
+| Reports | 编辑 draft/submitted 报告 | ✅ | ❌ | ✅（仅本人） |
+| Reports | 提交审核 | ✅ | ❌ | ✅（仅本人） |
+| Reports | 查看版本历史 | ✅ | ✅ | ✅（仅本人） |
+| Report Review | 访问审核工作台 | ✅ | ✅ | ❌ |
+| Report Review | 审批通过/拒绝 | ✅ | ✅ | ❌ |
+| **导航与消费侧读取** | - | - | - | - |
+| Desktop 导航 | Users 卡片显示 | ✅ | ❌ | ❌ |
+| Desktop 导航 | Regions 卡片显示 | ✅ | ❌ | ❌ |
+| Desktop 导航 | Analyst Info 卡片显示 | ✅ | ❌ | ❌ |
+| Desktop 导航 | Coverage/Sector/Template 卡片显示 | ✅ | ❌ | ❌ |
+| Desktop 导航 | Reports 卡片显示 | ✅ | ✅ | ✅ |
+| Desktop 导航 | Report Review 卡片显示 | ✅ | ✅ | ❌ |
+
+### 3.2 角色数据表权限矩阵（RLS）
+
+以下为当前阶段全量数据权限矩阵（含已实现表、前置 change 表与本 change 新增表）：
+
+| 数据表 | SELECT | INSERT | UPDATE | DELETE | 说明 |
+|-------|--------|--------|--------|--------|------|
+| **已有表** | - | - | - | - | - |
+| `auth.users` | Admin（通过 Admin API） | 仅 Admin | 仅 Admin | 仅 Admin | Auth 用户管理通过 Admin API，不走业务表 RLS |
+| `region` | 所有已认证用户 | 仅 Admin | 仅 Admin | 仅 Admin | 已有基础字典表 |
+| `analyst` | 所有已认证用户 | 仅 Admin | 仅 Admin | 仅 Admin | 业务分析师信息，保持与 auth.users 解耦 |
+| **基础数据模块（前置 change）** | - | - | - | - | - |
+| `coverage` | 所有已认证用户 | 仅 Admin | 仅 Admin | 仅 Admin | 基础数据可读、写入仅 Admin |
+| `coverage_analyst` | 所有已认证用户 | 仅 Admin | 仅 Admin | 仅 Admin | coverage 与 analyst 关系 |
+| `sector` | 所有已认证用户 | 仅 Admin | 仅 Admin | 仅 Admin | 两级行业分类 |
+| `template` | 所有已认证用户 | 仅 Admin | 仅 Admin | 仅 Admin | 模板元数据 |
+| **本 change 新增表** | - | - | - | - | - |
+| `report` | Admin/SA 全部；Analyst 仅本人 | Admin/Analyst | Admin；Analyst 仅本人 draft/submitted | 仅 Admin（可选） | 状态机主体 |
+| `report_version` | Admin/SA 全部；Analyst 仅本人 | Admin/Analyst | ❌ | ❌ | 仅追加，不更新 |
+| `report_analyst` | Admin/SA 全部；Analyst 仅本人关联 | Admin/Analyst | Admin/Analyst | Admin | 作者关系 |
+| **存储层** | - | - | - | - | - |
+| `storage.objects`（reports bucket） | 相关报告可见范围内可读 | Admin/Analyst | Admin/Analyst | Admin | Word/Excel 文件路径与权限 |
+
+## 四、验收标准
+
 - [ ] Analyst 可创建并提交自己的报告。
 - [ ] Admin 可替 Analyst 创建报告并提交。
 - [ ] SA 无法创建/编辑报告，但可审批 submitted 报告。
@@ -69,13 +121,12 @@
 - [ ] 每次保存都会新增 report_version 记录。
 - [ ] RLS 生效：Analyst 不能读取/修改他人报告。
 
-## 三、设计约束与规范
+## 五、设计约束与规范
 
-- 严格遵循 `docs/LOGIC.md` 的分层与 Server-first 架构。
-- 报告写操作统一走 Server Actions，不通过客户端直连高权限接口。
-- 文件上传路径规范化，避免覆盖冲突（按 report_id/version 分层）。
 - 审批动作必须具备可审计字段（人、时间、结果、理由）。
-- 测试覆盖最小闭环：创建->编辑->提交->审批通过/拒绝。
+- 文件路径规范：
+  - `reports/{report_id}/word/{version}/report.docx`
+  - `reports/{report_id}/model/{version}/model.xlsx`
 
 ## Capabilities
 

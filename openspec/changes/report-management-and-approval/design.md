@@ -1,14 +1,12 @@
 ## Context
 
-该 change 承接基础数据模块，建设系统核心流程：报告从创建到审批发布的完整生命周期。实现范围跨越页面、数据模型、文件存储、权限与状态机，是一个高耦合的跨模块变更，需要先统一状态与权限模型再进入编码。
+该 change 承接基础数据模块。`proposal.md` 已定义业务范围、全量权限矩阵、验收标准与特定约束；本文仅说明技术实现方案与关键权衡。
 
 ## Goals / Non-Goals
 
 **Goals:**
-- 实现 Reports 与 Report Review 两个页面的职责分离。
-- 实现报告状态机与可审计审批流程。
-- 实现 report_version 追加式版本记录（基本信息 + Word/Excel）。
-- 实现基于角色和归属关系的双层权限控制（应用层 + RLS）。
+- 在现有架构内实现 report 生命周期、审批流与版本追踪的数据与服务端链路。
+- 通过数据库约束与事务策略保证状态流转、版本写入与权限一致性。
 
 **Non-Goals:**
 - 不建设外部查看站点（neoreport）及其对接接口。
@@ -18,9 +16,7 @@
 ## Decisions
 
 ### 1) 设计基线
-- 沿用 Next.js App Router + Supabase + Server Actions。
-- 报告列表/详情由 Server Components 渲染，关键交互用 Client Components 局部承载。
-- 所有写操作必须先做角色校验，再进入 repository。
+- 技术基线继承既有项目约定（详见 `docs/LOGIC.md`、`docs/UI.md` 与相关规范文档）。
 
 备选方案：全部 client-side + RPC。  
 未选原因：权限边界更难统一，且与现有项目范式不一致。
@@ -38,32 +34,19 @@
 - 禁止：跨级跳转与回写（如 `published -> draft`）。
 
 ### 3) 权限与安全
-- 应用层：
-  - Analyst 仅可操作自己报告。
-  - SA 可读全部并执行审批，不可创建/编辑。
-  - Admin 全权限，含代建。
-- 数据层（RLS）：
-  - `report`/`report_version`/`report_analyst` 按角色 + 所属关系控制。
-  - `report_version` 仅 INSERT + SELECT，禁止 UPDATE/DELETE。
+- 应用层：权限规则按 proposal 的功能权限矩阵实现（Analyst 仅本人；SA 审批只读；Admin 全权限）。
+- 数据层（RLS）：`report`/`report_version`/`report_analyst` 按 proposal 的表级权限矩阵落地。
 - 文件安全：上传由服务端生成目标路径与文件名，避免覆盖和路径注入。
 
-### 4) 页面交互
-- Reports 页面：筛选（status/type/author）+ 列表 + 创建/编辑抽屉或弹窗 + 版本历史侧栏。
-- Report Review 页面：仅展示 `submitted` 队列，支持查看详情、批准、拒绝（必填拒绝理由）。
-- Report Review 页面：支持 Word 预览、Excel 下载、审核历史与统计看板；高亮等待时间较长条目。
-- 统一反馈：状态变更后 toast + 列表局部刷新。
-
-### 5) 技术实现方案
+### 4) 技术实现方案
 - `web/features/reports/repo/*.ts`：列表、详情、保存、提交、状态流转。
 - `web/features/report-review/repo/*.ts`：审批队列、审批动作。
 - `web/features/reports/actions.ts` 与 `web/features/report-review/actions.ts`：权限校验与命令编排。
 - `web/domain/schemas/report*.ts`：表单与状态机参数校验。
 - `supabase/migrations/*`：表结构、约束、RLS、索引、触发器（更新时间与版本号）。
-- 代码质量要求：实现代码需通过 Prettier/ESLint（前端）与既有仓库检查规范。
 
-### 6) 文件路径规范
-- Word 文件：`reports/{report_id}/word/{version}/report.docx`
-- Excel 模型：`reports/{report_id}/model/{version}/model.xlsx`
+### 5) 文件路径规范
+- 采用 proposal 已定义的 reports 文件路径规范，不在 design 中重复展开。
 
 ## Risks / Trade-offs
 
