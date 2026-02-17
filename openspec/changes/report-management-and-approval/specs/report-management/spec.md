@@ -1,0 +1,58 @@
+## ADDED Requirements
+
+### Requirement: System SHALL create reports with owner model
+The system SHALL create reports with immutable `owner_user_id` set to the current authenticated user at creation time.
+
+#### Scenario: Analyst creates report
+- **WHEN** Analyst creates a report
+- **THEN** system MUST persist report with `owner_user_id` = current Analyst user id
+
+#### Scenario: Admin creates report
+- **WHEN** Admin creates a report
+- **THEN** system MUST persist report with `owner_user_id` = current Admin user id
+
+### Requirement: System SHALL enforce report visibility by role and owner
+The system SHALL enforce report visibility by role and status scope.
+
+#### Scenario: Analyst views reports list
+- **WHEN** Analyst loads reports list
+- **THEN** system MUST return only reports where `owner_user_id` equals current Analyst user id
+
+#### Scenario: SA views reports list
+- **WHEN** SA loads reports list
+- **THEN** system MUST return only reports in `submitted|published|rejected`
+
+#### Scenario: Admin views reports list
+- **WHEN** Admin loads reports list
+- **THEN** system MUST return reports in all statuses
+
+### Requirement: System SHALL support default submitted filter for SA and Admin
+The system SHALL apply default status filter `submitted` for SA and Admin reports views.
+
+#### Scenario: SA enters reports page without explicit filter
+- **WHEN** SA opens reports page first time in a session
+- **THEN** system MUST default filter to `submitted`
+
+#### Scenario: Admin enters reports page without explicit filter
+- **WHEN** Admin opens reports page first time in a session
+- **THEN** system MUST default filter to `submitted`
+
+### Requirement: System SHALL support direct submit as two-step workflow
+The system SHALL support direct submit UX while executing save and submit as two backend steps.
+
+#### Scenario: Direct submit succeeds
+- **WHEN** owner clicks direct submit and both save and submit steps succeed
+- **THEN** system MUST persist latest content and transition report to `submitted`
+
+#### Scenario: Direct submit second step fails
+- **WHEN** owner clicks direct submit and save succeeds but submit fails
+- **THEN** system MUST keep report in `draft`
+- **AND** system MUST return message `已保存为 Draft，提交失败`
+
+### Requirement: System SHALL allow submitted editing by owner
+The system SHALL allow owner to edit report content when status is `submitted`.
+
+#### Scenario: Owner edits submitted report
+- **WHEN** owner saves changes on a submitted report
+- **THEN** system MUST persist new content
+- **AND** report status MUST remain `submitted`
