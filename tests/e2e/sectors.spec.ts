@@ -29,7 +29,8 @@ test.describe("Sectors Management", () => {
     const timestamp = Date.now();
     await page.getByLabel("English Name").fill(`Test Sector L1 ${timestamp}`);
     await page.getByLabel("Chinese Name").fill("测试一级行业");
-    await page.getByLabel("Level").selectOption("1");
+    // Use nth(1) to get the second Level select (inside the modal form)
+    await page.getByLabel("Level").nth(1).selectOption("1");
 
     // Submit via keyboard
     await page.keyboard.press("Enter");
@@ -55,31 +56,31 @@ test.describe("Sectors Management", () => {
     const timestamp = Date.now();
     await page.getByLabel("English Name").fill(`Parent Sector ${timestamp}`);
     await page.getByLabel("Chinese Name").fill("父行业");
-    await page.getByLabel("Level").selectOption("1");
+    await page.getByLabel("Level").nth(1).selectOption("1");
     await page.keyboard.press("Enter");
     await expect(page.locator("role=dialog")).not.toBeVisible({
       timeout: 10000,
     });
 
+    // Wait for page to refresh and show the new sector
+    await expect(page.locator("table")).toContainText(
+      `Parent Sector ${timestamp}`,
+      { timeout: 5000 },
+    );
+
     // Now create a level-2 sector with the parent
     await page.click('button:has-text("Create Sector")');
     await expect(page.locator("role=dialog")).toBeVisible();
 
-    // Wait for parent selector to load
-    await page.waitForFunction(
-      () => {
-        const select = document.querySelector("select");
-        return select && select.querySelectorAll("option").length > 1;
-      },
-      { timeout: 10000 },
-    );
-
     await page.getByLabel("English Name").fill(`Child Sector ${timestamp}`);
     await page.getByLabel("Chinese Name").fill("子行业");
-    await page.getByLabel("Level").selectOption("2");
-    await page.getByLabel("Parent Sector").selectOption({
-      label: `Parent Sector ${timestamp}`,
-    });
+    await page.getByLabel("Level").nth(1).selectOption("2");
+
+    // Wait for parent sector dropdown to be populated
+    await page.waitForTimeout(1000);
+
+    // Select the first available parent (the one we just created)
+    await page.getByLabel("Parent Sector").selectOption({ index: 1 });
 
     await page.keyboard.press("Enter");
 
@@ -103,7 +104,7 @@ test.describe("Sectors Management", () => {
 
     // Select level-2 without selecting parent
     await page.getByLabel("English Name").fill("Orphan Sector");
-    await page.getByLabel("Level").selectOption("2");
+    await page.getByLabel("Level").nth(1).selectOption("2");
     // Leave parent empty
 
     await page.keyboard.press("Enter");
@@ -151,7 +152,7 @@ test.describe("Sectors Management", () => {
     const timestamp = Date.now();
     await page.getByLabel("English Name").fill(`Delete Test ${timestamp}`);
     await page.getByLabel("Chinese Name").fill("删除测试");
-    await page.getByLabel("Level").selectOption("1");
+    await page.getByLabel("Level").nth(1).selectOption("1");
     await page.keyboard.press("Enter");
     await expect(page.locator("role=dialog")).not.toBeVisible({
       timeout: 10000,

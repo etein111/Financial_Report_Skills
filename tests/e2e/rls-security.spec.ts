@@ -123,25 +123,18 @@ test.describe("RLS Security Policies", () => {
       await page.click('button:has-text("Create Coverage")');
       await expect(page.locator("role=dialog")).toBeVisible();
 
-      // Fill required fields
-      await page.waitForFunction(
-        () => {
-          const select = document.querySelector("#sector-id");
-          return select && select.querySelectorAll("option").length > 1;
-        },
-        { timeout: 10000 },
-      );
-
+      // Fill required fields using labels
       const timestamp = Date.now();
-      await page.fill("#ticker", `RLS${timestamp % 10000} HK`);
-      await page.fill("#isin", `KYG${timestamp.toString().slice(-9)}`);
-      await page.fill("#country", "Hong Kong");
-      await page.fill("#english-name", `RLS Coverage Test ${timestamp}`);
-      await page.selectOption("#sector-id", { index: 1 });
-
-      // Select first analyst
-      const analystSelect = page.locator("select").nth(4);
-      await analystSelect.selectOption({ index: 1 });
+      await page.getByLabel("Ticker *").fill(`RLS${timestamp % 10000} HK`);
+      await page
+        .getByLabel("ISIN *")
+        .fill(`KYG${timestamp.toString().slice(-9)}`);
+      await page.getByLabel("Country of Domicile *").fill("Hong Kong");
+      await page
+        .getByLabel("English Full Name *")
+        .fill(`RLS Coverage Test ${timestamp}`);
+      await page.getByLabel("Sector *").selectOption({ index: 1 });
+      await page.getByLabel("Analyst").selectOption({ index: 1 });
 
       await page.keyboard.press("Enter");
 
@@ -222,9 +215,9 @@ test.describe("RLS Security Policies", () => {
       await expect(page.locator("role=dialog")).toBeVisible();
 
       const timestamp = Date.now();
-      await page.fill("#name_en", `RLS Sector ${timestamp}`);
-      await page.fill("#name_cn", "测试行业");
-      await page.selectOption("#level", "1");
+      await page.getByLabel("English Name").fill(`RLS Sector ${timestamp}`);
+      await page.getByLabel("Chinese Name").fill("测试行业");
+      await page.getByLabel("Level").nth(1).selectOption("1");
       await page.keyboard.press("Enter");
 
       // Should succeed
