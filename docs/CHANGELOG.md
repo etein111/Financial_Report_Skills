@@ -4,6 +4,12 @@
 
 ## 2026-02-17
 
+### OpenSpec 归档触发流程调整
+- 新增 `docs/OPENSPEC_ARCHIVE_BACKFILL.md`，统一归档并回填 docs 的触发语句、执行步骤与输出要求。
+- `docs/README.md` 重整为“启动全量加载清单”，将 `README` 与 `OPENSPEC_ARCHIVE_BACKFILL` 一并纳入启动必读。
+- `docs/README.md` 去除回填映射重复内容，改为只保留唯一入口引用（以 `OPENSPEC_ARCHIVE_BACKFILL` 为准）。
+- 移除自定义 skill：`.codex/skills/openspec-archive-change-docs`。
+
 ### 文档治理重构
 - 新增 `docs/DATA_MODEL.md` 作为逻辑数据模型唯一入口。
 - 新增 `docs/CHANGELOG.md` 作为项目变更摘要入口。
