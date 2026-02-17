@@ -61,4 +61,4 @@
 - [x] 8.3 编写/更新 E2E：template 上传、版本历史、active 切换
 - [x] 8.4 编写/更新权限测试：Desktop 卡片可见性与路由访问矩阵
 - [x] 8.5 编写/更新 RLS 测试：`coverage`/`coverage_analyst` INSERT 为 admin+analyst，其余写仅 admin
-- [ ] 8.6 执行全量回归并修复阻断问题，完成 change 验收打勾
+- [x] 8.6 执行全量回归并修复阻断问题，完成 change 验收打勾
