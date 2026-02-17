@@ -1,45 +1,64 @@
 # Docs
 
-这是一组“跨目录、长期有效”的项目规范与约定。面向人和 AI 工具共同阅读。
+项目规范与约定的唯一入口。面向人和 AI 工具共同阅读。
 
-约定：
-- `docs/README.md` 是唯一入口与索引。
-- `docs/` 下除 `README.md` 外的文件：彼此不相互引用；每个文件只负责一类事情。
 
-建议阅读顺序：
-1. `docs/REQUIREMENTS.md`：项目级需求全貌（按主题组织，非按 change 时间顺序）
-2. `docs/ARCHITECTURE.md`：项目级架构全貌（按主题组织，非按 change 时间顺序）
-3. `docs/DECISIONS.md`：跨后续功能的关键约束/约定（从 design/proposal 收敛而来）
-4. `docs/TESTING.md`：测试与验收规范（尤其是临时文件目录 `temp/`）
-5. `docs/LOGIC.md`：Web 逻辑与分层硬约定（优先级最高）
-6. `docs/UI.md`：Web UI 组件规范
+## 核心文档（按优先级阅读）
 
-子系统文档：
-- Web（Next.js）：`web/README.md`、`docs/LOGIC.md`、`docs/UI.md`
-- Tests：`tests/README.md`
-- Supabase：`supabase/README.md`
-- 变更（OpenSpec）：`openspec/`
+| 优先级 | 文档 | 说明 |
+|--------|------|------|
+| 1 | `docs/REQUIREMENTS.md` | 系统需求全貌 |
+| 2 | `docs/ARCHITECTURE.md` | 项目架构规范 |
+| 3 | `docs/DECISIONS.md` | 长期约束与约定 |
+| 4 | `docs/TESTING.md` | 测试规范（临时文件放 `temp/`） |
+| 5 | `docs/LOGIC.md` | Web 分层约定（**优先级最高**） |
+| 6 | `docs/UI.md` | UI 组件规范 |
 
-## Web (Next.js)
+---
 
-Next.js 应用，系统前端界面。
+## 开发流程原则
 
-详细说明：`web/README.md`
+### 必须遵守的文档
 
-### 目录结构
+开发时必须理解并遵守以上 6 个核心文档。
 
-```text
-web/                      # 交付代码
-├─ app/                   # Next.js App Router
-├─ components/            # React 组件
-├─ domain/                # 业务类型与规则
-├─ features/              # 业务功能模块
-├─ lib/                   # 基础设施
-└─ .env                   # 环境变量（提交到仓库）
+### 交付边界原则
+
+**核心：`web/` 目录只包含交付代码**
+
+```
+web/                     # 交付代码：app/, components/, domain/, features/, lib/
+tests/                   # 所有测试代码（E2E、验收脚本）
+supabase/scripts/        # 数据库开发脚本
+docs/                    # 项目文档
+scripts/                 # 开发/运维脚本
+temp/                    # 临时输出（不提交）
 ```
 
-### Web 规范文档
+**典型场景：**
 
-- 逻辑处理规范：`docs/LOGIC.md`
-- UI 组件规范：`docs/UI.md`
-- 测试规范：`docs/TESTING.md`
+| 场景 | 应放位置 | 禁止 |
+|------|---------|------|
+| 测试脚本 | `tests/e2e/` 或 `tests/scripts/` | `web/scripts/` |
+| 数据库验证脚本 | `supabase/scripts/` | `web/scripts/` |
+| 新功能模块 | `web/features/<name>/` | - |
+| UI 组件 | `web/components/` 或 `web/features/<name>/components/` | - |
+| 临时测试文件 | `temp/` | 任何源码目录 |
+
+---
+
+## 子系统文档
+
+| 子系统 | 文档 |
+|--------|------|
+| Web (Next.js) | `web/README.md`、`docs/LOGIC.md`、`docs/UI.md` |
+| Tests | `tests/README.md` |
+| Supabase | `supabase/README.md` |
+| 变更管理 | `openspec/` |
+
+---
+
+## 约定
+
+- `docs/README.md` 是唯一入口与索引
+- `docs/` 下其他文件彼此不相互引用，每个文件只负责一类事情
