@@ -21,8 +21,11 @@
 ### 2.1 Coverage 管理
 - 列表字段：ticker、english_full_name、chinese_short_name、sector、reporting_currency、updated_at。
 - 字段覆盖：`country_of_domicile`、`isin`、`ads_conversion_factor`、`is_duplicate`、`approved_by`、`approved_at`。
+- 创建/编辑表单必填：`ticker`、`country_of_domicile`、`english_full_name`、`sector_id`、`isin`、`analyst`（至少 1 位）。
 - 支持按 ticker/name/sector 搜索。
 - 维护 coverage 与 analyst 的作者角色（lead/co-author）。
+- 支持最多 4 位 analyst 排序维护（1/2/3/4 位）。
+- 允许 Analyst 新增 coverage；编辑/删除仍仅 Admin。
 - 删除 coverage 前需二次确认。
 
 ### 2.2 Sector 管理（两级）
@@ -30,6 +33,10 @@
 - 二级行业：必须绑定一级 parent。
 - 禁止形成循环层级、禁止二级再挂二级。
 - 列表支持按层级与关键词筛选。
+- 在 Coverage 关联 Sector 的选择器中，必须支持：
+  - 关键字搜索。
+  - 一级/二级层级展示（可视化缩进）。
+  - 长列表滚动浏览。
 
 ### 2.3 报告模板文件管理（Word/Excel）
 - 模板类型：`word`、`excel`。
@@ -41,7 +48,7 @@
 - Coverage 页面：列表、搜索、分页、创建/编辑弹窗、删除确认。
 - Sector 页面：树形展示（一级/二级）、层级筛选、创建/编辑弹窗、删除确认。
 - Template 页面：按 `report_type + file_type` 分组展示当前启用版本与历史版本，支持上传新版本与启用切换。
-- Desktop 导航：新增 Coverage/Sector/Template 三个入口卡片（Admin-only），并保持新标签页打开契约。
+- Desktop 导航：新增 Coverage/Sector/Template 三个入口卡片；Coverage 对 Admin/Analyst 可见，Sector/Template 仅 Admin 可见，并保持新标签页打开契约。
 
 ## 三、权限模型
 
@@ -70,9 +77,10 @@
 | Analyst Info 管理 | 列表/搜索 | ✅ | ❌ | ❌ |
 | Analyst Info 管理 | 创建/编辑/删除 | ✅ | ❌ | ❌ |
 | **本 change 新增模块** | - | - | - | - |
-| Coverage 管理 | 访问页面 | ✅ | ❌ | ❌ |
-| Coverage 管理 | 列表/搜索 | ✅ | ❌ | ❌ |
-| Coverage 管理 | 创建/编辑/删除 | ✅ | ❌ | ❌ |
+| Coverage 管理 | 访问页面 | ✅ | ❌ | ✅ |
+| Coverage 管理 | 列表/搜索 | ✅ | ❌ | ✅ |
+| Coverage 管理 | 新增 | ✅ | ❌ | ✅ |
+| Coverage 管理 | 编辑/删除 | ✅ | ❌ | ❌ |
 | Sector 管理 | 访问页面 | ✅ | ❌ | ❌ |
 | Sector 管理 | 列表/搜索 | ✅ | ❌ | ❌ |
 | Sector 管理 | 创建/编辑/删除 | ✅ | ❌ | ❌ |
@@ -83,7 +91,8 @@
 | Desktop 导航 | Users 卡片显示 | ✅ | ❌ | ❌ |
 | Desktop 导航 | Regions 卡片显示 | ✅ | ❌ | ❌ |
 | Desktop 导航 | Analyst Info 卡片显示 | ✅ | ❌ | ❌ |
-| Desktop 导航 | Coverage/Sector/Template 卡片显示 | ✅ | ❌ | ❌ |
+| Desktop 导航 | Coverage 卡片显示 | ✅ | ❌ | ✅ |
+| Desktop 导航 | Sector/Template 卡片显示 | ✅ | ❌ | ❌ |
 | 报告业务引用基础数据 | 读取 Coverage/Sector/Template | ✅ | ✅ | ✅ |
 
 ### 3.2 角色数据表权限矩阵（RLS）
@@ -97,8 +106,8 @@
 | `region` | 所有已认证用户 | 仅 Admin | 仅 Admin | 仅 Admin | 已有基础字典表 |
 | `analyst` | 所有已认证用户 | 仅 Admin | 仅 Admin | 仅 Admin | 业务分析师信息，保持与 auth.users 解耦 |
 | **本 change 新增表** | - | - | - | - | - |
-| `coverage` | 所有已认证用户 | 仅 Admin | 仅 Admin | 仅 Admin | 基础数据可读、写入仅 Admin |
-| `coverage_analyst` | 所有已认证用户 | 仅 Admin | 仅 Admin | 仅 Admin | 维护 coverage 与 analyst 关系 |
+| `coverage` | 所有已认证用户 | Admin/Analyst | 仅 Admin | 仅 Admin | 基础数据可读；新增允许 Analyst |
+| `coverage_analyst` | 所有已认证用户 | Admin/Analyst | 仅 Admin | 仅 Admin | 覆盖关系新增允许 Analyst |
 | `sector` | 所有已认证用户 | 仅 Admin | 仅 Admin | 仅 Admin | 支持两级行业分类 |
 | `template` | 所有已认证用户 | 仅 Admin | 仅 Admin | 仅 Admin | 模板元数据 |
 | **存储层** | - | - | - | - | - |
@@ -106,11 +115,13 @@
 
 ## 四、验收标准
 
-- [ ] Admin 可访问三类管理页面，非 Admin 访问返回 `/403`。
+- [ ] Admin 可访问 Coverage/Sector/Template；Analyst 可访问 Coverage，访问 Sector/Template 返回 `/403`。
 - [ ] Coverage/Sector/Template 均可完成 CRUD（Template 的 D 为停用或删除元数据）。
 - [ ] Sector 层级约束生效（无循环、二级必须有一级父节点）。
+- [ ] Coverage 创建/编辑时，必填字段校验生效（ticker/country_of_domicile/english_full_name/sector/isin/analyst）。
+- [ ] Coverage 的 analyst 角色排序可维护至 4 位。
 - [ ] 模板支持上传新版本并切换启用版本。
-- [ ] RLS 生效：已认证用户可读，只有 Admin 可写。
+- [ ] RLS 生效：已认证用户可读；Coverage 与 coverage_analyst 的 INSERT 允许 Admin/Analyst，其余写操作仅 Admin。
 - [ ] 创建用户时支持“是否邮件确认”：开启则发邀请确认邮件，关闭则可直接创建可登录账号。
 
 ## 五、设计约束与规范
@@ -128,7 +139,7 @@
 - `template-file-management`: 报告模板（Word/Excel）上传、版本与启用状态管理。
 
 ### Modified Capabilities
-- `desktop-nav`: 新增 Coverage/Sector/Template 管理入口（Admin-only）。
+- `desktop-nav`: 新增 Coverage/Sector/Template 管理入口（Coverage 对 Admin/Analyst 可见，Sector/Template 仅 Admin）。
 - `role-control`: 扩展这三个管理模块的功能权限判定与路由守卫。
 - `user-management`: 创建用户支持“是否邮件确认”开关。
 
