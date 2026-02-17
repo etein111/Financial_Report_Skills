@@ -4,49 +4,17 @@
 
 ## What Changes
 
-## 一、目标与背景
+## 一、目标与范围
 
 ### 1.1 目标
-- 新增 Coverage（公司覆盖）管理，支持列表、创建、编辑、删除、搜索。
-- 新增 Sector（行业分类）管理，支持一级/二级结构与层级校验。
-- 新增报告模板文件管理，支持 Word/Excel 模板上传、版本化与启用状态控制。
-- 调整 Analyst Info 与用户管理联动：新增 Analyst 时自动创建登录账号；创建用户时支持“是否邮件确认”开关。
+- 交付 Coverage（公司覆盖）、Sector（行业分类，二级结构）、报告模板文件（Word/Excel）三类基础数据管理能力。
+- 调整用户管理：创建用户时支持“是否邮件确认”开关。
 - 为后续 report 管理 change 提供可复用的基础数据选择源（coverage、sector、template）。
 
 ### 1.2 范围边界
 - 本 change 仅建设基础数据模块，不包含 report 创建/编辑/提交流程。
 - 不做模板在线编辑，仅做文件上传与版本管理。
 - 不引入 Edge Functions/Realtime，保持现有 Server Actions + Supabase 模式。
-
-### 1.3 权限模型
-
-#### 角色功能权限矩阵
-
-| 功能模块 | 功能能力 | Admin | SA | Analyst |
-|---------|---------|-------|----|---------|
-| Analyst Info 管理 | 新增 Analyst（自动创建账号） | ✅ | ❌ | ❌ |
-| Users 管理 | 创建用户时选择是否邮件确认 | ✅ | ❌ | ❌ |
-| Coverage 管理 | 访问页面 | ✅ | ❌ | ❌ |
-| Coverage 管理 | 列表/搜索 | ✅ | ❌ | ❌ |
-| Coverage 管理 | 创建/编辑/删除 | ✅ | ❌ | ❌ |
-| Sector 管理 | 访问页面 | ✅ | ❌ | ❌ |
-| Sector 管理 | 列表/搜索 | ✅ | ❌ | ❌ |
-| Sector 管理 | 创建/编辑/删除 | ✅ | ❌ | ❌ |
-| Template 管理 | 访问页面 | ✅ | ❌ | ❌ |
-| Template 管理 | 上传新版本 | ✅ | ❌ | ❌ |
-| Template 管理 | 启用/停用版本 | ✅ | ❌ | ❌ |
-| 报告业务引用基础数据 | 读取 Coverage/Sector/Template | ✅ | ✅ | ✅ |
-
-#### 角色数据表权限矩阵（RLS）
-
-| 数据表 | SELECT | INSERT | UPDATE | DELETE | 说明 |
-|-------|--------|--------|--------|--------|------|
-| `auth.users` | Admin（通过 Admin API） | 仅 Admin | 仅 Admin | 仅 Admin | 新增 Analyst 时自动创建登录账号 |
-| `coverage` | 所有已认证用户 | 仅 Admin | 仅 Admin | 仅 Admin | 基础数据可读、写入仅 Admin |
-| `coverage_analyst` | 所有已认证用户 | 仅 Admin | 仅 Admin | 仅 Admin | 维护 coverage 与 analyst 关系 |
-| `sector` | 所有已认证用户 | 仅 Admin | 仅 Admin | 仅 Admin | 支持两级行业分类 |
-| `template` | 所有已认证用户 | 仅 Admin | 仅 Admin | 仅 Admin | 模板元数据 |
-| `storage.objects`（模板桶） | 所有已认证用户（受路径约束） | 仅 Admin | 仅 Admin | 仅 Admin | 模板文件上传/替换/删除 |
 
 ## 二、需求
 
@@ -69,22 +37,88 @@
 - 支持版本号递增管理，保留历史版本。
 - 支持“当前启用版本”切换；同一 report_type + file_type 仅 1 个启用版本。
 
-### 2.4 验收标准
+### 2.4 页面与交互边界
+- Coverage 页面：列表、搜索、分页、创建/编辑弹窗、删除确认。
+- Sector 页面：树形展示（一级/二级）、层级筛选、创建/编辑弹窗、删除确认。
+- Template 页面：按 `report_type + file_type` 分组展示当前启用版本与历史版本，支持上传新版本与启用切换。
+- Desktop 导航：新增 Coverage/Sector/Template 三个入口卡片（Admin-only），并保持新标签页打开契约。
+
+## 三、权限模型
+
+### 3.1 角色功能权限矩阵
+
+以下为当前阶段全量功能权限矩阵（含已实现模块与本 change 新增模块）：
+
+| 功能模块 | 功能能力 | Admin | SA | Analyst |
+|---------|---------|-------|----|---------|
+| **认证与会话** | - | - | - | - |
+| 认证与会话 | 登录/登出 | ✅ | ✅ | ✅ |
+| 认证与会话 | 忘记密码（邮件重置） | ✅ | ✅ | ✅ |
+| **已有管理模块** | - | - | - | - |
+| Users 管理 | 访问 Users 页面 | ✅ | ❌ | ❌ |
+| Users 管理 | 查看用户列表 | ✅ | ❌ | ❌ |
+| Users 管理 | 创建用户时选择是否邮件确认 | ✅ | ❌ | ❌ |
+| Users 管理 | 编辑用户信息 | ✅ | ❌ | ❌ |
+| Users 管理 | 修改用户角色 | ✅ | ❌ | ❌ |
+| Users 管理 | 启用/禁用用户 | ✅ | ❌ | ❌ |
+| Users 管理 | 管理员直接修改用户密码 | ✅ | ❌ | ❌ |
+| Users 管理 | 删除用户 | ✅ | ❌ | ❌ |
+| Region 管理 | 访问页面 | ✅ | ❌ | ❌ |
+| Region 管理 | 列表/搜索 | ✅ | ❌ | ❌ |
+| Region 管理 | 创建/编辑/删除 | ✅ | ❌ | ❌ |
+| Analyst Info 管理 | 访问页面 | ✅ | ❌ | ❌ |
+| Analyst Info 管理 | 列表/搜索 | ✅ | ❌ | ❌ |
+| Analyst Info 管理 | 创建/编辑/删除 | ✅ | ❌ | ❌ |
+| **本 change 新增模块** | - | - | - | - |
+| Coverage 管理 | 访问页面 | ✅ | ❌ | ❌ |
+| Coverage 管理 | 列表/搜索 | ✅ | ❌ | ❌ |
+| Coverage 管理 | 创建/编辑/删除 | ✅ | ❌ | ❌ |
+| Sector 管理 | 访问页面 | ✅ | ❌ | ❌ |
+| Sector 管理 | 列表/搜索 | ✅ | ❌ | ❌ |
+| Sector 管理 | 创建/编辑/删除 | ✅ | ❌ | ❌ |
+| Template 管理 | 访问页面 | ✅ | ❌ | ❌ |
+| Template 管理 | 上传新版本 | ✅ | ❌ | ❌ |
+| Template 管理 | 启用/停用版本 | ✅ | ❌ | ❌ |
+| **导航与消费侧读取** | - | - | - | - |
+| Desktop 导航 | Users 卡片显示 | ✅ | ❌ | ❌ |
+| Desktop 导航 | Regions 卡片显示 | ✅ | ❌ | ❌ |
+| Desktop 导航 | Analyst Info 卡片显示 | ✅ | ❌ | ❌ |
+| Desktop 导航 | Coverage/Sector/Template 卡片显示 | ✅ | ❌ | ❌ |
+| 报告业务引用基础数据 | 读取 Coverage/Sector/Template | ✅ | ✅ | ✅ |
+
+### 3.2 角色数据表权限矩阵（RLS）
+
+以下为当前阶段全量数据权限矩阵（含已实现表与本 change 新增表）：
+
+| 数据表 | SELECT | INSERT | UPDATE | DELETE | 说明 |
+|-------|--------|--------|--------|--------|------|
+| **已有表** | - | - | - | - | - |
+| `auth.users` | Admin（通过 Admin API） | 仅 Admin | 仅 Admin | 仅 Admin | Auth 用户管理通过 Admin API，不走业务表 RLS |
+| `region` | 所有已认证用户 | 仅 Admin | 仅 Admin | 仅 Admin | 已有基础字典表 |
+| `analyst` | 所有已认证用户 | 仅 Admin | 仅 Admin | 仅 Admin | 业务分析师信息，保持与 auth.users 解耦 |
+| **本 change 新增表** | - | - | - | - | - |
+| `coverage` | 所有已认证用户 | 仅 Admin | 仅 Admin | 仅 Admin | 基础数据可读、写入仅 Admin |
+| `coverage_analyst` | 所有已认证用户 | 仅 Admin | 仅 Admin | 仅 Admin | 维护 coverage 与 analyst 关系 |
+| `sector` | 所有已认证用户 | 仅 Admin | 仅 Admin | 仅 Admin | 支持两级行业分类 |
+| `template` | 所有已认证用户 | 仅 Admin | 仅 Admin | 仅 Admin | 模板元数据 |
+| **存储层** | - | - | - | - | - |
+| `storage.objects`（模板桶） | 所有已认证用户（受路径约束） | 仅 Admin | 仅 Admin | 仅 Admin | 模板文件上传/替换/删除 |
+
+## 四、验收标准
+
 - [ ] Admin 可访问三类管理页面，非 Admin 访问返回 `/403`。
 - [ ] Coverage/Sector/Template 均可完成 CRUD（Template 的 D 为停用或删除元数据）。
 - [ ] Sector 层级约束生效（无循环、二级必须有一级父节点）。
 - [ ] 模板支持上传新版本并切换启用版本。
 - [ ] RLS 生效：已认证用户可读，只有 Admin 可写。
-- [ ] 新增 Analyst 时，系统自动创建对应登录账号。
 - [ ] 创建用户时支持“是否邮件确认”：开启则发邀请确认邮件，关闭则可直接创建可登录账号。
 
-## 三、设计约束与规范
+## 五、设计约束与规范
 
-- 遵循 `docs/LOGIC.md` 的分层：`app`/`features`/`domain`/`lib`。
-- Server-first：列表页使用 Server Components，写操作走 Server Actions。
-- Repository 模式封装数据访问，禁止页面层直接拼接 Supabase 查询。
-- UI 复用现有表格、分页、确认弹窗组件；桌面入口按现有 `desktop-nav` 规范扩展。
-- 临时脚本放 `supabase/scripts/` 或 `tests/scripts/`，不放 `web/`。
+- 继承既有约定：`analyst` 业务信息与 `auth.users` 解耦，创建/删除 Analyst 信息不自动创建/删除账号。
+- 存储路径规范：
+  - 模板文件：`templates/{template_id}/{version}/template.docx|xlsx`
+  - 报告文件预留（供后续 report change 使用）：`reports/{report_id}/word|model/{version}/...`
 
 ## Capabilities
 
@@ -96,7 +130,6 @@
 ### Modified Capabilities
 - `desktop-nav`: 新增 Coverage/Sector/Template 管理入口（Admin-only）。
 - `role-control`: 扩展这三个管理模块的功能权限判定与路由守卫。
-- `analyst-info-management`: 新增 Analyst 时自动创建账号（由原解耦策略改为联动创建）。
 - `user-management`: 创建用户支持“是否邮件确认”开关。
 
 ## Impact

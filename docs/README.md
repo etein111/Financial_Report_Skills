@@ -40,7 +40,7 @@ temp/                    # 临时输出（不提交）
 | 场景 | 应放位置 | 禁止 |
 |------|---------|------|
 | 测试脚本 | `tests/e2e/` 或 `tests/scripts/` | `web/scripts/` |
-| 数据库验证脚本 | `supabase/scripts/` | `web/scripts/` |
+| 数据库验证脚本 | `scripts/` 或 `tests/scripts/` | `web/scripts/`、`supabase/` |
 | 新功能模块 | `web/features/<name>/` | - |
 | UI 组件 | `web/components/` 或 `web/features/<name>/components/` | - |
 | 临时测试文件 | `temp/` | 任何源码目录 |
@@ -53,7 +53,7 @@ temp/                    # 临时输出（不提交）
 |--------|------|
 | Web (Next.js) | `web/README.md`、`docs/LOGIC.md`、`docs/UI.md`、`docs/FRONTEND_VISUAL_CONSISTENCY.md` |
 | Tests | `tests/README.md` |
-| Supabase | `supabase/README.md` |
+| Supabase（仅数据库版本管理） | `supabase/README.md` |
 | 变更管理 | `openspec/` |
 
 ---
