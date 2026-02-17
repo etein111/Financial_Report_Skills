@@ -1,126 +1,122 @@
 # Requirements (Project-Wide)
 
-Last updated: 2026-02-17 (by `region-and-analyst-management`).
+本文件定义项目级业务需求（WHAT）。
+不承载代码分层、数据库字段细节、迁移命令等实现内容。
 
-本文件用于沉淀“当前系统应该做什么”的统一需求视图（按主题组织，非按 change 时间顺序）。
+## 1. 目标与范围
 
-## 1. Purpose & Scope
+### 1.1 目标
+- 建立可演进的研究报告管理系统：从认证与基础数据，到报告创建、版本、审批闭环。
+- 用统一 RBAC 与验收口径保障后续变更不漂移。
 
-目的：建立可演示、可扩展的系统基线，支撑后续 Coverage/Sector/Template 与 report 流程叠加。
-
-范围（当前已覆盖）：
-- 认证闭环：登录、登出、忘记密码（邮件重置）、统一认证回调（邀请/确认/重置）。
+### 1.2 已上线能力（当前基线）
+- 认证闭环：登录、登出、忘记密码、统一认证回调。
 - Desktop：登录后默认落地页 `/desktop`，作为 Launcher。
-- Users 管理（Admin-only）：列表/搜索/分页、邀请创建、编辑信息、改角色、ban/unban、管理员改密、删除用户。
+- Users 管理（Admin-only）：列表/搜索/分页、邀请创建、编辑信息、改角色、禁用/启用、管理员改密、删除。
 - Region 管理（Admin-only）：列表/搜索/分页、创建、编辑、删除。
 - Analyst Info 管理（Admin-only）：列表/搜索/分页、创建、编辑、删除。
-- 数据层兜底：`region`/`analyst` 表启用 RLS，认证可读、仅 Admin 可写。
 
-不在范围（当前非目标）：
+### 1.3 已确认待开发能力（当前已定方案）
 - Coverage / Sector / Template 管理。
-- 报告相关能力（创建/编辑/审核/发布）。
-- Supabase Edge Functions / Realtime / Storage。
-- OAuth providers（当前仅邮箱+密码）。
+- Report 管理与审批：owner 模型、版本管理、状态历史、审批流。
 
-Last updated by region-and-analyst-management on 2026-02-17.
+### 1.4 非目标（当前阶段）
+- 外部发布站点（neoreport）。
+- 实时协作编辑（Realtime）。
+- 批量审批与统计面板。
 
-## 2. Roles & Permissions (RBAC)
+## 2. 角色与权限（业务层）
 
 角色：
-- `admin`：系统管理员，拥有当前全部管理能力。
-- `sa`：当前与 `analyst` 权限一致（预留后续扩展）。
-- `analyst`：普通用户，不具备管理能力。
+- `admin`：系统管理员。
+- `sa`：审批角色。
+- `analyst`：分析师角色。
 
-事实源：
-- 角色 MUST 取自 Supabase Auth `app_metadata.role`。
-- 角色更新 MUST 仅在服务端通过 Admin API 执行（避免客户端提权）。
+角色事实源：
+- 统一遵循 `docs/DECISIONS.md` 的 `D-003`（角色事实源）。
 
-功能权限（当前阶段）：
-- 所有人：登录/登出、忘记密码。
-- 仅 Admin：Users、Regions、Analyst Info 页面与所有写操作。
-- SA/Analyst：不可访问上述管理页面（重定向 `/403`）。
+## 3. 需求分组
 
-Last updated by region-and-analyst-management on 2026-02-17.
+### 3.1 认证与会话
+- 系统 MUST 提供登录、登出、忘记密码。
+- 系统 MUST 提供统一认证回调入口。
+- 未登录访问受保护页面 MUST 跳转 `/login`。
+- 无权限访问管理页面 MUST 进入 `/403`（文案包含 `No permission`）。
 
-## 3. Authentication & Sessions
-
-- 会话 MUST 使用 Supabase SSR cookies（不使用 `localStorage`）。
-- 服务端鉴权 MUST 以 `supabase.auth.getUser()` 为准（不以 `getSession()` 作为权限依据）。
-- 受保护路由：至少包含 `/desktop`、`/users`、`/regions`、`/analyst-info`。
-- 未登录访问受保护路由 MUST 跳转 `/login`。
-- 会话 refresh 失败时 MUST 视为未登录并跳转 `/login`。
-- 已登录但无权限访问 Admin-only MUST 进入 `/403`，且页面文案 MUST 包含 `No permission`。
-- 统一认证回调 `/auth/callback` 支持 `next` 参数，但 MUST 校验为相对路径以防 open redirect。
-
-## 4. Password Reset
-
-- 忘记密码 MUST 触发 Supabase 邮件重置流程。
-- 对不存在邮箱 MUST 返回统一成功提示（避免邮箱枚举）。
-- 重置链接有效期沿用 Supabase 默认配置（不额外定制）。
-
-## 5. Admin Capabilities
-
-### 5.1 User Management
-
-Users 管理（`/users`，Admin-only）必须支持：
-- 列表：按 `created_at DESC` 排序。
-- 分页：每页固定 12 条，超过 12 条启用分页。
-- 搜索：按 `email` 与 `user_metadata.full_name`（大小写不敏感、包含匹配）。
-- Invite-only 创建用户：public signups 必须关闭，仅允许 Admin 邀请创建。
-- 角色管理：写入 `app_metadata.role`。
-- 启用/禁用：仅使用 ban/unban 单机制（禁止使用 `app_metadata.is_active` 作为事实源）。
-- 管理员改密：不要求旧密码。
-- 删除用户：需二次确认。
-
-### 5.2 Region Management
-
-Region 管理（`/regions`，Admin-only）必须支持：
-- 列表字段：`name`、`code`、`created_at`。
-- 创建/编辑：`name`、`code`，且唯一性冲突有字段级提示。
-- 删除：需二次确认。
-- 删除被引用 region 时，`analyst.region_id` MUST 自动置空（`ON DELETE SET NULL`）。
-- 搜索：按 `name` / `code` 模糊匹配。
-- 分页：每页固定 15 条。
-
-### 5.3 Analyst Info Management
-
-Analyst Info 管理（`/analyst-info`，Admin-only）必须支持：
-- 列表字段：`full_name`、`chinese_name`、`email`、`region`、`is_active`。
-- 创建必填：`full_name`、`email`、`region`。
-- 编辑：可修改所有业务字段。
-- 删除：需二次确认。
-- 搜索：按 `full_name`、`chinese_name`、`email` 模糊匹配。
-- 分页：每页固定 15 条。
-- `analyst` 与 `auth.users` 保持解耦：创建/删除 analyst 信息不自动创建/删除账号。
-
-Last updated by region-and-analyst-management on 2026-02-17.
-
-## 6. Navigation Contract (Desktop-as-Launcher)
-
+### 3.2 Desktop 导航契约
+- 契约长期约束遵循 `docs/DECISIONS.md` 的 `D-005`。
 - `/desktop` MUST 为登录后默认落地页。
 - Desktop 功能卡片 MUST 在新标签页打开。
-- 功能页 MUST NOT 提供“返回 Desktop”的入口（通过关闭标签页返回）。
-- 非 Admin MUST 隐藏管理入口卡片。
-- Admin 在 Desktop 的 Data Management 区域可见：Users、Regions、Analyst Info。
+- 功能页 MUST NOT 提供“返回 Desktop”主导航入口。
 
-Last updated by region-and-analyst-management on 2026-02-17.
+### 3.3 Users 管理（Admin-only）
+- MUST 支持列表、搜索、分页（固定 12 条/页）。
+- MUST 支持邀请制创建（Invite-only）。
+- MUST 支持角色调整、启用/禁用、管理员改密、删除用户。
+- 账号状态 MUST 遵循 `docs/DECISIONS.md` 的 `D-004`（ban/unban 单机制）。
 
-## 7. Data Access Baseline (RLS)
+### 3.4 Region 与 Analyst Info（Admin-only）
+- Region：MUST 支持列表、搜索、分页（固定 15 条/页）、创建、编辑、删除。
+- Analyst Info：MUST 支持列表、搜索、分页（固定 15 条/页）、创建、编辑、删除。
+- Analyst 信息与认证账号 MUST 保持解耦（不自动建/删账号）。
 
-- `region` 与 `analyst` 表 MUST 启用 RLS。
-- 认证用户 MUST 可读（SELECT）。
-- 仅 Admin MUST 可写（INSERT/UPDATE/DELETE）。
-- RLS 角色判断 MUST 来源于 `auth.jwt()->'app_metadata'->>'role'`。
+### 3.5 Coverage / Sector / Template（已确认）
+- Coverage：
+  - MUST 支持列表、搜索、新增、编辑、删除。
+  - MUST 支持最多 4 位 analyst 排序维护。
+  - Analyst MUST 可新增 Coverage；编辑/删除仅 Admin。
+- Sector：
+  - MUST 支持两级结构管理。
+  - MUST 支持层级搜索与选择。
+- Template：
+  - MUST 支持 Word/Excel 模板管理、版本递增、启用版本切换。
 
-## 8. Operational & Security Constraints
+### 3.6 Report 管理与审批（已确认）
+- 报告 owner 模型：谁创建归谁（owner 不可转移）。
+- `draft` 与 `submitted`：owner 可继续编辑；`published/rejected` 禁止直接编辑。
+- 系统 MUST 支持“直接提交”快捷操作（后端分两步：先保存 draft，再提交）。
+- 直接提交第二步失败 MUST 提示：`已保存为 Draft，提交失败`。
+- 审批：SA/Admin 可审批通过、拒绝、`rejected -> draft`。
+- 审批页面仅提供文件下载，不做 Word 在线预览。
+- 报告列表默认筛选：SA/Admin 默认为 `submitted`（不记忆上次筛选）。
+- SA 可见报告范围：`submitted/published/rejected`；不可见他人 `draft`。
 
-- `SUPABASE_SERVICE_ROLE_KEY` MUST 仅存在于服务端环境变量，严禁下发浏览器。
-- public signups MUST 关闭，仅允许邀请制创建账号。
-- 包管理与命令入口 MUST 使用 `pnpm`。
-- 生产环境上线前 MUST 更换/改密默认 Admin 初始化方案。
-- 体验约定：前端界面语言统一为英文；对外展示与业务语义时间按 `Asia/Shanghai`（UTC+8）。
+### 3.7 报告版本与状态历史（已确认）
+- 长期约束遵循 `docs/DECISIONS.md` 的 `D-010`。
+- 内容版本（`report_version`）与状态历史（`report_status_log`）MUST 解耦。
+- 每次内容保存 MUST 追加新版本。
+- 状态流转 MUST 记录状态日志，并记录动作对应版本号。
+- 状态历史展示范围：按“当前报告”展示，不做全局历史列表。
 
-## 9. Sources
+## 4. 功能权限矩阵（目标态）
 
-- `auth-and-users-mvp`: `openspec/changes/archive/2026-02-15-auth-and-users-mvp`
-- `region-and-analyst-management`: `openspec/changes/archive/2026-02-17-region-and-analyst-management`
+| 功能 | Admin | SA | Analyst |
+|------|-------|----|---------|
+| 登录/登出/忘记密码 | ✅ | ✅ | ✅ |
+| Users 管理 | ✅ | ❌ | ❌ |
+| Region 管理 | ✅ | ❌ | ❌ |
+| Analyst Info 管理 | ✅ | ❌ | ❌ |
+| Coverage 列表/搜索 | ✅ | ❌ | ✅ |
+| Coverage 新增 | ✅ | ❌ | ✅ |
+| Coverage 编辑/删除 | ✅ | ❌ | ❌ |
+| Sector 管理 | ✅ | ❌ | ❌ |
+| Template 管理 | ✅ | ❌ | ❌ |
+| Reports 列表 | ✅（全部） | ✅（submitted/published/rejected） | ✅（仅 owner） |
+| Reports 创建 | ✅（为自己） | ❌ | ✅（为自己） |
+| Reports 编辑（draft/submitted） | ✅ | ❌ | ✅（仅 owner） |
+| Reports 提交审核 | ✅ | ❌ | ✅（仅 owner） |
+| Report Review 审批 | ✅ | ✅ | ❌ |
+| Report Review 退回 draft | ✅ | ✅ | ❌ |
+
+## 5. 验收口径（项目级）
+
+- 所有角色权限与页面可见性 MUST 与矩阵一致。
+- 关键流程（创建、编辑、提交、审批）MUST 可回归测试。
+- 非目标能力不得“隐式实现”（例如批量审批、统计面板、外部发布）。
+
+## 6. 变更来源
+
+- `auth-and-users-mvp`（归档）
+- `region-and-analyst-management`（归档）
+- `coverage-sector-template-management`（进行中）
+- `report-management-and-approval`（进行中）

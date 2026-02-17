@@ -1,111 +1,85 @@
 # Architecture (Project-Wide)
 
-Last updated: 2026-02-17 (by `region-and-analyst-management`).
+本文件定义系统架构与技术边界（HOW-系统级）。
+不承载业务需求细节（见 `REQUIREMENTS.md`）和代码级规则（见 `LOGIC.md`）。
 
-本文件用于沉淀“当前系统如何实现”的统一架构视图（按主题组织，非按 change 时间顺序）。
-
-## 1. System Overview
+## 1. 系统总览
 
 ```text
 Browser
   -> Next.js (App Router)
       - Server Components / Server Actions / Route Handlers
-      - Request boundary gate: `web/proxy.ts` (session refresh + light gating)
+      - Request boundary gate: proxy.ts（会话刷新 + 轻量门禁）
       -> Supabase Auth
-      -> Supabase PostgREST + RLS (defense in depth)
+      -> Supabase PostgREST + RLS
+      -> Supabase Storage（模板/报告文件）
 ```
 
-核心目标：Next.js 作为唯一应用入口（页面渲染 + 服务端能力），Supabase 提供 Auth 与数据层。
+核心原则：
+- Next.js 是唯一应用入口。
+- Supabase 承担认证、数据访问与数据权限兜底。
+- 应用层权限控制 + RLS 双层防护。
 
-## 2. Tech Stack & Boundaries
+## 2. 技术栈与边界
 
-- Next.js (App Router) + React + TypeScript。
-- Supabase：Auth / Postgres / RLS / PostgREST。
-- 当前明确不使用：Edge Functions / Realtime / Storage / OAuth providers。
+- 前端：Next.js App Router + React + TypeScript。
+- 后端能力：Supabase（Auth / Postgres / RLS / PostgREST / Storage）。
+- 当前不使用：Edge Functions、Realtime（除非后续 change 明确引入）。
 
-Last updated by region-and-analyst-management on 2026-02-17.
+## 3. 分层架构（系统层）
 
-## 3. App Structure & Dependency Rules
+- 路由与页面组合：`web/app`
+- 业务模块：`web/features`
+- 业务领域类型与纯规则：`web/domain`
+- 基础 UI：`web/components`
+- 基础设施：`web/lib`
 
-- 目录分层（Web）：`web/app`（路由与组合）、`web/features`（业务模块）、`web/domain`（纯业务类型/规则）、`web/components`（纯 UI）、`web/lib`（基础设施）。
-- 依赖方向（默认）：`app -> features -> domain`；`domain` 不依赖 React/Next/Supabase。
-- 触库规约：仅 `web/features/*/repo/*` 允许调用 `supabase.*`；`web/app` 与 `web/components` 禁止直连 Supabase。
-- Admin 能力：所有需要 `SUPABASE_SERVICE_ROLE_KEY` 的写操作只能在服务端执行，且应通过 `server-only` admin client。
+说明：
+- 详细依赖方向、触库规则、Server Actions 约束统一以 `docs/LOGIC.md` 为准。
 
-## 4. Auth/Session Architecture
+## 4. 认证与授权架构
 
-- 使用 `@supabase/ssr`，会话以 cookies 为载体。
-- 服务端鉴权以 `supabase.auth.getUser()` 为准。
-- 统一回调入口：`/auth/callback`（code exchange + token_hash/type verify，且 next 参数防 open redirect）。
+- 会话载体：SSR cookies（`@supabase/ssr`）。
+- 服务端鉴权事实源：`getUser()`。
+- 角色事实源遵循 `docs/DECISIONS.md` 的 `D-003`。
+- 路由门禁：`proxy.ts` 做“未登录拦截 + 轻量权限拦截”。
+- 资源级权限：通过应用层权限 + RLS 共同实现。
 
-参考实现位置（非合同）：
-- `web/app/auth/callback/route.ts`
-- `web/features/auth/repo/auth-repo.ts`
+## 5. 数据架构与数据库规范
 
-## 5. Request Boundary Gate (`proxy.ts`) & Route Protection
+### 5.1 数据模型分层
+- 逻辑模型（业务可读）：`docs/DATA_MODEL.md`
+- 物理模型（执行真相）：`supabase/migrations/*.sql`
 
-- `web/proxy.ts` 负责“会话刷新 + 轻量门禁”。
-- 门禁规则：
-  - 未登录访问受保护路由（至少 `/desktop`、`/users`、`/regions`、`/analyst-info`）重定向到 `/login`。
-  - 已登录但非 Admin 访问 Admin-only（`/users`、`/regions`、`/analyst-info`）重定向到 `/403`。
+### 5.2 数据库规范（系统级）
+- 主键：默认 `uuid`。
+- 时间字段：`created_at` / `updated_at`，使用 `timestamptz`。
+- 外键：显式声明 `ON DELETE` 语义（如 `set null` / `cascade` / `restrict`）。
+- 唯一性：通过唯一约束或唯一索引在 DB 层保证。
+- 审计：关键流程使用 append-only 日志表（例如状态历史）。
+- 删除策略：优先逻辑删除或状态驱动；是否允许物理删除由数据模型定义。
 
-Last updated by region-and-analyst-management on 2026-02-17.
+### 5.3 RLS 规范（系统级）
+- RLS 是最终授权裁判。
+- 角色判断统一来源于 JWT 角色字段。
+- 表级 RLS 矩阵与细节规则统一在 `docs/DATA_MODEL.md` 维护。
 
-## 6. Supabase Client Layering
+## 6. 存储架构规范
 
-三层 client：
-- Browser client：仅使用 `NEXT_PUBLIC_*`（anon/publishable）。
-- Server client：anon/publishable + cookies 读写。
-- Admin client：使用 `SUPABASE_SERVICE_ROLE_KEY`，仅服务端可达（`server-only`）。
+- 模板文件与报告文件统一使用 Supabase Storage。
+- 存储路径规则、命名规范、读写权限矩阵在 `docs/DATA_MODEL.md` 定义。
+- 前端不直持高权限凭据；上传/下载由服务端编排。
 
-参考实现位置：
-- `web/lib/supabase/browser.ts`
-- `web/lib/supabase/server.ts`
-- `web/lib/supabase/admin.ts`
+## 7. 迁移与演进原则
 
-## 7. Data Layer (PostgREST + RLS, Time Semantics)
+- 所有 Schema/RLS 变更必须走 `supabase/migrations/*.sql`。
+- `supabase/seed/` 仅放开发初始数据；测试数据由测试脚本创建与清理。
+- 文档更新顺序：先更新 `REQUIREMENTS`/`DATA_MODEL`/`DECISIONS`，再落实现。
 
-- 业务数据读取优先复用 Supabase PostgREST；授权最终由 RLS 裁决。
-- `region` / `analyst` 数据层：
-  - 表结构：`region`（name/code 唯一），`analyst`（email 唯一，`region_id` 外键 `ON DELETE SET NULL`）。
-  - RLS：认证可读，仅 Admin 可写。
-- 时间语义：DB 存储采用 `timestamptz` UTC 语义；展示层按 `Asia/Shanghai` 转换。
+## 8. 相关文档
 
-参考迁移：
-- `supabase/migrations/20260215122000_region_analyst_rls_baseline.sql`
-
-Last updated by region-and-analyst-management on 2026-02-17.
-
-## 8. Feature Implementation Pattern (Region/Analyst)
-
-- 路由层：
-  - `web/app/regions/page.tsx`
-  - `web/app/analyst-info/page.tsx`
-- Feature 层：
-  - `web/features/regions/*`
-  - `web/features/analyst-info/*`
-- 典型调用链：
-  - Server Component（页面加载） -> repo 读数据
-  - Server Action（写操作） -> `requireAdmin()` -> repo 写数据 -> `revalidatePath()`
-
-## 9. Supabase Migration 规范
-
-核心原则：Migration 只放生产环境需要的 Schema 变更。
-
-- `supabase/migrations/`：仅 Schema 变更（DDL、RLS、索引、约束等）。
-- `supabase/seed/`：开发环境初始数据。
-- 测试数据：禁止放 migration/seed，应由测试脚本动态创建。
-
-用户创建规范：
-- 所有用户创建必须使用 Supabase Admin API，禁止直接插入 `auth.users`。
-
-## 10. Operational/Security Notes
-
-- `SUPABASE_SERVICE_ROLE_KEY` 严禁下发浏览器；管理类写操作必须服务端执行。
-- Dev 环境允许提交 Dev key；Prod 环境严禁提交/硬编码密钥。
-- 默认 Admin 初始化仅用于 Dev/引导；生产必须替换或改密。
-
-## 11. Sources
-
-- `auth-and-users-mvp`: `openspec/changes/archive/2026-02-15-auth-and-users-mvp`
-- `region-and-analyst-management`: `openspec/changes/archive/2026-02-17-region-and-analyst-management`
+- 需求：`docs/REQUIREMENTS.md`
+- 数据模型：`docs/DATA_MODEL.md`
+- Web 实现规范：`docs/LOGIC.md`
+- 测试规范：`docs/TESTING.md`
+- 长期决策：`docs/DECISIONS.md`

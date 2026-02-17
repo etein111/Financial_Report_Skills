@@ -1,46 +1,94 @@
-# Project Decisions (Cross-Cutting)
+# Decisions (ADR, Cross-Cutting)
 
-本文件用于收敛 `openspec/*` 的 proposal/design 中对未来开发有长期影响的约束，避免约定散落在历史 change 里。
+本文件只记录“长期稳定、跨模块”的决策。
+不记录短期实现细节与操作步骤。
 
-## 技术栈与边界
+## 使用规则
 
-- 应用唯一入口：Next.js（App Router）。
-- 后端能力：Supabase（Auth/Postgres/RLS/PostgREST）。
-- Supabase 部署：使用 Supabase 云服务，不使用本地开发环境（`supabase start`）。Supabase CLI 仅用于迁移版本管理（`db push`、`migration list`）。
-- 不使用：Edge Functions / Realtime / Storage / OAuth providers（除非新 change 明确引入）。
-- 交互策略：Server-first（Server Components + Server Actions），仅必要时引入 Client Components。
-- 包管理：`pnpm`（禁止 npm/yarn 作为项目命令入口）。
+- 每条决策使用唯一编号（D-xxx）。
+- 每条决策包含：结论、影响、变更条件。
+- 若决策被更新，不删除历史，使用“Superseded by”标记。
 
-## 认证与会话
+## 决策清单
 
-- 会话：Supabase SSR cookies（`@supabase/ssr`），不使用 `localStorage`。
-- 服务端鉴权：以 `supabase.auth.getUser()` 为准，不以 `getSession()` 作为权限依据。
-- Redirect 安全：所有 `next` 参数必须是相对路径，禁止 open redirect。
+### D-001：技术栈固定为 Next.js + Supabase
+- 状态：Accepted
+- 结论：应用入口固定 Next.js（App Router），后端能力固定 Supabase。
+- 影响：业务能力默认不引入第二套后端框架。
+- 变更条件：需新 change 明确提出并通过评审。
 
-## 角色与权限（RBAC）
+### D-002：交互策略采用 Server-first
+- 状态：Accepted
+- 结论：优先 Server Components + Server Actions，客户端仅承担必要交互。
+- 影响：权限和写操作在服务端收敛。
+- 变更条件：性能或场景证明需要更重 client-side。
 
-- 角色：`admin` / `sa` / `analyst`。
-- 角色事实源：Supabase Auth `app_metadata.role`。
-- 管理操作（邀请/改角色/ban/改密/删除）：必须服务端执行，使用 service role key，禁止下发浏览器。
-- 账号禁用：只用 ban/unban 单机制，不使用 `app_metadata.is_active`。
+### D-003：角色事实源固定为 `app_metadata.role`
+- 状态：Accepted
+- 结论：RBAC 统一以 Auth 元数据角色为准。
+- 影响：禁止以客户端传入角色作为授权依据。
+- 变更条件：认证系统替换。
 
-## 数据权限（RLS）
+### D-004：账号启用/禁用只用 ban/unban
+- 状态：Accepted
+- 结论：不用 `app_metadata.is_active` 作为状态事实源。
+- 影响：避免双状态源冲突。
+- 变更条件：Auth 能力模型发生根本变化。
 
-- `region` / `analyst`：认证可读、仅 Admin 可写。
-- RLS 角色判断：`auth.jwt()->'app_metadata'->>'role'`。
+### D-005：Desktop-as-Launcher 导航契约长期保留
+- 状态：Accepted
+- 结论：`/desktop` 为默认落地页，功能卡片新标签页打开。
+- 影响：功能页不承担返回 Desktop 导航。
+- 变更条件：整体信息架构重构。
 
-## 时间语义
+### D-006：数据时间语义统一
+- 状态：Accepted
+- 结论：数据库存储使用 UTC `timestamptz`；展示按业务时区转换（当前 Asia/Shanghai）。
+- 影响：禁止把本地时间直接写入 DB 时间字段。
+- 变更条件：跨时区策略变更。
 
-- DB 存储：`timestamptz` 默认语义（UTC），禁止把本地时间写入 `timestamptz`。
-- 展示语义：对外展示按 `Asia/Shanghai` 转换。
+### D-007：Analyst 业务信息与 Auth 账号解耦
+- 状态：Accepted
+- 结论：`analyst` 表不自动创建/删除 Auth 用户。
+- 影响：业务档案与登录账号生命周期分离。
+- 变更条件：未来引入强绑定身份模型。
 
-## 文案与界面语言
+### D-008：Coverage 写权限部分放开
+- 状态：Accepted
+- 结论：`coverage` 与 `coverage_analyst` 对 Analyst 放开 INSERT；UPDATE/DELETE 仍仅 Admin。
+- 影响：Analyst 可新增覆盖标的，但不可改删既有记录。
+- 变更条件：协作流程升级。
 
-- 前端界面语言默认英文（按钮、标题、提示文案）。
+### D-009：Report owner 模型固定
+- 状态：Accepted
+- 结论：谁创建报告归谁（`owner_user_id`），owner 不可转移。
+- 影响：Analyst 默认只操作 owner 报告。
+- 变更条件：明确引入“转移所有权”业务流程。
 
-## 导航契约（Desktop-as-Launcher）
+### D-010：报告“内容版本”与“状态历史”解耦
+- 状态：Accepted
+- 结论：内容变化写 `report_version`，状态变化写 `report_status_log`。
+- 影响：审计与回溯更清晰。
+- 变更条件：版本模型简化为单链（不推荐）。
 
-- `/desktop` 为登录后默认落地页。
-- Desktop 功能卡片在新标签页打开目标页面。
-- 功能页不提供“返回 Desktop”入口（通过关闭标签页返回）。
-- 非 Admin 默认隐藏管理入口（例如 Users）。
+### D-011：报告文件路径采用扁平命名
+- 状态：Accepted
+- 结论：文件落 `reports/{report_id}/`，命名 `{report_id}_{version_no3}_{label}_{ts}.{ext}`。
+- 影响：目录简单，依赖 DB 元数据做关联。
+- 变更条件：文件系统与检索策略重构。
+
+### D-012：SA 可审批但不可编辑报告内容
+- 状态：Accepted
+- 结论：SA 负责审批动作（approve/reject/reopen），不参与内容编辑。
+- 影响：职责边界清晰，避免审批与编辑混淆。
+- 变更条件：流程角色设计调整。
+
+### D-013：交付边界固定（`web/` 仅放交付代码）
+- 状态：Accepted
+- 结论：`web/` 目录只放交付代码（`app/`、`components/`、`domain/`、`features/`、`lib/`）；测试与脚本不得放入 `web/`。
+- 影响：
+  - 测试代码统一放 `tests/`
+  - 开发/运维脚本统一放 `scripts/`
+  - 数据库开发脚本放 `supabase/scripts/`
+  - 临时输出统一放 `temp/`
+- 变更条件：目录结构体系整体重构并通过评审。

@@ -1,12 +1,21 @@
 # Web 逻辑处理规范（Next.js App Router + Supabase）
 
+> 文档边界：本文只定义 Web 代码实现层规则（目录分层、依赖方向、触库方式、Server Actions 约束、错误与鉴权处理）。
+>
+> 不重复承载以下内容：
+> - 业务需求（见 `docs/REQUIREMENTS.md`）
+> - 系统级架构与数据库规范（见 `docs/ARCHITECTURE.md`）
+> - 表结构与 RLS 全量矩阵（见 `docs/DATA_MODEL.md`）
+> - UI 视觉与组件规范（见 `docs/UI.md`）
+> - 测试策略（见 `docs/TESTING.md`）
+
 > 目的：统一“逻辑应该放哪里、怎么写、怎么报错、怎么鉴权、怎么做权限控制与数据读写”，确保后续从原型升级到真实 Supabase 时不漂移、不泄漏密钥、不产生重复实现。
 >
 > 本文是默认做法：必须有规范，但避免过死/过复杂。确有必要突破时允许例外，但必须说明原因，并把突破控制在最小范围，后续再收敛回规范。
 
 ## TL;DR（硬约定）
 
-- **交付边界**：`web/` 目录只包含交付代码（app/、components/、features/、domain/、lib/）；测试、脚本、文档等非交付代码必须放在项目根目录的专门目录（tests/、scripts/、docs/、supabase/）。
+- **交付边界**：主定义遵循 `docs/DECISIONS.md` 的 `D-013`；本文仅在涉及 Web 目录约束时按该决策执行。
 - 分层：`app/` 只路由与组合；业务逻辑在 `features/`；纯 UI 在 `components/`；基础设施在 `lib/`；纯业务类型/规则在 `domain/`。
 - 依赖方向：默认 `app → features → domain`；`domain` 不依赖 React/Next/Supabase；`app` 允许对 `domain` 做 **type-only import**（但业务能力不要绕过 `features`）。
 - 触库规约：**只在 `features/*/repo/*` 调用 `supabase.*`**（`from(...)`/`auth.*`/`auth.admin.*` 都算）；`app/` 与 `components/` 禁止直连 Supabase。
