@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/navigation";
+import { revalidatePath } from "next/cache";
 
 import {
   analystCreateSchema,
@@ -36,8 +36,7 @@ export async function listAnalystsAction(input: {
   const query = input.query ?? null;
 
   try {
-    const data = await listAnalystsRepo({ page, query });
-    return ok(data);
+    return await listAnalystsRepo({ page, query });
   } catch {
     return err("Failed to list analysts.");
   }
@@ -46,7 +45,9 @@ export async function listAnalystsAction(input: {
 /**
  * Create a new analyst
  */
-export async function createAnalystAction(input: unknown): Promise<Result<Analyst>> {
+export async function createAnalystAction(
+  input: unknown,
+): Promise<Result<Analyst>> {
   await requireAdminOrThrow();
 
   const parsed = analystCreateSchema.safeParse(input);
@@ -54,13 +55,11 @@ export async function createAnalystAction(input: unknown): Promise<Result<Analys
     return err(parsed.error.issues[0]?.message ?? "Invalid input.");
   }
 
-  try {
-    const data = await createAnalystRepo(parsed.data);
+  const result = await createAnalystRepo(parsed.data);
+  if (result.ok) {
     revalidatePath("/analyst-info");
-    return ok(data);
-  } catch {
-    return err("Failed to create analyst.");
   }
+  return result;
 }
 
 /**
@@ -68,7 +67,7 @@ export async function createAnalystAction(input: unknown): Promise<Result<Analys
  */
 export async function updateAnalystAction(
   id: string,
-  input: unknown
+  input: unknown,
 ): Promise<Result<Analyst>> {
   await requireAdminOrThrow();
 
@@ -77,13 +76,11 @@ export async function updateAnalystAction(
     return err(parsed.error.issues[0]?.message ?? "Invalid input.");
   }
 
-  try {
-    const data = await updateAnalystRepo(id, parsed.data);
+  const result = await updateAnalystRepo(id, parsed.data);
+  if (result.ok) {
     revalidatePath("/analyst-info");
-    return ok(data);
-  } catch {
-    return err("Failed to update analyst.");
   }
+  return result;
 }
 
 /**
@@ -107,11 +104,9 @@ export async function deleteAnalystAction(id: string): Promise<Result<null>> {
 export async function getRegionsForSelectAction(): Promise<
   Result<{ id: string; name: string; code: string }[]>
 > {
-  await requireAdminOrThrow();
-
   try {
-    const data = await getRegionsForSelectRepo();
-    return ok(data);
+    await requireAdminOrThrow();
+    return await getRegionsForSelectRepo();
   } catch {
     return err("Failed to fetch regions.");
   }

@@ -3,19 +3,21 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 
+import { ActionButton } from "@/components/ui/action-button";
 import { Button } from "@/components/ui/button";
+import { ConfirmModal } from "@/components/ui/confirm-modal";
 import { Input } from "@/components/ui/input";
+import { Modal } from "@/components/ui/modal";
+import { Pagination } from "@/components/ui/pagination";
+import { Table, TD, TH, THead, TR } from "@/components/ui/table";
+import { useToast } from "@/components/ui/toast";
+import { formatShanghaiYmd } from "@/lib/time";
 import {
-  Table,
-  THead,
-  TH,
-  TR,
-  TD,
-} from "@/components/ui/table";
-import { cn } from "@/lib/cn";
-import { deleteRegionAction } from "../actions";
+  createRegionAction,
+  deleteRegionAction,
+  updateRegionAction,
+} from "../actions";
 import type { Region } from "../repo/regions-repo";
-import { RegionForm } from "./region-form";
 
 export interface RegionsPageClientProps {
   regions: Region[];
@@ -23,6 +25,15 @@ export interface RegionsPageClientProps {
   page: number;
   totalPages: number;
   currentQuery: string | null;
+}
+
+function toQueryString(params: { q: string; page: number }) {
+  const q = params.q.trim();
+  const sp = new URLSearchParams();
+  if (q) sp.set("query", q);
+  if (params.page > 1) sp.set("page", String(params.page));
+  const s = sp.toString();
+  return s ? `?${s}` : "";
 }
 
 export function RegionsPageClient({
@@ -33,178 +44,226 @@ export function RegionsPageClient({
   currentQuery,
 }: RegionsPageClientProps) {
   const router = useRouter();
-  const [query, setQuery] = React.useState(currentQuery ?? "");
-  const [deleteConfirmId, setDeleteConfirmId] = React.useState<string | null>(null);
-  const [formModalOpen, setFormModalOpen] = React.useState(false);
+  const toast = useToast();
+
+  const [queryDraft, setQueryDraft] = React.useState(currentQuery ?? "");
+  React.useEffect(() => setQueryDraft(currentQuery ?? ""), [currentQuery]);
+
+  // Create/Edit modal
+  const [formOpen, setFormOpen] = React.useState(false);
   const [editingRegion, setEditingRegion] = React.useState<Region | null>(null);
+  const [formName, setFormName] = React.useState("");
+  const [formCode, setFormCode] = React.useState("");
+  const [formErrors, setFormErrors] = React.useState<{
+    name?: string;
+    code?: string;
+  }>({});
+  const [formLoading, setFormLoading] = React.useState(false);
 
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    const params = new URLSearchParams();
-    if (query) params.set("query", query);
-    params.set("page", "1");
-    router.push(`/regions?${params.toString()}`);
-  };
+  // Delete confirm
+  const [deleteOpen, setDeleteOpen] = React.useState(false);
+  const [deleteId, setDeleteId] = React.useState<string | null>(null);
+  const [deleteLoading, setDeleteLoading] = React.useState(false);
 
-  const handleDelete = async (id: string) => {
-    const result = await deleteRegionAction(id);
-    if (result.ok) {
-      router.refresh();
-    } else {
-      alert(`Failed to delete region: ${result.error}`);
-    }
-  };
-
-  const openCreateModal = () => {
+  function openCreate() {
     setEditingRegion(null);
-    setFormModalOpen(true);
-  };
+    setFormName("");
+    setFormCode("");
+    setFormErrors({});
+    setFormOpen(true);
+  }
 
-  const openEditModal = (region: Region) => {
+  function openEdit(region: Region) {
     setEditingRegion(region);
-    setFormModalOpen(true);
-  };
+    setFormName(region.name);
+    setFormCode(region.code);
+    setFormErrors({});
+    setFormOpen(true);
+  }
 
-  const closeFormModal = () => {
-    setFormModalOpen(false);
-    setEditingRegion(null);
-  };
+  async function submitForm(e: React.FormEvent) {
+    e.preventDefault();
+
+    const name = formName.trim();
+    const code = formCode.trim();
+
+    const next: { name?: string; code?: string } = {};
+    if (!name) next.name = "Name is required";
+    if (!code) next.code = "Code is required";
+    setFormErrors(next);
+    if (Object.keys(next).length) return;
+
+    setFormLoading(true);
+    const res = editingRegion
+      ? await updateRegionAction(editingRegion.id, { name, code })
+      : await createRegionAction({ name, code });
+    setFormLoading(false);
+
+    if (!res.ok) {
+      toast.error(res.error, { title: "Error" });
+      return;
+    }
+
+    setFormOpen(false);
+    toast.success(editingRegion ? "Region updated." : "Region created.", {
+      title: "Success",
+    });
+    router.refresh();
+  }
+
+  function openDelete(region: Region) {
+    setDeleteId(region.id);
+    setDeleteOpen(true);
+  }
+
+  async function confirmDelete() {
+    if (!deleteId) return;
+
+    setDeleteLoading(true);
+    const res = await deleteRegionAction(deleteId);
+    setDeleteLoading(false);
+
+    if (!res.ok) {
+      toast.error(res.error, { title: "Error" });
+      return;
+    }
+
+    setDeleteOpen(false);
+    toast.success("Region deleted.", { title: "Success" });
+    router.refresh();
+  }
+
+  function submitSearch(e: React.FormEvent) {
+    e.preventDefault();
+    router.push(`/regions${toQueryString({ q: queryDraft, page: 1 })}`);
+  }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-zinc-100">Regions</h1>
-          <p className="text-sm text-zinc-400">
-            Manage region data (total: {total})
-          </p>
+    <div className="min-h-screen">
+      <header className="border-b border-white/10 bg-zinc-900/60 backdrop-blur">
+        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
+          <div className="text-xl font-semibold text-zinc-50">Regions</div>
+          <Button onClick={openCreate}>Create Region</Button>
         </div>
-        <Button onClick={openCreateModal}>Create Region</Button>
-      </div>
+      </header>
 
-      {/* Search */}
-      <form onSubmit={handleSearch} className="flex gap-2">
-        <Input
-          type="text"
-          placeholder="Search by name or code..."
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          className="max-w-sm"
-        />
-        <Button type="submit">Search</Button>
-      </form>
-
-      {/* Table */}
-      <Table>
-        <THead>
-          <TR>
-            <TH>Name</TH>
-            <TH>Code</TH>
-            <TH>Created At</TH>
-            <TH className="text-right">Actions</TH>
-          </TR>
-        </THead>
-        <tbody>
-          {regions.map((region) => (
-            <TR key={region.id}>
-              <TD className="font-medium text-zinc-100">{region.name}</TD>
-              <TD>
-                <code className="rounded bg-zinc-800 px-1.5 py-0.5 text-xs">
-                  {region.code}
-                </code>
-              </TD>
-              <TD className="text-zinc-400">
-                {new Date(region.created_at).toLocaleString()}
-              </TD>
-              <TD className="text-right">
-                {deleteConfirmId === region.id ? (
-                  <div className="flex justify-end gap-2">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setDeleteConfirmId(null)}
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      variant="danger"
-                      size="sm"
-                      onClick={() => handleDelete(region.id)}
-                    >
-                      Confirm Delete
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="flex justify-end gap-2">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => openEditModal(region)}
-                    >
-                      Edit
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setDeleteConfirmId(region.id)}
-                    >
-                      Delete
-                    </Button>
-                  </div>
-                )}
-              </TD>
-            </TR>
-          ))}
-        </tbody>
-      </Table>
-
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between">
-          <p className="text-sm text-zinc-400">
-            Page {page} of {totalPages}
-          </p>
-          <div className="flex gap-2">
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={page === 1}
-              onClick={() => {
-                const params = new URLSearchParams();
-                if (currentQuery) params.set("query", currentQuery);
-                params.set("page", String(page - 1));
-                router.push(`/regions?${params.toString()}`);
-              }}
-            >
-              Previous
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={page === totalPages}
-              onClick={() => {
-                const params = new URLSearchParams();
-                if (currentQuery) params.set("query", currentQuery);
-                params.set("page", String(page + 1));
-                router.push(`/regions?${params.toString()}`);
-              }}
-            >
-              Next
-            </Button>
+      <main className="mx-auto max-w-7xl space-y-4 px-6 py-8">
+        <div className="flex items-end justify-between gap-4">
+          <form className="w-full max-w-md" onSubmit={submitSearch}>
+            <Input
+              label="Search"
+              placeholder="Search by name or code"
+              value={queryDraft}
+              onChange={(e) => setQueryDraft(e.target.value)}
+            />
+          </form>
+          <div className="hidden text-sm text-zinc-400 sm:block">
+            {total} regions
           </div>
         </div>
-      )}
 
-      {/* Form Modal */}
-      <RegionForm
-        open={formModalOpen}
-        region={editingRegion}
-        onClose={closeFormModal}
-        onSuccess={() => {
-          closeFormModal();
-          router.refresh();
-        }}
+        <Table>
+          <THead>
+            <TR className="hover:bg-transparent">
+              <TH>Name</TH>
+              <TH>Code</TH>
+              <TH>Created</TH>
+              <TH className="text-right">Actions</TH>
+            </TR>
+          </THead>
+          <tbody>
+            {regions.length === 0 ? (
+              <TR className="hover:bg-transparent">
+                <TD colSpan={4} className="py-10 text-center text-zinc-400">
+                  No regions found
+                </TD>
+              </TR>
+            ) : (
+              regions.map((region) => (
+                <TR key={region.id}>
+                  <TD className="font-medium text-zinc-100">{region.name}</TD>
+                  <TD>
+                    <code className="rounded bg-zinc-800 px-1.5 py-0.5 text-xs text-zinc-300">
+                      {region.code}
+                    </code>
+                  </TD>
+                  <TD className="text-zinc-300">
+                    {formatShanghaiYmd(region.created_at)}
+                  </TD>
+                  <TD>
+                    <div className="flex justify-end gap-2">
+                      <ActionButton onClick={() => openEdit(region)}>
+                        Edit
+                      </ActionButton>
+                      <ActionButton
+                        tone="danger"
+                        onClick={() => openDelete(region)}
+                      >
+                        Delete
+                      </ActionButton>
+                    </div>
+                  </TD>
+                </TR>
+              ))
+            )}
+          </tbody>
+        </Table>
+
+        <Pagination
+          page={page}
+          totalPages={totalPages}
+          onChange={(p) =>
+            router.push(`/regions${toQueryString({ q: queryDraft, page: p })}`)
+          }
+        />
+      </main>
+
+      <Modal
+        open={formOpen}
+        title={editingRegion ? "Edit region" : "Create region"}
+        onClose={() => setFormOpen(false)}
+        footer={
+          <>
+            <Button
+              variant="ghost"
+              type="button"
+              onClick={() => setFormOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" form="region-form" isLoading={formLoading}>
+              {editingRegion ? "Save" : "Create"}
+            </Button>
+          </>
+        }
+      >
+        <form id="region-form" className="space-y-3" onSubmit={submitForm}>
+          <Input
+            label="Name"
+            placeholder="e.g., China"
+            value={formName}
+            onChange={(e) => setFormName(e.target.value)}
+            error={formErrors.name}
+          />
+          <Input
+            label="Code"
+            placeholder="e.g., CN"
+            value={formCode}
+            onChange={(e) => setFormCode(e.target.value)}
+            error={formErrors.code}
+          />
+        </form>
+      </Modal>
+
+      <ConfirmModal
+        open={deleteOpen}
+        title="Delete region?"
+        description="This action cannot be undone."
+        onClose={() => setDeleteOpen(false)}
+        onConfirm={confirmDelete}
+        confirmTone="danger"
+        confirmLabel="Delete"
+        loading={deleteLoading}
       />
     </div>
   );

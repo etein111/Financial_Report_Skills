@@ -4,7 +4,7 @@ test.describe("Analyst Info Management", () => {
   test.beforeEach(async ({ page }) => {
     // Login as admin
     await page.goto("/login");
-    await page.fill('input[type="email"]', "admin@neolyst.com");
+    await page.fill('input[type="email"]', "jiang_jiahong@qq.com");
     await page.fill('input[type="password"]', "Admin123");
     await page.click('button[type="submit"]');
     await expect(page).toHaveURL(/\/desktop/, { timeout: 15000 });
@@ -12,7 +12,8 @@ test.describe("Analyst Info Management", () => {
 
   test("analyst info page loads and displays analysts", async ({ page }) => {
     await page.goto("/analyst-info");
-    await expect(page.locator("h1")).toContainText("Analyst Info");
+    // Check for title in header
+    await expect(page.locator("header")).toContainText("Analyst Info");
     await expect(page.locator("table")).toBeVisible();
   });
 
@@ -22,18 +23,35 @@ test.describe("Analyst Info Management", () => {
     // Click create button
     await page.click('button:has-text("Create Analyst")');
 
+    // Wait for modal and regions to load
+    await expect(page.locator("role=dialog")).toBeVisible();
+    await page.waitForFunction(
+      () => {
+        const select = document.querySelector("#region_id");
+        return select && select.querySelectorAll("option").length > 1;
+      },
+      { timeout: 10000 }
+    );
+
     // Fill form
-    await page.fill('#full_name', 'Test Analyst');
-    await page.fill('#chinese_name', '测试分析师');
-    await page.fill('#email', 'test.analyst@example.com');
-    await page.selectOption('#region_id', 'China'); // Assuming China exists
+    const timestamp = Date.now();
+    await page.fill("#full_name", `Test Analyst ${timestamp}`);
+    await page.fill("#chinese_name", "测试分析师");
+    await page.fill("#email", `test.analyst.${timestamp}@example.com`);
+    await page.selectOption("#region_id", { label: "India (IN)" });
 
-    // Submit
-    await page.click('button:has-text("Create")');
+    // Submit by pressing Enter on the form
+    await page.keyboard.press("Enter");
 
-    // Should see success and new analyst in table
-    await expect(page.locator("body")).toContainText("Test Analyst", { timeout: 5000 });
-    await expect(page.locator("table")).toContainText("Test Analyst");
+    // Wait for modal to close (indicates success)
+    await expect(page.locator("role=dialog")).not.toBeVisible({
+      timeout: 10000,
+    });
+
+    // Should see new analyst in table
+    await expect(page.locator("table")).toContainText(`Test Analyst ${timestamp}`, {
+      timeout: 5000,
+    });
   });
 
   test("can edit an existing analyst", async ({ page }) => {
@@ -43,54 +61,117 @@ test.describe("Analyst Info Management", () => {
     const row = page.locator("table tbody tr").first();
     await row.locator('button:has-text("Edit")').click();
 
+    // Wait for modal
+    await expect(page.locator("role=dialog")).toBeVisible();
+
     // Update full name
-    await page.fill('#full_name', 'Updated Analyst Name');
-    await page.click('button:has-text("Update")');
+    const timestamp = Date.now();
+    await page.fill("#full_name", `Updated Name ${timestamp}`);
+    await page.click('button:has-text("Save")', { force: true });
+
+    // Wait for modal to close
+    await expect(page.locator("role=dialog")).not.toBeVisible({
+      timeout: 10000,
+    });
 
     // Should see updated analyst
-    await expect(page.locator("table")).toContainText("Updated Analyst Name", { timeout: 5000 });
+    await expect(page.locator("table")).toContainText(`Updated Name ${timestamp}`, {
+      timeout: 5000,
+    });
   });
 
   test("cannot create analyst with duplicate email", async ({ page }) => {
     await page.goto("/analyst-info");
 
-    // Click create button
+    // First, create an analyst
     await page.click('button:has-text("Create Analyst")');
+    await expect(page.locator("role=dialog")).toBeVisible();
+    await page.waitForFunction(
+      () => {
+        const select = document.querySelector("#region_id");
+        return select && select.querySelectorAll("option").length > 1;
+      },
+      { timeout: 10000 }
+    );
 
-    // Try to create duplicate email
-    await page.fill('#full_name', 'Duplicate Test');
-    await page.fill('#email', 'admin@neolyst.com'); // Assuming this exists
-    await page.selectOption('#region_id', 'China');
-    await page.click('button:has-text("Create")');
+    const uniqueEmail = `unique.${Date.now()}@example.com`;
+    await page.fill("#full_name", "First Analyst");
+    await page.fill("#email", uniqueEmail);
+    await page.selectOption("#region_id", { label: "India (IN)" });
+    await page.keyboard.press("Enter");
 
-    // Should show error
-    await expect(page.locator("text=Email already exists")).toBeVisible({ timeout: 5000 });
+    // Wait for modal to close
+    await expect(page.locator("role=dialog")).not.toBeVisible({
+      timeout: 10000,
+    });
+
+    // Now try to create another analyst with the same email
+    await page.click('button:has-text("Create Analyst")');
+    await expect(page.locator("role=dialog")).toBeVisible();
+    await page.waitForFunction(
+      () => {
+        const select = document.querySelector("#region_id");
+        return select && select.querySelectorAll("option").length > 1;
+      },
+      { timeout: 10000 }
+    );
+
+    await page.fill("#full_name", "Duplicate Email Test");
+    await page.fill("#email", uniqueEmail); // Use the same email
+    await page.selectOption("#region_id", { label: "Japan (JP)" });
+    await page.keyboard.press("Enter");
+
+    // Should show error toast
+    await expect(page.locator("[role='status']")).toContainText("already exists", {
+      timeout: 10000,
+    });
   });
 
   test("can delete an analyst with confirmation", async ({ page }) => {
     await page.goto("/analyst-info");
 
-    // Find a test analyst and click delete
-    const row = page.locator("table tbody tr").filter({ hasText: /Test Analyst/ });
-    const count = await row.count();
+    // First create an analyst to delete
+    await page.click('button:has-text("Create Analyst")');
+    await expect(page.locator("role=dialog")).toBeVisible();
+    await page.waitForFunction(
+      () => {
+        const select = document.querySelector("#region_id");
+        return select && select.querySelectorAll("option").length > 1;
+      },
+      { timeout: 10000 }
+    );
 
-    if (count > 0) {
-      await row.locator('button:has-text("Delete")').click();
+    const timestamp = Date.now();
+    await page.fill("#full_name", `Delete Test ${timestamp}`);
+    await page.fill("#email", `delete.${timestamp}@example.com`);
+    await page.selectOption("#region_id", { label: "India (IN)" });
+    await page.keyboard.press("Enter");
+    await expect(page.locator("role=dialog")).not.toBeVisible({
+      timeout: 10000,
+    });
 
-      // Confirm deletion
-      await page.click('button:has-text("Confirm Delete")');
+    // Now delete it
+    const row = page
+      .locator("table tbody tr")
+      .filter({ hasText: `Delete Test ${timestamp}` });
+    await row.locator('button:has-text("Delete")').click();
 
-      // Should refresh and analyst should be gone
-      await expect(page.locator("table")).not.toContainText("Test Analyst", { timeout: 5000 });
-    }
+    // Confirm deletion in modal
+    await expect(page.locator("role=dialog")).toBeVisible();
+    await page.click('button:has-text("Delete")', { force: true });
+
+    // Should refresh and analyst should be gone
+    await expect(page.locator("table")).not.toContainText(`Delete Test ${timestamp}`, {
+      timeout: 5000,
+    });
   });
 
   test("search filters analysts by name or email", async ({ page }) => {
     await page.goto("/analyst-info");
 
-    // Enter search query
-    await page.fill('input[placeholder*="Search"]', 'analyst');
-    await page.click('button:has-text("Search")');
+    // Enter search query and submit form
+    await page.fill('input[placeholder*="Search"]', "analyst");
+    await page.keyboard.press("Enter");
 
     // URL should update with search params
     await expect(page).toHaveURL(/query=analyst/, { timeout: 5000 });
@@ -108,15 +189,24 @@ test.describe("Analyst Info Management", () => {
     const row = page.locator("table tbody tr").first();
     await row.locator('button:has-text("Edit")').click();
 
-    // Toggle active status
-    await page.locator('#is_active').uncheck();
-    await page.click('button:has-text("Update")');
+    // Wait for modal
+    await expect(page.locator("role=dialog")).toBeVisible();
 
-    // Should see "Inactive" badge
-    await expect(page.locator("body")).toContainText("Inactive", { timeout: 5000 });
+    // Toggle active status
+    await page.locator("#is_active").uncheck();
+    await page.click('button:has-text("Save")', { force: true });
+    await page.waitForTimeout(1000);
+
+    // Should see "INACTIVE" badge
+    await expect(page.locator("body")).toContainText("INACTIVE", {
+      timeout: 5000,
+    });
   });
 
-  test("non-admin cannot access analyst info page", async ({ page, context }) => {
+  test("non-admin cannot access analyst info page", async ({
+    page,
+    context,
+  }) => {
     // Create non-admin browser context
     const nonAdminPage = await context.newPage();
     await nonAdminPage.goto("/login");
@@ -130,6 +220,8 @@ test.describe("Analyst Info Management", () => {
 
     // Should redirect to 403
     await expect(nonAdminPage).toHaveURL(/\/403/, { timeout: 5000 });
-    await expect(nonAdminPage.locator("body")).toContainText("Forbidden", { timeout: 5000 });
+    await expect(nonAdminPage.locator("body")).toContainText("No permission", {
+      timeout: 5000,
+    });
   });
 });

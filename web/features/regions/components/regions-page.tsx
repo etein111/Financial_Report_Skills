@@ -1,7 +1,6 @@
 import * as React from "react";
 
 import { listRegionsAction } from "../actions";
-import type { Region } from "../repo/regions-repo";
 import { RegionsPageClient } from "./regions-page-client";
 
 export interface RegionsPageProps {

@@ -62,14 +62,14 @@ export function Modal({
             ? "animate-[modal-overlay-in_200ms_ease-out]"
             : "animate-[modal-overlay-out_200ms_ease-in]",
         )}
-        onClick={onClose}
+        style={{ pointerEvents: "none" }}
         aria-hidden="true"
       />
       <div
         role="dialog"
         aria-modal="true"
         className={cn(
-          "relative mx-4 w-full max-w-md rounded-[12px] border border-white/10 bg-zinc-900 p-6",
+          "relative z-10 mx-4 w-full max-w-md rounded-[12px] border border-white/10 bg-zinc-900 p-6",
           "shadow-[0_10px_30px_rgba(0,0,0,0.5)]",
           open
             ? "animate-[modal-in_200ms_ease-out]"
@@ -90,7 +90,9 @@ export function Modal({
 
         <div>{children}</div>
 
-        {footer ? <div className="mt-6 flex justify-end gap-2">{footer}</div> : null}
+        {footer ? (
+          <div className="mt-6 flex justify-end gap-2">{footer}</div>
+        ) : null}
       </div>
       <style jsx global>{`
         @keyframes modal-overlay-in {

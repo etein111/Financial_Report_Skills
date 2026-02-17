@@ -3,20 +3,23 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { ActionButton } from "@/components/ui/action-button";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { ConfirmModal } from "@/components/ui/confirm-modal";
+import { Input } from "@/components/ui/input";
+import { Modal } from "@/components/ui/modal";
+import { Pagination } from "@/components/ui/pagination";
+import { Table, TD, TH, THead, TR } from "@/components/ui/table";
+import { useToast } from "@/components/ui/toast";
+import { formatShanghaiYmd } from "@/lib/time";
 import {
-  Table,
-  THead,
-  TH,
-  TR,
-  TD,
-} from "@/components/ui/table";
-import { cn } from "@/lib/cn";
-import { deleteAnalystAction } from "../actions";
+  createAnalystAction,
+  deleteAnalystAction,
+  getRegionsForSelectAction,
+  updateAnalystAction,
+} from "../actions";
 import type { Analyst } from "../repo/analysts-repo";
-import { AnalystForm } from "./analyst-form";
 
 export interface AnalystsPageClientProps {
   analysts: Analyst[];
@@ -24,6 +27,17 @@ export interface AnalystsPageClientProps {
   page: number;
   totalPages: number;
   currentQuery: string | null;
+}
+
+type RegionOption = { id: string; name: string; code: string };
+
+function toQueryString(params: { q: string; page: number }) {
+  const q = params.q.trim();
+  const sp = new URLSearchParams();
+  if (q) sp.set("query", q);
+  if (params.page > 1) sp.set("page", String(params.page));
+  const s = sp.toString();
+  return s ? `?${s}` : "";
 }
 
 export function AnalystsPageClient({
@@ -34,190 +48,350 @@ export function AnalystsPageClient({
   currentQuery,
 }: AnalystsPageClientProps) {
   const router = useRouter();
-  const [query, setQuery] = React.useState(currentQuery ?? "");
-  const [deleteConfirmId, setDeleteConfirmId] = React.useState<string | null>(null);
-  const [formModalOpen, setFormModalOpen] = React.useState(false);
-  const [editingAnalyst, setEditingAnalyst] = React.useState<Analyst | null>(null);
+  const toast = useToast();
 
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    const params = new URLSearchParams();
-    if (query) params.set("query", query);
-    params.set("page", "1");
-    router.push(`/analyst-info?${params.toString()}`);
-  };
+  const [queryDraft, setQueryDraft] = React.useState(currentQuery ?? "");
+  React.useEffect(() => setQueryDraft(currentQuery ?? ""), [currentQuery]);
 
-  const handleDelete = async (id: string) => {
-    const result = await deleteAnalystAction(id);
-    if (result.ok) {
-      router.refresh();
-    } else {
-      alert(`Failed to delete analyst: ${result.error}`);
+  // Create/Edit modal
+  const [formOpen, setFormOpen] = React.useState(false);
+  const [editingAnalyst, setEditingAnalyst] = React.useState<Analyst | null>(
+    null
+  );
+  const [regions, setRegions] = React.useState<RegionOption[]>([]);
+  const [formFullName, setFormFullName] = React.useState("");
+  const [formChineseName, setFormChineseName] = React.useState("");
+  const [formEmail, setFormEmail] = React.useState("");
+  const [formRegionId, setFormRegionId] = React.useState("");
+  const [formSuffix, setFormSuffix] = React.useState("");
+  const [formSfc, setFormSfc] = React.useState("");
+  const [formIsActive, setFormIsActive] = React.useState(true);
+  const [formErrors, setFormErrors] = React.useState<{
+    full_name?: string;
+    email?: string;
+    region_id?: string;
+  }>({});
+  const [formLoading, setFormLoading] = React.useState(false);
+
+  // Delete confirm
+  const [deleteOpen, setDeleteOpen] = React.useState(false);
+  const [deleteId, setDeleteId] = React.useState<string | null>(null);
+  const [deleteLoading, setDeleteLoading] = React.useState(false);
+
+  // Load regions when modal opens
+  React.useEffect(() => {
+    if (formOpen) {
+      setRegions([]);
+      getRegionsForSelectAction()
+        .then((result) => {
+          if (result.ok && Array.isArray(result.data)) {
+            setRegions(result.data);
+          } else {
+            toast.error("Failed to load regions", { title: "Error" });
+          }
+        })
+        .catch(() => {
+          toast.error("Failed to load regions", { title: "Error" });
+        });
     }
-  };
+  }, [formOpen, toast]);
 
-  const openCreateModal = () => {
+  function openCreate() {
     setEditingAnalyst(null);
-    setFormModalOpen(true);
-  };
+    setFormFullName("");
+    setFormChineseName("");
+    setFormEmail("");
+    setFormRegionId("");
+    setFormSuffix("");
+    setFormSfc("");
+    setFormIsActive(true);
+    setFormErrors({});
+    setFormOpen(true);
+  }
 
-  const openEditModal = (analyst: Analyst) => {
+  function openEdit(analyst: Analyst) {
     setEditingAnalyst(analyst);
-    setFormModalOpen(true);
-  };
+    setFormFullName(analyst.full_name);
+    setFormChineseName(analyst.chinese_name ?? "");
+    setFormEmail(analyst.email);
+    setFormRegionId(analyst.region_id ?? "");
+    setFormSuffix(analyst.suffix ?? "");
+    setFormSfc(analyst.sfc ?? "");
+    setFormIsActive(analyst.is_active);
+    setFormErrors({});
+    setFormOpen(true);
+  }
 
-  const closeFormModal = () => {
-    setFormModalOpen(false);
-    setEditingAnalyst(null);
-  };
+  async function submitForm(e: React.FormEvent) {
+    e.preventDefault();
+
+    const full_name = formFullName.trim();
+    const email = formEmail.trim();
+    const region_id = formRegionId;
+
+    const next: { full_name?: string; email?: string; region_id?: string } = {};
+    if (!full_name) next.full_name = "Full name is required";
+    if (!email) next.email = "Email is required";
+    if (!region_id) next.region_id = "Region is required";
+    setFormErrors(next);
+    if (Object.keys(next).length) return;
+
+    setFormLoading(true);
+    const data = {
+      full_name,
+      chinese_name: formChineseName.trim() || undefined,
+      email,
+      region_id,
+      suffix: formSuffix.trim() || undefined,
+      sfc: formSfc.trim() || undefined,
+      is_active: formIsActive,
+    };
+
+    const res = editingAnalyst
+      ? await updateAnalystAction(editingAnalyst.id, data)
+      : await createAnalystAction(data);
+    setFormLoading(false);
+
+    if (!res.ok) {
+      toast.error(res.error, { title: "Error" });
+      return;
+    }
+
+    setFormOpen(false);
+    toast.success(
+      editingAnalyst ? "Analyst updated." : "Analyst created.",
+      { title: "Success" }
+    );
+    router.refresh();
+  }
+
+  function openDelete(analyst: Analyst) {
+    setDeleteId(analyst.id);
+    setDeleteOpen(true);
+  }
+
+  async function confirmDelete() {
+    if (!deleteId) return;
+
+    setDeleteLoading(true);
+    const res = await deleteAnalystAction(deleteId);
+    setDeleteLoading(false);
+
+    if (!res.ok) {
+      toast.error(res.error, { title: "Error" });
+      return;
+    }
+
+    setDeleteOpen(false);
+    toast.success("Analyst deleted.", { title: "Success" });
+    router.refresh();
+  }
+
+  function submitSearch(e: React.FormEvent) {
+    e.preventDefault();
+    router.push(`/analyst-info${toQueryString({ q: queryDraft, page: 1 })}`);
+  }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-zinc-100">Analyst Info</h1>
-          <p className="text-sm text-zinc-400">
-            Manage analyst information (total: {total})
-          </p>
+    <div className="min-h-screen">
+      <header className="border-b border-white/10 bg-zinc-900/60 backdrop-blur">
+        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
+          <div className="text-xl font-semibold text-zinc-50">Analyst Info</div>
+          <Button onClick={openCreate}>Create Analyst</Button>
         </div>
-        <Button onClick={openCreateModal}>Create Analyst</Button>
-      </div>
+      </header>
 
-      {/* Search */}
-      <form onSubmit={handleSearch} className="flex gap-2">
-        <Input
-          type="text"
-          placeholder="Search by name or email..."
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          className="max-w-sm"
-        />
-        <Button type="submit">Search</Button>
-      </form>
-
-      {/* Table */}
-      <Table>
-        <THead>
-          <TR>
-            <TH>Full Name</TH>
-            <TH>Chinese Name</TH>
-            <TH>Email</TH>
-            <TH>Region</TH>
-            <TH>Status</TH>
-            <TH className="text-right">Actions</TH>
-          </TR>
-        </THead>
-        <tbody>
-          {analysts.map((analyst) => (
-            <TR key={analyst.id}>
-              <TD className="font-medium text-zinc-100">{analyst.full_name}</TD>
-              <TD className="text-zinc-400">{analyst.chinese_name || "-"}</TD>
-              <TD className="text-zinc-300">{analyst.email}</TD>
-              <TD>
-                {analyst.region ? (
-                  <span className="text-zinc-300">
-                    {analyst.region.name} ({analyst.region.code})
-                  </span>
-                ) : (
-                  <span className="text-zinc-500">-</span>
-                )}
-              </TD>
-              <TD>
-                {analyst.is_active ? (
-                  <Badge variant="success">Active</Badge>
-                ) : (
-                  <Badge variant="secondary">Inactive</Badge>
-                )}
-              </TD>
-              <TD className="text-right">
-                {deleteConfirmId === analyst.id ? (
-                  <div className="flex justify-end gap-2">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setDeleteConfirmId(null)}
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      variant="danger"
-                      size="sm"
-                      onClick={() => handleDelete(analyst.id)}
-                    >
-                      Confirm Delete
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="flex justify-end gap-2">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => openEditModal(analyst)}
-                    >
-                      Edit
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setDeleteConfirmId(analyst.id)}
-                    >
-                      Delete
-                    </Button>
-                  </div>
-                )}
-              </TD>
-            </TR>
-          ))}
-        </tbody>
-      </Table>
-
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between">
-          <p className="text-sm text-zinc-400">
-            Page {page} of {totalPages}
-          </p>
-          <div className="flex gap-2">
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={page === 1}
-              onClick={() => {
-                const params = new URLSearchParams();
-                if (currentQuery) params.set("query", currentQuery);
-                params.set("page", String(page - 1));
-                router.push(`/analyst-info?${params.toString()}`);
-              }}
-            >
-              Previous
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={page === totalPages}
-              onClick={() => {
-                const params = new URLSearchParams();
-                if (currentQuery) params.set("query", currentQuery);
-                params.set("page", String(page + 1));
-                router.push(`/analyst-info?${params.toString()}`);
-              }}
-            >
-              Next
-            </Button>
+      <main className="mx-auto max-w-7xl space-y-4 px-6 py-8">
+        <div className="flex items-end justify-between gap-4">
+          <form className="w-full max-w-md" onSubmit={submitSearch}>
+            <Input
+              label="Search"
+              placeholder="Search by name or email"
+              value={queryDraft}
+              onChange={(e) => setQueryDraft(e.target.value)}
+            />
+          </form>
+          <div className="hidden text-sm text-zinc-400 sm:block">
+            {total} analysts
           </div>
         </div>
-      )}
 
-      {/* Form Modal */}
-      <AnalystForm
-        open={formModalOpen}
-        analyst={editingAnalyst}
-        onClose={closeFormModal}
-        onSuccess={() => {
-          closeFormModal();
-          router.refresh();
-        }}
+        <Table>
+          <THead>
+            <TR className="hover:bg-transparent">
+              <TH>Full Name</TH>
+              <TH>Chinese Name</TH>
+              <TH>Email</TH>
+              <TH>Region</TH>
+              <TH>Status</TH>
+              <TH>Created</TH>
+              <TH className="text-right">Actions</TH>
+            </TR>
+          </THead>
+          <tbody>
+            {analysts.length === 0 ? (
+              <TR className="hover:bg-transparent">
+                <TD colSpan={7} className="py-10 text-center text-zinc-400">
+                  No analysts found
+                </TD>
+              </TR>
+            ) : (
+              analysts.map((analyst) => (
+                <TR key={analyst.id}>
+                  <TD className="font-medium text-zinc-100">
+                    {analyst.full_name}
+                  </TD>
+                  <TD className="text-zinc-300">
+                    {analyst.chinese_name || "-"}
+                  </TD>
+                  <TD className="text-zinc-300">{analyst.email}</TD>
+                  <TD className="text-zinc-300">
+                    {analyst.region
+                      ? `${analyst.region.name} (${analyst.region.code})`
+                      : "-"}
+                  </TD>
+                  <TD>
+                    <Badge tone={analyst.is_active ? "green" : "zinc"}>
+                      {analyst.is_active ? "ACTIVE" : "INACTIVE"}
+                    </Badge>
+                  </TD>
+                  <TD className="text-zinc-300">
+                    {formatShanghaiYmd(analyst.created_at)}
+                  </TD>
+                  <TD>
+                    <div className="flex justify-end gap-2">
+                      <ActionButton onClick={() => openEdit(analyst)}>
+                        Edit
+                      </ActionButton>
+                      <ActionButton
+                        tone="danger"
+                        onClick={() => openDelete(analyst)}
+                      >
+                        Delete
+                      </ActionButton>
+                    </div>
+                  </TD>
+                </TR>
+              ))
+            )}
+          </tbody>
+        </Table>
+
+        <Pagination
+          page={page}
+          totalPages={totalPages}
+          onChange={(p) =>
+            router.push(
+              `/analyst-info${toQueryString({ q: queryDraft, page: p })}`
+            )
+          }
+        />
+      </main>
+
+      <Modal
+        open={formOpen}
+        title={editingAnalyst ? "Edit analyst" : "Create analyst"}
+        onClose={() => setFormOpen(false)}
+        footer={
+          <>
+            <Button
+              variant="ghost"
+              type="button"
+              onClick={() => setFormOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" form="analyst-form" isLoading={formLoading}>
+              {editingAnalyst ? "Save" : "Create"}
+            </Button>
+          </>
+        }
+      >
+        <form id="analyst-form" className="space-y-3" onSubmit={submitForm}>
+          <Input
+            label="Full Name"
+            placeholder="e.g., Zhang San"
+            value={formFullName}
+            onChange={(e) => setFormFullName(e.target.value)}
+            error={formErrors.full_name}
+          />
+          <Input
+            label="Chinese Name"
+            placeholder="e.g., 张三"
+            value={formChineseName}
+            onChange={(e) => setFormChineseName(e.target.value)}
+          />
+          <Input
+            label="Email"
+            type="email"
+            placeholder="e.g., zhangsan@example.com"
+            value={formEmail}
+            onChange={(e) => setFormEmail(e.target.value)}
+            error={formErrors.email}
+          />
+          <div className="space-y-1">
+            <label
+              className="text-sm font-medium text-zinc-300"
+              htmlFor="region_id"
+            >
+              Region
+            </label>
+            <select
+              id="region_id"
+              value={formRegionId}
+              onChange={(e) => setFormRegionId(e.target.value)}
+              className="w-full rounded-[8px] border border-white/10 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus-visible:ring-2 focus-visible:ring-blue-500/60"
+            >
+              <option value="">Select a region...</option>
+              {regions.map((region) => (
+                <option key={region.id} value={region.id}>
+                  {region.name} ({region.code})
+                </option>
+              ))}
+            </select>
+            {formErrors.region_id && (
+              <p className="text-xs text-red-400">{formErrors.region_id}</p>
+            )}
+          </div>
+          <Input
+            label="Suffix"
+            placeholder="e.g., CFA"
+            value={formSuffix}
+            onChange={(e) => setFormSuffix(e.target.value)}
+          />
+          <Input
+            label="SFC"
+            placeholder="e.g., 12345678"
+            value={formSfc}
+            onChange={(e) => setFormSfc(e.target.value)}
+          />
+          <div className="flex items-center gap-2">
+            <input
+              id="is_active"
+              type="checkbox"
+              checked={formIsActive}
+              onChange={(e) => setFormIsActive(e.target.checked)}
+              className="h-4 w-4 rounded border-white/10 bg-zinc-800 text-blue-600 focus:ring-2 focus:ring-blue-500"
+            />
+            <label
+              className="text-sm font-medium text-zinc-300"
+              htmlFor="is_active"
+            >
+              Active
+            </label>
+          </div>
+        </form>
+      </Modal>
+
+      <ConfirmModal
+        open={deleteOpen}
+        title="Delete analyst?"
+        description="This action cannot be undone."
+        onClose={() => setDeleteOpen(false)}
+        onConfirm={confirmDelete}
+        confirmTone="danger"
+        confirmLabel="Delete"
+        loading={deleteLoading}
       />
     </div>
   );

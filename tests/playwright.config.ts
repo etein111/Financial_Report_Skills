@@ -8,8 +8,12 @@ export default defineConfig({
   workers: process.env.CI ? 1 : undefined,
   reporter: "html",
   use: {
-    baseURL: "http://localhost:3001",
+    baseURL: "http://localhost:3000",
     trace: "on-first-retry",
+    // Hide Next.js dev overlay during tests
+    contextOptions: {
+      hasTouch: false,
+    },
   },
   projects: [
     {
@@ -18,8 +22,8 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "cd ../web && pnpm dev",
-    url: "http://localhost:3001",
+    command: "cd ../web && NEXT_PRIVATE_DISABLE_DEV_OVERLAY=1 pnpm dev",
+    url: "http://localhost:3000",
     reuseExistingServer: true,
   },
 });

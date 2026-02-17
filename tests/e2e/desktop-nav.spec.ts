@@ -5,32 +5,44 @@ test.describe("Desktop Navigation", () => {
     test.beforeEach(async ({ page }) => {
       // Login as admin
       await page.goto("/login");
-      await page.fill('input[type="email"]', "admin@neolyst.com");
+      await page.fill('input[type="email"]', "jiang_jiahong@qq.com");
       await page.fill('input[type="password"]', "Admin123");
       await page.click('button[type="submit"]');
       await expect(page).toHaveURL(/\/desktop/, { timeout: 15000 });
     });
 
-    test("displays Regions and Analyst Info cards on desktop", async ({ page }) => {
+    test("displays Regions and Analyst Info cards on desktop", async ({
+      page,
+    }) => {
       // Check Data Management section
-      const dataSection = page.locator('section:has(h2:has-text("Data Management"))');
+      const dataSection = page.locator(
+        'section:has(h2:has-text("Data Management"))',
+      );
 
       // Should have Regions card
       await expect(dataSection.locator('a:has-text("Regions")')).toBeVisible();
-      await expect(dataSection.locator('a:has-text("Regions")')).toHaveAttribute('href', '/regions');
+      await expect(
+        dataSection.locator('a:has-text("Regions")'),
+      ).toHaveAttribute("href", "/regions");
 
       // Should have Analyst Info card
-      await expect(dataSection.locator('a:has-text("Analyst Info")')).toBeVisible();
-      await expect(dataSection.locator('a:has-text("Analyst Info")')).toHaveAttribute('href', '/analyst-info');
+      await expect(
+        dataSection.locator('a:has-text("Analyst Info")'),
+      ).toBeVisible();
+      await expect(
+        dataSection.locator('a:has-text("Analyst Info")'),
+      ).toHaveAttribute("href", "/analyst-info");
 
       // Should have User Management card
-      await expect(dataSection.locator('a:has-text("User Management")')).toBeVisible();
+      await expect(
+        dataSection.locator('a:has-text("User Management")'),
+      ).toBeVisible();
     });
 
     test("cards open in new tab when clicked", async ({ page }) => {
       // Click Regions card
       const [regionsTab] = await Promise.all([
-        page.waitForEvent('popup'),
+        page.waitForEvent("popup"),
         page.locator('a:has-text("Regions")').click(),
       ]);
 
@@ -43,33 +55,42 @@ test.describe("Desktop Navigation", () => {
 
     test("coming soon features are marked correctly", async ({ page }) => {
       // Check that some cards still show "Coming Soon"
-      const badges = page.locator('section:has(h2:has-text("Reports")) .badge');
+      const badges = page.locator(
+        'section:has(h2:has-text("Reports")) span:has-text("Coming Soon")',
+      );
 
-      const badgeTexts = await badges.allTextContents();
-      expect(badgeTexts).toContain('Coming Soon');
+      await expect(badges.first()).toBeVisible();
     });
   });
 
   test.describe("Non-Admin User (SA/Analyst)", () => {
-    test("does not display admin-only cards", async ({ page }) => {
+    test("does not display Admin-only cards", async ({ page }) => {
       // Login as SA
       await page.goto("/login");
       await page.fill('input[type="email"]', "sa@neolyst.com");
-      await page.fill('input[type="password"]', 'Analyst123');
+      await page.fill('input[type="password"]', "Analyst123");
       await page.click('button[type="submit"]');
       await expect(page).toHaveURL(/\/desktop/, { timeout: 15000 });
 
-      // Data Management section should NOT have admin cards
-      const dataSection = page.locator('section:has(h2:has-text("Data Management"))');
+      // Data Management section should NOT have Admin-only cards
+      const dataSection = page.locator(
+        'section:has(h2:has-text("Data Management"))',
+      );
 
-      // Should NOT see Regions card
-      await expect(dataSection.locator('a:has-text("Regions")')).not.toBeVisible();
+      // Should NOT see User Management card (admin only)
+      await expect(
+        dataSection.locator('a:has-text("User Management")'),
+      ).not.toBeVisible();
 
-      // Should NOT see Analyst Info card
-      await expect(dataSection.locator('a:has-text("Analyst Info")')).not.toBeVisible();
+      // Should NOT see Regions card (admin only)
+      await expect(
+        dataSection.locator('a:has-text("Regions")'),
+      ).not.toBeVisible();
 
-      // Should NOT see User Management card
-      await expect(dataSection.locator('a:has-text("User Management")')).not.toBeVisible();
+      // Should NOT see Analyst Info card (admin only)
+      await expect(
+        dataSection.locator('a:has-text("Analyst Info")'),
+      ).not.toBeVisible();
     });
   });
 

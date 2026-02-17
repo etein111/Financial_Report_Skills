@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/navigation";
+import { revalidatePath } from "next/cache";
 
 import { regionSchema, regionUpdateSchema } from "@/domain/schemas/region";
 import { err, ok, type Result } from "@/lib/result";
@@ -32,9 +32,8 @@ export async function listRegionsAction(input: {
   const query = input.query ?? null;
 
   try {
-    const data = await listRegionsRepo({ page, query });
-    return ok(data);
-  catch {
+    return await listRegionsRepo({ page, query });
+  } catch {
     return err("Failed to list regions.");
   }
 }
@@ -42,7 +41,9 @@ export async function listRegionsAction(input: {
 /**
  * Create a new region
  */
-export async function createRegionAction(input: unknown): Promise<Result<Region>> {
+export async function createRegionAction(
+  input: unknown,
+): Promise<Result<Region>> {
   await requireAdminOrThrow();
 
   const parsed = regionSchema.safeParse(input);
@@ -50,13 +51,11 @@ export async function createRegionAction(input: unknown): Promise<Result<Region>
     return err(parsed.error.issues[0]?.message ?? "Invalid input.");
   }
 
-  try {
-    const data = await createRegionRepo(parsed.data);
+  const result = await createRegionRepo(parsed.data);
+  if (result.ok) {
     revalidatePath("/regions");
-    return ok(data);
-  } catch {
-    return err("Failed to create region.");
   }
+  return result;
 }
 
 /**
@@ -64,7 +63,7 @@ export async function createRegionAction(input: unknown): Promise<Result<Region>
  */
 export async function updateRegionAction(
   id: string,
-  input: unknown
+  input: unknown,
 ): Promise<Result<Region>> {
   await requireAdminOrThrow();
 
@@ -73,26 +72,27 @@ export async function updateRegionAction(
     return err(parsed.error.issues[0]?.message ?? "Invalid input.");
   }
 
-  try {
-    const data = await updateRegionRepo(id, parsed.data);
+  const result = await updateRegionRepo(id, parsed.data);
+  if (result.ok) {
     revalidatePath("/regions");
-    return ok(data);
-  } catch {
-    return err("Failed to update region.");
   }
+  return result;
 }
 
 /**
  * Delete a region
  */
 export async function deleteRegionAction(id: string): Promise<Result<null>> {
-  await requireAdminOrThrow();
-
   try {
+    await requireAdminOrThrow();
+
     await deleteRegionRepo(id);
     revalidatePath("/regions");
     return ok(null);
-  } catch {
+  } catch (e) {
+    if (e instanceof Error) {
+      return err(e.message);
+    }
     return err("Failed to delete region.");
   }
 }

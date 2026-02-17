@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 
 import { getCurrentUser, getCurrentUserRole } from "@/lib/supabase/server";
 
-import { RegionsPage } from "@/features/regions/components/regions-page";
+import { RegionsPage as RegionsPageContent } from "@/features/regions/components/regions-page";
 
 export default async function RegionsPage({
   searchParams,
@@ -24,5 +24,5 @@ export default async function RegionsPage({
     redirect("/403");
   }
 
-  return <RegionsPage searchParams={searchParams} />;
+  return <RegionsPageContent searchParams={searchParams} />;
 }

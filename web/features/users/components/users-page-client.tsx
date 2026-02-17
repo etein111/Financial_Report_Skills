@@ -5,13 +5,15 @@ import { useRouter } from "next/navigation";
 
 import type { UserRole, UserRow, UserStatus } from "@/domain/user";
 import { emailSchema } from "@/domain/schemas/user";
+import { ActionButton } from "@/components/ui/action-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ConfirmModal } from "@/components/ui/confirm-modal";
 import { Input } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
+import { Pagination } from "@/components/ui/pagination";
 import { Table, TD, TH, THead, TR } from "@/components/ui/table";
 import { useToast } from "@/components/ui/toast";
-import { cn } from "@/lib/cn";
 import { formatShanghaiYmd } from "@/lib/time";
 
 import {
@@ -94,7 +96,8 @@ export function UsersPageClient({
   // Ban/Unban confirm
   const [banOpen, setBanOpen] = React.useState(false);
   const [banId, setBanId] = React.useState<string | null>(null);
-  const [banTargetStatus, setBanTargetStatus] = React.useState<UserStatus>("active");
+  const [banTargetStatus, setBanTargetStatus] =
+    React.useState<UserStatus>("active");
   const [banLoading, setBanLoading] = React.useState(false);
 
   // Reset password
@@ -125,7 +128,8 @@ export function UsersPageClient({
 
     const next: { email?: string; name?: string } = {};
     if (!email) next.email = "Email is required";
-    else if (!emailSchema.safeParse(email).success) next.email = "Invalid email format";
+    else if (!emailSchema.safeParse(email).success)
+      next.email = "Invalid email format";
     if (!fullName) next.name = "Name is required";
     setInviteErrors(next);
     if (Object.keys(next).length) return;
@@ -162,7 +166,8 @@ export function UsersPageClient({
     const next: { email?: string; name?: string } = {};
     if (!fullName) next.name = "Name is required";
     if (!email) next.email = "Email is required";
-    else if (!emailSchema.safeParse(email).success) next.email = "Invalid email format";
+    else if (!emailSchema.safeParse(email).success)
+      next.email = "Invalid email format";
     setEditErrors(next);
     if (Object.keys(next).length) return;
 
@@ -305,7 +310,9 @@ export function UsersPageClient({
               onChange={(e) => setQueryDraft(e.target.value)}
             />
           </form>
-          <div className="hidden text-sm text-zinc-400 sm:block">{total} users</div>
+          <div className="hidden text-sm text-zinc-400 sm:block">
+            {total} users
+          </div>
         </div>
 
         <Table>
@@ -332,17 +339,23 @@ export function UsersPageClient({
                   <TD className="font-medium text-zinc-100">{u.email}</TD>
                   <TD className="text-zinc-300">{u.fullName ?? "-"}</TD>
                   <TD>
-                    <Badge tone={roleTone(u.role)}>{u.role.toUpperCase()}</Badge>
+                    <Badge tone={roleTone(u.role)}>
+                      {u.role.toUpperCase()}
+                    </Badge>
                   </TD>
                   <TD>
                     <Badge tone={statusTone(u.status)}>
                       {u.status === "active" ? "ACTIVE" : "BANNED"}
                     </Badge>
                   </TD>
-                  <TD className="text-zinc-300">{formatShanghaiYmd(u.createdAt)}</TD>
+                  <TD className="text-zinc-300">
+                    {formatShanghaiYmd(u.createdAt)}
+                  </TD>
                   <TD>
                     <div className="flex justify-end gap-2">
-                      <ActionButton onClick={() => openEdit(u)}>Edit</ActionButton>
+                      <ActionButton onClick={() => openEdit(u)}>
+                        Edit
+                      </ActionButton>
                       <ActionButton onClick={() => openChangeRole(u)}>
                         Role
                       </ActionButton>
@@ -366,7 +379,9 @@ export function UsersPageClient({
         <Pagination
           page={page}
           totalPages={totalPages}
-          onChange={(p) => router.push(`/users${toQueryString({ q: queryDraft, page: p })}`)}
+          onChange={(p) =>
+            router.push(`/users${toQueryString({ q: queryDraft, page: p })}`)
+          }
         />
       </main>
 
@@ -377,7 +392,11 @@ export function UsersPageClient({
         onClose={() => setInviteOpen(false)}
         footer={
           <>
-            <Button variant="ghost" type="button" onClick={() => setInviteOpen(false)}>
+            <Button
+              variant="ghost"
+              type="button"
+              onClick={() => setInviteOpen(false)}
+            >
               Cancel
             </Button>
             <Button type="submit" form="invite-form" isLoading={inviteLoading}>
@@ -404,7 +423,10 @@ export function UsersPageClient({
           />
 
           <div className="space-y-1">
-            <label className="text-sm font-medium text-zinc-300" htmlFor="invite-role">
+            <label
+              className="text-sm font-medium text-zinc-300"
+              htmlFor="invite-role"
+            >
               Role
             </label>
             <select
@@ -427,7 +449,11 @@ export function UsersPageClient({
         onClose={() => setEditOpen(false)}
         footer={
           <>
-            <Button variant="ghost" type="button" onClick={() => setEditOpen(false)}>
+            <Button
+              variant="ghost"
+              type="button"
+              onClick={() => setEditOpen(false)}
+            >
               Cancel
             </Button>
             <Button type="submit" form="edit-form" isLoading={editLoading}>
@@ -461,7 +487,11 @@ export function UsersPageClient({
         onClose={() => setRoleOpen(false)}
         footer={
           <>
-            <Button variant="ghost" type="button" onClick={() => setRoleOpen(false)}>
+            <Button
+              variant="ghost"
+              type="button"
+              onClick={() => setRoleOpen(false)}
+            >
               Cancel
             </Button>
             <Button type="submit" form="role-form" isLoading={roleLoading}>
@@ -472,7 +502,10 @@ export function UsersPageClient({
       >
         <form id="role-form" className="space-y-3" onSubmit={submitChangeRole}>
           <div className="space-y-1">
-            <label className="text-sm font-medium text-zinc-300" htmlFor="role-select">
+            <label
+              className="text-sm font-medium text-zinc-300"
+              htmlFor="role-select"
+            >
               Role
             </label>
             <select
@@ -509,10 +542,19 @@ export function UsersPageClient({
         onClose={() => setResetOpen(false)}
         footer={
           <>
-            <Button variant="ghost" type="button" onClick={() => setResetOpen(false)}>
+            <Button
+              variant="ghost"
+              type="button"
+              onClick={() => setResetOpen(false)}
+            >
               Cancel
             </Button>
-            <Button variant="danger" type="submit" form="reset-form" isLoading={resetLoading}>
+            <Button
+              variant="danger"
+              type="submit"
+              form="reset-form"
+              isLoading={resetLoading}
+            >
               Reset
             </Button>
           </>
@@ -541,126 +583,5 @@ export function UsersPageClient({
         loading={deleteLoading}
       />
     </div>
-  );
-}
-
-type ActionButtonTone = "default" | "danger";
-
-type ActionButtonProps = {
-  children: React.ReactNode;
-  onClick: () => void;
-  tone?: ActionButtonTone;
-};
-
-function ActionButton({
-  children,
-  onClick,
-  tone,
-}: ActionButtonProps) {
-  return (
-    <button
-      type="button"
-      className={cn(
-        "rounded-[6px] border border-white/10 px-3 py-1 text-xs font-medium",
-        "transition-colors duration-200",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/60",
-        tone === "danger"
-          ? "bg-red-600/20 text-red-100 hover:bg-red-600/30"
-          : "bg-zinc-800 text-zinc-100 hover:bg-zinc-700",
-      )}
-      onClick={onClick}
-    >
-      {children}
-    </button>
-  );
-}
-
-type PaginationProps = {
-  page: number;
-  totalPages: number;
-  onChange: (page: number) => void;
-};
-
-function Pagination({
-  page,
-  totalPages,
-  onChange,
-}: PaginationProps) {
-  if (totalPages <= 1) return null;
-
-  return (
-    <div className="flex items-center justify-between">
-      <div className="text-sm text-zinc-400">
-        Page {page} / {totalPages}
-      </div>
-      <div className="flex gap-2">
-        <Button
-          variant="secondary"
-          type="button"
-          disabled={page <= 1}
-          onClick={() => onChange(page - 1)}
-        >
-          Prev
-        </Button>
-        <Button
-          variant="secondary"
-          type="button"
-          disabled={page >= totalPages}
-          onClick={() => onChange(page + 1)}
-        >
-          Next
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-type ConfirmTone = "secondary" | "danger";
-
-type ConfirmModalProps = {
-  open: boolean;
-  title: string;
-  description: string;
-  onClose: () => void;
-  onConfirm: () => void;
-  confirmTone?: ConfirmTone;
-  confirmLabel?: string;
-  loading?: boolean;
-};
-
-function ConfirmModal({
-  open,
-  title,
-  description,
-  onClose,
-  onConfirm,
-  confirmTone = "secondary",
-  confirmLabel = "Confirm",
-  loading,
-}: ConfirmModalProps) {
-  return (
-    <Modal
-      open={open}
-      title={title}
-      description={description}
-      onClose={onClose}
-      footer={
-        <>
-          <Button variant="ghost" type="button" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button
-            variant={confirmTone === "danger" ? "danger" : "secondary"}
-            type="button"
-            onClick={onConfirm}
-            isLoading={loading}
-          >
-            {confirmLabel}
-          </Button>
-        </>
-      }
-    >
-      <p className="text-sm text-zinc-400">Please confirm to proceed.</p>
-    </Modal>
   );
 }

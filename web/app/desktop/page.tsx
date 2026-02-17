@@ -99,8 +99,12 @@ const dataCards: DesktopCard[] = [
 export default async function DesktopPage() {
   const user = await getCurrentUser();
   const role = await getCurrentUserRole();
+
+  // Only show admin-only cards to admin users
   const visibleDataCards =
-    role === "admin" ? dataCards : dataCards.filter((c) => c.key !== "users");
+    role === "admin"
+      ? dataCards
+      : dataCards.filter((c) => c.permissionLabel !== "Admin only");
 
   const fullName =
     typeof user?.user_metadata?.full_name === "string"

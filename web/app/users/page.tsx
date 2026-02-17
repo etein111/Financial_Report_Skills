@@ -6,7 +6,7 @@ export const revalidate = 0;
 export default function UsersPageRoute({
   searchParams,
 }: {
-  searchParams?: Record<string, string | string[] | undefined>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   return <UsersPage searchParams={searchParams} />;
 }

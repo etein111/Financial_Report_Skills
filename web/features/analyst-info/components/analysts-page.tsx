@@ -1,7 +1,6 @@
 import * as React from "react";
 
 import { listAnalystsAction } from "../actions";
-import type { Analyst } from "../repo/analysts-repo";
 import { AnalystsPageClient } from "./analysts-page-client";
 
 export interface AnalystsPageProps {
