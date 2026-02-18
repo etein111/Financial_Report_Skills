@@ -27,6 +27,7 @@
 - 文件上传非必填，可为空。
 - `draft` 与 `submitted` 允许 owner 继续编辑；`published`/`rejected` 禁止直接编辑。
 - `report` 主表新增发布快照字段：`published_by`（发布人）与 `published_at`（发布时间），用于已发布报告查询。
+- Web 端 `Reports` 页面支持拖拽上传（drag-and-drop）报告文件，仍保留点击选择文件作为兜底入口。
 - 支持“直接提交”快捷操作：前端一键触发，后端按两步执行（先保存 draft，再提交 submitted）。
 - 若“直接提交”第二步失败，系统必须提示“已保存为 Draft，提交失败”，并允许重试提交。
 
@@ -55,6 +56,11 @@
 - 文件命名规范：`{report_id}_{version_no(3位补零)}_{label}_{ts}.{ext}`
 - `label`：`report` 或 `model`
 - `ts`：UTC 秒级时间戳（`YYYYMMDDTHHMMSSZ`）
+
+### 2.6 Web 上传交互（拖拽）
+- `Reports` 页面支持将文件拖拽到上传区域完成选择/上传流程。
+- `Report Template` 页面（`/templates`）支持将 Word/Excel 模板拖拽到上传区域完成上传流程。
+- 拖拽上传不改变现有权限边界：Report 文件仍仅 owner/Admin 可上传；Template 文件仍仅 Admin 可上传。
 
 ## 三、权限模型
 
@@ -128,6 +134,7 @@
 - [ ] 系统保留“报告状态历史”，且日志含 `version_no`。
 - [ ] “直接提交”失败时，系统提示“已保存为 Draft，提交失败”。
 - [ ] 文件路径与命名符合 `{report_id}_{version_no3}_{label}_{ts}.{ext}` 规范。
+- [ ] Reports 页面与 Report Template 页面均支持拖拽上传，并保留点击上传兜底能力。
 - [ ] RLS 生效：Analyst 不能读取/修改非 owner 报告；SA 仅可见 `submitted/published/rejected`。
 
 ## 五、设计约束与规范
@@ -137,6 +144,7 @@
 - 文件下载：owner/Admin/SA（SA 仅可见状态范围）。
 - 状态与版本解耦：状态变化写 `report_status_log`；内容变化写 `report_version`。
 - 发布快照字段：仅 `submitted -> published` 时更新 `published_by/published_at`；其他状态流转不改动该快照字段。
+- Web 上传交互：拖拽上传仅作为交互增强，不改变文件校验、命名、落盘与权限规则。
 
 ## Capabilities
 
@@ -149,12 +157,15 @@
 ### Modified Capabilities
 - `role-control`: 扩展 report/review 场景的角色判定与 owner 模型。
 - `desktop-nav`: 新增 Reports / Report Review 导航入口与可见性规则。
+- `template-file-management`: 模板上传新增拖拽交互（Report Template 页面）。
 
 ## Impact
 
 - Affected code:
   - `web/app/reports/*`, `web/app/report-review/*`
+  - `web/app/templates/*`
   - `web/features/reports/*`, `web/features/report-review/*`
+  - `web/features/templates/*`
   - `web/features/report-status-history/*`（或并入 reports）
 - Database:
   - `report`、`report_version`、`report_analyst`、`report_status_log` 表与状态流转约束

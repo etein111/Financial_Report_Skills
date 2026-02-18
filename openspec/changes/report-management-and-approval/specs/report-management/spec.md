@@ -67,3 +67,14 @@ The system SHALL provide `published_by` and `published_at` for published reports
 #### Scenario: Query non-published reports
 - **WHEN** authorized user queries reports with status in `draft|submitted|rejected`
 - **THEN** system MAY return null values for `published_by` and `published_at`
+
+### Requirement: System SHALL support drag-and-drop upload on Reports page
+The system SHALL support drag-and-drop file upload on Reports create/edit page with click-upload fallback.
+
+#### Scenario: Owner drags report file
+- **WHEN** owner drags a valid report/model file into Reports upload area
+- **THEN** system MUST accept the file through the same validation and upload pipeline as click upload
+
+#### Scenario: User does not use drag-and-drop
+- **WHEN** user uploads from file picker on Reports page
+- **THEN** system MUST keep existing upload behavior unchanged

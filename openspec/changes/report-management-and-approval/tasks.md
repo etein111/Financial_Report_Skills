@@ -42,6 +42,8 @@
 - [ ] 5.4 实现上传流程与 version_no 绑定（内容保存时落路径）
 - [ ] 5.5 实现下载流程与权限校验（owner/Admin/SA 限定状态）
 - [ ] 5.6 实现无文件场景 UI（显示 `No file`，不渲染预览）
+- [ ] 5.7 实现 Reports 页面拖拽上传（report/model）并保留点击上传兜底
+- [ ] 5.8 实现 Report Template 页面拖拽上传（word/excel）并保留点击上传兜底
 
 ## 6. 页面与交互
 
@@ -67,6 +69,7 @@
 - [ ] 8.4 E2E：reject 必填 reason 与 `rejected->draft` 保留历史原因
 - [ ] 8.5 E2E：直接提交两步流程及失败提示
 - [ ] 8.6 E2E：文件命名规则、下载权限、无文件审批场景
+- [ ] 8.7 E2E：Reports 与 Report Template 的拖拽上传与点击上传兜底流程
 
 ## 9. 自动迁移与自动化测试
 

@@ -80,6 +80,11 @@
 - `version_no3`：3 位补零（`001`）
 - `ts`：UTC 秒级时间戳（`YYYYMMDDTHHMMSSZ`）
 
+### 6) 页面上传交互（拖拽）
+- `Reports` 页面与 `Report Template` 页面均提供拖拽上传区域（dropzone）。
+- 拖拽上传与点击上传共用同一后端链路：文件类型校验、命名规则、权限校验、落盘路径保持一致。
+- 无拖拽能力的环境（或用户不使用拖拽）下，点击上传流程必须可用（功能等价兜底）。
+
 ## 技术实现方案
 
 - `web/features/reports/repo/*.ts`：列表、详情、保存、提交、作者关系维护、版本读取。
@@ -87,6 +92,9 @@
 - `web/features/reports/actions.ts`：create/save/submit/direct-submit 与 owner 校验。
 - `web/features/report-review/actions.ts`：approve/reject/reopen-draft。
 - `web/features/report-status-history/*`：状态历史读取（或并入 reports）。
+- `web/features/reports/components/*`：在 report 编辑页集成拖拽上传交互（report/model）。
+- `web/features/templates/components/*`：在 Report Template 页集成模板拖拽上传交互（word/excel）。
+- `web/components/ui/*`：可复用 dropzone/upload 组件（如抽象后可跨页面复用）。
 - `web/domain/schemas/report*.ts`：表单、状态机、动作参数校验。
 - `supabase/migrations/*`：表结构、索引、RLS、触发器、约束。
 
