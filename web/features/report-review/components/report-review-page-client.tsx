@@ -13,12 +13,12 @@ import { Select } from "@/components/ui/select";
 import { Table, TD, TH, THead, TR } from "@/components/ui/table";
 import { useToast } from "@/components/ui/toast";
 import { getReportDownloadUrlAction } from "@/features/reports/actions";
-import type { ReportDetail, ReportSummary } from "@/features/reports/repo/reports-repo";
+import type {
+  ReportDetail,
+  ReportSummary,
+} from "@/features/reports/repo/reports-repo";
 
-import {
-  executeReviewAction,
-  getReviewReportDetailAction,
-} from "../actions";
+import { executeReviewAction, getReviewReportDetailAction } from "../actions";
 
 export interface ReportReviewPageClientProps {
   reports: ReportSummary[];
@@ -91,6 +91,18 @@ export function ReportReviewPageClient({
     setStatusFilter(currentStatus);
   }, [currentQuery, currentStatus]);
 
+  // Debounced search on input change
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      if (queryDraft !== (currentQuery ?? "")) {
+        router.push(
+          `/report-review${toQueryString({ q: queryDraft, status: statusFilter, page: 1 })}`,
+        );
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [queryDraft]);
+
   const [detailOpen, setDetailOpen] = React.useState(false);
   const [detailLoading, setDetailLoading] = React.useState(false);
   const [detail, setDetail] = React.useState<ReportDetail | null>(null);
@@ -114,7 +126,9 @@ export function ReportReviewPageClient({
 
   function onStatusChange(value: "submitted" | "published" | "rejected") {
     setStatusFilter(value);
-    router.push(`/report-review${toQueryString({ q: queryDraft, status: value, page: 1 })}`);
+    router.push(
+      `/report-review${toQueryString({ q: queryDraft, status: value, page: 1 })}`,
+    );
   }
 
   async function openDetail(reportId: string) {
@@ -186,14 +200,16 @@ export function ReportReviewPageClient({
       <header className="border-b border-white/10 bg-zinc-900/60 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
           <div>
-            <div className="text-xl font-semibold text-zinc-50">Report Review</div>
+            <div className="text-xl font-semibold text-zinc-50">
+              Report Review
+            </div>
             <div className="text-xs text-zinc-400">Total {total}</div>
           </div>
         </div>
       </header>
 
       <main className="mx-auto max-w-7xl space-y-4 px-6 py-8">
-        <div className="flex items-end justify-between gap-4">
+        <div className="flex items-end gap-4">
           <form className="flex flex-1 gap-4" onSubmit={submitSearch}>
             <div className="w-full max-w-md">
               <Input
@@ -208,12 +224,16 @@ export function ReportReviewPageClient({
                 label="Status"
                 value={statusFilter}
                 onChange={(event) =>
-                  onStatusChange(event.target.value as "submitted" | "published" | "rejected")
+                  onStatusChange(
+                    event.target.value as
+                      | "submitted"
+                      | "published"
+                      | "rejected",
+                  )
                 }
                 options={FILTER_OPTIONS}
               />
             </div>
-            <Button type="submit">Search</Button>
           </form>
         </div>
 
@@ -239,13 +259,19 @@ export function ReportReviewPageClient({
                 <TR key={report.id}>
                   <TD className="font-medium text-zinc-100">{report.title}</TD>
                   <TD>
-                    <Badge tone={statusTone(report.status)}>{report.status}</Badge>
+                    <Badge tone={statusTone(report.status)}>
+                      {report.status}
+                    </Badge>
                   </TD>
                   <TD className="text-zinc-300">{`${report.owner_user_id.slice(0, 8)}...`}</TD>
-                  <TD className="text-zinc-400">{formatDateTime(report.updated_at)}</TD>
+                  <TD className="text-zinc-400">
+                    {formatDateTime(report.updated_at)}
+                  </TD>
                   <TD>
                     <div className="flex justify-end">
-                      <ActionButton onClick={() => openDetail(report.id)}>Review</ActionButton>
+                      <ActionButton onClick={() => openDetail(report.id)}>
+                        Review
+                      </ActionButton>
                     </div>
                   </TD>
                 </TR>
@@ -264,7 +290,11 @@ export function ReportReviewPageClient({
         className="max-w-3xl"
         footer={
           <>
-            <Button variant="ghost" type="button" onClick={() => setDetailOpen(false)}>
+            <Button
+              variant="ghost"
+              type="button"
+              onClick={() => setDetailOpen(false)}
+            >
               Close
             </Button>
             {detail?.status === "submitted" ? (
@@ -277,13 +307,21 @@ export function ReportReviewPageClient({
                 >
                   Reject
                 </Button>
-                <Button type="button" onClick={() => runAction("approve")} isLoading={actionLoading}>
+                <Button
+                  type="button"
+                  onClick={() => runAction("approve")}
+                  isLoading={actionLoading}
+                >
                   Approve
                 </Button>
               </>
             ) : null}
             {detail?.status === "rejected" ? (
-              <Button type="button" onClick={() => runAction("reopen")} isLoading={actionLoading}>
+              <Button
+                type="button"
+                onClick={() => runAction("reopen")}
+                isLoading={actionLoading}
+              >
                 Reopen to Draft
               </Button>
             ) : null}
@@ -291,7 +329,9 @@ export function ReportReviewPageClient({
         }
       >
         {detailLoading ? (
-          <div className="py-8 text-center text-zinc-400">Loading detail...</div>
+          <div className="py-8 text-center text-zinc-400">
+            Loading detail...
+          </div>
         ) : detail ? (
           <div className="space-y-4">
             <div className="rounded-[12px] border border-white/10 bg-zinc-900/70 p-4">
@@ -306,17 +346,23 @@ export function ReportReviewPageClient({
                 </div>
                 <div>
                   <span className="text-zinc-500">Status:</span>{" "}
-                  <Badge tone={statusTone(detail.status)}>{detail.status}</Badge>
+                  <Badge tone={statusTone(detail.status)}>
+                    {detail.status}
+                  </Badge>
                 </div>
                 <div>
                   <span className="text-zinc-500">Version:</span>{" "}
-                  <span className="text-zinc-100">v{detail.current_version_no}</span>
+                  <span className="text-zinc-100">
+                    v{detail.current_version_no}
+                  </span>
                 </div>
               </div>
             </div>
 
             <div className="rounded-[12px] border border-white/10 bg-zinc-900/70 p-4">
-              <div className="mb-2 text-sm font-medium text-zinc-200">Files</div>
+              <div className="mb-2 text-sm font-medium text-zinc-200">
+                Files
+              </div>
               <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
                 <div className="rounded-[8px] border border-white/10 bg-zinc-800/40 p-3 text-sm text-zinc-300">
                   <div className="mb-1 text-xs text-zinc-500">Report</div>
@@ -324,7 +370,9 @@ export function ReportReviewPageClient({
                     <Button
                       type="button"
                       variant="secondary"
-                      onClick={() => handleDownload(detail.latest_version!.word_file_path!)}
+                      onClick={() =>
+                        handleDownload(detail.latest_version!.word_file_path!)
+                      }
                     >
                       Download
                     </Button>
@@ -338,7 +386,9 @@ export function ReportReviewPageClient({
                     <Button
                       type="button"
                       variant="secondary"
-                      onClick={() => handleDownload(detail.latest_version!.model_file_path!)}
+                      onClick={() =>
+                        handleDownload(detail.latest_version!.model_file_path!)
+                      }
                     >
                       Download
                     </Button>
@@ -359,7 +409,9 @@ export function ReportReviewPageClient({
             ) : null}
 
             <div className="space-y-2 rounded-[12px] border border-white/10 bg-zinc-900/70 p-4">
-              <div className="text-sm font-medium text-zinc-200">Report Status History</div>
+              <div className="text-sm font-medium text-zinc-200">
+                Report Status History
+              </div>
               {detail.status_logs.length === 0 ? (
                 <p className="text-sm text-zinc-500">No history.</p>
               ) : (
@@ -369,11 +421,16 @@ export function ReportReviewPageClient({
                     className="rounded-[8px] border border-white/10 bg-zinc-800/40 p-3 text-sm"
                   >
                     <div className="text-zinc-100">
-                      {item.from_status} -&gt; {item.to_status} <Badge tone="zinc">v{item.version_no}</Badge>
+                      {item.from_status} -&gt; {item.to_status}{" "}
+                      <Badge tone="zinc">v{item.version_no}</Badge>
                     </div>
-                    <div className="mt-1 text-xs text-zinc-500">{formatDateTime(item.action_at)}</div>
+                    <div className="mt-1 text-xs text-zinc-500">
+                      {formatDateTime(item.action_at)}
+                    </div>
                     {item.reason ? (
-                      <div className="mt-1 text-xs text-amber-300">Note: {item.reason}</div>
+                      <div className="mt-1 text-xs text-amber-300">
+                        Note: {item.reason}
+                      </div>
                     ) : null}
                   </div>
                 ))
