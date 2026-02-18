@@ -1,4 +1,3 @@
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { signOutAction } from "@/features/auth";
@@ -12,7 +11,6 @@ type DesktopCard = {
   title: string;
   description: string;
   href: string;
-  permissionLabel?: string;
   visibleRoles: Role[];
 };
 
@@ -31,7 +29,6 @@ const reportsCards: DesktopCard[] = [
     title: "Report Review",
     description: "Review and approve submitted reports",
     href: "/report-review",
-    permissionLabel: "SA/Admin only",
     visibleRoles: ["admin", "sa"],
   },
   {
@@ -40,7 +37,6 @@ const reportsCards: DesktopCard[] = [
     title: "Templates",
     description: "Manage report templates",
     href: "/templates",
-    permissionLabel: "Admin only",
     visibleRoles: ["admin"],
   },
 ];
@@ -52,7 +48,6 @@ const dataCards: DesktopCard[] = [
     title: "User Management",
     description: "Manage system users",
     href: "/users",
-    permissionLabel: "Admin only",
     visibleRoles: ["admin"],
   },
   {
@@ -61,7 +56,6 @@ const dataCards: DesktopCard[] = [
     title: "Analyst Info",
     description: "Manage analyst profiles",
     href: "/analyst-info",
-    permissionLabel: "Admin only",
     visibleRoles: ["admin"],
   },
   {
@@ -70,7 +64,6 @@ const dataCards: DesktopCard[] = [
     title: "Regions",
     description: "Manage regions",
     href: "/regions",
-    permissionLabel: "Admin only",
     visibleRoles: ["admin"],
   },
   {
@@ -78,7 +71,6 @@ const dataCards: DesktopCard[] = [
     icon: "🏢",
     title: "Coverage",
     description: "Manage coverage universe",
-    permissionLabel: "Admin/Analyst",
     href: "/coverage",
     visibleRoles: ["admin", "analyst"],
   },
@@ -88,7 +80,6 @@ const dataCards: DesktopCard[] = [
     title: "Sectors",
     description: "Manage sector taxonomy",
     href: "/sectors",
-    permissionLabel: "Admin only",
     visibleRoles: ["admin"],
   },
 ];
@@ -119,7 +110,8 @@ export default async function DesktopPage() {
 
           <div className="flex items-center gap-4">
             <div className="hidden text-sm text-zinc-300 sm:block">
-              Welcome, <span className="font-medium text-zinc-100">{welcome}</span>
+              Welcome,{" "}
+              <span className="font-medium text-zinc-100">{welcome}</span>
             </div>
 
             <form action={signOutAction}>
@@ -131,8 +123,8 @@ export default async function DesktopPage() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-5xl px-6 pb-10 pt-12">
-        <div className="grid grid-cols-1 gap-12 lg:grid-cols-2 lg:gap-16">
+      <main className="mx-auto max-w-7xl px-6 py-8">
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
           <Section title="Reports" cards={visibleReportsCards} />
           <Section title="Data Management" cards={visibleDataCards} />
         </div>
@@ -143,27 +135,24 @@ export default async function DesktopPage() {
 
 function Section({ title, cards }: { title: string; cards: DesktopCard[] }) {
   return (
-    <section className="space-y-3">
-      <h2 className="text-base font-medium text-zinc-200">{title}</h2>
-      <div className="flex flex-col gap-4">
+    <section>
+      <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-zinc-500">
+        {title}
+      </h2>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {cards.map((card) => (
           <a
             key={card.key}
             href={card.href}
             target="_blank"
             rel="noopener noreferrer"
-            className="block"
+            className="group"
           >
-            <Card className="flex items-center gap-4 px-5 py-4">
-              <div className="text-[28px] leading-none">{card.icon}</div>
-              <div className="min-w-0 flex-1">
-                <div className="text-sm font-medium text-zinc-100">{card.title}</div>
-                <div className="mt-0.5 text-xs text-zinc-400">{card.description}</div>
-              </div>
-              <div className="flex flex-shrink-0 flex-col items-end gap-1.5">
-                {card.permissionLabel ? (
-                  <Badge tone="zinc">{card.permissionLabel}</Badge>
-                ) : null}
+            <Card className="flex h-full flex-col p-4 transition-all group-hover:border-white/20 group-hover:bg-white/[0.03]">
+              <div className="mb-2 text-2xl">{card.icon}</div>
+              <div className="font-medium text-zinc-100">{card.title}</div>
+              <div className="mt-1 text-sm text-zinc-500">
+                {card.description}
               </div>
             </Card>
           </a>
