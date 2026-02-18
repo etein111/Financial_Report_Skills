@@ -8,7 +8,7 @@ const client = new Client({
 await client.connect();
 
 // 查看当前用户的 NULL 字段
-const user = await client.query("SELECT * FROM auth.users WHERE email = 'jiang_jiahong@qq.com'");
+const user = await client.query("SELECT * FROM auth.users WHERE email = 'admin@neolyst.com'");
 console.log("Current user NULL fields:");
 const nullFields = Object.entries(user.rows[0]).filter(([k, v]) => v === null);
 nullFields.forEach(([k]) => console.log(" -", k));

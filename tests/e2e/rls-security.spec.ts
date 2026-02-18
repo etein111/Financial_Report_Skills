@@ -21,7 +21,7 @@ test.describe("RLS Security Policies", () => {
     test("only admin can write to regions table", async ({ page }) => {
       // Login as admin
       await page.goto("/login");
-      await page.fill('input[type="email"]', "jiang_jiahong@qq.com");
+      await page.fill('input[type="email"]', "admin@neolyst.com");
       await page.fill('input[type="password"]', "Admin123");
       await page.click('button[type="submit"]');
       await expect(page).toHaveURL(/\/desktop/, { timeout: 15000 });
@@ -59,7 +59,7 @@ test.describe("RLS Security Policies", () => {
     test("only admin can write to analyst table", async ({ page }) => {
       // Login as admin
       await page.goto("/login");
-      await page.fill('input[type="email"]', "jiang_jiahong@qq.com");
+      await page.fill('input[type="email"]', "admin@neolyst.com");
       await page.fill('input[type="password"]', "Admin123");
       await page.click('button[type="submit"]');
       await expect(page).toHaveURL(/\/desktop/, { timeout: 15000 });
@@ -169,7 +169,7 @@ test.describe("RLS Security Policies", () => {
     test("only admin can delete coverage", async ({ page }) => {
       // Login as admin
       await page.goto("/login");
-      await page.fill('input[type="email"]', "jiang_jiahong@qq.com");
+      await page.fill('input[type="email"]', "admin@neolyst.com");
       await page.fill('input[type="password"]', "Admin123");
       await page.click('button[type="submit"]');
       await expect(page).toHaveURL(/\/desktop/, { timeout: 15000 });
@@ -204,7 +204,7 @@ test.describe("RLS Security Policies", () => {
 
     test("admin can create sector", async ({ page }) => {
       await page.goto("/login");
-      await page.fill('input[type="email"]', "jiang_jiahong@qq.com");
+      await page.fill('input[type="email"]', "admin@neolyst.com");
       await page.fill('input[type="password"]', "Admin123");
       await page.click('button[type="submit"]');
       await expect(page).toHaveURL(/\/desktop/, { timeout: 15000 });
@@ -245,7 +245,7 @@ test.describe("RLS Security Policies", () => {
 
     test("admin can access templates page", async ({ page }) => {
       await page.goto("/login");
-      await page.fill('input[type="email"]', "jiang_jiahong@qq.com");
+      await page.fill('input[type="email"]', "admin@neolyst.com");
       await page.fill('input[type="password"]', "Admin123");
       await page.click('button[type="submit"]');
       await expect(page).toHaveURL(/\/desktop/, { timeout: 15000 });
@@ -259,7 +259,7 @@ test.describe("RLS Security Policies", () => {
     test("deleting region sets analyst region_id to NULL", async ({ page }) => {
       // Login as admin
       await page.goto("/login");
-      await page.fill('input[type="email"]', "jiang_jiahong@qq.com");
+      await page.fill('input[type="email"]', "admin@neolyst.com");
       await page.fill('input[type="password"]', "Admin123");
       await page.click('button[type="submit"]');
       await expect(page).toHaveURL(/\/desktop/, { timeout: 15000 });
@@ -334,7 +334,7 @@ test.describe("RLS Security Policies", () => {
   test.describe("Unique Constraints", () => {
     test("region name must be unique", async ({ page }) => {
       await page.goto("/login");
-      await page.fill('input[type="email"]', "jiang_jiahong@qq.com");
+      await page.fill('input[type="email"]', "admin@neolyst.com");
       await page.fill('input[type="password"]', "Admin123");
       await page.click('button[type="submit"]');
       await expect(page).toHaveURL(/\/desktop/, { timeout: 15000 });
@@ -359,7 +359,7 @@ test.describe("RLS Security Policies", () => {
 
     test("region code must be unique", async ({ page }) => {
       await page.goto("/login");
-      await page.fill('input[type="email"]', "jiang_jiahong@qq.com");
+      await page.fill('input[type="email"]', "admin@neolyst.com");
       await page.fill('input[type="password"]', "Admin123");
       await page.click('button[type="submit"]');
       await expect(page).toHaveURL(/\/desktop/, { timeout: 15000 });
@@ -384,7 +384,7 @@ test.describe("RLS Security Policies", () => {
 
     test("analyst email must be unique", async ({ page }) => {
       await page.goto("/login");
-      await page.fill('input[type="email"]', "jiang_jiahong@qq.com");
+      await page.fill('input[type="email"]', "admin@neolyst.com");
       await page.fill('input[type="password"]', "Admin123");
       await page.click('button[type="submit"]');
       await expect(page).toHaveURL(/\/desktop/, { timeout: 15000 });

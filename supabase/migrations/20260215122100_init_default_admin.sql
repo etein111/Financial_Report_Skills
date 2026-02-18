@@ -1,6 +1,6 @@
 -- Initialize default Admin account (idempotent).
 -- Dev credential:
---   email: jiang_jiahong@qq.com
+--   email: admin@neolyst.com
 --   password: Admin123
 --
 -- Requirements:
@@ -16,7 +16,7 @@ create extension if not exists pgcrypto;
 
 do $$
 declare
-  v_email constant text := 'jiang_jiahong@qq.com';
+  v_email constant text := 'admin@neolyst.com';
   v_password constant text := 'Admin123';
   v_user_id uuid;
   v_instance_id uuid;

@@ -147,7 +147,7 @@ Users 列表搜索（基线）：
 
 ## 9. 默认 Admin（Dev/引导）
 
-- 默认 Admin 已由 migration 幂等初始化（email：`jiang_jiahong@qq.com`，password：`Admin123`）
+- 默认 Admin 已由 migration 幂等初始化（email：`admin@neolyst.com`，password：`Admin123`）
 - 生产必须改密/替换初始化方案
 
 ## 10. 运维与安全（补充）

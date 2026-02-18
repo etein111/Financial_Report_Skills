@@ -43,7 +43,7 @@ async function main() {
   const ANON_KEY = requireEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY");
   const SERVICE_ROLE_KEY = requireEnv("SUPABASE_SERVICE_ROLE_KEY");
 
-  const ADMIN_EMAIL = process.env.ADMIN_EMAIL ?? "jiang_jiahong@qq.com";
+  const ADMIN_EMAIL = process.env.ADMIN_EMAIL ?? "admin@neolyst.com";
   const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? "Admin123";
 
   const service = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {

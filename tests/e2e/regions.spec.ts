@@ -4,7 +4,7 @@ test.describe("Regions Management", () => {
   test.beforeEach(async ({ page }) => {
     // Login as admin
     await page.goto("/login");
-    await page.fill('input[type="email"]', "jiang_jiahong@qq.com");
+    await page.fill('input[type="email"]', "admin@neolyst.com");
     await page.fill('input[type="password"]', "Admin123");
 
     // Remove Next.js dev overlay if present

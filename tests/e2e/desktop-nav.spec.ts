@@ -5,7 +5,7 @@ test.describe("Desktop Navigation", () => {
     test.beforeEach(async ({ page }) => {
       // Login as admin
       await page.goto("/login");
-      await page.fill('input[type="email"]', "jiang_jiahong@qq.com");
+      await page.fill('input[type="email"]', "admin@neolyst.com");
       await page.fill('input[type="password"]', "Admin123");
       await page.click('button[type="submit"]');
       await expect(page).toHaveURL(/\/desktop/, { timeout: 15000 });

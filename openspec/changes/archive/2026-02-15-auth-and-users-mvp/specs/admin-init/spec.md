@@ -5,7 +5,7 @@
 
 #### Scenario: 初始化默认账号
 - **WHEN** 数据库迁移执行完成
-- **THEN** 系统 MUST 存在邮箱为 `jiang_jiahong@qq.com` 的 Auth 用户
+- **THEN** 系统 MUST 存在邮箱为 `admin@neolyst.com` 的 Auth 用户
 - **AND** 该用户的 `app_metadata.role` MUST 为 `admin`
 
 #### Scenario: 幂等执行

@@ -4,7 +4,7 @@ test.describe("Templates Management", () => {
   test.beforeEach(async ({ page }) => {
     // Login as admin
     await page.goto("/login");
-    await page.fill('input[type="email"]', "jiang_jiahong@qq.com");
+    await page.fill('input[type="email"]', "admin@neolyst.com");
     await page.fill('input[type="password"]', "Admin123");
     await page.click('button[type="submit"]');
     await expect(page).toHaveURL(/\/desktop/, { timeout: 15000 });
@@ -36,7 +36,9 @@ test.describe("Templates Management", () => {
     await expect(page.locator("#upload-form")).toBeVisible();
   });
 
-  test("upload modal has report type and file type selectors", async ({ page }) => {
+  test("upload modal has report type and file type selectors", async ({
+    page,
+  }) => {
     await page.goto("/templates");
 
     await page.click('button:has-text("Upload Template")');

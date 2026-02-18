@@ -73,7 +73,7 @@ pnpm start
 ## 默认账号
 
 ```
-Email: jiang_jiahong@qq.com
+Email: admin@neolyst.com
 Password: Admin123
 Role: Admin
 ```

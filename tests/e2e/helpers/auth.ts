@@ -3,7 +3,7 @@ import { Page } from "@playwright/test";
 export async function loginAs(
   page: Page,
   email: string,
-  password: string
+  password: string,
 ): Promise<void> {
   await page.goto("/login");
   await page.fill('input[type="email"]', email);
@@ -19,7 +19,7 @@ export async function loginAs(
 }
 
 export async function loginAsAdmin(page: Page): Promise<void> {
-  await loginAs(page, "jiang_jiahong@qq.com", "Admin123");
+  await loginAs(page, "admin@neolyst.com", "Admin123");
 }
 
 export async function loginAsSA(page: Page): Promise<void> {

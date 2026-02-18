@@ -15,13 +15,18 @@ test.describe("Auth Flow", () => {
     await page.click('button[type="submit"]');
 
     // Should show error message (toast or inline)
-    await expect(page.locator("p.text-red-500")).toContainText("Invalid email or password", { timeout: 5000 });
+    await expect(page.locator("p.text-red-500")).toContainText(
+      "Invalid email or password",
+      { timeout: 5000 },
+    );
   });
 
-  test("login with valid credentials redirects to desktop", async ({ page }) => {
+  test("login with valid credentials redirects to desktop", async ({
+    page,
+  }) => {
     await page.goto("/login");
 
-    await page.fill('input[type="email"]', "jiang_jiahong@qq.com");
+    await page.fill('input[type="email"]', "admin@neolyst.com");
     await page.fill('input[type="password"]', "Admin123");
     await page.click('button[type="submit"]');
 
@@ -29,7 +34,9 @@ test.describe("Auth Flow", () => {
     await expect(page).toHaveURL(/\/desktop/, { timeout: 15000 });
   });
 
-  test("protected route redirects to login when not authenticated", async ({ page }) => {
+  test("protected route redirects to login when not authenticated", async ({
+    page,
+  }) => {
     await page.goto("/desktop");
     await expect(page).toHaveURL(/\/login/, { timeout: 5000 });
   });

@@ -104,7 +104,7 @@ async function main() {
     // 1.4 default admin exists + idempotent (password not reset).
     // Run idempotency check inside a transaction and rollback, to avoid touching Auth rows.
     {
-      const adminEmail = "jiang_jiahong@qq.com";
+      const adminEmail = "admin@neolyst.com";
       const before = await client.query(
         "select id, email, encrypted_password, raw_app_meta_data->>'role' as role from auth.users where lower(email)=lower($1) limit 1",
         [adminEmail],

@@ -137,7 +137,7 @@ async function main() {
     const admin = await q(
       client,
       "select id, email, raw_app_meta_data->>'role' as role, created_at from auth.users where lower(email)=lower($1) limit 1",
-      ["jiang_jiahong@qq.com"],
+      ["admin@neolyst.com"],
     );
     console.log({ defaultAdminRow: admin });
 

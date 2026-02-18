@@ -8,7 +8,7 @@ const client = new Client({
 await client.connect();
 
 // 检查 identities 表的 NULL 字段
-const identities = await client.query("SELECT * FROM auth.identities WHERE user_id = (SELECT id FROM auth.users WHERE email = 'jiang_jiahong@qq.com')");
+const identities = await client.query("SELECT * FROM auth.identities WHERE user_id = (SELECT id FROM auth.users WHERE email = 'admin@neolyst.com')");
 console.log("Identities NULL fields:");
 if (identities.rows.length > 0) {
   const nullFields = Object.entries(identities.rows[0]).filter(([k, v]) => v === null);
