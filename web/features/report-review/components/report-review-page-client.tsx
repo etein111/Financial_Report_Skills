@@ -91,18 +91,6 @@ export function ReportReviewPageClient({
     setStatusFilter(currentStatus);
   }, [currentQuery, currentStatus]);
 
-  // Debounced search on input change
-  React.useEffect(() => {
-    const timer = setTimeout(() => {
-      if (queryDraft !== (currentQuery ?? "")) {
-        router.push(
-          `/report-review${toQueryString({ q: queryDraft, status: statusFilter, page: 1 })}`,
-        );
-      }
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [queryDraft]);
-
   const [detailOpen, setDetailOpen] = React.useState(false);
   const [detailLoading, setDetailLoading] = React.useState(false);
   const [detail, setDetail] = React.useState<ReportDetail | null>(null);
