@@ -217,6 +217,7 @@ const id = generateId();
 - 只用 `SUPABASE_SERVICE_ROLE_KEY`
 - 模块必须显式 `import "server-only";`
 - 所有用户管理写操作都必须走 admin client（invite/role/ban/reset/delete）
+- Auth 用户写入规则遵循 `docs/DECISIONS.md` 的 `D-014`。
 
 ## 4. Repo 层触库规约（最重要）
 

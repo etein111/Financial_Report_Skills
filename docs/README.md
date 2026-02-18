@@ -32,6 +32,7 @@
 | `docs/LOGIC.md` | Web 代码实现规范（HOW-代码） | 代码放哪里、依赖怎么走、触库规则是什么 | 是（工程规范变更） |
 | `docs/UI.md` | UI 组件与视觉一致性规范 | 页面/组件应该长什么样、如何避免视觉漂移 | 是（设计系统变更） |
 | `docs/TESTING.md` | 测试与验收规范 | 怎么测、覆盖什么、通过标准是什么 | 是（测试策略变更） |
+| `docs/SUPABASE_DB_VERSIONING.md` | Supabase 数据库版本管理规范 | migration/seed/seed.ts 各负责什么、如何一键初始化与幂等执行 | 是（数据库流程变更） |
 | `docs/DECISIONS.md` | 长期决策（ADR） | 哪些约束长期固定、为什么固定 | 是（新增/调整 ADR） |
 | `docs/CHANGELOG.md` | 变更日志（按时间） | 最近改了什么、影响范围是什么 | 是（每次关键变更后追加） |
 | `docs/OPENSPEC_ARCHIVE_BACKFILL.md` | OpenSpec 归档与回填流程 | 如何触发归档并把 change 结论回填到 docs | 是（流程调整） |

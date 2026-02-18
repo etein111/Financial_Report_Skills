@@ -92,3 +92,12 @@
   - 数据库开发脚本放 `supabase/scripts/`
   - 临时输出统一放 `temp/`
 - 变更条件：目录结构体系整体重构并通过评审。
+
+### D-014：Auth 用户写入路径固定为 Admin API
+- 状态：Accepted
+- 结论：创建/邀请/更新/禁用/改密/删除 Auth 用户必须通过 `supabase.auth.admin.*`；禁止对 `auth.users` 直接执行 `INSERT/UPDATE/DELETE`。
+- 影响：
+  - Web 服务端用户管理统一走 admin client。
+  - `seed.ts` / 运维脚本初始化 Auth 用户时必须走 Admin API。
+  - migration/SQL seed 禁止直接写入 Auth 用户记录。
+- 变更条件：Supabase Auth 能力模型发生根本变化并通过评审。
