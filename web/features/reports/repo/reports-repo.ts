@@ -174,40 +174,6 @@ function normalizeReportSummaryRow(row: ReportSummaryRow): ReportSummary {
   };
 }
 
-async function listReportAnalysts(reportId: string): Promise<ReportAnalyst[]> {
-  const supabase = await createServerClient();
-
-  const { data, error } = await supabase
-    .from("report_analyst")
-    .select(
-      `
-      id,
-      report_id,
-      analyst_id,
-      role,
-      sort_order,
-      created_at,
-      updated_at,
-      analyst:analyst_id (
-        id,
-        full_name,
-        chinese_name,
-        email
-      )
-    `,
-    )
-    .eq("report_id", reportId)
-    .order("sort_order", { ascending: true });
-
-  if (error || !data) {
-    return [];
-  }
-
-  return (data as ReportAnalystRow[]).map((item) =>
-    normalizeReportAnalystRow(item),
-  );
-}
-
 export const toUtcTimestamp = toUtcTimestampValue;
 export const getFileExtension = getFileExtensionValue;
 
@@ -230,39 +196,6 @@ export function buildReportStoragePath(params: {
   ts?: Date;
 }): string {
   return buildReportStoragePathValue(params);
-}
-
-function buildSnapshot(params: {
-  report: {
-    id: string;
-    owner_user_id: string;
-    title: string;
-    report_type: ReportType;
-    status: ReportStatus;
-    current_version_no: number;
-    coverage_id: string | null;
-    sector_id: string | null;
-  };
-  analysts: ReportAnalyst[];
-}): Record<string, unknown> {
-  return {
-    report_id: params.report.id,
-    owner_user_id: params.report.owner_user_id,
-    owner_name: params.report.owner_user_id,
-    title: params.report.title,
-    report_type: params.report.report_type,
-    status: params.report.status,
-    version_no: params.report.current_version_no,
-    coverage_id: params.report.coverage_id,
-    sector_id: params.report.sector_id,
-    analyst_names: params.analysts.map((item) => item.analyst?.full_name ?? "Unknown"),
-    analysts: params.analysts.map((item) => ({
-      analyst_id: item.analyst_id,
-      analyst_name: item.analyst?.full_name ?? "Unknown",
-      role: item.role,
-      sort_order: item.sort_order,
-    })),
-  };
 }
 
 export async function listReports(
@@ -500,71 +433,20 @@ export async function saveReportContent(
 ): Promise<Result<ReportDetail>> {
   const supabase = await createServerClient();
 
-  const { data: currentReport, error: currentError } = await supabase
-    .from("report")
-    .select(
-      "id, owner_user_id, title, report_type, status, current_version_no, coverage_id, sector_id",
-    )
-    .eq("id", params.report_id)
-    .single();
-
-  if (currentError || !currentReport) {
-    return err("Report not found or no permission.");
-  }
-
-  const nextVersionNo = (currentReport.current_version_no ?? 0) + 1;
-
-  const { data: updatedReport, error: updateError } = await supabase
-    .from("report")
-    .update({
-      title: params.title,
-      report_type: params.report_type,
-      coverage_id: params.coverage_id ?? null,
-      sector_id: params.sector_id ?? null,
-      current_version_no: nextVersionNo,
-    })
-    .eq("id", params.report_id)
-    .select(
-      "id, owner_user_id, title, report_type, status, current_version_no, coverage_id, sector_id",
-    )
-    .single();
-
-  if (updateError || !updatedReport) {
-    return err(updateError?.message ?? "Failed to update report.");
-  }
-
-  const replaceResult = await replaceReportAnalysts(params.report_id, params.analysts);
-  if (!replaceResult.ok) {
-    return replaceResult;
-  }
-
-  const currentAnalysts = await listReportAnalysts(params.report_id);
-  const snapshotJson = buildSnapshot({
-    report: updatedReport as {
-      id: string;
-      owner_user_id: string;
-      title: string;
-      report_type: ReportType;
-      status: ReportStatus;
-      current_version_no: number;
-      coverage_id: string | null;
-      sector_id: string | null;
-    },
-    analysts: currentAnalysts,
+  const { error } = await supabase.rpc("report_save_content_atomic", {
+    p_report_id: params.report_id,
+    p_title: params.title,
+    p_report_type: params.report_type,
+    p_coverage_id: params.coverage_id ?? null,
+    p_sector_id: params.sector_id ?? null,
+    p_analysts: params.analysts,
+    p_changed_by: params.changed_by,
+    p_word_file_path: params.word_file_path ?? null,
+    p_model_file_path: params.model_file_path ?? null,
   });
 
-  const { error: versionError } = await supabase.from("report_version").insert({
-    report_id: params.report_id,
-    version_no: nextVersionNo,
-    snapshot_json: snapshotJson,
-    word_file_path: params.word_file_path ?? null,
-    model_file_path: params.model_file_path ?? null,
-    changed_by: params.changed_by,
-    changed_at: new Date().toISOString(),
-  });
-
-  if (versionError) {
-    return err(versionError.message);
+  if (error) {
+    return err(error.message);
   }
 
   return getReportDetail(params.report_id);
@@ -578,46 +460,15 @@ export async function changeReportStatus(params: {
 }): Promise<Result<ReportDetail>> {
   const supabase = await createServerClient();
 
-  const { data: currentReport, error: currentError } = await supabase
-    .from("report")
-    .select("id, status, current_version_no")
-    .eq("id", params.report_id)
-    .single();
-
-  if (currentError || !currentReport) {
-    return err("Report not found or no permission.");
-  }
-
-  const updatePayload: Record<string, unknown> = {
-    status: params.to_status,
-  };
-
-  if (params.to_status === "published") {
-    updatePayload.published_by = params.action_by;
-    updatePayload.published_at = new Date().toISOString();
-  }
-
-  const { error: updateError } = await supabase
-    .from("report")
-    .update(updatePayload)
-    .eq("id", params.report_id);
-
-  if (updateError) {
-    return err(updateError.message);
-  }
-
-  const { error: logError } = await supabase.from("report_status_log").insert({
-    report_id: params.report_id,
-    from_status: currentReport.status,
-    to_status: params.to_status,
-    action_by: params.action_by,
-    action_at: new Date().toISOString(),
-    reason: params.reason?.trim() || null,
-    version_no: currentReport.current_version_no,
+  const { error } = await supabase.rpc("report_change_status_atomic", {
+    p_report_id: params.report_id,
+    p_to_status: params.to_status,
+    p_action_by: params.action_by,
+    p_reason: params.reason?.trim() || null,
   });
 
-  if (logError) {
-    return err(logError.message);
+  if (error) {
+    return err(error.message);
   }
 
   return getReportDetail(params.report_id);

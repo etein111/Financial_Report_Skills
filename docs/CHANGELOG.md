@@ -4,6 +4,16 @@
 
 ## 2026-02-18
 
+### Report 管理与审批归档回填
+- OpenSpec change `report-management-and-approval` 已归档：`openspec/changes/archive/2026-02-18-report-management-and-approval/`。
+- 报告能力口径从“已确认待开发/进行中”更新为“已实现/已归档”，并回填到：
+  - `docs/REQUIREMENTS.md`
+  - `docs/DATA_MODEL.md`
+- 新增数据库原子化迁移，保障报告保存与状态流转的一致性：
+  - `supabase/migrations/20260218170000_report_atomic_rpc.sql`
+  - `supabase/migrations/20260218170100_report_change_status_atomic.sql`
+- 执行 `bash scripts/db-init.sh` 完成云端迁移推送、迁移一致性核验与 Auth 种子用户刷新。
+
 ### Analyst 字段迁移补齐
 - 修复云端重置后 `analyst` 表缺少 `suffix` / `sfc` 字段的问题。
 - 新增迁移：`supabase/migrations/20260218150000_add_analyst_suffix_sfc.sql`。

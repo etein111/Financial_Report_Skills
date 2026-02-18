@@ -502,12 +502,11 @@ test.describe("RLS Security Policies", () => {
       await expect(page.locator("role=dialog")).toBeVisible();
 
       const timestamp = Date.now();
-      await page.getByLabel("Title *").fill(`RLS Test Report ${timestamp}`);
-      await page.getByLabel("Report Type *").selectOption("company");
-      await page.click('button:has-text("Save")');
+      await page.getByLabel("Title").fill(`RLS Test Report ${timestamp}`);
+      await page.getByLabel("Report Type").selectOption("company");
+      await page.click('button:has-text("Save Draft")');
 
-      // Should succeed
-      await expect(page.locator("role=dialog")).not.toBeVisible({
+      await expect(page.locator("[aria-live='polite']")).toContainText("Draft saved.", {
         timeout: 10000,
       });
     });
@@ -556,13 +555,13 @@ test.describe("RLS Security Policies", () => {
       // Click on first report to see detail
       const firstReport = page.locator("table tbody tr").first();
       if (await firstReport.isVisible()) {
-        await firstReport.click();
+        await firstReport.getByRole("button", { name: "Edit" }).click();
         await expect(page.locator("role=dialog")).toBeVisible({
           timeout: 5000,
         });
 
         // Should show status history section
-        await expect(page.locator("role=dialog")).toContainText("History", {
+        await expect(page.locator("role=dialog")).toContainText("Report Status History", {
           timeout: 5000,
         });
       }

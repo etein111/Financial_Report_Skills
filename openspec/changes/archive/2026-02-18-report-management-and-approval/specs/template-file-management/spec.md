@@ -11,6 +11,8 @@ The system SHALL allow Admin users to upload and manage template metadata for `w
 - **WHEN** SA or Analyst drags template file into upload area
 - **THEN** system MUST reject the request
 
+## ADDED Requirements
+
 ### Requirement: Report Template page SHALL support drag-and-drop with click-upload fallback
 The system SHALL support drag-and-drop upload on Report Template page while preserving click-upload behavior.
 

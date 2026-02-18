@@ -77,14 +77,13 @@ test.describe("Reports Management", () => {
       await expect(page.locator("role=dialog")).toBeVisible();
 
       const timestamp = Date.now();
-      await page.getByLabel("Title *").fill(`E2E Test Report ${timestamp}`);
-      await page.getByLabel("Report Type *").selectOption("company");
+      await page.getByLabel("Title").fill(`E2E Test Report ${timestamp}`);
+      await page.getByLabel("Report Type").selectOption("company");
 
-      // Submit directly
-      await page.click('button:has-text("Submit")');
+      // Direct submit from create modal
+      await page.click('button:has-text("Direct Submit")');
 
-      // Dialog should close
-      await expect(page.locator("role=dialog")).not.toBeVisible({
+      await expect(page.locator("[aria-live='polite']")).toContainText("Report submitted.", {
         timeout: 10000,
       });
     });
@@ -100,17 +99,16 @@ test.describe("Reports Management", () => {
       // Click on first report to view details
       const firstReport = page.locator("table tbody tr").first();
       if (await firstReport.isVisible()) {
-        await firstReport.click();
+        await firstReport.getByRole("button", { name: "Review" }).click();
         await expect(page.locator("role=dialog")).toBeVisible({ timeout: 5000 });
 
         // Try to approve
         const approveButton = page.locator('button:has-text("Approve")');
         if (await approveButton.isVisible()) {
           await approveButton.click();
-          await expect(page.locator("[aria-live='polite']")).toContainText(
-            "approved",
-            { timeout: 5000 }
-          );
+          await expect(page.locator("[aria-live='polite']")).toContainText("Action completed.", {
+            timeout: 5000,
+          });
         }
       }
     });
@@ -125,21 +123,20 @@ test.describe("Reports Management", () => {
 
       const firstReport = page.locator("table tbody tr").first();
       if (await firstReport.isVisible()) {
-        await firstReport.click();
+        await firstReport.getByRole("button", { name: "Review" }).click();
         await expect(page.locator("role=dialog")).toBeVisible({ timeout: 5000 });
 
         const rejectButton = page.locator('button:has-text("Reject")');
         if (await rejectButton.isVisible()) {
           // Need to fill reason first
-          const reasonInput = page.getByLabel("Rejection Reason");
+          const reasonInput = page.getByLabel("Reject Reason");
           if (await reasonInput.isVisible()) {
             await reasonInput.fill("E2E test rejection reason");
           }
           await rejectButton.click();
-          await expect(page.locator("[aria-live='polite']")).toContainText(
-            "rejected",
-            { timeout: 5000 }
-          );
+          await expect(page.locator("[aria-live='polite']")).toContainText("Action completed.", {
+            timeout: 5000,
+          });
         }
       }
     });
@@ -156,13 +153,13 @@ test.describe("Reports Management", () => {
 
       const firstReport = page.locator("table tbody tr").first();
       if (await firstReport.isVisible()) {
-        await firstReport.click();
+        await firstReport.getByRole("button", { name: "Review" }).click();
         await expect(page.locator("role=dialog")).toBeVisible({ timeout: 5000 });
 
         const rejectButton = page.locator('button:has-text("Reject")');
         if (await rejectButton.isVisible()) {
           // Try to reject without reason
-          const reasonInput = page.getByLabel("Rejection Reason");
+          const reasonInput = page.getByLabel("Reject Reason");
           if (await reasonInput.isVisible()) {
             await reasonInput.fill(""); // Empty reason
           }
@@ -180,15 +177,15 @@ test.describe("Reports Management", () => {
       await page.goto("/report-review");
 
       // Switch to rejected filter
-      await page.click('button:has-text("rejected")');
+      await page.getByLabel("Status").selectOption("rejected");
 
       const rejectedReport = page.locator("table tbody tr").first();
       if (await rejectedReport.isVisible()) {
-        await rejectedReport.click();
+        await rejectedReport.getByRole("button", { name: "Review" }).click();
         await expect(page.locator("role=dialog")).toBeVisible({ timeout: 5000 });
 
         // Should show status history with reason
-        await expect(page.locator("role=dialog")).toContainText("History");
+        await expect(page.locator("role=dialog")).toContainText("Report Status History");
       }
     });
   });
@@ -204,14 +201,13 @@ test.describe("Reports Management", () => {
       await expect(page.locator("role=dialog")).toBeVisible();
 
       const timestamp = Date.now();
-      await page.getByLabel("Title *").fill(`Direct Submit Test ${timestamp}`);
-      await page.getByLabel("Report Type *").selectOption("company");
+      await page.getByLabel("Title").fill(`Direct Submit Test ${timestamp}`);
+      await page.getByLabel("Report Type").selectOption("company");
 
-      // Click Submit (direct submit)
-      await page.click('button:has-text("Submit")');
+      // Click Direct Submit
+      await page.click('button:has-text("Direct Submit")');
 
-      // Should succeed
-      await expect(page.locator("role=dialog")).not.toBeVisible({
+      await expect(page.locator("[aria-live='polite']")).toContainText("Report submitted.", {
         timeout: 10000,
       });
     });
@@ -239,7 +235,7 @@ test.describe("Reports Management", () => {
       // Click on first report
       const firstReport = page.locator("table tbody tr").first();
       if (await firstReport.isVisible()) {
-        await firstReport.click();
+        await firstReport.getByRole("button", { name: "Edit" }).click();
         await expect(page.locator("role=dialog")).toBeVisible({ timeout: 5000 });
 
         // Should show "No file" message if no files attached
@@ -255,7 +251,7 @@ test.describe("Reports Management", () => {
 
       const firstReport = page.locator("table tbody tr").first();
       if (await firstReport.isVisible()) {
-        await firstReport.click();
+        await firstReport.getByRole("button", { name: "Edit" }).click();
         await expect(page.locator("role=dialog")).toBeVisible({ timeout: 5000 });
 
         const downloadButton = page.locator('button:has-text("Download")');
@@ -280,10 +276,9 @@ test.describe("Reports Management", () => {
       await expect(page.locator("role=dialog")).toBeVisible();
 
       // Should have file dropzone area
-      const dropzone = page.locator("[data-testid='file-dropzone'], .dropzone, text=Drop");
-      // Check if dropzone exists (may have different selectors)
+      const dropzone = page.locator("text=Drag file here or click to choose");
       const dropzoneExists = await dropzone.count();
-      expect(dropzoneExists).toBeGreaterThanOrEqual(0);
+      expect(dropzoneExists).toBeGreaterThan(0);
     });
 
     test("templates page has file upload capability", async ({ page }) => {
@@ -294,9 +289,10 @@ test.describe("Reports Management", () => {
       await expect(page.locator("header")).toContainText("Templates");
 
       // Should have upload capability
-      const uploadButton = page.locator('button:has-text("Upload"), button:has-text("Create")');
-      const count = await uploadButton.count();
-      expect(count).toBeGreaterThan(0);
+      await page.click('button:has-text("Upload Template")');
+      await expect(page.locator("role=dialog")).toBeVisible();
+      const dropzone = page.locator("text=Drag file here or click to choose");
+      expect(await dropzone.count()).toBeGreaterThan(0);
     });
   });
 });

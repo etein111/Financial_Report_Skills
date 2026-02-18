@@ -26,10 +26,10 @@
 | 公司覆盖 | `coverage` | 已实现（change 已归档） |
 | 覆盖-分析师关系 | `coverage_analyst` | 已实现（change 已归档） |
 | 报告模板 | `template` | 已实现（change 已归档） |
-| 报告主表 | `report` | 已确认待开发 |
-| 报告内容版本 | `report_version` | 已确认待开发 |
-| 报告作者关系 | `report_analyst` | 已确认待开发 |
-| 报告状态历史 | `report_status_log` | 已确认待开发 |
+| 报告主表 | `report` | 已实现（change 已归档） |
+| 报告内容版本 | `report_version` | 已实现（change 已归档） |
+| 报告作者关系 | `report_analyst` | 已实现（change 已归档） |
+| 报告状态历史 | `report_status_log` | 已实现（change 已归档） |
 
 ## 3. 表结构口径
 
@@ -130,7 +130,7 @@
 - `(report_type, file_type, version)` 唯一
 - 同一 `(report_type, file_type)` 仅一个 `is_active=true`
 
-### 3.7 `report`（已确认）
+### 3.7 `report`（已归档）
 
 关键字段：
 - `id` (uuid, PK)
@@ -147,7 +147,7 @@
 - 报告不做物理删除（`DELETE` 关闭）
 - `submitted` 状态允许 owner 继续编辑
 
-### 3.8 `report_version`（已确认）
+### 3.8 `report_version`（已归档）
 
 关键字段：
 - `id` (uuid, PK)
@@ -163,7 +163,7 @@
 - `(report_id, version_no)` 唯一
 - append-only（禁止 update/delete）
 
-### 3.9 `report_analyst`（已确认）
+### 3.9 `report_analyst`（已归档）
 
 关键字段：
 - `id` (uuid, PK)
@@ -176,7 +176,7 @@
 - 维护作者关系
 - owner 可维护自己报告的作者关系；Admin 可全局维护
 
-### 3.10 `report_status_log`（已确认）
+### 3.10 `report_status_log`（已归档）
 
 关键字段：
 - `id` (uuid, PK)

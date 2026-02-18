@@ -17,7 +17,7 @@
 - Analyst Info 管理（Admin-only）：列表/搜索/分页、创建、编辑、删除。
 - Coverage / Sector / Template 管理（含权限与路由守卫）。
 
-### 1.3 已确认待开发能力（当前已定方案）
+### 1.3 已实现能力（本次归档）
 - Report 管理与审批：owner 模型、版本管理、状态历史、审批流。
 
 ### 1.4 非目标（当前阶段）
@@ -74,7 +74,7 @@
 - Template：
   - MUST 支持 Word/Excel 模板管理、版本递增、启用版本切换。
 
-### 3.6 Report 管理与审批（已确认）
+### 3.6 Report 管理与审批（已实现）
 - 报告 owner 模型：谁创建归谁（owner 不可转移）。
 - `draft` 与 `submitted`：owner 可继续编辑；`published/rejected` 禁止直接编辑。
 - 系统 MUST 支持“直接提交”快捷操作（后端分两步：先保存 draft，再提交）。
@@ -84,7 +84,7 @@
 - 报告列表默认筛选：SA/Admin 默认为 `submitted`（不记忆上次筛选）。
 - SA 可见报告范围：`submitted/published/rejected`；不可见他人 `draft`。
 
-### 3.7 报告版本与状态历史（已确认）
+### 3.7 报告版本与状态历史（已实现）
 - 长期约束遵循 `docs/DECISIONS.md` 的 `D-010`。
 - 内容版本（`report_version`）与状态历史（`report_status_log`）MUST 解耦。
 - 每次内容保存 MUST 追加新版本。
@@ -122,4 +122,4 @@
 - `auth-and-users-mvp`（归档）
 - `region-and-analyst-management`（归档）
 - `coverage-sector-template-management`（归档）
-- `report-management-and-approval`（进行中）
+- `report-management-and-approval`（归档：`2026-02-18-report-management-and-approval`）
