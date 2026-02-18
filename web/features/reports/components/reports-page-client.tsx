@@ -13,7 +13,11 @@ import { Pagination } from "@/components/ui/pagination";
 import { Select } from "@/components/ui/select";
 import { Table, TD, TH, THead, TR } from "@/components/ui/table";
 import { useToast } from "@/components/ui/toast";
-import type { ReportAnalystInput, ReportStatus, ReportType } from "@/domain/schemas/report";
+import type {
+  ReportAnalystInput,
+  ReportStatus,
+  ReportType,
+} from "@/domain/schemas/report";
 import type { Analyst } from "@/features/analyst-info/repo/analysts-repo";
 import {
   createReportAction,
@@ -23,8 +27,14 @@ import {
   saveReportContentAction,
   submitReportAction,
 } from "@/features/reports/actions";
-import { buildReportStoragePath, validateUploadExtension } from "@/features/reports/file-utils";
-import type { ReportDetail, ReportSummary } from "@/features/reports/repo/reports-repo";
+import {
+  buildReportStoragePath,
+  validateUploadExtension,
+} from "@/features/reports/file-utils";
+import type {
+  ReportDetail,
+  ReportSummary,
+} from "@/features/reports/repo/reports-repo";
 import { createBrowserClient } from "@/lib/supabase/browser";
 
 export interface ReportsPageClientProps {
@@ -57,7 +67,9 @@ const STATUS_OPTIONS: { value: string; label: string }[] = [
   { value: "rejected", label: "Rejected" },
 ];
 
-function statusTone(status: ReportStatus): "secondary" | "blue" | "green" | "red" {
+function statusTone(
+  status: ReportStatus,
+): "secondary" | "blue" | "green" | "red" {
   if (status === "draft") return "secondary";
   if (status === "submitted") return "blue";
   if (status === "published") return "green";
@@ -111,28 +123,41 @@ export function ReportsPageClient({
 
   const canCreate = userRole === "admin" || userRole === "analyst";
   const [queryDraft, setQueryDraft] = React.useState(currentQuery ?? "");
-  const [statusFilter, setStatusFilter] = React.useState(currentStatus ?? (userRole === "admin" || userRole === "sa" ? "submitted" : "all"));
+  const [statusFilter, setStatusFilter] = React.useState(
+    currentStatus ??
+      (userRole === "admin" || userRole === "sa" ? "submitted" : "all"),
+  );
 
   React.useEffect(() => {
     setQueryDraft(currentQuery ?? "");
-    setStatusFilter(currentStatus ?? (userRole === "admin" || userRole === "sa" ? "submitted" : "all"));
+    setStatusFilter(
+      currentStatus ??
+        (userRole === "admin" || userRole === "sa" ? "submitted" : "all"),
+    );
   }, [currentQuery, currentStatus, userRole]);
 
   const [formOpen, setFormOpen] = React.useState(false);
   const [loadingDetail, setLoadingDetail] = React.useState(false);
-  const [activeReport, setActiveReport] = React.useState<ReportDetail | null>(null);
+  const [activeReport, setActiveReport] = React.useState<ReportDetail | null>(
+    null,
+  );
 
   const [formTitle, setFormTitle] = React.useState("");
-  const [formReportType, setFormReportType] = React.useState<ReportType>("company");
+  const [formReportType, setFormReportType] =
+    React.useState<ReportType>("company");
   const [formAnalysts, setFormAnalysts] = React.useState<FormAnalyst[]>([]);
-  const [formErrors, setFormErrors] = React.useState<Record<string, string>>({});
+  const [formErrors, setFormErrors] = React.useState<Record<string, string>>(
+    {},
+  );
 
   const [reportFile, setReportFile] = React.useState<File | null>(null);
   const [modelFile, setModelFile] = React.useState<File | null>(null);
   const [saving, setSaving] = React.useState(false);
 
   function goToPage(nextPage: number) {
-    router.push(`/reports${toQueryString({ q: queryDraft, status: statusFilter || "all", page: nextPage })}`);
+    router.push(
+      `/reports${toQueryString({ q: queryDraft, status: statusFilter || "all", page: nextPage })}`,
+    );
   }
 
   function submitSearch(e: React.FormEvent) {
@@ -142,7 +167,9 @@ export function ReportsPageClient({
 
   function onStatusChange(value: string) {
     setStatusFilter(value as ReportStatus | "all");
-    router.push(`/reports${toQueryString({ q: queryDraft, status: value, page: 1 })}`);
+    router.push(
+      `/reports${toQueryString({ q: queryDraft, status: value, page: 1 })}`,
+    );
   }
 
   function resetFormState() {
@@ -196,17 +223,24 @@ export function ReportsPageClient({
     setModelFile(null);
   }
 
-  function canEditReport(report: Pick<ReportSummary, "owner_user_id" | "status">): boolean {
+  function canEditReport(
+    report: Pick<ReportSummary, "owner_user_id" | "status">,
+  ): boolean {
     if (userRole === "admin") {
       return report.status === "draft" || report.status === "submitted";
     }
     if (userRole === "analyst") {
-      return report.owner_user_id === currentUserId && (report.status === "draft" || report.status === "submitted");
+      return (
+        report.owner_user_id === currentUserId &&
+        (report.status === "draft" || report.status === "submitted")
+      );
     }
     return false;
   }
 
-  function canSubmitReport(report: Pick<ReportSummary, "owner_user_id" | "status">): boolean {
+  function canSubmitReport(
+    report: Pick<ReportSummary, "owner_user_id" | "status">,
+  ): boolean {
     if (report.status !== "draft") {
       return false;
     }
@@ -246,7 +280,11 @@ export function ReportsPageClient({
     );
   }
 
-  function updateAnalyst(index: number, field: keyof FormAnalyst, value: string | number) {
+  function updateAnalyst(
+    index: number,
+    field: keyof FormAnalyst,
+    value: string | number,
+  ) {
     setFormAnalysts((prev) => {
       const next = [...prev];
       next[index] = {
@@ -257,7 +295,9 @@ export function ReportsPageClient({
     });
   }
 
-  function getAnalystOptions(index: number): { value: string; label: string }[] {
+  function getAnalystOptions(
+    index: number,
+  ): { value: string; label: string }[] {
     const selectedOthers = new Set(
       formAnalysts
         .filter((_, idx) => idx !== index)
@@ -306,11 +346,15 @@ export function ReportsPageClient({
   async function uploadReportFiles(params: {
     reportId: string;
     versionNo: number;
-  }): Promise<Result<{ word_file_path: string | null; model_file_path: string | null }>> {
+  }): Promise<
+    Result<{ word_file_path: string | null; model_file_path: string | null }>
+  > {
     const supabase = createBrowserClient();
 
-    let wordFilePath: string | null = activeReport?.latest_version?.word_file_path ?? null;
-    let modelFilePath: string | null = activeReport?.latest_version?.model_file_path ?? null;
+    let wordFilePath: string | null =
+      activeReport?.latest_version?.word_file_path ?? null;
+    let modelFilePath: string | null =
+      activeReport?.latest_version?.model_file_path ?? null;
 
     if (reportFile) {
       const check = validateUploadExtension("report", reportFile.name);
@@ -323,9 +367,11 @@ export function ReportsPageClient({
         label: "report",
         extension: check.extension,
       });
-      const { error } = await supabase.storage.from("reports").upload(path, reportFile, {
-        upsert: true,
-      });
+      const { error } = await supabase.storage
+        .from("reports")
+        .upload(path, reportFile, {
+          upsert: true,
+        });
       if (error) {
         return { ok: false, error: error.message };
       }
@@ -343,9 +389,11 @@ export function ReportsPageClient({
         label: "model",
         extension: check.extension,
       });
-      const { error } = await supabase.storage.from("reports").upload(path, modelFile, {
-        upsert: true,
-      });
+      const { error } = await supabase.storage
+        .from("reports")
+        .upload(path, modelFile, {
+          upsert: true,
+        });
       if (error) {
         return { ok: false, error: error.message };
       }
@@ -429,7 +477,9 @@ export function ReportsPageClient({
 
     setSaving(true);
     try {
-      const submitResult = await submitReportAction({ report_id: activeReport.id });
+      const submitResult = await submitReportAction({
+        report_id: activeReport.id,
+      });
       if (!submitResult.ok) {
         toast.error(submitResult.error, { title: "Error" });
         return;
@@ -520,18 +570,20 @@ export function ReportsPageClient({
   }
 
   const canEditActive = activeReport ? canEditReport(activeReport) : canCreate;
-  const canDirectSubmit = canEditActive && (!activeReport || activeReport.status === "draft");
+  const canDirectSubmit =
+    canEditActive && (!activeReport || activeReport.status === "draft");
   const canSubmit = activeReport ? canSubmitReport(activeReport) : false;
 
   return (
     <div className="min-h-screen">
       <header className="border-b border-white/10 bg-zinc-900/60 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
-          <div>
-            <div className="text-xl font-semibold text-zinc-50">Reports</div>
-            <div className="text-xs text-zinc-400">Total {total}</div>
-          </div>
-          {canCreate ? <Button onClick={openCreate}>Create Report</Button> : <div />}
+          <div className="text-xl font-semibold text-zinc-50">Reports</div>
+          {canCreate ? (
+            <Button onClick={openCreate}>Create Report</Button>
+          ) : (
+            <div />
+          )}
         </div>
       </header>
 
@@ -554,7 +606,6 @@ export function ReportsPageClient({
                 options={STATUS_OPTIONS}
               />
             </div>
-            <Button type="submit">Search</Button>
           </form>
         </div>
 
@@ -582,14 +633,18 @@ export function ReportsPageClient({
                   <TD className="font-medium text-zinc-100">{report.title}</TD>
                   <TD className="text-zinc-300">{report.report_type}</TD>
                   <TD>
-                    <Badge tone={statusTone(report.status)}>{report.status}</Badge>
+                    <Badge tone={statusTone(report.status)}>
+                      {report.status}
+                    </Badge>
                   </TD>
                   <TD className="text-zinc-300">
                     {report.owner_user_id === currentUserId
                       ? "Me"
                       : `${report.owner_user_id.slice(0, 8)}...`}
                   </TD>
-                  <TD className="text-zinc-400">{formatDateTime(report.updated_at)}</TD>
+                  <TD className="text-zinc-400">
+                    {formatDateTime(report.updated_at)}
+                  </TD>
                   <TD>
                     <div className="flex justify-end gap-2">
                       <ActionButton onClick={() => openDetail(report.id)}>
@@ -613,11 +668,20 @@ export function ReportsPageClient({
         className="max-w-3xl"
         footer={
           <>
-            <Button variant="ghost" type="button" onClick={() => setFormOpen(false)}>
+            <Button
+              variant="ghost"
+              type="button"
+              onClick={() => setFormOpen(false)}
+            >
               Close
             </Button>
             {canEditActive ? (
-              <Button type="button" variant="secondary" onClick={handleSaveDraft} isLoading={saving}>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={handleSaveDraft}
+                isLoading={saving}
+              >
                 Save Draft
               </Button>
             ) : null}
@@ -627,7 +691,11 @@ export function ReportsPageClient({
               </Button>
             ) : null}
             {canDirectSubmit ? (
-              <Button type="button" onClick={handleDirectSubmit} isLoading={saving}>
+              <Button
+                type="button"
+                onClick={handleDirectSubmit}
+                isLoading={saving}
+              >
                 Direct Submit
               </Button>
             ) : null}
@@ -635,7 +703,9 @@ export function ReportsPageClient({
         }
       >
         {loadingDetail ? (
-          <div className="py-8 text-center text-zinc-400">Loading report...</div>
+          <div className="py-8 text-center text-zinc-400">
+            Loading report...
+          </div>
         ) : (
           <div className="space-y-4">
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -649,7 +719,9 @@ export function ReportsPageClient({
               <Select
                 label="Report Type"
                 value={formReportType}
-                onChange={(event) => setFormReportType(event.target.value as ReportType)}
+                onChange={(event) =>
+                  setFormReportType(event.target.value as ReportType)
+                }
                 options={REPORT_TYPE_OPTIONS}
                 disabled={!canEditActive}
               />
@@ -657,7 +729,9 @@ export function ReportsPageClient({
 
             <div className="space-y-2 rounded-[12px] border border-white/10 bg-zinc-900/70 p-4">
               <div className="flex items-center justify-between">
-                <div className="text-sm font-medium text-zinc-200">Analysts</div>
+                <div className="text-sm font-medium text-zinc-200">
+                  Analysts
+                </div>
                 {canEditActive ? (
                   <Button type="button" variant="ghost" onClick={addAnalyst}>
                     Add Analyst
@@ -668,11 +742,16 @@ export function ReportsPageClient({
                 <p className="text-sm text-zinc-500">No analyst assigned.</p>
               ) : (
                 formAnalysts.map((item, index) => (
-                  <div key={`${item.analyst_id}-${index}`} className="grid grid-cols-12 gap-2">
+                  <div
+                    key={`${item.analyst_id}-${index}`}
+                    className="grid grid-cols-12 gap-2"
+                  >
                     <div className="col-span-8">
                       <Select
                         value={item.analyst_id}
-                        onChange={(event) => updateAnalyst(index, "analyst_id", event.target.value)}
+                        onChange={(event) =>
+                          updateAnalyst(index, "analyst_id", event.target.value)
+                        }
                         options={getAnalystOptions(index)}
                         disabled={!canEditActive}
                       />
@@ -721,7 +800,9 @@ export function ReportsPageClient({
 
             {activeReport ? (
               <div className="rounded-[12px] border border-white/10 bg-zinc-900/70 p-4">
-                <div className="mb-2 text-sm font-medium text-zinc-200">Files</div>
+                <div className="mb-2 text-sm font-medium text-zinc-200">
+                  Files
+                </div>
                 <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
                   <div className="rounded-[8px] border border-white/10 bg-zinc-800/40 p-3 text-sm text-zinc-300">
                     <div className="mb-1 text-xs text-zinc-500">Report</div>
@@ -729,7 +810,11 @@ export function ReportsPageClient({
                       <Button
                         type="button"
                         variant="secondary"
-                        onClick={() => handleDownload(activeReport.latest_version!.word_file_path!)}
+                        onClick={() =>
+                          handleDownload(
+                            activeReport.latest_version!.word_file_path!,
+                          )
+                        }
                       >
                         Download
                       </Button>
@@ -743,7 +828,11 @@ export function ReportsPageClient({
                       <Button
                         type="button"
                         variant="secondary"
-                        onClick={() => handleDownload(activeReport.latest_version!.model_file_path!)}
+                        onClick={() =>
+                          handleDownload(
+                            activeReport.latest_version!.model_file_path!,
+                          )
+                        }
                       >
                         Download
                       </Button>
@@ -757,7 +846,9 @@ export function ReportsPageClient({
 
             {activeReport ? (
               <div className="space-y-2 rounded-[12px] border border-white/10 bg-zinc-900/70 p-4">
-                <div className="text-sm font-medium text-zinc-200">Report Status History</div>
+                <div className="text-sm font-medium text-zinc-200">
+                  Report Status History
+                </div>
                 {activeReport.status_logs.length === 0 ? (
                   <p className="text-sm text-zinc-500">No history yet.</p>
                 ) : (
@@ -774,10 +865,14 @@ export function ReportsPageClient({
                           <Badge tone="zinc">v{item.version_no}</Badge>
                         </div>
                         <div className="mt-1 text-xs text-zinc-500">
-                          {formatDateTime(item.action_at)} by {item.action_by.slice(0, 8)}...
+                          {formatDateTime(item.action_at)} by{" "}
+                          {item.action_by_name ??
+                            `${item.action_by.slice(0, 8)}...`}
                         </div>
                         {item.reason ? (
-                          <div className="mt-1 text-xs text-amber-300">Reason: {item.reason}</div>
+                          <div className="mt-1 text-xs text-amber-300">
+                            Reason: {item.reason}
+                          </div>
                         ) : null}
                       </div>
                     ))}

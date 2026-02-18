@@ -52,6 +52,7 @@ export type ReportStatusLog = {
   from_status: ReportStatus;
   to_status: ReportStatus;
   action_by: string;
+  action_by_name: string | null;
   action_at: string;
   reason: string | null;
   version_no: number;
@@ -261,16 +262,16 @@ export async function listReports(
   const rows = (data ?? []) as ReportSummaryRow[];
 
   return ok({
-    items: rows.map((item) =>
-      normalizeReportSummaryRow(item),
-    ),
+    items: rows.map((item) => normalizeReportSummaryRow(item)),
     total,
     page: params.page,
     totalPages,
   });
 }
 
-export async function getReportDetail(reportId: string): Promise<Result<ReportDetail>> {
+export async function getReportDetail(
+  reportId: string,
+): Promise<Result<ReportDetail>> {
   const supabase = await createServerClient();
 
   const { data: reportData, error: reportError } = await supabase
@@ -343,10 +344,13 @@ export async function getReportDetail(reportId: string): Promise<Result<ReportDe
     return err(logError.message);
   }
 
-  const summary = normalizeReportSummaryRow(reportData as unknown as ReportSummaryRow);
+  const summary = normalizeReportSummaryRow(
+    reportData as unknown as ReportSummaryRow,
+  );
   const detail: ReportDetail = {
     ...summary,
-    coverage: firstRelation<ReportDetail["coverage"]>(reportData.coverage) ?? null,
+    coverage:
+      firstRelation<ReportDetail["coverage"]>(reportData.coverage) ?? null,
     sector: firstRelation<ReportDetail["sector"]>(reportData.sector) ?? null,
     versions: (versions ?? []) as ReportVersion[],
     latest_version: ((versions ?? [])[0] as ReportVersion | undefined) ?? null,
@@ -356,7 +360,9 @@ export async function getReportDetail(reportId: string): Promise<Result<ReportDe
   return ok(detail);
 }
 
-export async function createReport(params: CreateReportParams): Promise<Result<ReportDetail>> {
+export async function createReport(
+  params: CreateReportParams,
+): Promise<Result<ReportDetail>> {
   const supabase = await createServerClient();
 
   const { data: reportData, error: reportError } = await supabase
@@ -378,14 +384,16 @@ export async function createReport(params: CreateReportParams): Promise<Result<R
   }
 
   if (params.analysts.length > 0) {
-    const { error: analystError } = await supabase.from("report_analyst").insert(
-      params.analysts.map((item) => ({
-        report_id: reportData.id,
-        analyst_id: item.analyst_id,
-        role: item.role,
-        sort_order: item.sort_order,
-      })),
-    );
+    const { error: analystError } = await supabase
+      .from("report_analyst")
+      .insert(
+        params.analysts.map((item) => ({
+          report_id: reportData.id,
+          analyst_id: item.analyst_id,
+          role: item.role,
+          sort_order: item.sort_order,
+        })),
+      );
 
     if (analystError) {
       return err(analystError.message);
