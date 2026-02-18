@@ -132,7 +132,7 @@ export default async function DesktopPage() {
       </header>
 
       <main className="mx-auto max-w-7xl px-6 py-8">
-        <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
+        <div className="space-y-8">
           <Section title="Reports" cards={visibleReportsCards} />
           <Section title="Data Management" cards={visibleDataCards} />
         </div>
@@ -147,7 +147,7 @@ function Section({ title, cards }: { title: string; cards: DesktopCard[] }) {
       <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-zinc-500">
         {title}
       </h2>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {cards.map((card) => (
           <a
             key={card.key}

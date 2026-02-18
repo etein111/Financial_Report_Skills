@@ -6,8 +6,8 @@ import { ToastProvider } from "@/components/ui/toast";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Neolyst Prototype",
-  description: "UI prototype for Neolyst (Login / Desktop / Users)",
+  title: "Neolyst",
+  description: "Research Report Management System",
 };
 
 export default function RootLayout({
