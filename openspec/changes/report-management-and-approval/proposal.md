@@ -26,6 +26,7 @@
 - 最小必填：`title`、`report_type`（`owner_user_id` 自动取当前登录用户）。
 - 文件上传非必填，可为空。
 - `draft` 与 `submitted` 允许 owner 继续编辑；`published`/`rejected` 禁止直接编辑。
+- `report` 主表新增发布快照字段：`published_by`（发布人）与 `published_at`（发布时间），用于已发布报告查询。
 - 支持“直接提交”快捷操作：前端一键触发，后端按两步执行（先保存 draft，再提交 submitted）。
 - 若“直接提交”第二步失败，系统必须提示“已保存为 Draft，提交失败”，并允许重试提交。
 
@@ -44,7 +45,7 @@
 ### 2.4 审批管理（Report Review）
 - SA/Admin 可查看并处理 `submitted` 报告。
 - SA 默认筛选状态为 `submitted`；Admin 默认也为 `submitted`；不记忆上次筛选。
-- 审批通过：状态改为 `published`。
+- 审批通过：状态改为 `published`，并同步写入 `published_by` 与 `published_at`。
 - 审批拒绝：状态改为 `rejected`，必须填写 `reason`。
 - SA/Admin 可执行 `rejected -> draft` 退回。
 - 审批详情仅提供文件下载，不提供 Word 在线预览。
@@ -122,6 +123,7 @@
 - [ ] SA 无法创建/编辑报告，但可审批 submitted 报告。
 - [ ] `submitted` 状态下 owner 仍可编辑，且不自动回退状态。
 - [ ] report 状态机按规则流转，非法流转被阻断。
+- [ ] `submitted -> published` 时写入 `published_by` 与 `published_at`，用于已发布报告查询。
 - [ ] 每次保存内容都会新增 `report_version` 记录。
 - [ ] 系统保留“报告状态历史”，且日志含 `version_no`。
 - [ ] “直接提交”失败时，系统提示“已保存为 Draft，提交失败”。
@@ -134,6 +136,7 @@
 - 文件上传/替换：仅 owner 或 Admin。
 - 文件下载：owner/Admin/SA（SA 仅可见状态范围）。
 - 状态与版本解耦：状态变化写 `report_status_log`；内容变化写 `report_version`。
+- 发布快照字段：仅 `submitted -> published` 时更新 `published_by/published_at`；其他状态流转不改动该快照字段。
 
 ## Capabilities
 

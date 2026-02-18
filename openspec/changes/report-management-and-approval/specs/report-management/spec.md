@@ -56,3 +56,14 @@ The system SHALL allow owner to edit report content when status is `submitted`.
 - **WHEN** owner saves changes on a submitted report
 - **THEN** system MUST persist new content
 - **AND** report status MUST remain `submitted`
+
+### Requirement: System SHALL expose publish snapshot fields for published reports
+The system SHALL provide `published_by` and `published_at` for published reports to support downstream published-report querying.
+
+#### Scenario: Query published reports
+- **WHEN** authorized user queries reports with status `published`
+- **THEN** system MUST return `published_by` and `published_at` fields for each published report
+
+#### Scenario: Query non-published reports
+- **WHEN** authorized user queries reports with status in `draft|submitted|rejected`
+- **THEN** system MAY return null values for `published_by` and `published_at`

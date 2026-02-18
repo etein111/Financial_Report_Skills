@@ -27,6 +27,18 @@ The system SHALL allow SA and Admin to approve, reject, and reopen reports accor
 - **WHEN** SA or Admin reopens a report in `rejected`
 - **THEN** system MUST transition status to `draft`
 
+### Requirement: System SHALL persist publish snapshot on approval
+The system SHALL persist publish snapshot fields on report publish action for downstream published-report queries.
+
+#### Scenario: Approval writes publish snapshot
+- **WHEN** SA or Admin approves a report in `submitted`
+- **THEN** system MUST set `report.published_by` to current action user id
+- **AND** system MUST set `report.published_at` to current action time
+
+#### Scenario: Non-publish actions do not overwrite publish snapshot
+- **WHEN** report transitions by non-publish actions
+- **THEN** system MUST NOT update `report.published_by` and `report.published_at`
+
 ### Requirement: System SHALL provide file download only in review detail
 The system SHALL provide report and model file download in review detail without online word preview.
 
