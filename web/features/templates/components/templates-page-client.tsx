@@ -6,11 +6,13 @@ import { useRouter } from "next/navigation";
 import { ActionButton } from "@/components/ui/action-button";
 import { Button } from "@/components/ui/button";
 import { ConfirmModal } from "@/components/ui/confirm-modal";
+import { FileDropzone } from "@/components/ui/file-dropzone";
 import { Input } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import { Select } from "@/components/ui/select";
 import { useToast } from "@/components/ui/toast";
 import { formatShanghaiYmd } from "@/lib/time";
+import { createBrowserClient } from "@/lib/supabase/browser";
 import {
   activateTemplateAction,
   createTemplateAction,
@@ -101,9 +103,19 @@ export function TemplatesPageClient({
     setUploadErrors({});
 
     try {
-      // For now, we'll use a placeholder file path
-      // In a real implementation, you'd upload to Supabase Storage first
-      const filePath = `templates/${uploadReportType}/${uploadFileType}/${Date.now()}_${uploadFile.name}`;
+      const supabase = createBrowserClient();
+      const safeName = uploadFile.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+      const filePath = `templates/${uploadReportType}/${uploadFileType}/${Date.now()}_${safeName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("templates")
+        .upload(filePath, uploadFile, { upsert: false });
+
+      if (uploadError) {
+        toast.error(uploadError.message, { title: "Error" });
+        setUploadLoading(false);
+        return;
+      }
 
       const res = await createTemplateAction({
         name,
@@ -121,7 +133,7 @@ export function TemplatesPageClient({
       setUploadOpen(false);
       toast.success("Template uploaded and activated.", { title: "Success" });
       router.refresh();
-    } catch (error) {
+    } catch {
       toast.error("Failed to upload template", { title: "Error" });
     } finally {
       setUploadLoading(false);
@@ -333,18 +345,18 @@ export function TemplatesPageClient({
             error={uploadErrors.name}
           />
           <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-zinc-300">
-              File
-            </label>
-            <input
-              type="file"
+            <FileDropzone
+              label="File"
               accept={uploadFileType === "word" ? ".docx,.doc" : ".xlsx,.xls"}
-              onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)}
-              className="w-full rounded-lg border border-white/10 bg-zinc-800/50 px-3 py-2 text-sm text-zinc-100 file:mr-3 file:rounded file:border-0 file:bg-zinc-700 file:px-3 file:py-1 file:text-sm file:text-zinc-200"
+              file={uploadFile}
+              onFileChange={setUploadFile}
+              error={uploadErrors.file}
+              hint={
+                uploadFileType === "word"
+                  ? "Supports .doc/.docx"
+                  : "Supports .xls/.xlsx"
+              }
             />
-            {uploadErrors.file && (
-              <p className="text-sm text-red-400">{uploadErrors.file}</p>
-            )}
           </div>
           <p className="text-sm text-zinc-400">
             The uploaded template will be automatically activated.

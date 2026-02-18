@@ -7,6 +7,10 @@ function isAdmin(role: unknown): role is "admin" {
   return role === "admin";
 }
 
+function isAdminOrSa(role: unknown): role is "admin" | "sa" {
+  return role === "admin" || role === "sa";
+}
+
 export async function proxy(request: NextRequest) {
   // Keep a stable list of cookies Supabase wants to set so we can apply them
   // to either a normal response or a redirect response.
@@ -39,6 +43,8 @@ export async function proxy(request: NextRequest) {
   const isLogin = path === "/login";
   const isProtected =
     path.startsWith("/desktop") ||
+    path.startsWith("/reports") ||
+    path.startsWith("/report-review") ||
     path.startsWith("/users") ||
     path.startsWith("/regions") ||
     path.startsWith("/analyst-info");
@@ -46,12 +52,18 @@ export async function proxy(request: NextRequest) {
     path.startsWith("/users") ||
     path.startsWith("/regions") ||
     path.startsWith("/analyst-info");
+  const isReviewOnly = path.startsWith("/report-review");
 
   let response: NextResponse;
 
   if (isProtected && !user && !isLogin) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
+    url.search = "";
+    response = NextResponse.redirect(url);
+  } else if (isReviewOnly && user && !isAdminOrSa(role)) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/403";
     url.search = "";
     response = NextResponse.redirect(url);
   } else if (isAdminOnly && user && !isAdmin(role)) {

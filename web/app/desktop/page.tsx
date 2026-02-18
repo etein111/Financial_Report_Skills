@@ -4,6 +4,8 @@ import { Card } from "@/components/ui/card";
 import { signOutAction } from "@/features/auth";
 import { getCurrentUser, getCurrentUserRole } from "@/features/auth/server";
 
+type Role = "admin" | "sa" | "analyst";
+
 type DesktopCard = {
   key: string;
   icon: string;
@@ -11,7 +13,7 @@ type DesktopCard = {
   description: string;
   href: string;
   permissionLabel?: string;
-  comingSoon?: boolean;
+  visibleRoles: Role[];
 };
 
 const reportsCards: DesktopCard[] = [
@@ -19,26 +21,18 @@ const reportsCards: DesktopCard[] = [
     key: "reports",
     icon: "📝",
     title: "Reports",
-    description: "View all reports",
-    href: "/coming-soon?feature=reports",
-    comingSoon: true,
+    description: "Create, edit, and submit reports",
+    href: "/reports",
+    visibleRoles: ["admin", "sa", "analyst"],
   },
   {
-    key: "new-report",
-    icon: "➕",
-    title: "New Report",
-    description: "Create new report",
-    href: "/coming-soon?feature=new-report",
-    comingSoon: true,
-  },
-  {
-    key: "review",
+    key: "report-review",
     icon: "✅",
     title: "Report Review",
-    description: "Review pending reports",
-    href: "/coming-soon?feature=report-review",
+    description: "Review and approve submitted reports",
+    href: "/report-review",
     permissionLabel: "SA/Admin only",
-    comingSoon: true,
+    visibleRoles: ["admin", "sa"],
   },
   {
     key: "templates",
@@ -47,7 +41,7 @@ const reportsCards: DesktopCard[] = [
     description: "Manage report templates",
     href: "/templates",
     permissionLabel: "Admin only",
-    comingSoon: false,
+    visibleRoles: ["admin"],
   },
 ];
 
@@ -59,7 +53,7 @@ const dataCards: DesktopCard[] = [
     description: "Manage system users",
     href: "/users",
     permissionLabel: "Admin only",
-    comingSoon: false,
+    visibleRoles: ["admin"],
   },
   {
     key: "analyst-info",
@@ -68,7 +62,7 @@ const dataCards: DesktopCard[] = [
     description: "Manage analyst profiles",
     href: "/analyst-info",
     permissionLabel: "Admin only",
-    comingSoon: false,
+    visibleRoles: ["admin"],
   },
   {
     key: "regions",
@@ -77,16 +71,16 @@ const dataCards: DesktopCard[] = [
     description: "Manage regions",
     href: "/regions",
     permissionLabel: "Admin only",
-    comingSoon: false,
+    visibleRoles: ["admin"],
   },
   {
     key: "coverage",
     icon: "🏢",
     title: "Coverage",
     description: "Manage coverage universe",
-    href: "/coverage",
     permissionLabel: "Admin/Analyst",
-    comingSoon: false,
+    href: "/coverage",
+    visibleRoles: ["admin", "analyst"],
   },
   {
     key: "sectors",
@@ -95,7 +89,7 @@ const dataCards: DesktopCard[] = [
     description: "Manage sector taxonomy",
     href: "/sectors",
     permissionLabel: "Admin only",
-    comingSoon: false,
+    visibleRoles: ["admin"],
   },
 ];
 
@@ -103,23 +97,13 @@ export default async function DesktopPage() {
   const user = await getCurrentUser();
   const role = await getCurrentUserRole();
 
-  // Filter cards based on role
-  const visibleReportsCards =
-    role === "admin"
-      ? reportsCards
-      : reportsCards.filter((c) => c.permissionLabel !== "Admin only");
+  const visibleReportsCards = reportsCards.filter((card) =>
+    role ? card.visibleRoles.includes(role) : false,
+  );
 
-  // Admin-only cards: users, analyst-info, regions, sectors
-  // Admin/SA/Analyst cards: coverage
-  const visibleDataCards = dataCards.filter((c) => {
-    if (c.permissionLabel === "Admin only") {
-      return role === "admin";
-    }
-    if (c.permissionLabel === "Admin/Analyst") {
-      return role === "admin" || role === "sa" || role === "analyst";
-    }
-    return true;
-  });
+  const visibleDataCards = dataCards.filter((card) =>
+    role ? card.visibleRoles.includes(role) : false,
+  );
 
   const fullName =
     typeof user?.user_metadata?.full_name === "string"
@@ -135,8 +119,7 @@ export default async function DesktopPage() {
 
           <div className="flex items-center gap-4">
             <div className="hidden text-sm text-zinc-300 sm:block">
-              Welcome,{" "}
-              <span className="font-medium text-zinc-100">{welcome}</span>
+              Welcome, <span className="font-medium text-zinc-100">{welcome}</span>
             </div>
 
             <form action={signOutAction}>
@@ -148,7 +131,7 @@ export default async function DesktopPage() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-5xl px-6 pt-12 pb-10">
+      <main className="mx-auto max-w-5xl px-6 pb-10 pt-12">
         <div className="grid grid-cols-1 gap-12 lg:grid-cols-2 lg:gap-16">
           <Section title="Reports" cards={visibleReportsCards} />
           <Section title="Data Management" cards={visibleDataCards} />
@@ -163,29 +146,24 @@ function Section({ title, cards }: { title: string; cards: DesktopCard[] }) {
     <section className="space-y-3">
       <h2 className="text-base font-medium text-zinc-200">{title}</h2>
       <div className="flex flex-col gap-4">
-        {cards.map((c) => (
+        {cards.map((card) => (
           <a
-            key={c.key}
-            href={c.href}
+            key={card.key}
+            href={card.href}
             target="_blank"
             rel="noopener noreferrer"
             className="block"
           >
             <Card className="flex items-center gap-4 px-5 py-4">
-              <div className="text-[28px] leading-none">{c.icon}</div>
+              <div className="text-[28px] leading-none">{card.icon}</div>
               <div className="min-w-0 flex-1">
-                <div className="text-sm font-medium text-zinc-100">
-                  {c.title}
-                </div>
-                <div className="mt-0.5 text-xs text-zinc-400">
-                  {c.description}
-                </div>
+                <div className="text-sm font-medium text-zinc-100">{card.title}</div>
+                <div className="mt-0.5 text-xs text-zinc-400">{card.description}</div>
               </div>
               <div className="flex flex-shrink-0 flex-col items-end gap-1.5">
-                {c.permissionLabel ? (
-                  <Badge tone="zinc">{c.permissionLabel}</Badge>
+                {card.permissionLabel ? (
+                  <Badge tone="zinc">{card.permissionLabel}</Badge>
                 ) : null}
-                {c.comingSoon ? <Badge tone="blue">Coming Soon</Badge> : null}
               </div>
             </Card>
           </a>

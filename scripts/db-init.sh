@@ -44,7 +44,11 @@ echo "1. Pushing migrations + SQL seed..."
 supabase db push --linked --include-seed --yes
 
 echo ""
-echo "2. Initializing Auth users..."
+echo "2. Verifying migration status..."
+supabase migration list --linked
+
+echo ""
+echo "3. Initializing Auth users..."
 pnpm -s run seed:auth
 
 echo ""

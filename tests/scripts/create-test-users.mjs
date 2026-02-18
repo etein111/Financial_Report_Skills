@@ -96,6 +96,14 @@ async function main() {
     'Test Senior Analyst'
   );
 
+  // Create Analyst test user (for owner access control tests)
+  await createTestUser(
+    'analyst@neolyst.com',
+    'Analyst123',
+    'analyst',
+    'Test Analyst'
+  );
+
   console.log('\nDone!');
 }
 

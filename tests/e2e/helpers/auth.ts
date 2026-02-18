@@ -25,3 +25,7 @@ export async function loginAsAdmin(page: Page): Promise<void> {
 export async function loginAsSA(page: Page): Promise<void> {
   await loginAs(page, "sa@neolyst.com", "Analyst123");
 }
+
+export async function loginAsAnalyst(page: Page): Promise<void> {
+  await loginAs(page, "analyst@neolyst.com", "Analyst123");
+}

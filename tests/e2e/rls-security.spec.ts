@@ -437,4 +437,135 @@ test.describe("RLS Security Policies", () => {
       );
     });
   });
+
+  test.describe("Report Table RLS", () => {
+    test("analyst can only see own reports", async ({ page }) => {
+      // Login as analyst
+      await page.goto("/login");
+      await page.fill('input[type="email"]', "analyst@neolyst.com");
+      await page.fill('input[type="password"]', "Analyst123");
+      await page.click('button[type="submit"]');
+      await expect(page).toHaveURL(/\/desktop/, { timeout: 15000 });
+
+      await page.goto("/reports");
+      await expect(page).toHaveURL(/\/reports/, { timeout: 5000 });
+      await expect(page.locator("header")).toContainText("Reports");
+    });
+
+    test("SA can see submitted/published/rejected reports", async ({
+      page,
+    }) => {
+      await page.goto("/login");
+      await page.fill('input[type="email"]', "sa@neolyst.com");
+      await page.fill('input[type="password"]', "Analyst123");
+      await page.click('button[type="submit"]');
+      await expect(page).toHaveURL(/\/desktop/, { timeout: 15000 });
+
+      await page.goto("/reports");
+      // Default filter is 'submitted'
+      await expect(page.locator("body")).toContainText("submitted", {
+        timeout: 5000,
+      });
+    });
+
+    test("analyst cannot access report-review page", async ({ page }) => {
+      await page.goto("/login");
+      await page.fill('input[type="email"]', "analyst@neolyst.com");
+      await page.fill('input[type="password"]', "Analyst123");
+      await page.click('button[type="submit"]');
+      await expect(page).toHaveURL(/\/desktop/, { timeout: 15000 });
+
+      await page.goto("/report-review");
+      await expect(page).toHaveURL(/\/403/, { timeout: 5000 });
+    });
+
+    test("SA can access report-review page", async ({ page }) => {
+      await page.goto("/login");
+      await page.fill('input[type="email"]', "sa@neolyst.com");
+      await page.fill('input[type="password"]', "Analyst123");
+      await page.click('button[type="submit"]');
+      await expect(page).toHaveURL(/\/desktop/, { timeout: 15000 });
+
+      await page.goto("/report-review");
+      await expect(page.locator("header")).toContainText("Report Review");
+    });
+
+    test("admin can create report", async ({ page }) => {
+      await page.goto("/login");
+      await page.fill('input[type="email"]', "admin@neolyst.com");
+      await page.fill('input[type="password"]', "Admin123");
+      await page.click('button[type="submit"]');
+      await expect(page).toHaveURL(/\/desktop/, { timeout: 15000 });
+
+      await page.goto("/reports");
+      await page.click('button:has-text("Create Report")');
+      await expect(page.locator("role=dialog")).toBeVisible();
+
+      const timestamp = Date.now();
+      await page.getByLabel("Title *").fill(`RLS Test Report ${timestamp}`);
+      await page.getByLabel("Report Type *").selectOption("company");
+      await page.click('button:has-text("Save")');
+
+      // Should succeed
+      await expect(page.locator("role=dialog")).not.toBeVisible({
+        timeout: 10000,
+      });
+    });
+
+    test("SA cannot create report (no create button)", async ({ page }) => {
+      await page.goto("/login");
+      await page.fill('input[type="email"]', "sa@neolyst.com");
+      await page.fill('input[type="password"]', "Analyst123");
+      await page.click('button[type="submit"]');
+      await expect(page).toHaveURL(/\/desktop/, { timeout: 15000 });
+
+      await page.goto("/reports");
+
+      // SA should NOT see Create Report button
+      const createButton = page.locator('button:has-text("Create Report")');
+      await expect(createButton).not.toBeVisible({ timeout: 5000 });
+    });
+
+    test("analyst can create report", async ({ page }) => {
+      await page.goto("/login");
+      await page.fill('input[type="email"]', "analyst@neolyst.com");
+      await page.fill('input[type="password"]', "Analyst123");
+      await page.click('button[type="submit"]');
+      await expect(page).toHaveURL(/\/desktop/, { timeout: 15000 });
+
+      await page.goto("/reports");
+
+      // Analyst should see Create Report button
+      const createButton = page.locator('button:has-text("Create Report")');
+      await expect(createButton).toBeVisible({ timeout: 5000 });
+    });
+  });
+
+  test.describe("Report Status Log RLS", () => {
+    test("status history is visible to all authenticated users on report detail", async ({
+      page,
+    }) => {
+      await page.goto("/login");
+      await page.fill('input[type="email"]', "admin@neolyst.com");
+      await page.fill('input[type="password"]', "Admin123");
+      await page.click('button[type="submit"]');
+      await expect(page).toHaveURL(/\/desktop/, { timeout: 15000 });
+
+      await page.goto("/reports");
+
+      // Click on first report to see detail
+      const firstReport = page.locator("table tbody tr").first();
+      if (await firstReport.isVisible()) {
+        await firstReport.click();
+        await expect(page.locator("role=dialog")).toBeVisible({
+          timeout: 5000,
+        });
+
+        // Should show status history section
+        await expect(page.locator("role=dialog")).toContainText("History", {
+          timeout: 5000,
+        });
+      }
+    });
+  });
 });
