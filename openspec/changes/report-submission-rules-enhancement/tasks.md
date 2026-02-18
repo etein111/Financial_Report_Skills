@@ -46,11 +46,11 @@
 
 ## 7. 测试与验收
 
-- [ ] 7.1 单元/集成：`report_type` 来源与模板有效性校验
-- [ ] 7.2 单元/集成：`Region/Sector` 下拉值合法性校验
-- [ ] 7.3 单元/集成：`Certificate` 未勾选阻断提交
-- [ ] 7.4 单元/集成：Company 无 Model 阻断；非 Company 无 Model 可提交
-- [ ] 7.5 E2E：Desktop `Add Report` 第一位显示与新标签打开行为
-- [ ] 7.6 E2E：Reports Add 与 Desktop Add 进入同一独立创建页
-- [ ] 7.7 E2E：Reject 无 Note 阻断、有 Note 成功
-- [ ] 7.8 E2E：初始化 5 种 report_type 后下拉可见，模板文件可后补
+- [x] 7.1 单元/集成：`report_type` 来源与模板有效性校验
+- [x] 7.2 单元/集成：`Region/Sector` 下拉值合法性校验
+- [x] 7.3 单元/集成：`Certificate` 未勾选阻断提交
+- [x] 7.4 单元/集成：Company 无 Model 阻断；非 Company 无 Model 可提交
+- [x] 7.5 E2E：Desktop `Add Report` 第一位显示与新标签打开行为
+- [x] 7.6 E2E：Reports Add 与 Desktop Add 进入同一独立创建页
+- [x] 7.7 E2E：Reject 无 Note 阻断、有 Note 成功
+- [x] 7.8 E2E：初始化 5 种 report_type 后下拉可见，模板文件可后补
