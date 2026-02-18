@@ -10,7 +10,7 @@
     "supabase:stop": "pnpm exec supabase stop",
     "supabase:db:push": "pnpm exec supabase db push",
     "supabase:db:push:dry-run": "pnpm exec supabase db push --dry-run",
-    "seed:auth": "npx tsx supabase/seed.ts",
+    "seed:auth": "NODE_PATH=web/node_modules npx -y tsx supabase/seed.ts",
     "db:init": "bash scripts/db-init.sh"
   },
   "packageManager": "pnpm@10.29.3"

@@ -12,7 +12,7 @@
 ## 1. 职责边界（强制）
 
 - `supabase db push --linked`：只负责 schema（`supabase/migrations/*.sql`）。
-- `supabase seed --linked`：只负责 SQL seed（由 `supabase/config.toml` 的 `[db.seed].sql_paths` 决定）。
+- `supabase db push --linked --include-seed`：在 push migration 后执行 SQL seed（由 `supabase/config.toml` 的 `[db.seed].sql_paths` 决定）。
 - `supabase/seed.ts`：只负责 Auth 用户初始化与需要程序逻辑的初始化。
 
 禁止项：
@@ -33,7 +33,7 @@ supabase/
   seed.ts                # Auth 初始化（Admin API）
   config.toml
 scripts/
-  db-init.sh             # 一键执行 push + seed + seed.ts
+  db-init.sh             # 一键执行 push(--include-seed) + seed.ts
 ```
 
 ## 3. `config.toml` 约定
@@ -72,6 +72,9 @@ sql_paths = ["./seed/01_base.sql", "./seed/02_demo.sql"]
 - 必须只读取：
   - `SUPABASE_URL`
   - `SUPABASE_SERVICE_ROLE_KEY`
+- 项目默认通过 `scripts/db-init.sh` 从 `web/.env` 注入环境变量：
+  - 使用 `NEXT_PUBLIC_SUPABASE_URL` 映射为 `SUPABASE_URL`
+  - 直接读取 `SUPABASE_SERVICE_ROLE_KEY`
 - 必须通过 `supabase.auth.admin.*` 创建/更新 Auth 用户。
 - 必须先查后建（按 email），重复执行结果一致。
 - 业务侧映射表（如 `user_roles` / `profiles`）统一 `upsert`。
@@ -85,8 +88,9 @@ sql_paths = ["./seed/01_base.sql", "./seed/02_demo.sql"]
 #!/usr/bin/env bash
 set -euo pipefail
 
-supabase db push
-supabase seed --linked
+# 默认从 web/.env 读取 NEXT_PUBLIC_SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY
+# 并将 NEXT_PUBLIC_SUPABASE_URL 映射为 SUPABASE_URL
+supabase db push --linked --include-seed --yes
 pnpm -s run seed:auth
 ```
 
@@ -95,7 +99,7 @@ pnpm -s run seed:auth
 ```json
 {
   "scripts": {
-    "seed:auth": "tsx supabase/seed.ts",
+    "seed:auth": "NODE_PATH=web/node_modules npx -y tsx supabase/seed.ts",
     "db:init": "bash scripts/db-init.sh"
   }
 }

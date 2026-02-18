@@ -17,6 +17,9 @@ supabase/
 1. 安装 Supabase CLI：`supabase --version`
 2. 在仓库根目录执行命令（统一用 `pnpm` 脚本）
 3. 若操作远端项目，先 `supabase link --project-ref <ref>`
+4. 初始化默认从 `web/.env` 读取：
+   - `NEXT_PUBLIC_SUPABASE_URL`（会映射为 `SUPABASE_URL`）
+   - `SUPABASE_SERVICE_ROLE_KEY`
 
 ## 3. 日常工作流（推荐）
 
@@ -33,10 +36,16 @@ pnpm exec supabase migration new <change_name>
 pnpm exec supabase db reset --local
 ```
 
-4. 推送到目标数据库
+4. 推送到目标数据库（仅 migration）
 
 ```bash
 pnpm run supabase:db:push
+```
+
+如需“迁移 + SQL seed”一起执行，使用：
+
+```bash
+pnpm exec supabase db push --linked --include-seed --yes
 ```
 
 5. 核对迁移历史（本地/远端）
@@ -50,7 +59,8 @@ pnpm exec supabase migration list --linked
 SQL seed（由 `supabase/config.toml` 的 `[db.seed].sql_paths` 控制）：
 
 ```bash
-pnpm exec supabase seed --local
+pnpm exec supabase db reset --local
+pnpm exec supabase db push --linked --include-seed --yes
 ```
 
 Auth 初始化（`seed.ts`）：
@@ -77,6 +87,9 @@ pnpm exec supabase status
 
 # 推送迁移
 pnpm run supabase:db:push
+
+# 推送迁移 + SQL seed（远端）
+pnpm exec supabase db push --linked --include-seed --yes
 
 # 本地重置数据库（默认会跑 seed）
 pnpm exec supabase db reset --local

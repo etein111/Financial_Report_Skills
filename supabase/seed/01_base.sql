@@ -10,4 +10,4 @@ INSERT INTO public.region (name, code) VALUES
   ('India', 'IN'),
   ('Macau', 'MO'),
   ('US', 'US')
-ON CONFLICT (name) DO NOTHING;
+ON CONFLICT DO NOTHING;
