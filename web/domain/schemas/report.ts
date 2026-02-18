@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const reportTypes = [
+export const knownReportTypes = [
   "company",
   "sector",
   "company_flash",
@@ -15,6 +15,7 @@ export const reportStatuses = [
   "rejected",
 ] as const;
 
+export const reportLanguages = ["zh", "en"] as const;
 export const reportFileLabels = ["report", "model"] as const;
 
 export const reportStatusActions = [
@@ -23,6 +24,15 @@ export const reportStatusActions = [
   "reject",
   "reopen",
 ] as const;
+
+const reportTypeSchema = z
+  .string()
+  .trim()
+  .min(1, "Report type is required")
+  .max(64, "Report type is too long");
+
+const optionalShortText = z.string().trim().max(255, "Value too long").nullable().optional();
+const optionalLongText = z.string().trim().max(4000, "Value too long").nullable().optional();
 
 export const reportAnalystInputSchema = z.object({
   analyst_id: z.string().uuid("Analyst is required"),
@@ -51,23 +61,31 @@ const reportAnalystsSchema = z
     }
   });
 
-export const reportCreateSchema = z.object({
+const reportEditableFieldsSchema = z.object({
   title: z.string().trim().min(1, "Title is required").max(300, "Title too long"),
-  report_type: z.enum(reportTypes),
-  coverage_id: z.string().uuid().nullable().optional(),
+  report_type: reportTypeSchema,
+  ticker: optionalShortText,
+  rating: optionalShortText,
+  target_price: optionalShortText,
+  region_id: z.string().uuid().nullable().optional(),
   sector_id: z.string().uuid().nullable().optional(),
-  analysts: reportAnalystsSchema.default([]),
-});
-
-export const reportSaveSchema = z.object({
-  report_id: z.string().uuid("Report ID is required"),
-  title: z.string().trim().min(1, "Title is required").max(300, "Title too long"),
-  report_type: z.enum(reportTypes),
+  report_language: z.enum(reportLanguages).nullable().optional(),
+  contact_person: optionalShortText,
+  investment_thesis: optionalLongText,
+  certificate_confirmed: z.boolean().optional().default(false),
   coverage_id: z.string().uuid().nullable().optional(),
-  sector_id: z.string().uuid().nullable().optional(),
   analysts: reportAnalystsSchema.default([]),
   word_file_path: z.string().trim().min(1).nullable().optional(),
   model_file_path: z.string().trim().min(1).nullable().optional(),
+});
+
+export const reportCreateSchema = reportEditableFieldsSchema.omit({
+  word_file_path: true,
+  model_file_path: true,
+});
+
+export const reportSaveSchema = reportEditableFieldsSchema.extend({
+  report_id: z.string().uuid("Report ID is required"),
 });
 
 export const reportSubmitSchema = z.object({
@@ -85,8 +103,8 @@ export const reportReviewActionSchema = z.discriminatedUnion("action", [
     reason: z
       .string()
       .trim()
-      .min(1, "Reason is required")
-      .max(1000, "Reason too long"),
+      .min(1, "Note is required")
+      .max(1000, "Note too long"),
   }),
   z.object({
     action: z.literal("reopen"),
@@ -94,15 +112,8 @@ export const reportReviewActionSchema = z.discriminatedUnion("action", [
   }),
 ]);
 
-export const reportDirectSubmitSchema = z.object({
+export const reportDirectSubmitSchema = reportEditableFieldsSchema.extend({
   report_id: z.string().uuid().optional(),
-  title: z.string().trim().min(1, "Title is required").max(300, "Title too long"),
-  report_type: z.enum(reportTypes),
-  coverage_id: z.string().uuid().nullable().optional(),
-  sector_id: z.string().uuid().nullable().optional(),
-  analysts: reportAnalystsSchema.default([]),
-  word_file_path: z.string().trim().min(1).nullable().optional(),
-  model_file_path: z.string().trim().min(1).nullable().optional(),
 });
 
 export const reportDownloadSchema = z.object({
@@ -110,8 +121,9 @@ export const reportDownloadSchema = z.object({
   file_path: z.string().trim().min(1, "File path is required"),
 });
 
-export type ReportType = (typeof reportTypes)[number];
+export type ReportType = string;
 export type ReportStatus = (typeof reportStatuses)[number];
+export type ReportLanguage = (typeof reportLanguages)[number];
 export type ReportFileLabel = (typeof reportFileLabels)[number];
 export type ReportStatusAction = (typeof reportStatusActions)[number];
 

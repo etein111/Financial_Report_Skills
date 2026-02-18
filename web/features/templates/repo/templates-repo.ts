@@ -11,7 +11,7 @@ export type Template = {
   file_path: string;
   version: number;
   is_active: boolean;
-  uploaded_by: string;
+  uploaded_by: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -23,8 +23,17 @@ export type TemplateGroup = {
   history: Template[];
 };
 
-export type ReportType = "company" | "sector" | "company-flash" | "sector-flash" | "common";
+export type ReportType =
+  | "company"
+  | "sector"
+  | "company_flash"
+  | "sector_flash"
+  | "common";
 export type FileType = "word" | "excel";
+
+function hasTemplateFile(template: Pick<Template, "file_path">): boolean {
+  return template.file_path.trim().length > 0;
+}
 
 /**
  * List all templates grouped by report_type and file_type
@@ -57,8 +66,9 @@ export async function listTemplatesGrouped(): Promise<Result<TemplateGroup[]>> {
   for (const [key, templates] of groups) {
     const [report_type, file_type] = key.split(":") as [string, FileType];
 
-    const activeTemplate = templates.find((t) => t.is_active) || null;
-    const history = templates.filter((t) => !t.is_active);
+    const activeTemplate =
+      templates.find((t) => t.is_active && hasTemplateFile(t)) || null;
+    const history = templates.filter((t) => t.id !== activeTemplate?.id);
 
     result.push({
       report_type,
@@ -156,9 +166,52 @@ export async function getActiveTemplate(
     return err(error.message);
   }
 
-  if (!data) return err("Template not found");
+  if (!data || !hasTemplateFile(data as Template)) {
+    return err("No active template found for this report type and file type");
+  }
 
   return ok(data as Template);
+}
+
+export async function listTemplateReportTypes(): Promise<Result<string[]>> {
+  const supabase = await createServerClient();
+
+  const { data, error } = await supabase
+    .from("template")
+    .select("report_type")
+    .order("report_type", { ascending: true });
+
+  if (error) return err(error.message);
+  if (!data) return err("Failed to fetch template report types");
+
+  const distinct = Array.from(
+    new Set(
+      data
+        .map((item) => item.report_type?.trim())
+        .filter((value): value is string => Boolean(value)),
+    ),
+  );
+
+  return ok(distinct);
+}
+
+export async function hasValidTemplateForReportType(
+  reportType: string,
+): Promise<Result<boolean>> {
+  const supabase = await createServerClient();
+
+  const { data, error } = await supabase
+    .from("template")
+    .select("id, file_path, is_active")
+    .eq("report_type", reportType)
+    .eq("is_active", true);
+
+  if (error) return err(error.message);
+  if (!data || data.length === 0) return ok(false);
+
+  return ok(
+    data.some((item) => Boolean(item.file_path && item.file_path.trim().length > 0)),
+  );
 }
 
 /**

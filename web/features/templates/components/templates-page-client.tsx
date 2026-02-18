@@ -31,8 +31,8 @@ export interface TemplatesPageClientProps {
 const REPORT_TYPE_LABELS: Record<ReportType, string> = {
   company: "Company",
   sector: "Sector",
-  "company-flash": "Company Flash",
-  "sector-flash": "Sector Flash",
+  company_flash: "Company Flash",
+  sector_flash: "Sector Flash",
   common: "Common",
 };
 
@@ -322,8 +322,8 @@ export function TemplatesPageClient({
               options={[
                 { value: "company", label: "Company" },
                 { value: "sector", label: "Sector" },
-                { value: "company-flash", label: "Company Flash" },
-                { value: "sector-flash", label: "Sector Flash" },
+                { value: "company_flash", label: "Company Flash" },
+                { value: "sector_flash", label: "Sector Flash" },
                 { value: "common", label: "Common" },
               ]}
             />

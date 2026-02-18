@@ -3,8 +3,8 @@ import { z } from "zod";
 export const reportTypes = [
   "company",
   "sector",
-  "company-flash",
-  "sector-flash",
+  "company_flash",
+  "sector_flash",
   "common",
 ] as const;
 

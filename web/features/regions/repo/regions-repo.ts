@@ -137,3 +137,17 @@ export async function deleteRegion(id: string): Promise<Result<null>> {
 
   return ok(null);
 }
+
+export async function listAllRegions(): Promise<Result<Region[]>> {
+  const supabase = await createServerClient();
+
+  const { data, error } = await supabase
+    .from("region")
+    .select("*")
+    .order("name", { ascending: true });
+
+  if (error) return err(error.message);
+  if (!data) return err("Failed to fetch regions");
+
+  return ok(data);
+}

@@ -351,8 +351,8 @@ export function ReportReviewPageClient({
 
             {detail.status === "submitted" ? (
               <Input
-                label="Reject Reason"
-                placeholder="Required when rejecting"
+                label="Reject Note"
+                placeholder="Note is required when rejecting"
                 value={rejectReason}
                 onChange={(event) => setRejectReason(event.target.value)}
               />
@@ -373,7 +373,7 @@ export function ReportReviewPageClient({
                     </div>
                     <div className="mt-1 text-xs text-zinc-500">{formatDateTime(item.action_at)}</div>
                     {item.reason ? (
-                      <div className="mt-1 text-xs text-amber-300">Reason: {item.reason}</div>
+                      <div className="mt-1 text-xs text-amber-300">Note: {item.reason}</div>
                     ) : null}
                   </div>
                 ))

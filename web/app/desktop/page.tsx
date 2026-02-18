@@ -16,6 +16,14 @@ type DesktopCard = {
 
 const reportsCards: DesktopCard[] = [
   {
+    key: "add-report",
+    icon: "➕",
+    title: "Add Report",
+    description: "Create a new report",
+    href: "/reports/new",
+    visibleRoles: ["admin", "analyst"],
+  },
+  {
     key: "reports",
     icon: "📝",
     title: "Reports",

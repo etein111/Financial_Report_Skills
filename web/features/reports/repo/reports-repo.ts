@@ -3,6 +3,7 @@ import "server-only";
 import type {
   ReportAnalystInput,
   ReportFileLabel,
+  ReportLanguage,
   ReportStatus,
   ReportType,
 } from "@/domain/schemas/report";
@@ -64,6 +65,14 @@ export type ReportSummary = {
   owner_user_id: string;
   title: string;
   report_type: ReportType;
+  ticker: string | null;
+  rating: string | null;
+  target_price: string | null;
+  region_id: string | null;
+  report_language: ReportLanguage | null;
+  contact_person: string | null;
+  investment_thesis: string | null;
+  certificate_confirmed: boolean;
   status: ReportStatus;
   current_version_no: number;
   coverage_id: string | null;
@@ -81,6 +90,11 @@ export type ReportDetail = ReportSummary & {
     ticker: string;
     english_full_name: string;
   } | null;
+  region?: {
+    id: string;
+    name: string;
+    code: string;
+  } | null;
   sector?: {
     id: string;
     name_en: string;
@@ -91,12 +105,26 @@ export type ReportDetail = ReportSummary & {
   status_logs: ReportStatusLog[];
 };
 
+export type CoverageMatch = {
+  id: string;
+  ticker: string;
+  analyst_ids: string[];
+};
+
 export type CreateReportParams = {
   owner_user_id: string;
   title: string;
   report_type: ReportType;
+  ticker?: string | null;
+  rating?: string | null;
+  target_price?: string | null;
+  region_id?: string | null;
   coverage_id?: string | null;
   sector_id?: string | null;
+  report_language?: ReportLanguage | null;
+  contact_person?: string | null;
+  investment_thesis?: string | null;
+  certificate_confirmed?: boolean;
   analysts: ReportAnalystInput[];
 };
 
@@ -104,8 +132,16 @@ export type SaveReportContentParams = {
   report_id: string;
   title: string;
   report_type: ReportType;
+  ticker?: string | null;
+  rating?: string | null;
+  target_price?: string | null;
+  region_id?: string | null;
   coverage_id?: string | null;
   sector_id?: string | null;
+  report_language?: ReportLanguage | null;
+  contact_person?: string | null;
+  investment_thesis?: string | null;
+  certificate_confirmed?: boolean;
   analysts: ReportAnalystInput[];
   changed_by: string;
   word_file_path?: string | null;
@@ -161,6 +197,14 @@ function normalizeReportSummaryRow(row: ReportSummaryRow): ReportSummary {
     owner_user_id: row.owner_user_id,
     title: row.title,
     report_type: row.report_type,
+    ticker: row.ticker,
+    rating: row.rating,
+    target_price: row.target_price,
+    region_id: row.region_id,
+    report_language: row.report_language,
+    contact_person: row.contact_person,
+    investment_thesis: row.investment_thesis,
+    certificate_confirmed: row.certificate_confirmed,
     status: row.status,
     current_version_no: row.current_version_no,
     coverage_id: row.coverage_id,
@@ -199,6 +243,144 @@ export function buildReportStoragePath(params: {
   return buildReportStoragePathValue(params);
 }
 
+export async function listReportTypeOptions(): Promise<Result<string[]>> {
+  const supabase = await createServerClient();
+
+  const { data, error } = await supabase
+    .from("template")
+    .select("report_type")
+    .order("report_type", { ascending: true });
+
+  if (error) {
+    return err(error.message);
+  }
+
+  const distinct = Array.from(
+    new Set(
+      (data ?? [])
+        .map((item) => item.report_type?.trim())
+        .filter((value): value is string => Boolean(value)),
+    ),
+  );
+
+  return ok(distinct);
+}
+
+export async function reportTypeExists(reportType: string): Promise<Result<boolean>> {
+  const supabase = await createServerClient();
+
+  const { data, error } = await supabase
+    .from("template")
+    .select("id")
+    .eq("report_type", reportType)
+    .limit(1);
+
+  if (error) {
+    return err(error.message);
+  }
+
+  return ok((data ?? []).length > 0);
+}
+
+export async function hasValidTemplateForReportType(
+  reportType: string,
+): Promise<Result<boolean>> {
+  const supabase = await createServerClient();
+
+  const { data, error } = await supabase
+    .from("template")
+    .select("id, file_path")
+    .eq("report_type", reportType)
+    .eq("is_active", true);
+
+  if (error) {
+    return err(error.message);
+  }
+
+  const valid = (data ?? []).some(
+    (row) => Boolean(row.file_path && row.file_path.trim().length > 0),
+  );
+  return ok(valid);
+}
+
+export async function regionExists(regionId: string): Promise<Result<boolean>> {
+  const supabase = await createServerClient();
+
+  const { data, error } = await supabase
+    .from("region")
+    .select("id")
+    .eq("id", regionId)
+    .limit(1);
+
+  if (error) {
+    return err(error.message);
+  }
+  return ok((data ?? []).length > 0);
+}
+
+export async function sectorExists(sectorId: string): Promise<Result<boolean>> {
+  const supabase = await createServerClient();
+
+  const { data, error } = await supabase
+    .from("sector")
+    .select("id")
+    .eq("id", sectorId)
+    .eq("is_active", true)
+    .limit(1);
+
+  if (error) {
+    return err(error.message);
+  }
+  return ok((data ?? []).length > 0);
+}
+
+export async function findCoverageByTicker(
+  ticker: string,
+): Promise<Result<CoverageMatch | null>> {
+  const normalizedTicker = ticker.trim().toUpperCase();
+  if (!normalizedTicker) {
+    return ok(null);
+  }
+
+  const supabase = await createServerClient();
+
+  const { data, error } = await supabase
+    .from("coverage")
+    .select(
+      `
+      id,
+      ticker,
+      analysts:coverage_analyst (
+        analyst_id
+      )
+    `,
+    )
+    .eq("is_active", true)
+    .ilike("ticker", normalizedTicker)
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    return err(error.message);
+  }
+
+  if (!data) {
+    return ok(null);
+  }
+
+  const analystIds = Array.isArray(data.analysts)
+    ? data.analysts
+        .map((item) => item.analyst_id as string | null)
+        .filter((value): value is string => Boolean(value))
+    : [];
+
+  return ok({
+    id: data.id,
+    ticker: data.ticker,
+    analyst_ids: analystIds,
+  });
+}
+
 export async function listReports(
   params: ListReportsParams,
 ): Promise<Result<PaginatedList<ReportSummary>>> {
@@ -210,6 +392,14 @@ export async function listReports(
       owner_user_id,
       title,
       report_type,
+      ticker,
+      rating,
+      target_price,
+      region_id,
+      report_language,
+      contact_person,
+      investment_thesis,
+      certificate_confirmed,
       status,
       current_version_no,
       coverage_id,
@@ -282,6 +472,14 @@ export async function getReportDetail(
       owner_user_id,
       title,
       report_type,
+      ticker,
+      rating,
+      target_price,
+      region_id,
+      report_language,
+      contact_person,
+      investment_thesis,
+      certificate_confirmed,
       status,
       current_version_no,
       coverage_id,
@@ -294,6 +492,11 @@ export async function getReportDetail(
         id,
         ticker,
         english_full_name
+      ),
+      region:region_id (
+        id,
+        name,
+        code
       ),
       sector:sector_id (
         id,
@@ -351,6 +554,7 @@ export async function getReportDetail(
     ...summary,
     coverage:
       firstRelation<ReportDetail["coverage"]>(reportData.coverage) ?? null,
+    region: firstRelation<ReportDetail["region"]>(reportData.region) ?? null,
     sector: firstRelation<ReportDetail["sector"]>(reportData.sector) ?? null,
     versions: (versions ?? []) as ReportVersion[],
     latest_version: ((versions ?? [])[0] as ReportVersion | undefined) ?? null,
@@ -371,10 +575,18 @@ export async function createReport(
       owner_user_id: params.owner_user_id,
       title: params.title,
       report_type: params.report_type,
-      status: "draft",
-      current_version_no: 0,
+      ticker: params.ticker?.trim() || null,
+      rating: params.rating?.trim() || null,
+      target_price: params.target_price?.trim() || null,
+      region_id: params.region_id ?? null,
       coverage_id: params.coverage_id ?? null,
       sector_id: params.sector_id ?? null,
+      report_language: params.report_language ?? null,
+      contact_person: params.contact_person?.trim() || null,
+      investment_thesis: params.investment_thesis?.trim() || null,
+      certificate_confirmed: Boolean(params.certificate_confirmed),
+      status: "draft",
+      current_version_no: 0,
     })
     .select("id")
     .single();
@@ -445,8 +657,16 @@ export async function saveReportContent(
     p_report_id: params.report_id,
     p_title: params.title,
     p_report_type: params.report_type,
-    p_coverage_id: params.coverage_id ?? null,
+    p_ticker: params.ticker ?? null,
+    p_rating: params.rating ?? null,
+    p_target_price: params.target_price ?? null,
+    p_region_id: params.region_id ?? null,
     p_sector_id: params.sector_id ?? null,
+    p_report_language: params.report_language ?? null,
+    p_contact_person: params.contact_person ?? null,
+    p_investment_thesis: params.investment_thesis ?? null,
+    p_certificate_confirmed: Boolean(params.certificate_confirmed),
+    p_coverage_id: params.coverage_id ?? null,
     p_analysts: params.analysts,
     p_changed_by: params.changed_by,
     p_word_file_path: params.word_file_path ?? null,

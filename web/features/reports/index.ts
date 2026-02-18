@@ -1,4 +1,5 @@
 export {
+  listReportTypeOptionsAction,
   listReportsAction,
   getReportDetailAction,
   createReportAction,

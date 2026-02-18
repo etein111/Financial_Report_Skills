@@ -172,26 +172,6 @@ export function ReportsPageClient({
     );
   }
 
-  function resetFormState() {
-    setActiveReport(null);
-    setFormTitle("");
-    setFormReportType("company");
-    setFormAnalysts([]);
-    setFormErrors({});
-    setReportFile(null);
-    setModelFile(null);
-  }
-
-  function openCreate() {
-    if (!canCreate) {
-      toast.error("No permission", { title: "Error" });
-      return;
-    }
-
-    resetFormState();
-    setFormOpen(true);
-  }
-
   async function openDetail(reportId: string) {
     setFormOpen(true);
     setLoadingDetail(true);
@@ -569,6 +549,16 @@ export function ReportsPageClient({
     window.open(result.data, "_blank", "noopener,noreferrer");
   }
 
+  function getVersionReason(versionNo: number): string | null {
+    if (!activeReport) {
+      return null;
+    }
+    const matched = activeReport.status_logs.find(
+      (item) => item.version_no === versionNo && item.reason,
+    );
+    return matched?.reason ?? null;
+  }
+
   const canEditActive = activeReport ? canEditReport(activeReport) : canCreate;
   const canDirectSubmit =
     canEditActive && (!activeReport || activeReport.status === "draft");
@@ -580,7 +570,12 @@ export function ReportsPageClient({
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
           <div className="text-xl font-semibold text-zinc-50">Reports</div>
           {canCreate ? (
-            <Button onClick={openCreate}>Create Report</Button>
+            <a
+              href="/reports/new"
+              className="inline-flex items-center justify-center rounded-[6px] bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors duration-200 hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/60"
+            >
+              Add Report
+            </a>
           ) : (
             <div />
           )}
@@ -847,6 +842,39 @@ export function ReportsPageClient({
             {activeReport ? (
               <div className="space-y-2 rounded-[12px] border border-white/10 bg-zinc-900/70 p-4">
                 <div className="text-sm font-medium text-zinc-200">
+                  Report Version History
+                </div>
+                {activeReport.versions.length === 0 ? (
+                  <p className="text-sm text-zinc-500">No versions yet.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {activeReport.versions.map((item) => (
+                      <div
+                        key={item.id}
+                        className="rounded-[8px] border border-white/10 bg-zinc-800/40 p-3 text-sm"
+                      >
+                        <div className="flex items-center gap-2 text-zinc-200">
+                          <Badge tone="zinc">v{item.version_no}</Badge>
+                          <span>Changed by {item.changed_by.slice(0, 8)}...</span>
+                        </div>
+                        <div className="mt-1 text-xs text-zinc-500">
+                          {formatDateTime(item.changed_at)}
+                        </div>
+                        {getVersionReason(item.version_no) ? (
+                          <div className="mt-1 text-xs text-amber-300">
+                            Note: {getVersionReason(item.version_no)}
+                          </div>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : null}
+
+            {activeReport ? (
+              <div className="space-y-2 rounded-[12px] border border-white/10 bg-zinc-900/70 p-4">
+                <div className="text-sm font-medium text-zinc-200">
                   Report Status History
                 </div>
                 {activeReport.status_logs.length === 0 ? (
@@ -871,7 +899,7 @@ export function ReportsPageClient({
                         </div>
                         {item.reason ? (
                           <div className="mt-1 text-xs text-amber-300">
-                            Reason: {item.reason}
+                            Note: {item.reason}
                           </div>
                         ) : null}
                       </div>
