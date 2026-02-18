@@ -24,7 +24,7 @@
 未选原因：权限边界更难统一，且与现有项目范式不一致。
 
 ### 2) 数据模型
-- `report`：主体信息 + 所有权 + 当前状态 + 当前版本号。
+- `report`：主体信息 + 所有权 + 当前状态 + 当前版本号 + 发布快照。
 - `report_version`：内容版本历史（仅追加，不更新/删除）。
 - `report_analyst`：报告与作者关系（可由 owner 或 Admin 维护）。
 - `report_status_log`：状态流转历史（仅追加，含动作版本号）。
@@ -33,9 +33,11 @@
 - `report.owner_user_id`：`not null`，创建时写入当前用户，后续不可转移。
 - `report.report_type`：枚举 `company|sector|company_flash|sector_flash|common`。
 - `report.current_version_no`：与 `report_version.version_no` 对齐。
+- `report.published_by`：`uuid`，FK -> `auth.users.id`，仅在 `published` 时写入发布人。
+- `report.published_at`：`timestamptz`，仅在 `published` 时写入发布时间。
 - `report_version`：`(report_id, version_no)` 唯一，`version_no` 从 1 递增。
 - `report_status_log`：记录 `from_status`、`to_status`、`action_by`、`action_at`、`reason`、`version_no`。
-- `report` 不保留 `submitted_by/published_by/rejection_reason` 等冗余字段，避免与日志双写不一致。
+- `report` 仅保留 `published_by/published_at` 两个发布快照字段，用于高频“已发布报告”查询；其余状态动作仍以 `report_status_log` 为准，避免双写漂移。
 - 删除策略：不做物理删除（`report DELETE = ❌`）。
 
 ### 3) 状态机与版本策略
@@ -46,6 +48,10 @@
 状态与版本解耦：
 - 内容变化（基本信息、文件、作者关系）写 `report_version`。
 - 状态变化写 `report_status_log`，并记录动作发生时 `version_no`。
+
+发布字段写入规则：
+- `submitted -> published`：同步写入 `report.published_by = action_by`、`report.published_at = action_at`。
+- 其余状态流转不更新发布字段。
 
 “直接提交”策略：
 - 前端可一键“直接提交”，后端分两步执行：
