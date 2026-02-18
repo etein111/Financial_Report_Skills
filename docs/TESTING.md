@@ -57,6 +57,15 @@ Coverage 管理回归至少包含：
 - 创建/编辑时 `analyst_id` 非活跃列表值必须失败。
 - 创建/编辑时重复选择同一 analyst 必须失败。
 
+Report 提交规则增强回归至少包含：
+- `report_type` 下拉来源于 `template.report_type` 去重值；无有效模板时提交失败。
+- `region_id` / `sector_id` 非法值（不在有效列表）提交失败。
+- `Certificate` 未勾选时提交失败并返回可见错误。
+- 任意类型缺少 Word 文件提交失败；`company` 缺少 Model 文件提交失败。
+- Desktop `Add Report` 在 Reports 分组首位，且新标签打开 `/reports/new`。
+- Reports Add 与 Desktop Add 进入同一独立创建页。
+- Reject 无 Note 失败，有 Note 成功。
+
 ## 6. 通过标准（Gate）
 
 - 必跑测试集全部通过。

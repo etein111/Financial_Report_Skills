@@ -123,12 +123,15 @@
 - `file_path` (text)
 - `version` (integer, >=1)
 - `is_active` (boolean)
-- `uploaded_by` (uuid, FK -> `auth.users.id`)
+- `uploaded_by` (uuid, FK -> `auth.users.id`, nullable for placeholder init)
 - `created_at` / `updated_at`
 
 关键约束：
 - `(report_type, file_type, version)` 唯一
 - 同一 `(report_type, file_type)` 仅一个 `is_active=true`
+- `report_type` 为 Report 创建页下拉事实源（`distinct report_type`）
+- 系统初始化至少包含：`company`、`sector`、`company_flash`、`sector_flash`、`common`
+- 初始化占位模板允许 `file_path=''` 且 `is_active=false`（仅注册类型，不可用于提交）
 
 ### 3.7 `report`（已归档）
 
@@ -136,7 +139,15 @@
 - `id` (uuid, PK)
 - `owner_user_id` (uuid, FK -> `auth.users.id`, not null)
 - `title` (text, not null)
-- `report_type` (`company|sector|company_flash|sector_flash|common`)
+- `report_type` (text, not null; 合法值由 `template.report_type` 事实源驱动)
+- `ticker` (text, nullable)
+- `rating` (text, nullable)
+- `target_price` (text, nullable)
+- `region_id` (uuid, FK -> `region.id`, nullable)
+- `report_language` (`zh|en`, nullable)
+- `contact_person` (text, nullable)
+- `investment_thesis` (text, nullable)
+- `certificate_confirmed` (boolean, not null, default false)
 - `status` (`draft|submitted|published|rejected`)
 - `current_version_no` (integer)
 - `coverage_id` / `sector_id`（允许空，后续补）
@@ -146,6 +157,7 @@
 - owner 一经创建不可转移
 - 报告不做物理删除（`DELETE` 关闭）
 - `submitted` 状态允许 owner 继续编辑
+- 提交门禁在服务端校验：字段矩阵必填、文件必填、模板有效性、Coverage 关联、Certificate 勾选
 
 ### 3.8 `report_version`（已归档）
 
@@ -183,8 +195,9 @@
 - `report_id` (uuid, FK -> `report.id`)
 - `from_status`, `to_status`
 - `action_by` (uuid, FK -> `auth.users.id`)
+- `action_by_name` (text, nullable)
 - `action_at` (timestamptz)
-- `reason` (reject 时必填)
+- `reason` (reject 时必填，业务语义为 Note)
 - `version_no` (动作发生时对应版本号)
 
 关键约束：

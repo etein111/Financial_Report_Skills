@@ -48,6 +48,8 @@
 - `/desktop` MUST 为登录后默认落地页。
 - Desktop 功能卡片 MUST 在新标签页打开。
 - 功能页 MUST NOT 提供“返回 Desktop”主导航入口。
+- Desktop `Reports` 分组 MUST 保留独立 `Add Report` 入口，且排序为分组第一项。
+- Desktop `Add Report` MUST 仅对 Admin/Analyst 可见（SA 不可见），并在新标签打开 `/reports/new`。
 
 ### 3.3 Users 管理（Admin-only）
 - MUST 支持列表、搜索、分页（固定 12 条/页）。
@@ -77,9 +79,18 @@
 ### 3.6 Report 管理与审批（已实现）
 - 报告 owner 模型：谁创建归谁（owner 不可转移）。
 - `draft` 与 `submitted`：owner 可继续编辑；`published/rejected` 禁止直接编辑。
+- 报告创建 MUST 使用独立路由 `/reports/new`，不再使用弹窗承载完整创建流程。
+- `Reports` 列表页 Add 与 Desktop Add MUST 进入同一创建路由 `/reports/new`。
 - 系统 MUST 支持“直接提交”快捷操作（后端分两步：先保存 draft，再提交）。
 - 直接提交第二步失败 MUST 提示：`已保存为 Draft，提交失败`。
+- 提交前 MUST 通过字段矩阵校验（按 report type 必填）。
+- `Report Type` MUST 来自 `template.report_type` 去重结果，且提交时必须匹配至少一个有效模板（`is_active=true` 且有文件路径）。
+- `Region` / `Sector` MUST 来自对应表有效记录（`region` / `sector`），服务端必须二次校验。
+- 所有报告类型提交时 MUST 有 Report Word 文件；`company` 类型提交时 MUST 有 Model 文件。
+- `company` / `company_flash` 提交时 MUST 满足 Coverage 关联语义（Ticker + Analyst 关系存在）。
+- `Certificate` MUST 以 checkbox 确认；未勾选 MUST 阻断提交；页面 MUST 展示 6 条英文条款原文。
 - 审批：SA/Admin 可审批通过、拒绝、`rejected -> draft`。
+- Reject MUST 要求填写 Note；无 Note MUST 阻断状态流转。
 - 审批页面仅提供文件下载，不做 Word 在线预览。
 - 报告列表默认筛选：SA/Admin 默认为 `submitted`（不记忆上次筛选）。
 - SA 可见报告范围：`submitted/published/rejected`；不可见他人 `draft`。
@@ -90,6 +101,7 @@
 - 每次内容保存 MUST 追加新版本。
 - 状态流转 MUST 记录状态日志，并记录动作对应版本号。
 - 状态历史展示范围：按“当前报告”展示，不做全局历史列表。
+- 报告详情中的版本历史 MUST 至少展示：版本号、修改人、修改时间、关联 Note/Reason（存在时）。
 
 ## 4. 功能权限矩阵（目标态）
 
@@ -104,6 +116,7 @@
 | Coverage 编辑/删除 | ✅ | ❌ | ❌ |
 | Sector 管理 | ✅ | ❌ | ❌ |
 | Template 管理 | ✅ | ❌ | ❌ |
+| Desktop Add Report 入口 | ✅ | ❌ | ✅ |
 | Reports 列表 | ✅（全部） | ✅（submitted/published/rejected） | ✅（仅 owner） |
 | Reports 创建 | ✅（为自己） | ❌ | ✅（为自己） |
 | Reports 编辑（draft/submitted） | ✅ | ❌ | ✅（仅 owner） |
@@ -123,3 +136,4 @@
 - `region-and-analyst-management`（归档）
 - `coverage-sector-template-management`（归档）
 - `report-management-and-approval`（归档：`2026-02-18-report-management-and-approval`）
+- `report-submission-rules-enhancement`（归档：`2026-02-18-report-submission-rules-enhancement`）

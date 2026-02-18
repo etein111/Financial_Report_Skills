@@ -51,11 +51,20 @@
   - 功能页不在页面内实现“返回 Desktop”主导航。
 - 保持两组分区结构：`Reports` / `Data Management`。
 - Admin-only 能力仅 Admin 可见。
+- `Reports` 分组中 `Add Report` 必须保留，并固定为第一项。
+- Desktop 点击 `Add Report` 必须新标签打开 `/reports/new`。
 
 ### 3.3 管理列表页（Users / Regions / Analyst Info / 后续同类）
 - 页面骨架统一：Header + 搜索区 + 列表区 + 分页区。
 - 列表操作统一使用 `Modal` / `ConfirmModal`。
 - 状态展示统一使用 `Badge`，主操作统一使用 `Button`。
+
+### 3.4 Reports 创建页
+- `Reports` 列表页 Add 必须跳转 `/reports/new`，不得再用弹窗承载完整创建流程。
+- 创建页基础信息区采用纵向单列布局。
+- `Investment thesis` 必须为多行 textarea，语义为报告摘要。
+- `Region` / `Sector` / `Report Type` 必须使用下拉组件。
+- `Certificate` 必须为 checkbox，并展示英文条款原文（6 条）；未勾选时提交按钮行为必须给出可见错误。
 
 ## 4. 组件复用规则（强制）
 

@@ -4,6 +4,27 @@
 
 ## 2026-02-18
 
+### Report Submission Rules 增强归档回填
+- OpenSpec change `report-submission-rules-enhancement` 已归档：`openspec/changes/archive/2026-02-18-report-submission-rules-enhancement/`。
+- specs 已同步到主线：
+  - `openspec/specs/report-submission-validation/spec.md`（新增）
+  - `openspec/specs/desktop-nav/spec.md`
+  - `openspec/specs/report-management/spec.md`
+  - `openspec/specs/template-file-management/spec.md`
+  - `openspec/specs/report-review/spec.md`
+  - `openspec/specs/coverage-management/spec.md`
+  - `openspec/specs/report-versioning/spec.md`
+- 新增数据库迁移与 seed：
+  - `supabase/migrations/20260218213000_report_submission_rules_enhancement.sql`
+  - `supabase/seed/02_template_report_types.sql`
+- 报告创建入口统一为 `/reports/new`，Desktop `Add Report` 保留并置顶，提交门禁补齐（模板有效性、下拉合法性、文件必填、Certificate、Reject Note）。
+- 回填文档：
+  - `docs/REQUIREMENTS.md`
+  - `docs/DATA_MODEL.md`
+  - `docs/UI.md`
+  - `docs/TESTING.md`
+  - `docs/DECISIONS.md`
+
 ### Report 管理与审批归档回填
 - OpenSpec change `report-management-and-approval` 已归档：`openspec/changes/archive/2026-02-18-report-management-and-approval/`。
 - 报告能力口径从“已确认待开发/进行中”更新为“已实现/已归档”，并回填到：

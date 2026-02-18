@@ -101,3 +101,12 @@
   - `seed.ts` / 运维脚本初始化 Auth 用户时必须走 Admin API。
   - migration/SQL seed 禁止直接写入 Auth 用户记录。
 - 变更条件：Supabase Auth 能力模型发生根本变化并通过评审。
+
+### D-015：Report Type 事实源固定为 `template.report_type`
+- 状态：Accepted
+- 结论：报告创建页的 `Report Type` 仅从 `template.report_type` 读取；`report.report_type` 不再使用固定枚举 check 约束。
+- 影响：
+  - `template` 同时承担“类型注册 + 模板版本管理”。
+  - 初始化阶段允许占位模板（`is_active=false` 且文件空）用于先注册类型。
+  - 提交链路必须额外校验“存在有效模板”（激活且有文件）后才允许 submit。
+- 变更条件：后续若引入独立 `report_type` 字典表并通过评审。
