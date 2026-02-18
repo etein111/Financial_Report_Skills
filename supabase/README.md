@@ -20,6 +20,10 @@ supabase/
 4. 初始化默认从 `web/.env` 读取：
    - `NEXT_PUBLIC_SUPABASE_URL`（会映射为 `SUPABASE_URL`）
    - `SUPABASE_SERVICE_ROLE_KEY`
+5. Access Token 存放在 `supabase/supabase_access.token`，推送迁移时使用：
+   ```bash
+   SUPABASE_ACCESS_TOKEN=$(cat supabase/supabase_access.token) supabase db push --linked --yes
+   ```
 
 ## 3. 日常工作流（推荐）
 
