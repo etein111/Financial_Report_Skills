@@ -64,7 +64,9 @@
 ### 3.5 Coverage / Sector / Template（已归档）
 - Coverage：
   - MUST 支持列表、搜索、新增、编辑、删除。
+  - Coverage 表单中的 `sector` 与 `analyst` MUST 从有效列表中选择（不允许自由文本/非法 ID）。
   - MUST 支持最多 4 位 analyst 排序维护。
+  - Coverage 中的 analyst MUST 唯一（同一 coverage 不可重复选择同一 analyst）。
   - Analyst MUST 可新增 Coverage；编辑/删除仅 Admin。
 - Sector：
   - MUST 支持两级结构管理。

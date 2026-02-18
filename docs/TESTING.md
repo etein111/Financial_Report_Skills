@@ -52,6 +52,11 @@ node scripts/verify/verify-db-admin-and-rls.mjs
 - 必须有 E2E 用例
 - 必须有角色维度断言
 
+Coverage 管理回归至少包含：
+- 创建/编辑时 `sector_id` 非活跃列表值必须失败。
+- 创建/编辑时 `analyst_id` 非活跃列表值必须失败。
+- 创建/编辑时重复选择同一 analyst 必须失败。
+
 ## 6. 通过标准（Gate）
 
 - 必跑测试集全部通过。

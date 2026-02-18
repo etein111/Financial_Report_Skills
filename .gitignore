@@ -63,7 +63,7 @@ supabase/.branches
 supabase/.temp
 
 # 测试
-coverage/
+/coverage/
 .nyc_output/
 temp/
 test_*.json

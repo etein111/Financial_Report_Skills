@@ -61,6 +61,7 @@
 
 - 按钮必须复用 `web/components/ui/button.tsx`。
 - 输入框必须复用 `web/components/ui/input.tsx`。
+- 关联实体字段（如 `region_id` / `sector_id` / `analyst_id`）必须使用 `Select` 或等价选择器；禁止自由文本输入 ID。
 - 卡片容器必须复用 `web/components/ui/card.tsx`。
 - 弹窗必须复用 `web/components/ui/modal.tsx` / `web/components/ui/confirm-modal.tsx`。
 - 分页必须复用 `web/components/ui/pagination.tsx`。

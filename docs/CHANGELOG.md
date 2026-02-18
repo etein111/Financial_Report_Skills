@@ -2,6 +2,16 @@
 
 记录项目级关键变更（按时间倒序）。
 
+## 2026-02-18
+
+### Coverage 表单选择约束收敛
+- Coverage 创建/编辑中，`sector` 与 `analyst` 改为“必须从活跃列表选择”，禁止提交非列表值。
+- Coverage 作者（analyst）选择增加唯一性约束，禁止重复 analyst。
+- Coverage 服务端 action 增加二次校验，防止绕过前端提交非法 `sector_id` / `analyst_id`。
+
+### `.gitignore` 规则修正
+- 将 `coverage/` 修正为 `/coverage/`，避免误忽略 `web/features/coverage/` 业务源码目录。
+
 ## 2026-02-17
 
 ### OpenSpec 归档触发流程调整

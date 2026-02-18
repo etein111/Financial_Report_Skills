@@ -52,7 +52,9 @@ export function SectorsPageClient({
   const toast = useToast();
 
   const [queryDraft, setQueryDraft] = React.useState(currentQuery ?? "");
-  const [levelFilter, setLevelFilter] = React.useState<string>(currentLevel?.toString() ?? "");
+  const [levelFilter, setLevelFilter] = React.useState<string>(
+    currentLevel?.toString() ?? "",
+  );
   React.useEffect(() => {
     setQueryDraft(currentQuery ?? "");
     setLevelFilter(currentLevel?.toString() ?? "");
@@ -76,7 +78,9 @@ export function SectorsPageClient({
   const [formNameCn, setFormNameCn] = React.useState("");
   const [formWindName, setFormWindName] = React.useState("");
   const [formParentId, setFormParentId] = React.useState("");
-  const [formErrors, setFormErrors] = React.useState<Record<string, string>>({});
+  const [formErrors, setFormErrors] = React.useState<Record<string, string>>(
+    {},
+  );
   const [formLoading, setFormLoading] = React.useState(false);
 
   // Delete confirm
@@ -115,7 +119,8 @@ export function SectorsPageClient({
 
     const next: Record<string, string> = {};
     if (!name_en) next.name_en = "English name is required";
-    if (level === 2 && !parent_id) next.parent_id = "Parent sector is required for level 2";
+    if (level === 2 && !parent_id)
+      next.parent_id = "Parent sector is required for level 2";
     setFormErrors(next);
     if (Object.keys(next).length) return;
 
@@ -169,9 +174,23 @@ export function SectorsPageClient({
     router.refresh();
   }
 
+  function doSearch() {
+    router.push(
+      `/sectors${toQueryString({ q: queryDraft, page: 1, level: levelFilter || undefined })}`,
+    );
+  }
+
   function submitSearch(e: React.FormEvent) {
     e.preventDefault();
-    router.push(`/sectors${toQueryString({ q: queryDraft, page: 1, level: levelFilter || undefined })}`);
+    doSearch();
+  }
+
+  // Auto-search when filter changes
+  function handleLevelChange(value: string) {
+    setLevelFilter(value);
+    router.push(
+      `/sectors${toQueryString({ q: queryDraft, page: 1, level: value || undefined })}`,
+    );
   }
 
   // Find parent name for level-2 sectors
@@ -205,7 +224,7 @@ export function SectorsPageClient({
               <Select
                 label="Level"
                 value={levelFilter}
-                onChange={(e) => setLevelFilter(e.target.value)}
+                onChange={(e) => handleLevelChange(e.target.value)}
                 options={[
                   { value: "", label: "All" },
                   { value: "1", label: "Level 1" },
@@ -213,9 +232,6 @@ export function SectorsPageClient({
                 ]}
               />
             </div>
-            <Button type="submit" variant="secondary">
-              Search
-            </Button>
           </form>
           <div className="hidden text-sm text-zinc-400 sm:block">
             {total} sectors
@@ -245,25 +261,31 @@ export function SectorsPageClient({
               sectors.map((sector) => (
                 <TR key={sector.id}>
                   <TD>
-                    <span className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-medium ${
-                      sector.level === 1
-                        ? "bg-blue-500/20 text-blue-300"
-                        : "bg-purple-500/20 text-purple-300"
-                    }`}>
+                    <span
+                      className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-medium ${
+                        sector.level === 1
+                          ? "bg-blue-500/20 text-blue-300"
+                          : "bg-purple-500/20 text-purple-300"
+                      }`}
+                    >
                       L{sector.level}
                     </span>
                   </TD>
-                  <TD className="font-medium text-zinc-100">{sector.name_en}</TD>
+                  <TD className="font-medium text-zinc-100">
+                    {sector.name_en}
+                  </TD>
                   <TD className="text-zinc-300">{sector.name_cn ?? "-"}</TD>
                   <TD className="text-zinc-300">
                     {sector.level === 2 ? getParentName(sector.parent_id) : "-"}
                   </TD>
                   <TD>
-                    <span className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-medium ${
-                      sector.is_active
-                        ? "bg-green-500/20 text-green-300"
-                        : "bg-zinc-500/20 text-zinc-400"
-                    }`}>
+                    <span
+                      className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-medium ${
+                        sector.is_active
+                          ? "bg-green-500/20 text-green-300"
+                          : "bg-zinc-500/20 text-zinc-400"
+                      }`}
+                    >
                       {sector.is_active ? "Active" : "Inactive"}
                     </span>
                   </TD>
@@ -293,7 +315,9 @@ export function SectorsPageClient({
           page={page}
           totalPages={totalPages}
           onChange={(p) =>
-            router.push(`/sectors${toQueryString({ q: queryDraft, page: p, level: levelFilter || undefined })}`)
+            router.push(
+              `/sectors${toQueryString({ q: queryDraft, page: p, level: levelFilter || undefined })}`,
+            )
           }
         />
       </main>
@@ -336,7 +360,10 @@ export function SectorsPageClient({
               onChange={(e) => setFormParentId(e.target.value)}
               options={[
                 { value: "", label: "Select parent..." },
-                ...level1Sectors.map((s) => ({ value: s.id, label: s.name_en })),
+                ...level1Sectors.map((s) => ({
+                  value: s.id,
+                  label: s.name_en,
+                })),
               ]}
               error={formErrors.parent_id}
             />
