@@ -4,11 +4,14 @@
   "version": "1.0.0",
   "description": "Neolyst 项目开发环境",
   "scripts": {
+    "dev": "bash scripts/dev.sh",
     "supabase": "pnpm exec supabase",
     "supabase:start": "pnpm exec supabase start",
     "supabase:stop": "pnpm exec supabase stop",
     "supabase:db:push": "pnpm exec supabase db push",
-    "supabase:db:push:dry-run": "pnpm exec supabase db push --dry-run"
+    "supabase:db:push:dry-run": "pnpm exec supabase db push --dry-run",
+    "seed:auth": "npx tsx supabase/seed.ts",
+    "db:init": "bash scripts/db-init.sh"
   },
   "packageManager": "pnpm@10.29.3"
 }

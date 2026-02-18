@@ -18,4 +18,4 @@ enable_signup = false
 
 [db.seed]
 enabled = true
-sql_paths = ["./seed/regions.sql"]
+sql_paths = ["./seed/*.sql"]
