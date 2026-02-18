@@ -20,11 +20,11 @@ echo "=== Database Initialization ==="
 echo ""
 
 echo "1. Pushing migrations..."
-supabase db push --yes
+supabase db push --linked --yes
 
 echo ""
 echo "2. Running SQL seed..."
-supabase seed --local
+supabase seed --linked --yes
 
 echo ""
 echo "3. Initializing Auth users..."

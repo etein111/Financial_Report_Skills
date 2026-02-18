@@ -2,10 +2,17 @@
 
 本规范基于 Supabase 官方 Local Development 指引整理，定义本项目数据库版本管理的职责边界与执行方式。
 
+## 0. 运行模式（强制）
+
+- 当前仓库默认使用 Supabase 云项目（linked project），不使用本地 Supabase 容器作为日常执行环境。
+- 规范中的命令默认针对云项目执行（`--linked`）。
+- 仅在明确需要本地排障时，才允许使用 `--local`。
+- `supabase db lint` 依赖本地数据库实例；当前流程默认不执行该命令。
+
 ## 1. 职责边界（强制）
 
-- `supabase db push`：只负责 schema（`supabase/migrations/*.sql`）。
-- `supabase seed --local`：只负责 SQL seed（由 `supabase/config.toml` 的 `[db.seed].sql_paths` 决定）。
+- `supabase db push --linked`：只负责 schema（`supabase/migrations/*.sql`）。
+- `supabase seed --linked`：只负责 SQL seed（由 `supabase/config.toml` 的 `[db.seed].sql_paths` 决定）。
 - `supabase/seed.ts`：只负责 Auth 用户初始化与需要程序逻辑的初始化。
 
 禁止项：
@@ -22,7 +29,7 @@ supabase/
     002_rls_and_triggers.sql
   seed/
     01_base.sql
-    02_demo.sql          # 可选，本地/测试
+    02_demo.sql          # 可选，开发/测试
   seed.ts                # Auth 初始化（Admin API）
   config.toml
 scripts/
@@ -79,7 +86,7 @@ sql_paths = ["./seed/01_base.sql", "./seed/02_demo.sql"]
 set -euo pipefail
 
 supabase db push
-supabase seed --local
+supabase seed --linked
 pnpm -s run seed:auth
 ```
 
@@ -97,7 +104,7 @@ pnpm -s run seed:auth
 ## 8. 环境与安全
 
 - `SUPABASE_SERVICE_ROLE_KEY` 仅用于服务端脚本与 CI Secret。
-- 默认账号密码仅允许本地/测试使用；生产环境通过安全渠道注入与轮换。
+- 默认账号密码仅允许开发/测试使用；生产环境通过安全渠道注入与轮换。
 - 若配置文件中使用 `env()`，仅用于声明变量来源，不应提交真实密钥。
 
 ## 9. 参考
