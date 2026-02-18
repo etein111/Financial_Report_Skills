@@ -123,17 +123,19 @@ export function ReportsPageClient({
 
   const canCreate = userRole === "admin" || userRole === "analyst";
   const [queryDraft, setQueryDraft] = React.useState(currentQuery ?? "");
-  const [statusFilter, setStatusFilter] = React.useState(
-    currentStatus ??
-      (userRole === "admin" || userRole === "sa" ? "submitted" : "all"),
+  // Use currentStatus from server, or default based on role
+  // admin/sa default to "submitted", others default to null (meaning "all")
+  const defaultStatus =
+    userRole === "admin" || userRole === "sa" ? "submitted" : null;
+  const [statusFilter, setStatusFilter] = React.useState<string | null>(
+    currentStatus ?? defaultStatus,
   );
 
   React.useEffect(() => {
     setQueryDraft(currentQuery ?? "");
-    setStatusFilter(
-      currentStatus ??
-        (userRole === "admin" || userRole === "sa" ? "submitted" : "all"),
-    );
+    const newDefaultStatus =
+      userRole === "admin" || userRole === "sa" ? "submitted" : null;
+    setStatusFilter(currentStatus ?? newDefaultStatus);
   }, [currentQuery, currentStatus, userRole]);
 
   const [formOpen, setFormOpen] = React.useState(false);
@@ -855,7 +857,9 @@ export function ReportsPageClient({
                       >
                         <div className="flex items-center gap-2 text-zinc-200">
                           <Badge tone="zinc">v{item.version_no}</Badge>
-                          <span>Changed by {item.changed_by.slice(0, 8)}...</span>
+                          <span>
+                            Changed by {item.changed_by.slice(0, 8)}...
+                          </span>
                         </div>
                         <div className="mt-1 text-xs text-zinc-500">
                           {formatDateTime(item.changed_at)}

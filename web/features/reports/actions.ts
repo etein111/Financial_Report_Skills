@@ -411,8 +411,9 @@ export async function listReportsAction(input: {
   const { role } = actor.data;
   const page = Math.max(1, input.page ?? 1);
   const query = input.query ?? null;
-  const appliedStatus =
-    input.status ?? (role === "admin" || role === "sa" ? "submitted" : null);
+  // Default status: admin/sa see "submitted", others see all (null for query)
+  const defaultStatus = role === "admin" || role === "sa" ? "submitted" : null;
+  const appliedStatus = input.status ?? defaultStatus;
 
   const listResult = await listReports({
     page,
