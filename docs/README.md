@@ -60,3 +60,10 @@
 推荐触发语句：
 - `归档并回填 <change_name>`
 - `执行 OpenSpec 归档并同步 docs: <change_name>`
+
+## 6. 跨工具执行入口（AGENTS 协同）
+
+- 本文件是文档加载协议的**唯一主定义**。
+- `AGENTS.md` 仅用于让不同 coding agent（如 Claude Code、Codex）在会话启动时执行本协议。
+- `AGENTS.md` 应保持“入口约束”最小化：要求先读 `docs/README.md` 与 `docs/*.md`，不复制完整规则正文。
+- 若 `AGENTS.md` 与本文件出现冲突，以本文件为准，并同步修正 `AGENTS.md`，避免双份规则漂移。
