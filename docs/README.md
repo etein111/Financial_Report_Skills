@@ -3,23 +3,15 @@
 项目文档统一入口（给人和 coding agent 共用）。
 目标：启动即获得完整上下文，避免遗漏与规则漂移。
 
-## 1. 启动加载协议（强制）
+## 1. 会话加载协议（强制）
 
-每次启动 coding agent 处理本仓库任务时，必须一次性全量读取以下文档（不跳读）：
-1. `docs/README.md`
-2. `docs/REQUIREMENTS.md`
-3. `docs/ARCHITECTURE.md`
-4. `docs/DATA_MODEL.md`
-5. `docs/LOGIC.md`
-6. `docs/UI.md`
-7. `docs/TESTING.md`
-8. `docs/DECISIONS.md`
-9. `docs/CHANGELOG.md`
-10. `docs/OPENSPEC_ARCHIVE_BACKFILL.md`
+每个 coding agent 会话首次处理本仓库任务时，必须一次性全量读取 `docs/` 目录下一级 Markdown 文档（`docs/*.md`，不跳读）。
 
 执行要求：
-- 启动阶段不得“按需只读部分文档”。
-- 完成加载后应先给出“已加载文档清单”再进入实现。
+- 会话启动阶段不得“按需只读部分文档”。
+- 完成首次加载后先给出“已加载文档清单”，再进入实现。
+- 同一会话内后续任务默认不重复全量读取。
+- 仅在以下情况重读：`docs/` 文档有变更、用户明确要求、出现规则冲突或口径不一致。
 
 ## 2. 文档索引（单一职责）
 
