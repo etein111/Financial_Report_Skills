@@ -100,7 +100,11 @@ function isCompanyType(reportType: string): boolean {
 }
 
 function requiresRegion(reportType: string): boolean {
-  return reportType === "sector" || reportType === "sector_flash" || reportType === "common";
+  return (
+    reportType === "sector" ||
+    reportType === "sector_flash" ||
+    reportType === "common"
+  );
 }
 
 function requiresSector(reportType: string): boolean {
@@ -111,7 +115,9 @@ function requiresModel(reportType: string): boolean {
   return reportType === "company";
 }
 
-async function validateAnalysts(input: { analyst_id: string }[]): Promise<string | null> {
+async function validateAnalysts(
+  input: { analyst_id: string }[],
+): Promise<string | null> {
   if (input.length === 0) {
     return null;
   }
@@ -187,7 +193,9 @@ async function resolveCoverageIdForDraft(input: {
   return { ok: true, data: coverageResult.data?.id ?? null };
 }
 
-async function validateReportForSubmit(detail: ReportDetail): Promise<string | null> {
+async function validateReportForSubmit(
+  detail: ReportDetail,
+): Promise<string | null> {
   const sourceCheck = await validateSourceTables({
     report_type: detail.report_type,
     region_id: detail.region_id,
@@ -251,7 +259,10 @@ async function validateReportForSubmit(detail: ReportDetail): Promise<string | n
     return "Report Word file is required before submit.";
   }
 
-  if (requiresModel(detail.report_type) && !detail.latest_version?.model_file_path) {
+  if (
+    requiresModel(detail.report_type) &&
+    !detail.latest_version?.model_file_path
+  ) {
     return "Company report requires Model file before submit.";
   }
 
@@ -270,7 +281,9 @@ async function validateReportForSubmit(detail: ReportDetail): Promise<string | n
     if (coverageResult.data.analyst_ids.length === 0) {
       return "Matched Coverage has no Analyst mapping. Please maintain Coverage first.";
     }
-    const reportAnalystIds = new Set(detail.analysts.map((item) => item.analyst_id));
+    const reportAnalystIds = new Set(
+      detail.analysts.map((item) => item.analyst_id),
+    );
     const overlap = coverageResult.data.analyst_ids.some((id) =>
       reportAnalystIds.has(id),
     );
@@ -327,13 +340,16 @@ function toSavePayload(input: {
     report_type: input.report_type.trim(),
     ticker: resolveOptionalText(input.ticker, input.fallback?.ticker),
     rating: resolveOptionalText(input.rating, input.fallback?.rating),
-    target_price: resolveOptionalText(input.target_price, input.fallback?.target_price),
+    target_price: resolveOptionalText(
+      input.target_price,
+      input.fallback?.target_price,
+    ),
     region_id: resolveOptionalId(input.region_id, input.fallback?.region_id),
     sector_id: resolveOptionalId(input.sector_id, input.fallback?.sector_id),
     report_language:
       input.report_language === undefined
-        ? input.fallback?.report_language ?? null
-        : input.report_language ?? null,
+        ? (input.fallback?.report_language ?? null)
+        : (input.report_language ?? null),
     contact_person: resolveOptionalText(
       input.contact_person,
       input.fallback?.contact_person,
@@ -346,16 +362,19 @@ function toSavePayload(input: {
       input.certificate_confirmed,
       input.fallback?.certificate_confirmed,
     ),
-    coverage_id: resolveOptionalId(input.coverage_id, input.fallback?.coverage_id),
+    coverage_id: resolveOptionalId(
+      input.coverage_id,
+      input.fallback?.coverage_id,
+    ),
     analysts: input.analysts,
     word_file_path:
       input.word_file_path === undefined
-        ? input.fallback?.latest_version?.word_file_path ?? null
-        : input.word_file_path ?? null,
+        ? (input.fallback?.latest_version?.word_file_path ?? null)
+        : (input.word_file_path ?? null),
     model_file_path:
       input.model_file_path === undefined
-        ? input.fallback?.latest_version?.model_file_path ?? null
-        : input.model_file_path ?? null,
+        ? (input.fallback?.latest_version?.model_file_path ?? null)
+        : (input.model_file_path ?? null),
   };
 }
 
@@ -414,7 +433,9 @@ export async function listReportsAction(input: {
   };
 }
 
-export async function getReportDetailAction(reportId: string): Promise<Result<ReportDetail>> {
+export async function getReportDetailAction(
+  reportId: string,
+): Promise<Result<ReportDetail>> {
   const actor = await getActor();
   if (!actor.ok) {
     return actor;
@@ -422,7 +443,9 @@ export async function getReportDetailAction(reportId: string): Promise<Result<Re
   return getReportDetail(reportId);
 }
 
-export async function createReportAction(input: unknown): Promise<Result<ReportDetail>> {
+export async function createReportAction(
+  input: unknown,
+): Promise<Result<ReportDetail>> {
   const actor = await getActor();
   if (!actor.ok) {
     return actor;
@@ -463,7 +486,6 @@ export async function createReportAction(input: unknown): Promise<Result<ReportD
   const payload = toSavePayload({
     ...parsed.data,
     coverage_id: coverageIdResult.data,
-    fallback: editableResult.data,
   });
 
   const createResult = await createReport({
@@ -492,7 +514,9 @@ export async function createReportAction(input: unknown): Promise<Result<ReportD
   return createResult;
 }
 
-export async function saveReportContentAction(input: unknown): Promise<Result<ReportDetail>> {
+export async function saveReportContentAction(
+  input: unknown,
+): Promise<Result<ReportDetail>> {
   const actor = await getActor();
   if (!actor.ok) {
     return actor;
@@ -508,7 +532,11 @@ export async function saveReportContentAction(input: unknown): Promise<Result<Re
     return err(parsed.error.issues[0]?.message ?? "Invalid input.");
   }
 
-  const editableResult = await assertEditable(role, user.id, parsed.data.report_id);
+  const editableResult = await assertEditable(
+    role,
+    user.id,
+    parsed.data.report_id,
+  );
   if (!editableResult.ok) {
     return editableResult;
   }
@@ -555,7 +583,9 @@ export async function saveReportContentAction(input: unknown): Promise<Result<Re
   return saveResult;
 }
 
-export async function submitReportAction(input: unknown): Promise<Result<ReportDetail>> {
+export async function submitReportAction(
+  input: unknown,
+): Promise<Result<ReportDetail>> {
   const actor = await getActor();
   if (!actor.ok) {
     return actor;
@@ -605,7 +635,9 @@ export async function submitReportAction(input: unknown): Promise<Result<ReportD
   return submitResult;
 }
 
-export async function directSubmitReportAction(input: unknown): Promise<Result<ReportDetail>> {
+export async function directSubmitReportAction(
+  input: unknown,
+): Promise<Result<ReportDetail>> {
   const actor = await getActor();
   if (!actor.ok) {
     return actor;
