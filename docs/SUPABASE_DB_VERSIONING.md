@@ -58,6 +58,7 @@ sql_paths = ["./seed/01_base.sql", "./seed/02_demo.sql"]
 - 仅包含：表结构、索引、约束、函数、触发器、RLS policy。
 - 允许定义 `auth.users` 触发器（如自动补齐 `profiles`），但不允许直接插入 Auth 用户。
 - migration 必须可审查、可回放，不依赖临时环境状态。
+- 应用层（schema/repo/UI）新增字段时，必须同步新增对应 migration，禁止仅改应用代码不改数据库。
 
 ## 5. SQL Seed 规范
 

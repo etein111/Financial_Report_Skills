@@ -53,6 +53,8 @@
 - `chinese_name` (text, nullable)
 - `email` (citext, unique, not null)
 - `region_id` (uuid, FK -> `region.id`, `on delete set null`)
+- `suffix` (text, nullable)
+- `sfc` (text, nullable)
 - `is_active` (boolean)
 - `created_at` / `updated_at`
 

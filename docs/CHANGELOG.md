@@ -4,6 +4,11 @@
 
 ## 2026-02-18
 
+### Analyst 字段迁移补齐
+- 修复云端重置后 `analyst` 表缺少 `suffix` / `sfc` 字段的问题。
+- 新增迁移：`supabase/migrations/20260218150000_add_analyst_suffix_sfc.sql`。
+- 初始化流程验收补充：`supabase db push --linked` 后需确认迁移已应用并与业务字段口径一致。
+
 ### Coverage 表单选择约束收敛
 - Coverage 创建/编辑中，`sector` 与 `analyst` 改为“必须从活跃列表选择”，禁止提交非列表值。
 - Coverage 作者（analyst）选择增加唯一性约束，禁止重复 analyst。
