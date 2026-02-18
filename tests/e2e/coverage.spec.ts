@@ -190,13 +190,10 @@ test.describe("Coverage Management", () => {
     test("filter by sector works", async ({ page }) => {
       await page.goto("/coverage");
 
-      // Select a sector from the dropdown
+      // Select a sector from the dropdown - auto-search on change
       await page.getByLabel("Sector").first().selectOption({ index: 1 });
 
-      // Click search
-      await page.click('button:has-text("Search")');
-
-      // URL should have sector_id parameter
+      // URL should have sector_id parameter (auto-search)
       await expect(page).toHaveURL(/sector_id=/, { timeout: 5000 });
     });
 

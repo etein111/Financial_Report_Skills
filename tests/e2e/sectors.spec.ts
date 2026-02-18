@@ -197,11 +197,10 @@ test.describe("Sectors Management", () => {
   test("level filter works", async ({ page }) => {
     await page.goto("/sectors");
 
-    // Select level 1 filter
+    // Select level 1 filter - auto-search on change
     await page.getByLabel("Level").first().selectOption("1");
-    await page.click('button:has-text("Search")');
 
-    // URL should have level parameter
+    // URL should have level parameter (auto-search)
     await expect(page).toHaveURL(/level=1/, { timeout: 5000 });
   });
 
