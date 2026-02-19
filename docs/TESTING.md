@@ -62,9 +62,12 @@ Report 提交规则增强回归至少包含：
 - `region_id` / `sector_id` 非法值（不在有效列表）提交失败。
 - `Certificate` 未勾选时提交失败并返回可见错误。
 - 任意类型缺少 Word 文件提交失败；`company` 缺少 Model 文件提交失败。
+- Reports 创建页 Report/Model 上传支持拖拽与点击两种路径，且行为一致。
+- Template 页面上传支持拖拽与点击两种路径，且权限保持 Admin-only。
 - Desktop `Add Report` 在 Reports 分组首位，且新标签打开 `/reports/new`。
 - Reports Add 与 Desktop Add 进入同一独立创建页。
 - Reject 无 Note 失败，有 Note 成功。
+- `submitted -> published` 后 `published_by/published_at` 正确写入；其他状态流转不覆盖发布快照。
 
 ## 6. 通过标准（Gate）
 

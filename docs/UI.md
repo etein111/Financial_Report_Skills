@@ -65,6 +65,11 @@
 - `Investment thesis` 必须为多行 textarea，语义为报告摘要。
 - `Region` / `Sector` / `Report Type` 必须使用下拉组件。
 - `Certificate` 必须为 checkbox，并展示英文条款原文（6 条）；未勾选时提交按钮行为必须给出可见错误。
+- Report/Model 上传区必须支持拖拽上传与点击上传两种入口，且两种入口共享同一校验与权限规则。
+
+### 3.5 Template 页
+- 模板上传区必须支持拖拽上传（Word/Excel）并保留点击上传兜底。
+- 拖拽上传不得绕过既有权限边界（Template 上传仍为 Admin-only）。
 
 ## 4. 组件复用规则（强制）
 

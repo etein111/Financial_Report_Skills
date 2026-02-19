@@ -178,6 +178,11 @@ const id = generateId();
 
 约束：
 - 参数 `next` 必须防 open redirect（见第 5.3 节）
+- `/auth/callback` 必须兼容两类回调参数：
+  - `code`：执行 `exchangeCodeForSession(code)`
+  - `token_hash + type`：执行 `verifyOtp({ token_hash, type })`
+- 回调成功后跳转到通过校验的 `next`（默认 `/desktop`）
+- 回调失败统一跳转 `/auth/auth-code-error`
 
 ### 2.5 Proxy（会话刷新 + 轻量路由保护）
 

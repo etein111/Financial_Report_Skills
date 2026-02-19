@@ -100,11 +100,14 @@ pnpm -s run seed:auth
 ```json
 {
   "scripts": {
-    "seed:auth": "NODE_PATH=web/node_modules npx -y tsx supabase/seed.ts",
+    "seed:auth": "NODE_PATH=web/node_modules pnpm exec tsx supabase/seed.ts",
     "db:init": "bash scripts/db-init.sh"
   }
 }
 ```
+
+补充：
+- Node.js 命令入口统一使用 `pnpm`，禁止 `npm/npx` 作为日常脚本入口。
 
 ## 8. 环境与安全
 

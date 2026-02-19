@@ -2,6 +2,28 @@
 
 记录项目级关键变更（按时间倒序）。
 
+## 2026-02-19
+
+### Archive 口径漏项回填（docs 对齐）
+- 按已归档 change（截止 `2026-02-18-report-submission-rules-enhancement`）复核并补齐 docs 口径。
+- 回填 `docs/REQUIREMENTS.md`：
+  - 补充报告字段矩阵（按 report type 必填）
+  - 补充 Certificate 6 条英文条款原文
+  - 补充 Reports/Template 拖拽上传 + 点击兜底
+  - 补充 `submitted -> published` 发布快照写入规则
+  - 补充 Region 初始值域基线
+- 回填 `docs/DATA_MODEL.md`：
+  - 补充 `report.published_by` / `report.published_at`
+  - 补充发布快照字段写入约束
+  - 补充模板存储路径的读写权限口径
+- 回填 `docs/UI.md` 与 `docs/TESTING.md`：
+  - 增加拖拽上传与点击上传等价验收口径
+  - 增加发布快照字段回归校验口径
+- 回填 `docs/LOGIC.md`：
+  - 补充 `/auth/callback` 分支处理与失败跳转规则
+- 修正 `docs/SUPABASE_DB_VERSIONING.md`：
+  - 将 `seed:auth` 示例改为 `pnpm exec tsx`，与 `pnpm-only` 口径一致。
+
 ## 2026-02-18
 
 ### Report Submission Rules 增强归档回填

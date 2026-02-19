@@ -110,3 +110,18 @@
   - 初始化阶段允许占位模板（`is_active=false` 且文件空）用于先注册类型。
   - 提交链路必须额外校验“存在有效模板”（激活且有文件）后才允许 submit。
 - 变更条件：后续若引入独立 `report_type` 字典表并通过评审。
+
+### D-016：Archive 历史冲突口径收敛（2026-02-19）
+- 状态：Accepted
+- 结论：针对已归档 change 中存在的历史口径冲突，统一采用以下收敛规则：
+  - 有效模板定义固定为：`is_active=true` 且 `file_path` 非空。
+  - `report.report_type` 合法值由 `template.report_type` 驱动，不恢复固定枚举 check。
+  - `template.uploaded_by` 允许为空，仅用于占位模板初始化场景。
+  - `auth.users` 写入路径固定为 Admin API，不作为业务 RLS 矩阵对象。
+  - 报告文件规则固定为：draft 可无文件；submit 必须有 Word，且 `company` 必须有 Model。
+  - Node.js 命令入口统一 `pnpm`，不使用 `npm/npx` 作为日常入口。
+- 影响：
+  - 文档评审与回填时，出现历史描述冲突按本条收敛口径判定。
+  - 迁移、服务端校验、测试验收和运维脚本需要与本条保持一致。
+  - Archive 中与本条不一致的旧表述视为被后续口径覆盖，不作为当前实现依据。
+- 变更条件：出现新的 OpenSpec change 明确提出替代口径并通过评审。

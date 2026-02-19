@@ -62,6 +62,7 @@
 - Region：MUST 支持列表、搜索、分页（固定 15 条/页）、创建、编辑、删除。
 - Analyst Info：MUST 支持列表、搜索、分页（固定 15 条/页）、创建、编辑、删除。
 - Analyst 信息与认证账号 MUST 保持解耦（不自动建/删账号）。
+- Region 初始值域基线 MUST 至少包含：China、Hong Kong、Japan、Taiwan、Korea、India、Macau、US（允许后续扩展）。
 
 ### 3.5 Coverage / Sector / Template（已归档）
 - Coverage：
@@ -75,6 +76,7 @@
   - MUST 支持层级搜索与选择。
 - Template：
   - MUST 支持 Word/Excel 模板管理、版本递增、启用版本切换。
+  - Template 管理页 MUST 支持拖拽上传，并保留点击上传作为等价兜底。
 
 ### 3.6 Report 管理与审批（已实现）
 - 报告 owner 模型：谁创建归谁（owner 不可转移）。
@@ -89,11 +91,44 @@
 - 所有报告类型提交时 MUST 有 Report Word 文件；`company` 类型提交时 MUST 有 Model 文件。
 - `company` / `company_flash` 提交时 MUST 满足 Coverage 关联语义（Ticker + Analyst 关系存在）。
 - `Certificate` MUST 以 checkbox 确认；未勾选 MUST 阻断提交；页面 MUST 展示 6 条英文条款原文。
+- Reports 创建/编辑页 MUST 支持 Report/Model 文件拖拽上传，并保留点击上传作为等价兜底。
 - 审批：SA/Admin 可审批通过、拒绝、`rejected -> draft`。
 - Reject MUST 要求填写 Note；无 Note MUST 阻断状态流转。
 - 审批页面仅提供文件下载，不做 Word 在线预览。
 - 报告列表默认筛选：SA/Admin 默认为 `submitted`（不记忆上次筛选）。
 - SA 可见报告范围：`submitted/published/rejected`；不可见他人 `draft`。
+- 审批通过（`submitted -> published`）MUST 同步写入 `published_by` 与 `published_at`；其他状态流转 MUST NOT 修改发布快照字段。
+
+#### 3.6.1 报告字段矩阵（提交态必填）
+
+| 字段 | company | sector | company_flash | sector_flash | common |
+|---|:---:|:---:|:---:|:---:|:---:|
+| Ticker | ✅ |  | ✅ |  |  |
+| Rating | ✅ |  |  |  |  |
+| Target price | ✅ |  |  |  |  |
+| Region |  | ✅ |  | ✅ | ✅ |
+| Sector |  | ✅ |  | ✅ |  |
+| Report language（`zh/en`） | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Report title | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Analyst（可多选） | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Contact Person | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Investment thesis | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Certificate（checkbox） | ✅ | ✅ | ✅ | ✅ | ✅ |
+
+补充规则：
+- `company` / `company_flash` MUST 提供合法 `ticker`；其中 `company` 额外 MUST 提供 `rating` 与 `target_price`。
+- `sector` / `sector_flash` MUST 提供合法 `region` 与 `sector`。
+- `common` MUST 提供合法 `region`。
+
+#### 3.6.2 Certificate 英文条款原文（必须展示）
+
+页面在 Certificate checkbox 旁 MUST 展示以下英文条款原文：
+1. `members of my household and I have not traded any financial interest in the subject company since I started the coverage nor currently hold any financial interest in the subject company (including, without limitation, any securities, option, right, warrant, future, long or short position;`
+2. `I did not receive any compensation from the subject company in the previous 12 months;`
+3. `I have not served as an officer, director or employee of the subject company;`
+4. `none of my household serve as an officer of the subject company;`
+5. `I comply with the Group Compliance Policy with regards to gifts and entertainment in dealing with subject companies and investors;`
+6. `this research report contains no material non-public information.`
 
 ### 3.7 报告版本与状态历史（已实现）
 - 长期约束遵循 `docs/DECISIONS.md` 的 `D-010`。

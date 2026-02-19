@@ -44,6 +44,7 @@
 关键约束：
 - `name` 唯一
 - `code` 唯一
+- 初始值域基线建议包含：China、Hong Kong、Japan、Taiwan、Korea、India、Macau、US（可扩展）
 
 ### 3.2 `analyst`（已上线）
 
@@ -150,6 +151,8 @@
 - `certificate_confirmed` (boolean, not null, default false)
 - `status` (`draft|submitted|published|rejected`)
 - `current_version_no` (integer)
+- `published_by` (uuid, FK -> `auth.users.id`, nullable)
+- `published_at` (timestamptz, nullable)
 - `coverage_id` / `sector_id`（允许空，后续补）
 - `created_at` / `updated_at`
 
@@ -157,6 +160,7 @@
 - owner 一经创建不可转移
 - 报告不做物理删除（`DELETE` 关闭）
 - `submitted` 状态允许 owner 继续编辑
+- 仅 `submitted -> published` 时更新发布快照（`published_by`/`published_at`），其余状态流转不改动
 - 提交门禁在服务端校验：字段矩阵必填、文件必填、模板有效性、Coverage 关联、Certificate 勾选
 
 ### 3.8 `report_version`（已归档）
@@ -239,6 +243,8 @@
 ### 6.1 模板文件
 - bucket：模板专用 bucket
 - 路径：`templates/{template_id}/{version}/...`
+- 读取：所有已认证用户（受路径约束）
+- 写入（上传/替换/删除）：仅 Admin
 
 ### 6.2 报告文件
 - bucket：reports bucket
