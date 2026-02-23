@@ -189,7 +189,7 @@ export function ReportReviewPageClient({
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
           <div>
             <div className="text-xl font-semibold text-zinc-50">
-              Report Review
+              Quality Review
             </div>
             <div className="text-xs text-zinc-400">Total {total}</div>
           </div>

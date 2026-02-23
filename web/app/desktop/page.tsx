@@ -18,7 +18,7 @@ const reportsCards: DesktopCard[] = [
   {
     key: "add-report",
     icon: "➕",
-    title: "Add Report",
+    title: "Analyst Submit",
     description: "Create a new report",
     href: "/reports/new",
     visibleRoles: ["admin", "analyst"],
@@ -26,7 +26,7 @@ const reportsCards: DesktopCard[] = [
   {
     key: "reports",
     icon: "📝",
-    title: "Reports",
+    title: "Analyst Revise",
     description: "Create, edit, and submit reports",
     href: "/reports",
     visibleRoles: ["admin", "sa", "analyst"],
@@ -34,7 +34,7 @@ const reportsCards: DesktopCard[] = [
   {
     key: "report-review",
     icon: "✅",
-    title: "Report Review",
+    title: "Quality Review",
     description: "Review and approve submitted reports",
     href: "/report-review",
     visibleRoles: ["admin", "sa"],

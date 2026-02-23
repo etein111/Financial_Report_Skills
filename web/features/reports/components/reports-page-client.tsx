@@ -570,7 +570,9 @@ export function ReportsPageClient({
     <div className="min-h-screen">
       <header className="border-b border-white/10 bg-zinc-900/60 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
-          <div className="text-xl font-semibold text-zinc-50">Reports</div>
+          <div className="text-xl font-semibold text-zinc-50">
+            Analyst Revise
+          </div>
           {canCreate ? (
             <a
               href="/reports/new"

@@ -9,7 +9,10 @@ import { FileDropzone } from "@/components/ui/file-dropzone";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { useToast } from "@/components/ui/toast";
-import type { ReportAnalystInput, ReportLanguage } from "@/domain/schemas/report";
+import type {
+  ReportAnalystInput,
+  ReportLanguage,
+} from "@/domain/schemas/report";
 import type { Analyst } from "@/features/analyst-info/repo/analysts-repo";
 import type { Region } from "@/features/regions/repo/regions-repo";
 import type { Sector } from "@/features/sectors/repo/sectors-repo";
@@ -18,7 +21,10 @@ import {
   directSubmitReportAction,
   saveReportContentAction,
 } from "@/features/reports/actions";
-import { buildReportStoragePath, validateUploadExtension } from "@/features/reports/file-utils";
+import {
+  buildReportStoragePath,
+  validateUploadExtension,
+} from "@/features/reports/file-utils";
 import type { ReportDetail } from "@/features/reports/repo/reports-repo";
 import { createBrowserClient } from "@/lib/supabase/browser";
 
@@ -50,7 +56,11 @@ function isCompanyType(reportType: string): boolean {
 }
 
 function requiresRegion(reportType: string): boolean {
-  return reportType === "sector" || reportType === "sector_flash" || reportType === "common";
+  return (
+    reportType === "sector" ||
+    reportType === "sector_flash" ||
+    reportType === "common"
+  );
 }
 
 function requiresSector(reportType: string): boolean {
@@ -80,11 +90,17 @@ export function NewReportPageClient({
   const toast = useToast();
 
   const canCreate = userRole === "admin" || userRole === "analyst";
-  const [activeReport, setActiveReport] = React.useState<ReportDetail | null>(null);
+  const [activeReport, setActiveReport] = React.useState<ReportDetail | null>(
+    null,
+  );
   const [saving, setSaving] = React.useState(false);
 
   const reportTypeOptions = React.useMemo(
-    () => reportTypes.map((value) => ({ value, label: formatReportTypeLabel(value) })),
+    () =>
+      reportTypes.map((value) => ({
+        value,
+        label: formatReportTypeLabel(value),
+      })),
     [reportTypes],
   );
 
@@ -102,7 +118,9 @@ export function NewReportPageClient({
   const [formInvestmentThesis, setFormInvestmentThesis] = React.useState("");
   const [formCertificate, setFormCertificate] = React.useState(false);
   const [formAnalysts, setFormAnalysts] = React.useState<FormAnalyst[]>([]);
-  const [formErrors, setFormErrors] = React.useState<Record<string, string>>({});
+  const [formErrors, setFormErrors] = React.useState<Record<string, string>>(
+    {},
+  );
 
   const [reportFile, setReportFile] = React.useState<File | null>(null);
   const [modelFile, setModelFile] = React.useState<File | null>(null);
@@ -113,7 +131,9 @@ export function NewReportPageClient({
     }
   }, [formReportType, reportTypes]);
 
-  function getAnalystOptions(index: number): { value: string; label: string }[] {
+  function getAnalystOptions(
+    index: number,
+  ): { value: string; label: string }[] {
     const selectedOthers = new Set(
       formAnalysts
         .filter((_, idx) => idx !== index)
@@ -190,7 +210,9 @@ export function NewReportPageClient({
     return validatedAnalysts;
   }
 
-  async function ensureReportId(analystsValue: FormAnalyst[]): Promise<ReportDetail | null> {
+  async function ensureReportId(
+    analystsValue: FormAnalyst[],
+  ): Promise<ReportDetail | null> {
     if (activeReport) {
       return activeReport;
     }
@@ -223,14 +245,20 @@ export function NewReportPageClient({
     reportId: string;
     versionNo: number;
   }): Promise<
-    { ok: true; data: { word_file_path: string | null; model_file_path: string | null } } | {
-      ok: false;
-      error: string;
-    }
+    | {
+        ok: true;
+        data: { word_file_path: string | null; model_file_path: string | null };
+      }
+    | {
+        ok: false;
+        error: string;
+      }
   > {
     const supabase = createBrowserClient();
-    let wordFilePath: string | null = activeReport?.latest_version?.word_file_path ?? null;
-    let modelFilePath: string | null = activeReport?.latest_version?.model_file_path ?? null;
+    let wordFilePath: string | null =
+      activeReport?.latest_version?.word_file_path ?? null;
+    let modelFilePath: string | null =
+      activeReport?.latest_version?.model_file_path ?? null;
 
     if (reportFile) {
       const check = validateUploadExtension("report", reportFile.name);
@@ -245,9 +273,11 @@ export function NewReportPageClient({
         extension: check.extension,
       });
 
-      const { error } = await supabase.storage.from("reports").upload(path, reportFile, {
-        upsert: true,
-      });
+      const { error } = await supabase.storage
+        .from("reports")
+        .upload(path, reportFile, {
+          upsert: true,
+        });
 
       if (error) {
         return { ok: false, error: error.message };
@@ -268,9 +298,11 @@ export function NewReportPageClient({
         extension: check.extension,
       });
 
-      const { error } = await supabase.storage.from("reports").upload(path, modelFile, {
-        upsert: true,
-      });
+      const { error } = await supabase.storage
+        .from("reports")
+        .upload(path, modelFile, {
+          upsert: true,
+        });
 
       if (error) {
         return { ok: false, error: error.message };
@@ -421,14 +453,20 @@ export function NewReportPageClient({
       <header className="border-b border-white/10 bg-zinc-900/60 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-5xl items-center justify-between px-6">
           <div>
-            <div className="text-xl font-semibold text-zinc-50">Add Report</div>
+            <div className="text-xl font-semibold text-zinc-50">
+              Analyst Submit
+            </div>
             {activeReport ? (
               <div className="text-xs text-zinc-400">
-                Draft ID: {activeReport.id.slice(0, 8)}... / v{activeReport.current_version_no}
+                Draft ID: {activeReport.id.slice(0, 8)}... / v
+                {activeReport.current_version_no}
               </div>
             ) : null}
           </div>
-          <Link href="/reports" className="text-sm text-zinc-300 hover:text-zinc-100">
+          <Link
+            href="/reports"
+            className="text-sm text-zinc-300 hover:text-zinc-100"
+          >
             Back to Reports
           </Link>
         </div>
@@ -511,7 +549,9 @@ export function NewReportPageClient({
           <Select
             label="Report Language"
             value={formLanguage}
-            onChange={(event) => setFormLanguage(event.target.value as ReportLanguage)}
+            onChange={(event) =>
+              setFormLanguage(event.target.value as ReportLanguage)
+            }
             options={LANGUAGE_OPTIONS}
           />
 
@@ -526,11 +566,16 @@ export function NewReportPageClient({
               <p className="text-sm text-zinc-500">No analyst assigned.</p>
             ) : (
               formAnalysts.map((item, index) => (
-                <div key={`${item.analyst_id}-${index}`} className="grid grid-cols-12 gap-2">
+                <div
+                  key={`${item.analyst_id}-${index}`}
+                  className="grid grid-cols-12 gap-2"
+                >
                   <div className="col-span-9">
                     <Select
                       value={item.analyst_id}
-                      onChange={(event) => updateAnalyst(index, event.target.value)}
+                      onChange={(event) =>
+                        updateAnalyst(index, event.target.value)
+                      }
                       options={getAnalystOptions(index)}
                     />
                   </div>
@@ -562,7 +607,10 @@ export function NewReportPageClient({
           />
 
           <div className="space-y-1">
-            <label className="text-sm font-medium text-zinc-300" htmlFor="investment-thesis">
+            <label
+              className="text-sm font-medium text-zinc-300"
+              htmlFor="investment-thesis"
+            >
               Investment Thesis
             </label>
             <textarea
@@ -576,7 +624,9 @@ export function NewReportPageClient({
           </div>
 
           <div className="space-y-2 rounded-[8px] border border-white/10 bg-zinc-800/30 p-4">
-            <div className="text-sm font-medium text-zinc-200">* certificate</div>
+            <div className="text-sm font-medium text-zinc-200">
+              * certificate
+            </div>
             <label className="flex items-start gap-2 text-sm text-zinc-100">
               <input
                 type="checkbox"
@@ -592,8 +642,8 @@ export function NewReportPageClient({
                 }}
               />
               <span>
-                I and all the names listed as the authors of this uploaded notes, certify
-                that'
+                I and all the names listed as the authors of this uploaded
+                notes, certify that'
               </span>
             </label>
             <ol className="list-decimal space-y-1 pl-6 text-sm text-zinc-300">
@@ -602,7 +652,9 @@ export function NewReportPageClient({
               ))}
             </ol>
             {formErrors.certificate_confirmed ? (
-              <p className="text-xs text-red-500">{formErrors.certificate_confirmed}</p>
+              <p className="text-xs text-red-500">
+                {formErrors.certificate_confirmed}
+              </p>
             ) : null}
           </div>
         </section>
@@ -632,7 +684,12 @@ export function NewReportPageClient({
         </section>
 
         <div className="flex justify-end gap-3">
-          <Button type="button" variant="secondary" onClick={handleSaveDraft} isLoading={saving}>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={handleSaveDraft}
+            isLoading={saving}
+          >
             Save Draft
           </Button>
           <Button type="button" onClick={handleDirectSubmit} isLoading={saving}>
