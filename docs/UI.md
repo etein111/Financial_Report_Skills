@@ -51,8 +51,8 @@
   - 功能页不在页面内实现“返回 Desktop”主导航。
 - 保持两组分区结构：`Reports` / `Data Management`。
 - Admin-only 能力仅 Admin 可见。
-- `Reports` 分组中 `Add Report` 必须保留，并固定为第一项。
-- Desktop 点击 `Add Report` 必须新标签打开 `/reports/new`。
+- `Reports` 分组中 `Analyst Submit`（原 Add Report）必须保留，并固定为第一项。
+- Desktop 点击 `Analyst Submit` 必须新标签打开 `/reports/new`。
 
 ### 3.3 管理列表页（Users / Regions / Analyst Info / 后续同类）
 - 页面骨架统一：Header + 搜索区 + 列表区 + 分页区。

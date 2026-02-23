@@ -2,6 +2,20 @@
 
 记录项目级关键变更（按时间倒序）。
 
+## 2026-02-23
+
+### Desktop 卡片标题更新
+- Desktop 功能卡片标题重命名：
+  - `Add Report` → `Analyst Submit`
+  - `Reports` → `Analyst Revise`
+  - `Report Review` → `Quality Review`
+- 同步更新页面标题（Reports 列表页、New Report 页、Report Review 页）。
+- 文档同步更新：`docs/REQUIREMENTS.md`、`docs/UI.md`。
+
+### Vercel 部署配置
+- 新增 `vercel.json` 配置文件，指定 Next.js 项目位于 `web/` 子目录。
+- 配置 GitHub webhook 实现 push 自动部署。
+
 ## 2026-02-19
 
 ### Archive 口径漏项回填（docs 对齐）

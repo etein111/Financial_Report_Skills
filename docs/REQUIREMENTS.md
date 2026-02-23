@@ -48,8 +48,8 @@
 - `/desktop` MUST 为登录后默认落地页。
 - Desktop 功能卡片 MUST 在新标签页打开。
 - 功能页 MUST NOT 提供“返回 Desktop”主导航入口。
-- Desktop `Reports` 分组 MUST 保留独立 `Add Report` 入口，且排序为分组第一项。
-- Desktop `Add Report` MUST 仅对 Admin/Analyst 可见（SA 不可见），并在新标签打开 `/reports/new`。
+- Desktop `Reports` 分组 MUST 保留独立 `Analyst Submit` 入口（原 `Add Report`），且排序为分组第一项。
+- Desktop `Analyst Submit` MUST 仅对 Admin/Analyst 可见（SA 不可见），并在新标签打开 `/reports/new`。
 
 ### 3.3 Users 管理（Admin-only）
 - MUST 支持列表、搜索、分页（固定 12 条/页）。
@@ -82,7 +82,7 @@
 - 报告 owner 模型：谁创建归谁（owner 不可转移）。
 - `draft` 与 `submitted`：owner 可继续编辑；`published/rejected` 禁止直接编辑。
 - 报告创建 MUST 使用独立路由 `/reports/new`，不再使用弹窗承载完整创建流程。
-- `Reports` 列表页 Add 与 Desktop Add MUST 进入同一创建路由 `/reports/new`。
+- `Analyst Revise`（原 Reports）列表页 Add 与 Desktop `Analyst Submit` MUST 进入同一创建路由 `/reports/new`。
 - 系统 MUST 支持“直接提交”快捷操作（后端分两步：先保存 draft，再提交）。
 - 直接提交第二步失败 MUST 提示：`已保存为 Draft，提交失败`。
 - 提交前 MUST 通过字段矩阵校验（按 report type 必填）。
@@ -151,7 +151,7 @@
 | Coverage 编辑/删除 | ✅ | ❌ | ❌ |
 | Sector 管理 | ✅ | ❌ | ❌ |
 | Template 管理 | ✅ | ❌ | ❌ |
-| Desktop Add Report 入口 | ✅ | ❌ | ✅ |
+| Desktop Analyst Submit 入口 | ✅ | ❌ | ✅ |
 | Reports 列表 | ✅（全部） | ✅（submitted/published/rejected） | ✅（仅 owner） |
 | Reports 创建 | ✅（为自己） | ❌ | ✅（为自己） |
 | Reports 编辑（draft/submitted） | ✅ | ❌ | ✅（仅 owner） |
