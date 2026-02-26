@@ -1,247 +1,298 @@
-# Claude Code 精美界面 UI 技术栈安装指南
+# Next.js 专业后台 UI — 推荐库清单（必装 vs 可选）
 
-本指南介绍 4 个核心 UI 工具，以及完整安装方法。这些工具组合可以让 Claude Code 自动生成现代、专业级 SaaS 界面（类似 Linear / Stripe / Vercel）。
-
-适用于：
-
-- Next.js App Router 项目
-- Claude Code 自动生成 UI
-- SaaS Dashboard / 管理后台
+> 目标：基于 **Next.js + Claude Code** 构建「大气、精美、专业」的 Web 操作界面。
+> 分类原则：
+>
+> * **必装（Essential）**：行业主流组合，几乎所有现代 SaaS / Dashboard 都会用
+> * **可选（Recommended / Optional）**：根据项目复杂度或风格升级选择
 
 ---
 
-# 概览
+# 🥇 必装（Essential）
 
-需要安装以下 4 个核心组件：
+## 1. shadcn/ui
 
-| 工具 | 类型 | 作用 |
-|---|---|---|
-| Tailwind CSS | 样式系统 | 提供布局、颜色、间距、响应式能力 |
-| shadcn/ui | UI 组件库 | 提供专业 SaaS 风格组件 |
-| lucide-react | 图标库 | 提供现代 SVG 图标 |
-| next-themes | 主题系统 | 提供 Dark Mode 支持 |
+**作用：**
 
----
+* 基于 Tailwind + Radix 的高质量 UI 组件系统
+* 提供专业级组件（Card / Dialog / Table / Form 等）
+* 可完全控制样式（不像 AntD 那种强绑定）
 
-# 前提条件
+**为什么必装：**
 
-确保你在 Next.js 项目根目录：
-
-```bash
-cd your-nextjs-project
-```
-
-确保存在：
-
-```
-package.json
-app/
-```
+* 当前 Next.js 生态最主流 UI 基础
+* 与 Claude Code 生成代码高度兼容
+* 易于建立统一 Design System
 
 ---
 
-# 1. Tailwind CSS（现代样式系统）
+## 2. tailwindcss
 
-## 安装
+**作用：**
 
-```bash
-pnpm add -D tailwindcss postcss autoprefixer
-pnpm dlx tailwindcss init -p
-```
+* Utility-first CSS 框架
+* 控制布局、间距、字体、颜色
 
-## 安装后生成
+**为什么必装：**
 
-```
-tailwind.config.js
-postcss.config.js
-```
-
-## 作用
-
-Tailwind CSS 提供：
-
-- 响应式设计（responsive design）
-- 间距系统（spacing system）
-- 颜色系统（color system）
-- Flexbox 和 Grid 布局
-- 现代 UI 样式基础
-
-Claude Code 默认优先使用 Tailwind。
+* Claude Code 对 Tailwind 理解能力最强
+* 专业 UI = 一致的 spacing + typography
+* 现代 React UI 基础设施
 
 ---
 
-# 2. shadcn/ui（核心 UI 组件库）
+## 3. lucide-react
 
-## 初始化
+**作用：**
 
-```bash
-pnpm dlx shadcn-ui@latest init
-```
+* 现代简洁风格的图标库
+* 用于 Sidebar、Toolbar、Action 按钮等
 
-推荐选项：
+**为什么必装：**
 
-```
-TypeScript: Yes
-App Router: Yes
-Tailwind CSS: Yes
-Components directory: components/ui
-```
-
-## 安装常用组件
-
-```bash
-pnpm dlx shadcn-ui@latest add button card dialog input form table dropdown-menu
-```
-
-## 安装后生成
-
-```
-components/ui/button.tsx
-components/ui/card.tsx
-components/ui/dialog.tsx
-components/ui/input.tsx
-components/ui/form.tsx
-components/ui/table.tsx
-components/ui/dropdown-menu.tsx
-```
-
-## 作用
-
-提供现代 SaaS UI 组件：
-
-- Button
-- Card
-- Dialog（Modal）
-- Form
-- Table
-- Dropdown Menu
-
-特点：
-
-- 专业视觉效果
-- 正确间距和布局
-- 正确交互行为
-- 高可访问性（accessibility）
-
-Claude Code 会自动优先使用这些组件。
+* 与 shadcn/ui 风格一致
+* 更接近 Linear / Vercel 风格
 
 ---
 
-# 3. lucide-react（现代图标库）
+## 4. next-themes
 
-## 安装
+**作用：**
 
-```bash
-pnpm add lucide-react
-```
+* Dark / Light 主题切换
+* 自动跟随系统主题
 
-## 作用
+**为什么必装：**
 
-提供现代 SVG 图标：
-
-- Sidebar 图标
-- Toolbar 图标
-- 按钮图标
-- 状态图标
-
-## 使用示例
-
-```tsx
-import { User } from "lucide-react"
-
-<User className="w-4 h-4" />
-```
-
-Claude Code 会自动使用 lucide-react 生成图标。
+* 专业 SaaS 基本都有暗黑模式
+* 与 shadcn 官方方案匹配
 
 ---
 
-# 4. next-themes（Dark Mode 主题系统）
+## 5. react-hook-form
 
-## 安装
+**作用：**
 
-```bash
-pnpm add next-themes
-```
+* 高性能 React 表单管理
+* 减少 re-render
 
-## 作用
+**为什么必装：**
 
-提供主题支持：
-
-- Dark Mode
-- Light Mode
-- 自动检测系统主题
-- 主题切换
-
-现代 SaaS 应用标准功能。
+* 企业系统大量表单
+* 与 shadcn Form 深度集成
 
 ---
 
-# 一次性完整安装命令（推荐）
+## 6. zod
 
-可直接复制执行：
+**作用：**
 
-```bash
-pnpm add -D tailwindcss postcss autoprefixer
-pnpm dlx tailwindcss init -p
+* Schema 验证
+* 类型安全的数据校验
 
-pnpm dlx shadcn-ui@latest init
-pnpm dlx shadcn-ui@latest add button card dialog input form table dropdown-menu
+**为什么必装：**
 
-pnpm add lucide-react
-pnpm add next-themes
-```
+* Form 校验标准方案
+* TypeScript 友好
 
 ---
 
-# 安装完成后的项目结构
+## 7. @hookform/resolvers
 
-```
-app/
-components/
-  ui/
-    button.tsx
-    card.tsx
-    dialog.tsx
-lib/
-styles/
-tailwind.config.js
-postcss.config.js
-package.json
-```
+**作用：**
+
+* 连接 react-hook-form 与 zod
+
+**为什么必装：**
+
+* RHF + Zod 官方推荐组合
 
 ---
 
-# Claude Code 如何使用这些工具
+## 8. @tanstack/react-table
 
-Claude Code 会自动使用：
+**作用：**
 
-- Tailwind CSS → 生成样式
-- shadcn/ui → 生成组件
-- lucide-react → 添加图标
-- next-themes → 支持 Dark Mode
+* 高性能数据表格核心引擎
+* 支持排序、筛选、分页
 
-Claude Code 可以自动生成：
+**为什么必装：**
 
-- Dashboard
-- Sidebar
-- Navbar
-- Forms
-- Tables
-- 管理后台界面
+* 后台系统核心组件
+* shadcn DataTable 基础
 
 ---
 
-# 总结
+## 9. class-variance-authority (CVA)
 
-必须安装：
+**作用：**
+
+* 管理组件不同 variant（primary / danger 等）
+
+**为什么必装：**
+
+* 构建设计系统关键
+* 防止 Button style 混乱
+
+---
+
+## 10. clsx
+
+**作用：**
+
+* 条件 className 拼接
+
+---
+
+## 11. tailwind-merge
+
+**作用：**
+
+* 自动解决 Tailwind class 冲突
+
+**为什么 clsx + tailwind-merge 必装：**
+
+* 几乎所有 shadcn 项目默认配置
+* 防止 class 覆盖错误
+
+---
+
+# 🥈 可选（Recommended / Optional）
+
+## 12. @tanstack/react-query
+
+**作用：**
+
+* 数据请求缓存
+* loading / error 管理
+* 自动刷新
+
+**适合：**
+
+* 数据密集型 dashboard
+* 多页面数据共享
+
+---
+
+## 13. zustand
+
+**作用：**
+
+* 轻量全局状态管理
+
+**适合：**
+
+* Sidebar 状态
+* UI 全局控制
+* 简单 app state
+
+---
+
+## 14. recharts
+
+**作用：**
+
+* 图表库（柱状图 / 折线图 / 饼图）
+
+**适合：**
+
+* 数据分析界面
+* Dashboard KPI 展示
+
+---
+
+## 15. framer-motion
+
+**作用：**
+
+* 动画与微交互
+* 页面过渡、hover 动效
+
+**适合：**
+
+* 提升高级感
+* 增强操作反馈
+
+---
+
+# 🧩 推荐安装顺序
+
+## Step 1 — 先装基础（必须）
 
 ```
-Tailwind CSS
 shadcn/ui
+tailwindcss
 lucide-react
 next-themes
 ```
 
-这是 Claude Code 自动生成精美界面的基础技术栈。
+---
 
+## Step 2 — 表单 + 数据（后台核心）
+
+```
+react-hook-form
+zod
+@hookform/resolvers
+@tanstack/react-table
+```
+
+---
+
+## Step 3 — 设计系统基础
+
+```
+class-variance-authority
+clsx
+tailwind-merge
+```
+
+---
+
+## Step 4 — 按需要升级
+
+```
+@tanstack/react-query
+zustand
+recharts
+framer-motion
+```
+
+---
+
+# ⭐ 最小专业后台组合（推荐基线）
+
+如果你只想要一套「稳定 + 专业 + 不乱」的组合：
+
+```
+shadcn/ui
+tailwindcss
+lucide-react
+react-hook-form
+zod
+@tanstack/react-table
+class-variance-authority
+```
+
+---
+
+# 🔥 经验总结（核心原则）
+
+真正的大气 UI 来自：
+
+* 统一组件系统（shadcn）
+* 一致 spacing（Tailwind）
+* 专业数据展示（TanStack Table）
+* 统一交互与校验（RHF + Zod）
+* 明确 variant 管理（CVA）
+
+库只是基础。
+
+真正的专业感来自：
+
+* Layout 结构一致
+* Card 体系统一
+* 留白足够
+* 状态表达完整（loading / empty / error）
+
+---
