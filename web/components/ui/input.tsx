@@ -16,7 +16,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
       <div className="space-y-1">
         {label ? (
           <label
-            className="text-sm font-medium text-zinc-300"
+            className="text-sm font-medium text-[var(--fg-secondary)]"
             htmlFor={inputId}
           >
             {label}
@@ -26,16 +26,18 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
           ref={ref}
           id={inputId}
           className={cn(
-            "w-full rounded-[8px] border border-white/10 bg-zinc-900 px-3 py-2 text-sm text-zinc-100",
-            "placeholder:text-zinc-500",
+            "w-full rounded-[8px] border border-[var(--border-default)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-[var(--fg-primary)]",
+            "placeholder:text-[var(--fg-tertiary)]",
             "outline-none ring-offset-0",
-            "focus-visible:ring-2 focus-visible:ring-blue-500/60",
-            error && "border-red-500 focus-visible:ring-red-500/50",
+            "transition-all duration-200",
+            "hover:border-[var(--border-strong)]",
+            "focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent-soft)] focus:ring-offset-2 focus:ring-offset-[var(--bg-canvas)]",
+            error && "border-[var(--error)] focus:border-[var(--error)] focus:ring-[var(--error-soft)]",
             className,
           )}
           {...props}
         />
-        {error ? <p className="text-xs text-red-500">{error}</p> : null}
+        {error ? <p className="text-xs text-[var(--error)]">{error}</p> : null}
       </div>
     );
   },

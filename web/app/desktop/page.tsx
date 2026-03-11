@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { signOutAction } from "@/features/auth";
 import { getCurrentUser, getCurrentUserRole } from "@/features/auth/server";
 
@@ -80,7 +81,7 @@ const dataCards: DesktopCard[] = [
     title: "Coverage",
     description: "Manage coverage universe",
     href: "/coverage",
-    visibleRoles: ["admin", "analyst"],
+    visibleRoles: ["admin", "sa", "analyst"],
   },
   {
     key: "sectors",
@@ -112,14 +113,16 @@ export default async function DesktopPage() {
 
   return (
     <div className="min-h-screen">
-      <header className="border-b border-white/10 bg-zinc-900/60 backdrop-blur">
+      <header className="border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]/60 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
-          <div className="text-xl font-semibold text-zinc-50">Neolyst</div>
+          <div className="text-xl font-semibold text-[var(--fg-primary)]">Neolyst</div>
 
           <div className="flex items-center gap-4">
-            <div className="hidden text-sm text-zinc-300 sm:block">
+            <ThemeToggle />
+
+            <div className="hidden text-sm text-[var(--fg-secondary)] sm:block">
               Welcome,{" "}
-              <span className="font-medium text-zinc-100">{welcome}</span>
+              <span className="font-medium text-[var(--fg-primary)]">{welcome}</span>
             </div>
 
             <form action={signOutAction}>
@@ -144,7 +147,7 @@ export default async function DesktopPage() {
 function Section({ title, cards }: { title: string; cards: DesktopCard[] }) {
   return (
     <section>
-      <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-zinc-500">
+      <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-[var(--fg-tertiary)]">
         {title}
       </h2>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -156,10 +159,10 @@ function Section({ title, cards }: { title: string; cards: DesktopCard[] }) {
             rel="noopener noreferrer"
             className="group"
           >
-            <Card className="flex h-full flex-col p-4 transition-all group-hover:border-white/20 group-hover:bg-white/[0.03]">
+            <Card className="flex h-full flex-col p-4 transition-all group-hover:border-[var(--border-default)] group-hover:bg-[var(--bg-surface-hover)]">
               <div className="mb-2 text-2xl">{card.icon}</div>
-              <div className="font-medium text-zinc-100">{card.title}</div>
-              <div className="mt-1 text-sm text-zinc-500">
+              <div className="font-medium text-[var(--fg-primary)]">{card.title}</div>
+              <div className="mt-1 text-sm text-[var(--fg-tertiary)]">
                 {card.description}
               </div>
             </Card>

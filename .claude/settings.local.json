@@ -135,7 +135,8 @@
       "Bash(/mnt/c/_code/neolyst/openspec/changes/region-and-analyst-management/specs/desktop-nav/spec.md:*)",
       "Bash(/mnt/c/_code/neolyst/openspec/changes/region-and-analyst-management/tasks.md:*)",
       "Bash(/mnt/c/_code/neolyst/supabase/seed/regions.sql:*)",
-      "Bash"
+      "Bash",
+      "WebFetch(domain:minimax-algeng-chat-tts.oss-cn-wulanchabu.aliyuncs.com)"
     ]
   }
 }

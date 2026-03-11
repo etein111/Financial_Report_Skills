@@ -5,10 +5,13 @@ export const reportTypes = [
   "sector",
   "company_flash",
   "sector_flash",
-  "common",
+  "macro",
+  "strategy",
+  "quantitative",
+  "bond",
 ] as const;
 
-export const fileTypes = ["word", "excel"] as const;
+export const fileTypes = ["report", "model"] as const;
 
 export const templateSchema = z.object({
   name: z.string().min(1, "Name is required").max(200, "Name too long"),

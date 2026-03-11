@@ -21,6 +21,7 @@ import {
 import type { CoverageWithDetails } from "../repo/coverage-repo";
 import type { Sector } from "@/features/sectors/repo/sectors-repo";
 import type { Analyst } from "@/features/analyst-info/repo/analysts-repo";
+import type { Region } from "@/features/regions/repo/regions-repo";
 
 export interface CoveragePageClientProps {
   coverages: CoverageWithDetails[];
@@ -31,6 +32,7 @@ export interface CoveragePageClientProps {
   currentSectorId: string | null;
   sectors: Sector[];
   analysts: Analyst[];
+  regions: Region[];
   userRole: "admin" | "sa" | "analyst";
 }
 
@@ -63,12 +65,13 @@ export function CoveragePageClient({
   currentSectorId,
   sectors,
   analysts,
+  regions,
   userRole,
 }: CoveragePageClientProps) {
   const router = useRouter();
   const toast = useToast();
-  const canEdit = userRole === "admin";
-  const canCreate = userRole === "admin" || userRole === "analyst";
+  const canEdit = userRole === "admin" || userRole === "sa";
+  const canCreate = userRole === "admin" || userRole === "sa" || userRole === "analyst";
   const activeSectorIds = React.useMemo(
     () => new Set(sectors.map((item) => item.id)),
     [sectors],
@@ -338,9 +341,9 @@ export function CoveragePageClient({
 
   return (
     <div className="min-h-screen">
-      <header className="border-b border-white/10 bg-zinc-900/60 backdrop-blur">
+      <header className="border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]/60 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
-          <div className="text-xl font-semibold text-zinc-50">Coverage</div>
+          <div className="text-xl font-semibold text-[var(--fg-primary)]">Coverage</div>
           {canCreate ? (
             <Button onClick={openCreate}>Create Coverage</Button>
           ) : (
@@ -375,7 +378,7 @@ export function CoveragePageClient({
               />
             </div>
           </form>
-          <div className="hidden text-sm text-zinc-400 sm:block">
+          <div className="hidden text-sm text-[var(--fg-secondary)] sm:block">
             {total} coverages
           </div>
         </div>
@@ -394,26 +397,26 @@ export function CoveragePageClient({
           <tbody>
             {coverages.length === 0 ? (
               <TR className="hover:bg-transparent">
-                <TD colSpan={6} className="py-10 text-center text-zinc-400">
+                <TD colSpan={6} className="py-10 text-center text-[var(--fg-secondary)]">
                   No coverages found
                 </TD>
               </TR>
             ) : (
               coverages.map((coverage) => (
                 <TR key={coverage.id}>
-                  <TD className="font-mono font-medium text-zinc-100">
+                  <TD className="font-mono font-medium text-[var(--fg-primary)]">
                     {coverage.ticker}
                   </TD>
-                  <TD className="text-zinc-300">
+                  <TD className="text-[var(--fg-secondary)]">
                     {coverage.english_full_name}
                   </TD>
-                  <TD className="text-zinc-300">
+                  <TD className="text-[var(--fg-secondary)]">
                     {getSectorName(coverage.sector_id)}
                   </TD>
-                  <TD className="text-zinc-300">
+                  <TD className="text-[var(--fg-secondary)]">
                     {getAnalystNames(coverage.analysts)}
                   </TD>
-                  <TD className="text-zinc-300">
+                  <TD className="text-[var(--fg-secondary)]">
                     {formatShanghaiYmd(coverage.updated_at)}
                   </TD>
                   <TD>
@@ -488,12 +491,18 @@ export function CoveragePageClient({
             />
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <Input
+            <Select
               label="Country of Domicile *"
-              placeholder="e.g., Hong Kong"
               value={formCountry}
               onChange={(e) => setFormCountry(e.target.value)}
               error={formErrors.country}
+              options={[
+                { value: "", label: "Select region..." },
+                ...regions.map((r) => ({
+                  value: r.name_en,
+                  label: r.name_en,
+                })),
+              ]}
             />
             <Input
               label="English Full Name *"
@@ -550,7 +559,7 @@ export function CoveragePageClient({
           {/* Analysts section */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <label className="text-sm font-medium text-zinc-300">
+              <label className="text-sm font-medium text-[var(--fg-secondary)]">
                 Analysts * (1-4)
               </label>
               {formAnalysts.length < 4 && (

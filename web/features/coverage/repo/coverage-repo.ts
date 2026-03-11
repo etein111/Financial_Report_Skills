@@ -369,3 +369,22 @@ export async function deleteCoverage(id: string): Promise<Result<null>> {
 
   return ok(null);
 }
+
+/**
+ * Get all active coverages (for stock quote sync)
+ */
+export async function listActiveCoverages(): Promise<Result<Coverage[]>> {
+  const supabase = await createServerClient();
+
+  const { data, error } = await supabase
+    .from("coverage")
+    .select("*")
+    .eq("is_active", true);
+
+  if (error) {
+    console.error("Error fetching active coverages:", error);
+    return err(error.message);
+  }
+
+  return ok(data ?? []);
+}

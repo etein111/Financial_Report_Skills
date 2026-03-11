@@ -1,7 +1,6 @@
 import * as React from "react";
 
 import type { ReportStatus } from "@/domain/schemas/report";
-import { listAllActiveAnalysts } from "@/features/analyst-info/repo/analysts-repo";
 
 import { listReportsAction } from "../actions";
 import { ReportsPageClient } from "./reports-page-client";
@@ -37,20 +36,15 @@ export async function ReportsPage({
       ? (rawStatus as ReportStatus)
       : null;
 
-  const [listResult, analystsResult] = await Promise.all([
-    listReportsAction({ page, query, status }),
-    listAllActiveAnalysts(),
-  ]);
+  const listResult = await listReportsAction({ page, query, status });
 
   if (!listResult.ok) {
     return (
       <div className="flex items-center justify-center p-8">
-        <p className="text-zinc-400">Failed to load reports: {listResult.error}</p>
+        <p className="text-[var(--fg-secondary)]">Failed to load reports: {listResult.error}</p>
       </div>
     );
   }
-
-  const analysts = analystsResult.ok ? analystsResult.data : [];
 
   return (
     <ReportsPageClient
@@ -62,7 +56,6 @@ export async function ReportsPage({
       currentStatus={listResult.data.applied_status}
       userRole={userRole}
       currentUserId={currentUserId}
-      analysts={analysts}
     />
   );
 }

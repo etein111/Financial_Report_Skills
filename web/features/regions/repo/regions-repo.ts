@@ -8,8 +8,10 @@ export type { PaginatedList };
 
 export type Region = {
   id: string;
-  name: string;
+  name_en: string;
+  name_cn: string;
   code: string;
+  is_active: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -30,7 +32,7 @@ export async function listRegions(params: {
   // Apply search filter
   if (params.query) {
     const searchTerm = `%${params.query}%`;
-    query = query.or(`name.ilike.${searchTerm},code.ilike.${searchTerm}`);
+    query = query.or(`name_en.ilike.${searchTerm},name_cn.ilike.${searchTerm},code.ilike.${searchTerm}`);
   }
 
   // Apply pagination
@@ -144,7 +146,8 @@ export async function listAllRegions(): Promise<Result<Region[]>> {
   const { data, error } = await supabase
     .from("region")
     .select("*")
-    .order("name", { ascending: true });
+    .eq("is_active", true)
+    .order("name_en", { ascending: true });
 
   if (error) return err(error.message);
   if (!data) return err("Failed to fetch regions");

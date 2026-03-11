@@ -46,7 +46,7 @@ export function ConfirmModal({
         </>
       }
     >
-      <p className="text-sm text-zinc-400">Please confirm to proceed.</p>
+      <p className="text-sm text-[var(--fg-secondary)]">Please confirm to proceed.</p>
     </Modal>
   );
 }

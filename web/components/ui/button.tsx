@@ -2,7 +2,7 @@ import * as React from "react";
 
 import { cn } from "@/lib/cn";
 
-export type ButtonVariant = "primary" | "secondary" | "danger" | "ghost";
+export type ButtonVariant = "primary" | "secondary" | "danger" | "ghost" | "outline";
 
 export type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: ButtonVariant;
@@ -22,16 +22,17 @@ export function Button({
   return (
     <button
       className={cn(
+        // Base styles
         "inline-flex items-center justify-center gap-2 rounded-[6px] px-4 py-2 text-sm font-medium",
-        "transition-colors duration-200",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/60",
+        "transition-all duration-200",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-canvas)]",
         isDisabled && "cursor-wait opacity-50",
-        variant === "primary" && "bg-blue-600 text-white hover:bg-blue-700",
-        variant === "secondary" &&
-          "border border-white/10 bg-zinc-800 text-zinc-100 hover:bg-zinc-700",
-        variant === "danger" && "bg-red-600 text-white hover:bg-red-700",
-        variant === "ghost" &&
-          "bg-transparent text-zinc-200 hover:bg-white/5 hover:text-white",
+        // Variants
+        variant === "primary" && "bg-[var(--accent)] text-white hover:brightness-110 [&:not(:hover)]:shadow-[var(--shadow-sm)] hover:shadow-[var(--glow-md)]",
+        variant === "secondary" && "bg-[var(--bg-surface)] text-[var(--fg-primary)] border border-[var(--border-default)] hover:bg-[var(--bg-surface-hover)]",
+        variant === "outline" && "bg-transparent text-[var(--fg-primary)] border border-[var(--border-default)] hover:bg-[var(--bg-surface-hover)] hover:border-[var(--border-strong)]",
+        variant === "danger" && "bg-[var(--error)] text-white hover:brightness-110",
+        variant === "ghost" && "bg-transparent text-[var(--fg-secondary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--fg-primary)]",
         className,
       )}
       disabled={isDisabled}

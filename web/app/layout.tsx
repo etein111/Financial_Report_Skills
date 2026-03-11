@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
+import { ThemeProvider } from "@/lib/theme-provider";
 import { ToastProvider } from "@/components/ui/toast";
 
 import "./globals.css";
@@ -16,9 +17,15 @@ export default function RootLayout({
   children: ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body className="min-h-screen antialiased">
-        <ToastProvider>{children}</ToastProvider>
+        <ThemeProvider
+          defaultTheme="dark"
+          enableSystem
+          disableTransitionOnChange
+        >
+          <ToastProvider>{children}</ToastProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

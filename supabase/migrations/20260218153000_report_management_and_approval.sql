@@ -191,7 +191,7 @@ for select
 to authenticated
 using (
   public.current_app_role() = 'admin'
-  or (public.current_app_role() = 'sa' and status in ('submitted', 'published', 'rejected'))
+  or (public.current_app_role() = 'sa' and status in ('draft', 'submitted', 'published', 'rejected'))
   or (public.current_app_role() = 'analyst' and owner_user_id = auth.uid())
 );
 

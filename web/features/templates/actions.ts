@@ -17,6 +17,7 @@ import {
   getActiveTemplate as getActiveTemplateRepo,
   listTemplates as listTemplatesRepo,
   listTemplatesGrouped as listTemplatesGroupedRepo,
+  listTemplateReportTypes as listTemplateReportTypesRepo,
   type Template,
   type TemplateGroup,
   type ReportType,
@@ -60,6 +61,17 @@ export async function listTemplatesAction(params?: {
 }
 
 /**
+ * List all distinct report types from template table
+ */
+export async function listTemplateReportTypesAction(): Promise<Result<string[]>> {
+  try {
+    return await listTemplateReportTypesRepo();
+  } catch {
+    return err("Failed to list report types.");
+  }
+}
+
+/**
  * Get a single template
  */
 export async function getTemplateAction(id: string): Promise<Result<Template>> {
@@ -95,6 +107,7 @@ export async function createTemplateAction(input: {
   name: string;
   report_type: ReportType;
   file_type: FileType;
+  language?: "en" | "zh";
   file_path: string;
 }): Promise<Result<Template>> {
   await requireAdminOrThrow();
@@ -111,6 +124,7 @@ export async function createTemplateAction(input: {
 
   const result = await createTemplateRepo({
     ...parsed.data,
+    language: input.language,
     file_path: input.file_path,
     uploaded_by: user.id,
     set_active: true, // New templates are activated by default

@@ -20,7 +20,7 @@ export async function RegionsPage({ searchParams }: RegionsPageProps) {
   if (!result.ok) {
     return (
       <div className="flex items-center justify-center p-8">
-        <p className="text-zinc-400">Failed to load regions: {result.error}</p>
+        <p className="text-[var(--fg-secondary)]">Failed to load regions: {result.error}</p>
       </div>
     );
   }

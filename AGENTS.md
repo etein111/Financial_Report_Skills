@@ -4,14 +4,23 @@
 
 AI 编程助手的统一指导文件。Claude Code 和 Codex 共享此配置。
 
-## 文档加载约定（跨工具）
+## 文档索引
 
-- 规则主定义在 `docs/README.md`；`AGENTS.md` 只负责跨工具执行入口，不重复维护完整规则。
-- `@docs/README.md` 仅作为“优先阅读提示”，不能作为唯一依赖（不同工具对 `@文件` 自动注入支持不一致）。
-- **Claude Code / Codex 统一执行约束**：每个会话首次接手本仓库任务时，必须先显式读取 `docs/README.md` 与 `docs/*.md`（一级目录下全部 Markdown），再继续后续工作。
-- 首次加载完成后，必须先向用户输出“已加载文档清单”，再进入实现。
-- 同一会话内后续任务默认不重复全量读取；仅在以下情况重读：`docs/` 文档发生变更、用户明确要求、出现规则冲突或口径不一致。
-- 若 `AGENTS.md` 与 `docs/README.md` 表述不一致，以 `docs/README.md` 为准，并回修 `AGENTS.md`。
+| 文档 | 定位 | 主要回答的问题 |
+|------|------|----------------|
+| `docs/README.md` | 文档入口与加载协议 | 启动时加载哪些文档、冲突怎么判定 |
+| `docs/REQUIREMENTS.md` | 业务需求总览（WHAT） | 系统要做什么、角色能做什么、验收口径是什么 |
+| `docs/ARCHITECTURE.md` | 系统架构与技术边界（HOW-系统） | 系统怎么分层、边界如何划分、数据库规范是什么 |
+| `docs/DATA_MODEL.md` | 逻辑数据模型（表/约束/RLS） | 有哪些数据实体、表结构口径、权限矩阵是什么 |
+| `docs/LOGIC.md` | Web 代码实现规范（HOW-代码） | 代码放哪里、依赖怎么走、触库规则是什么 |
+| `docs/UI.md` | UI 组件与视觉一致性规范 | 页面/组件应该长什么样、如何避免视觉漂移 |
+| `docs/TESTING.md` | 测试与验收规范 | 怎么测、覆盖什么、通过标准是什么 |
+| `docs/SUPABASE_DB_VERSIONING.md` | Supabase 数据库版本管理规范 | migration/seed/seed.ts 各负责什么、如何一键初始化与幂等执行 |
+| `docs/DECISIONS.md` | 长期决策（ADR） | 哪些约束长期固定、为什么固定 |
+| `docs/CHANGELOG.md` | 变更日志（按时间） | 最近改了什么、影响范围是什么 |
+| `docs/OPENSPEC_ARCHIVE_BACKFILL.md` | OpenSpec 归档与回填流程 | 如何触发归档并把 change 结论回填到 docs |
+
+> 完整规则定义见 `docs/README.md`，按需查阅即可。
 
 
 ## 语言偏好

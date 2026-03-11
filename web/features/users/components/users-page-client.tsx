@@ -293,9 +293,9 @@ export function UsersPageClient({
 
   return (
     <div className="min-h-screen">
-      <header className="border-b border-white/10 bg-zinc-900/60 backdrop-blur">
+      <header className="border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]/60 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
-          <div className="text-xl font-semibold text-zinc-50">Users</div>
+          <div className="text-xl font-semibold text-[var(--fg-primary)]">Users</div>
           <Button onClick={openInvite}>Invite user</Button>
         </div>
       </header>
@@ -310,7 +310,7 @@ export function UsersPageClient({
               onChange={(e) => setQueryDraft(e.target.value)}
             />
           </form>
-          <div className="hidden text-sm text-zinc-400 sm:block">
+          <div className="hidden text-sm text-[var(--fg-secondary)] sm:block">
             {total} users
           </div>
         </div>
@@ -329,15 +329,15 @@ export function UsersPageClient({
           <tbody>
             {items.length === 0 ? (
               <TR className="hover:bg-transparent">
-                <TD colSpan={6} className="py-10 text-center text-zinc-400">
+                <TD colSpan={6} className="py-10 text-center text-[var(--fg-secondary)]">
                   No users found
                 </TD>
               </TR>
             ) : (
               items.map((u) => (
                 <TR key={u.id}>
-                  <TD className="font-medium text-zinc-100">{u.email}</TD>
-                  <TD className="text-zinc-300">{u.fullName ?? "-"}</TD>
+                  <TD className="font-medium text-[var(--fg-primary)]">{u.email}</TD>
+                  <TD className="text-[var(--fg-secondary)]">{u.fullName ?? "-"}</TD>
                   <TD>
                     <Badge tone={roleTone(u.role)}>
                       {u.role.toUpperCase()}
@@ -348,7 +348,7 @@ export function UsersPageClient({
                       {u.status === "active" ? "ACTIVE" : "BANNED"}
                     </Badge>
                   </TD>
-                  <TD className="text-zinc-300">
+                  <TD className="text-[var(--fg-secondary)]">
                     {formatShanghaiYmd(u.createdAt)}
                   </TD>
                   <TD>
@@ -424,14 +424,14 @@ export function UsersPageClient({
 
           <div className="space-y-1">
             <label
-              className="text-sm font-medium text-zinc-300"
+              className="text-sm font-medium text-[var(--fg-secondary)]"
               htmlFor="invite-role"
             >
               Role
             </label>
             <select
               id="invite-role"
-              className="w-full rounded-[8px] border border-white/10 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus-visible:ring-2 focus-visible:ring-blue-500/60"
+              className="w-full rounded-[8px] border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-[var(--fg-primary)] outline-none focus-visible:ring-2 focus-visible:ring-blue-500/60"
               value={inviteRole}
               onChange={(e) => setInviteRole(e.target.value as UserRole)}
             >
@@ -503,14 +503,14 @@ export function UsersPageClient({
         <form id="role-form" className="space-y-3" onSubmit={submitChangeRole}>
           <div className="space-y-1">
             <label
-              className="text-sm font-medium text-zinc-300"
+              className="text-sm font-medium text-[var(--fg-secondary)]"
               htmlFor="role-select"
             >
               Role
             </label>
             <select
               id="role-select"
-              className="w-full rounded-[8px] border border-white/10 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus-visible:ring-2 focus-visible:ring-blue-500/60"
+              className="w-full rounded-[8px] border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-[var(--fg-primary)] outline-none focus-visible:ring-2 focus-visible:ring-blue-500/60"
               value={roleValue}
               onChange={(e) => setRoleValue(e.target.value as UserRole)}
             >

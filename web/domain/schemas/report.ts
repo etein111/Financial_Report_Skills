@@ -16,7 +16,7 @@ export const reportStatuses = [
 ] as const;
 
 export const reportLanguages = ["zh", "en"] as const;
-export const reportFileLabels = ["report", "model"] as const;
+export const reportFileLabels = ["report", "model", "chief-approval"] as const;
 
 export const reportStatusActions = [
   "submit",
@@ -67,20 +67,25 @@ const reportEditableFieldsSchema = z.object({
   ticker: optionalShortText,
   rating: optionalShortText,
   target_price: optionalShortText,
-  region_id: z.string().uuid().nullable().optional(),
+  region_code: z.string().max(10).nullable().optional(),
   sector_id: z.string().uuid().nullable().optional(),
   report_language: z.enum(reportLanguages).nullable().optional(),
-  contact_person: optionalShortText,
+  contact_person_id: z.string().uuid().nullable().optional(),
   investment_thesis: optionalLongText,
   certificate_confirmed: z.boolean().optional().default(false),
   coverage_id: z.string().uuid().nullable().optional(),
   analysts: reportAnalystsSchema.default([]),
   word_file_path: z.string().trim().min(1).nullable().optional(),
+  word_file_name: z.string().trim().nullable().optional(),
+  pdf_file_path: z.string().trim().min(1).nullable().optional(),
+  pdf_file_name: z.string().trim().nullable().optional(),
   model_file_path: z.string().trim().min(1).nullable().optional(),
+  model_file_name: z.string().trim().nullable().optional(),
 });
 
 export const reportCreateSchema = reportEditableFieldsSchema.omit({
   word_file_path: true,
+  pdf_file_path: true,
   model_file_path: true,
 });
 

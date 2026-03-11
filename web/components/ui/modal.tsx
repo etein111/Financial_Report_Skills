@@ -57,7 +57,7 @@ export function Modal({
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div
         className={cn(
-          "absolute inset-0 bg-black/70 backdrop-blur-sm",
+          "absolute inset-0 bg-black/60 backdrop-blur-sm",
           open
             ? "animate-[modal-overlay-in_200ms_ease-out]"
             : "animate-[modal-overlay-out_200ms_ease-in]",
@@ -69,8 +69,8 @@ export function Modal({
         role="dialog"
         aria-modal="true"
         className={cn(
-          "relative z-10 mx-4 w-full max-w-md rounded-[12px] border border-white/10 bg-zinc-900 p-6",
-          "shadow-[0_10px_30px_rgba(0,0,0,0.5)]",
+          "relative z-10 mx-4 w-full max-w-md rounded-[12px] border border-[var(--border-subtle)] bg-[var(--bg-elevated)] p-6",
+          "shadow-[var(--shadow-lg)]",
           open
             ? "animate-[modal-in_200ms_ease-out]"
             : "animate-[modal-out_200ms_ease-in]",
@@ -80,10 +80,12 @@ export function Modal({
         {(title || description) && (
           <div className="mb-4 space-y-1">
             {title ? (
-              <h2 className="text-base font-semibold text-zinc-100">{title}</h2>
+              <h2 className="text-base font-semibold text-[var(--fg-primary)]">
+                {title}
+              </h2>
             ) : null}
             {description ? (
-              <p className="text-sm text-zinc-400">{description}</p>
+              <p className="text-sm text-[var(--fg-secondary)]">{description}</p>
             ) : null}
           </div>
         )}
@@ -96,20 +98,12 @@ export function Modal({
       </div>
       <style jsx global>{`
         @keyframes modal-overlay-in {
-          from {
-            opacity: 0;
-          }
-          to {
-            opacity: 1;
-          }
+          from { opacity: 0; }
+          to { opacity: 1; }
         }
         @keyframes modal-overlay-out {
-          from {
-            opacity: 1;
-          }
-          to {
-            opacity: 0;
-          }
+          from { opacity: 1; }
+          to { opacity: 0; }
         }
         @keyframes modal-in {
           from {

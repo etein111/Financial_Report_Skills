@@ -11,11 +11,13 @@ export type Analyst = {
   full_name: string;
   chinese_name: string | null;
   email: string;
-  region_id: string | null;
+  region_code: string | null;
   region: {
     id: string;
-    name: string;
+    name_en: string;
+    name_cn: string;
     code: string;
+    is_active: boolean;
   } | null;
   suffix: string | null;
   sfc: string | null;
@@ -37,7 +39,7 @@ export async function listAnalysts(params: {
 
   let query = supabase
     .from("analyst")
-    .select("*, region(id, name, code)", { count: "exact" });
+    .select("*, region(id, name_en, name_cn, code, is_active)", { count: "exact" });
 
   // Apply search filter
   if (params.query) {
@@ -76,7 +78,7 @@ export async function createAnalyst(params: {
   full_name: string;
   chinese_name?: string;
   email: string;
-  region_id: string;
+  region_code: string;
   suffix?: string;
   sfc?: string;
 }): Promise<Result<Analyst>> {
@@ -85,7 +87,7 @@ export async function createAnalyst(params: {
   const { data, error } = await supabase
     .from("analyst")
     .insert(params)
-    .select("*, region(id, name, code)")
+    .select("*, region(id, name_en, name_cn, code, is_active)")
     .single();
 
   if (error) {
@@ -112,7 +114,7 @@ export async function updateAnalyst(
     full_name?: string;
     chinese_name?: string;
     email?: string;
-    region_id?: string;
+    region_code?: string;
     suffix?: string;
     sfc?: string;
     is_active?: boolean;
@@ -124,7 +126,7 @@ export async function updateAnalyst(
     .from("analyst")
     .update(params)
     .eq("id", id)
-    .select("*, region(id, name, code)")
+    .select("*, region(id, name_en, name_cn, code, is_active)")
     .single();
 
   if (error) {
@@ -159,19 +161,28 @@ export async function deleteAnalyst(id: string): Promise<Result<null>> {
  * Get all regions for form dropdown
  */
 export async function getRegionsForSelect(): Promise<
-  Result<{ id: string; name: string; code: string }[]>
+  Result<{ id: string; name: string; code: string; name_en: string; name_cn: string }[]>
 > {
   const supabase = await createServerClient();
 
   const { data, error } = await supabase
     .from("region")
-    .select("id, name, code")
-    .order("name");
+    .select("code, name_en, name_cn")
+    .eq("is_active", true)
+    .order("name_en");
 
   if (error) return err(error.message);
   if (!data) return err("Failed to fetch regions");
 
-  return ok(data);
+  return ok(
+    data.map((r) => ({
+      id: r.code,
+      name: r.name_en,
+      code: r.code,
+      name_en: r.name_en,
+      name_cn: r.name_cn,
+    }))
+  );
 }
 
 /**
@@ -182,7 +193,7 @@ export async function listAllActiveAnalysts(): Promise<Result<Analyst[]>> {
 
   const { data, error } = await supabase
     .from("analyst")
-    .select("*, region(id, name, code)")
+    .select("*, region(id, name_en, name_cn, code, is_active)")
     .eq("is_active", true)
     .order("full_name", { ascending: true });
 

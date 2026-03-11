@@ -29,7 +29,7 @@ export interface AnalystsPageClientProps {
   currentQuery: string | null;
 }
 
-type RegionOption = { id: string; name: string; code: string };
+type RegionOption = { id: string; code: string; name_en: string; name_cn: string };
 
 function toQueryString(params: { q: string; page: number }) {
   const q = params.q.trim();
@@ -62,14 +62,14 @@ export function AnalystsPageClient({
   const [formFullName, setFormFullName] = React.useState("");
   const [formChineseName, setFormChineseName] = React.useState("");
   const [formEmail, setFormEmail] = React.useState("");
-  const [formRegionId, setFormRegionId] = React.useState("");
+  const [formRegionCode, setFormRegionId] = React.useState("");
   const [formSuffix, setFormSuffix] = React.useState("");
   const [formSfc, setFormSfc] = React.useState("");
   const [formIsActive, setFormIsActive] = React.useState(true);
   const [formErrors, setFormErrors] = React.useState<{
     full_name?: string;
     email?: string;
-    region_id?: string;
+    region_code?: string;
   }>({});
   const [formLoading, setFormLoading] = React.useState(false);
 
@@ -114,7 +114,7 @@ export function AnalystsPageClient({
     setFormFullName(analyst.full_name);
     setFormChineseName(analyst.chinese_name ?? "");
     setFormEmail(analyst.email);
-    setFormRegionId(analyst.region_id ?? "");
+    setFormRegionId(analyst.region_code ?? "");
     setFormSuffix(analyst.suffix ?? "");
     setFormSfc(analyst.sfc ?? "");
     setFormIsActive(analyst.is_active);
@@ -127,12 +127,12 @@ export function AnalystsPageClient({
 
     const full_name = formFullName.trim();
     const email = formEmail.trim();
-    const region_id = formRegionId;
+    const region_code = formRegionCode;
 
-    const next: { full_name?: string; email?: string; region_id?: string } = {};
+    const next: { full_name?: string; email?: string; region_code?: string } = {};
     if (!full_name) next.full_name = "Full name is required";
     if (!email) next.email = "Email is required";
-    if (!region_id) next.region_id = "Region is required";
+    if (!region_code) next.region_code = "Region is required";
     setFormErrors(next);
     if (Object.keys(next).length) return;
 
@@ -141,7 +141,7 @@ export function AnalystsPageClient({
       full_name,
       chinese_name: formChineseName.trim() || undefined,
       email,
-      region_id,
+      region_code,
       suffix: formSuffix.trim() || undefined,
       sfc: formSfc.trim() || undefined,
       is_active: formIsActive,
@@ -193,9 +193,9 @@ export function AnalystsPageClient({
 
   return (
     <div className="min-h-screen">
-      <header className="border-b border-white/10 bg-zinc-900/60 backdrop-blur">
+      <header className="border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]/60 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
-          <div className="text-xl font-semibold text-zinc-50">Analyst Info</div>
+          <div className="text-xl font-semibold text-[var(--fg-primary)]">Analyst Info</div>
           <Button onClick={openCreate}>Create Analyst</Button>
         </div>
       </header>
@@ -210,7 +210,7 @@ export function AnalystsPageClient({
               onChange={(e) => setQueryDraft(e.target.value)}
             />
           </form>
-          <div className="hidden text-sm text-zinc-400 sm:block">
+          <div className="hidden text-sm text-[var(--fg-secondary)] sm:block">
             {total} analysts
           </div>
         </div>
@@ -230,23 +230,23 @@ export function AnalystsPageClient({
           <tbody>
             {analysts.length === 0 ? (
               <TR className="hover:bg-transparent">
-                <TD colSpan={7} className="py-10 text-center text-zinc-400">
+                <TD colSpan={7} className="py-10 text-center text-[var(--fg-secondary)]">
                   No analysts found
                 </TD>
               </TR>
             ) : (
               analysts.map((analyst) => (
                 <TR key={analyst.id}>
-                  <TD className="font-medium text-zinc-100">
+                  <TD className="font-medium text-[var(--fg-primary)]">
                     {analyst.full_name}
                   </TD>
-                  <TD className="text-zinc-300">
+                  <TD className="text-[var(--fg-secondary)]">
                     {analyst.chinese_name || "-"}
                   </TD>
-                  <TD className="text-zinc-300">{analyst.email}</TD>
-                  <TD className="text-zinc-300">
+                  <TD className="text-[var(--fg-secondary)]">{analyst.email}</TD>
+                  <TD className="text-[var(--fg-secondary)]">
                     {analyst.region
-                      ? `${analyst.region.name} (${analyst.region.code})`
+                      ? `${analyst.region.name_en} (${analyst.region.code})`
                       : "-"}
                   </TD>
                   <TD>
@@ -254,7 +254,7 @@ export function AnalystsPageClient({
                       {analyst.is_active ? "ACTIVE" : "INACTIVE"}
                     </Badge>
                   </TD>
-                  <TD className="text-zinc-300">
+                  <TD className="text-[var(--fg-secondary)]">
                     {formatShanghaiYmd(analyst.created_at)}
                   </TD>
                   <TD>
@@ -333,26 +333,26 @@ export function AnalystsPageClient({
           />
           <div className="space-y-1">
             <label
-              className="text-sm font-medium text-zinc-300"
-              htmlFor="region_id"
+              className="text-sm font-medium text-[var(--fg-secondary)]"
+              htmlFor="region_code"
             >
               Region
             </label>
             <select
-              id="region_id"
-              value={formRegionId}
+              id="region_code"
+              value={formRegionCode}
               onChange={(e) => setFormRegionId(e.target.value)}
-              className="w-full rounded-[8px] border border-white/10 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 outline-none focus-visible:ring-2 focus-visible:ring-blue-500/60"
+              className="w-full rounded-[8px] border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-[var(--fg-primary)] outline-none focus-visible:ring-2 focus-visible:ring-blue-500/60"
             >
               <option value="">Select a region...</option>
               {regions.map((region) => (
-                <option key={region.id} value={region.id}>
-                  {region.name} ({region.code})
+                <option key={region.code} value={region.code}>
+                  {region.name_en} ({region.code})
                 </option>
               ))}
             </select>
-            {formErrors.region_id && (
-              <p className="text-xs text-red-400">{formErrors.region_id}</p>
+            {formErrors.region_code && (
+              <p className="text-xs text-red-400">{formErrors.region_code}</p>
             )}
           </div>
           <Input
@@ -373,10 +373,10 @@ export function AnalystsPageClient({
               type="checkbox"
               checked={formIsActive}
               onChange={(e) => setFormIsActive(e.target.checked)}
-              className="h-4 w-4 rounded border-white/10 bg-zinc-800 text-blue-600 focus:ring-2 focus:ring-blue-500"
+              className="h-4 w-4 rounded border-[var(--border-subtle)] bg-[var(--bg-surface-hover)] text-blue-600 focus:ring-2 focus:ring-blue-500"
             />
             <label
-              className="text-sm font-medium text-zinc-300"
+              className="text-sm font-medium text-[var(--fg-secondary)]"
               htmlFor="is_active"
             >
               Active

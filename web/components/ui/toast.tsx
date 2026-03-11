@@ -74,18 +74,20 @@ function ToastViewport({ toasts }: { toasts: ToastItem[] }) {
         <div
           key={t.id}
           className={cn(
-            "rounded-[12px] border px-4 py-3 text-sm shadow-[0_10px_40px_-3px_rgba(0,0,0,0.5)]",
+            "rounded-[12px] border px-4 py-3 text-sm shadow-[var(--shadow-lg)]",
             "backdrop-blur-md",
             "animate-[toast-in_200ms_ease-out]",
             t.type === "success"
-              ? "border-emerald-500/30 bg-zinc-900/80 text-zinc-100"
-              : "border-red-500/30 bg-zinc-900/80 text-zinc-100",
+              ? "border-[var(--success)]/30 bg-[var(--bg-elevated)]/80 text-[var(--fg-primary)]"
+              : "border-[var(--error)]/30 bg-[var(--bg-elevated)]/80 text-[var(--fg-primary)]",
           )}
         >
           <div className="flex items-start gap-3">
             <div className={cn(
               "flex h-5 w-5 shrink-0 items-center justify-center rounded-full",
-              t.type === "success" ? "bg-emerald-500/20 text-emerald-400" : "bg-red-500/20 text-red-400"
+              t.type === "success"
+                ? "bg-[var(--success-soft)] text-[var(--success)]"
+                : "bg-[var(--error-soft)] text-[var(--error)]"
             )}>
               {t.type === "success" ? (
                 <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
@@ -98,8 +100,8 @@ function ToastViewport({ toasts }: { toasts: ToastItem[] }) {
               )}
             </div>
             <div className="min-w-0 flex-1">
-              {t.title ? <div className="font-medium text-zinc-50">{t.title}</div> : null}
-              <div className="break-words text-zinc-300">{t.message}</div>
+              {t.title ? <div className="font-medium text-[var(--fg-primary)]">{t.title}</div> : null}
+              <div className="break-words text-[var(--fg-secondary)]">{t.message}</div>
             </div>
           </div>
         </div>
@@ -119,4 +121,3 @@ function ToastViewport({ toasts }: { toasts: ToastItem[] }) {
     </div>
   );
 }
-

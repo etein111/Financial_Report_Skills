@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import {
   reportReviewActionSchema,
+  reportSaveSchema,
   reportSubmitSchema,
   type ReportStatus,
 } from "@/domain/schemas/report";
@@ -16,9 +17,10 @@ import {
   listReviewReports,
   rejectReport,
   reopenReport,
+  saveReviewReportContent,
 } from "./repo/report-review-repo";
 
-type ReviewFilterStatus = "submitted" | "published" | "rejected";
+type ReviewFilterStatus = "all" | "submitted" | "published" | "rejected";
 type Role = "admin" | "sa" | "analyst";
 
 async function getReviewerActor(): Promise<
@@ -72,7 +74,7 @@ export async function listReviewReportsAction(input: {
 
   const page = Math.max(1, input.page ?? 1);
   const query = input.query ?? null;
-  const status = input.status ?? "submitted";
+  const status = input.status ?? "all";
 
   const result = await listReviewReports({ page, query, status });
   if (!result.ok) {
@@ -178,4 +180,33 @@ export async function getReviewReportAction(input: unknown): Promise<Result<Awai
   }
 
   return getReviewReportDetailAction(parsed.data.report_id);
+}
+
+export async function saveReviewReportAction(input: unknown): Promise<Result<Awaited<ReturnType<typeof getReviewReportDetail>> extends Result<infer T> ? T : never>> {
+  const actor = await getReviewerActor();
+  if (!actor.ok) {
+    return actor;
+  }
+
+  const roleCheck = ensureReviewerRole(actor.data.role);
+  if (!roleCheck.ok) {
+    return roleCheck;
+  }
+
+  const parsed = reportSaveSchema.safeParse(input);
+  if (!parsed.success) {
+    return err(parsed.error.issues[0]?.message ?? "Invalid input.");
+  }
+
+  const result = await saveReviewReportContent({
+    ...parsed.data,
+    changed_by: actor.data.user.id,
+  });
+
+  if (result.ok) {
+    revalidatePath("/report-review");
+    revalidatePath("/reports");
+  }
+
+  return result;
 }

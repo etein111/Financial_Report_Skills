@@ -101,7 +101,7 @@ export async function deleteAnalystAction(id: string): Promise<Result<null>> {
  * Get all regions for form dropdown
  */
 export async function getRegionsForSelectAction(): Promise<
-  Result<{ id: string; name: string; code: string }[]>
+  Result<{ id: string; name: string; code: string; name_en: string; name_cn: string }[]>
 > {
   try {
     await requireAdminOrThrow();

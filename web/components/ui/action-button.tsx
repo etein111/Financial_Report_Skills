@@ -20,13 +20,13 @@ export function ActionButton({
       type="button"
       disabled={disabled}
       className={cn(
-        "rounded-[6px] border border-white/10 px-3 py-1 text-xs font-medium",
+        "rounded-[6px] border border-[var(--border-default)] px-3 py-1 text-xs font-medium",
         "transition-colors duration-200",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/60",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-canvas)]",
         "disabled:cursor-not-allowed disabled:opacity-50",
         tone === "danger"
-          ? "bg-red-600/20 text-red-100 hover:bg-red-600/30"
-          : "bg-zinc-800 text-zinc-100 hover:bg-zinc-700",
+          ? "bg-[var(--error-soft)] text-[var(--error)] hover:bg-[var(--error)] hover:text-white"
+          : "bg-[var(--bg-surface)] text-[var(--fg-primary)] hover:bg-[var(--bg-surface-hover)]",
       )}
       onClick={onClick}
     >

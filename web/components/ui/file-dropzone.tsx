@@ -36,7 +36,7 @@ export function FileDropzone({
 
   return (
     <div className="space-y-1.5">
-      <label htmlFor={inputId} className="block text-sm font-medium text-zinc-300">
+      <label htmlFor={inputId} className="block text-sm font-medium text-[var(--fg-secondary)]">
         {label}
       </label>
       <div
@@ -44,12 +44,12 @@ export function FileDropzone({
         tabIndex={disabled ? -1 : 0}
         aria-disabled={disabled}
         className={cn(
-          "rounded-[8px] border border-dashed border-white/20 bg-zinc-900/60 p-4",
-          "transition-colors duration-200",
-          !disabled && "cursor-pointer hover:border-blue-400/60 hover:bg-zinc-900",
-          isDragging && "border-blue-500/70 bg-blue-500/10",
+          "rounded-[8px] border border-dashed border-[var(--border-default)] bg-[var(--bg-surface)]/60 p-4",
+          "transition-all duration-200",
+          !disabled && "cursor-pointer hover:border-[var(--accent)] hover:bg-[var(--bg-surface)]",
+          isDragging && "border-[var(--accent)] bg-[var(--accent-soft)]",
           disabled && "cursor-not-allowed opacity-60",
-          error && "border-red-500/70",
+          error && "border-[var(--error)]",
         )}
         onDragOver={(event) => {
           if (disabled) {
@@ -98,10 +98,10 @@ export function FileDropzone({
         />
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
-            <p className="text-sm text-zinc-100">
+            <p className="text-sm text-[var(--fg-primary)]">
               {file ? file.name : "Drag file here or click to choose"}
             </p>
-            {hint ? <p className="text-xs text-zinc-400">{hint}</p> : null}
+            {hint ? <p className="text-xs text-[var(--fg-tertiary)]">{hint}</p> : null}
           </div>
           <Button
             type="button"
@@ -117,7 +117,7 @@ export function FileDropzone({
           </Button>
         </div>
       </div>
-      {error ? <p className="text-xs text-red-500">{error}</p> : null}
+      {error ? <p className="text-xs text-[var(--error)]">{error}</p> : null}
     </div>
   );
 }

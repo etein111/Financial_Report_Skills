@@ -54,12 +54,12 @@ export default function LoginPage() {
       <ParticleField />
 
       <div className="relative z-10 flex min-h-screen items-center justify-center px-4">
-        <div className="w-full max-w-sm rounded-[12px] border border-white/10 bg-zinc-900/70 px-6 py-8 backdrop-blur-md">
+        <div className="w-full max-w-sm rounded-[12px] border border-[var(--border-subtle)] bg-[var(--bg-elevated)]/70 px-6 py-8 backdrop-blur-md">
           <div className="mb-10 space-y-2 text-center">
-            <h1 className="text-3xl font-bold text-white">
+            <h1 className="text-3xl font-bold text-[var(--fg-primary)]">
               The Future is Now
             </h1>
-            <p className="text-sm text-zinc-400">
+            <p className="text-sm text-[var(--fg-secondary)]">
               Research Report Management System
             </p>
           </div>
@@ -88,7 +88,7 @@ export default function LoginPage() {
             <div className="flex justify-center">
               <button
                 type="button"
-                className="text-sm text-zinc-300 underline decoration-white/30 underline-offset-4 hover:text-white"
+                className="text-sm text-[var(--fg-secondary)] underline decoration-[var(--border-default)] underline-offset-4 hover:text-[var(--fg-primary)]"
                 onClick={openForgotPassword}
               >
                 Forgot password
@@ -125,7 +125,7 @@ export default function LoginPage() {
               forgotState && !forgotState.ok ? forgotState.error : undefined
             }
           />
-          <p className="text-sm text-zinc-400">
+          <p className="text-sm text-[var(--fg-secondary)]">
             We will always show the same success message to protect your privacy.
           </p>
         </form>

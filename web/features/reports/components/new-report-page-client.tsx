@@ -7,25 +7,34 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { FileDropzone } from "@/components/ui/file-dropzone";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Select } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
+import { RichTextEditor } from "@/components/ui/rich-text-editor";
 import { useToast } from "@/components/ui/toast";
 import type {
   ReportAnalystInput,
   ReportLanguage,
 } from "@/domain/schemas/report";
 import type { Analyst } from "@/features/analyst-info/repo/analysts-repo";
+import type { CoverageWithDetails } from "@/features/coverage/repo/coverage-repo";
 import type { Region } from "@/features/regions/repo/regions-repo";
+import type { Rating } from "@/features/ratings/repo/ratings-repo";
 import type { Sector } from "@/features/sectors/repo/sectors-repo";
 import {
   createReportAction,
   directSubmitReportAction,
+  saveChiefApproveAction,
   saveReportContentAction,
 } from "@/features/reports/actions";
 import {
   buildReportStoragePath,
   validateUploadExtension,
+  validateWordPptExtension,
+  validatePdfExtension,
 } from "@/features/reports/file-utils";
 import type { ReportDetail } from "@/features/reports/repo/reports-repo";
+import type { UserRow } from "@/domain/user";
 import { createBrowserClient } from "@/lib/supabase/browser";
 
 type FormAnalyst = ReportAnalystInput;
@@ -77,6 +86,9 @@ export interface NewReportPageClientProps {
   analysts: Analyst[];
   regions: Region[];
   sectors: Sector[];
+  coverages: CoverageWithDetails[];
+  ratings: Rating[];
+  users: UserRow[];
 }
 
 export function NewReportPageClient({
@@ -85,6 +97,9 @@ export function NewReportPageClient({
   analysts,
   regions,
   sectors,
+  coverages,
+  ratings,
+  users,
 }: NewReportPageClientProps) {
   const router = useRouter();
   const toast = useToast();
@@ -104,6 +119,15 @@ export function NewReportPageClient({
     [reportTypes],
   );
 
+  const ratingOptions = React.useMemo(
+    () =>
+      ratings.map((rating) => ({
+        value: rating.code,
+        label: `${rating.name} (${rating.code})`,
+      })),
+    [ratings],
+  );
+
   const [formTitle, setFormTitle] = React.useState("");
   const [formReportType, setFormReportType] = React.useState(
     reportTypes[0] ?? "company",
@@ -111,10 +135,10 @@ export function NewReportPageClient({
   const [formTicker, setFormTicker] = React.useState("");
   const [formRating, setFormRating] = React.useState("");
   const [formTargetPrice, setFormTargetPrice] = React.useState("");
-  const [formRegionId, setFormRegionId] = React.useState("");
+  const [formRegionCode, setFormRegionCode] = React.useState("");
   const [formSectorId, setFormSectorId] = React.useState("");
   const [formLanguage, setFormLanguage] = React.useState<ReportLanguage>("en");
-  const [formContactPerson, setFormContactPerson] = React.useState("");
+  const [formContactPersonId, setFormContactPersonId] = React.useState("");
   const [formInvestmentThesis, setFormInvestmentThesis] = React.useState("");
   const [formCertificate, setFormCertificate] = React.useState(false);
   const [formAnalysts, setFormAnalysts] = React.useState<FormAnalyst[]>([]);
@@ -123,7 +147,9 @@ export function NewReportPageClient({
   );
 
   const [reportFile, setReportFile] = React.useState<File | null>(null);
+  const [pdfFile, setPdfFile] = React.useState<File | null>(null);
   const [modelFile, setModelFile] = React.useState<File | null>(null);
+  const [chiefApprovalScreenshotFile, setChiefApprovalScreenshotFile] = React.useState<File | null>(null);
 
   React.useEffect(() => {
     if (!reportTypes.includes(formReportType) && reportTypes.length > 0) {
@@ -223,10 +249,10 @@ export function NewReportPageClient({
       ticker: formTicker || null,
       rating: formRating || null,
       target_price: formTargetPrice || null,
-      region_id: formRegionId || null,
+      region_code: formRegionCode || null,
       sector_id: formSectorId || null,
       report_language: formLanguage,
-      contact_person: formContactPerson || null,
+      contact_person_id: formContactPersonId || null,
       investment_thesis: formInvestmentThesis || null,
       certificate_confirmed: formCertificate,
       analysts: analystsValue,
@@ -247,7 +273,14 @@ export function NewReportPageClient({
   }): Promise<
     | {
         ok: true;
-        data: { word_file_path: string | null; model_file_path: string | null };
+        data: {
+          word_file_path: string | null;
+          word_file_name: string | null;
+          pdf_file_path: string | null;
+          pdf_file_name: string | null;
+          model_file_path: string | null;
+          model_file_name: string | null;
+        };
       }
     | {
         ok: false;
@@ -257,11 +290,20 @@ export function NewReportPageClient({
     const supabase = createBrowserClient();
     let wordFilePath: string | null =
       activeReport?.latest_version?.word_file_path ?? null;
+    let wordFileName: string | null =
+      activeReport?.latest_version?.word_file_name ?? null;
+    let pdfFilePath: string | null =
+      activeReport?.latest_version?.pdf_file_path ?? null;
+    let pdfFileName: string | null =
+      activeReport?.latest_version?.pdf_file_name ?? null;
     let modelFilePath: string | null =
       activeReport?.latest_version?.model_file_path ?? null;
+    let modelFileName: string | null =
+      activeReport?.latest_version?.model_file_name ?? null;
 
+    // Upload Word/PPT file
     if (reportFile) {
-      const check = validateUploadExtension("report", reportFile.name);
+      const check = validateWordPptExtension(reportFile.name);
       if (!check.ok) {
         return { ok: false, error: check.error };
       }
@@ -283,6 +325,34 @@ export function NewReportPageClient({
         return { ok: false, error: error.message };
       }
       wordFilePath = path;
+      wordFileName = reportFile.name;
+    }
+
+    // Upload PDF file
+    if (pdfFile) {
+      const check = validatePdfExtension(pdfFile.name);
+      if (!check.ok) {
+        return { ok: false, error: check.error };
+      }
+
+      const path = buildReportStoragePath({
+        reportId: params.reportId,
+        versionNo: params.versionNo,
+        label: "report-pdf",
+        extension: check.extension,
+      });
+
+      const { error } = await supabase.storage
+        .from("reports")
+        .upload(path, pdfFile, {
+          upsert: true,
+        });
+
+      if (error) {
+        return { ok: false, error: error.message };
+      }
+      pdfFilePath = path;
+      pdfFileName = pdfFile.name;
     }
 
     if (modelFile) {
@@ -308,15 +378,63 @@ export function NewReportPageClient({
         return { ok: false, error: error.message };
       }
       modelFilePath = path;
+      modelFileName = modelFile.name;
     }
 
     return {
       ok: true,
       data: {
         word_file_path: wordFilePath,
+        word_file_name: wordFileName,
+        pdf_file_path: pdfFilePath,
+        pdf_file_name: pdfFileName,
         model_file_path: modelFilePath,
+        model_file_name: modelFileName,
       },
     };
+  }
+
+  async function uploadChiefApprovalScreenshot(params: {
+    reportId: string;
+  }): Promise<{ ok: boolean; error?: string }> {
+    if (!chiefApprovalScreenshotFile) {
+      return { ok: true };
+    }
+
+    const supabase = createBrowserClient();
+    const allowedExtensions = [".jpg", ".jpeg", ".png", ".gif", ".webp"];
+    const fileName = chiefApprovalScreenshotFile.name.toLowerCase();
+    const ext = fileName.match(/\.[^.]+$/)?.[0] ?? "";
+
+    if (!allowedExtensions.includes(ext)) {
+      return { ok: false, error: "Chief approval screenshot must be an image (jpg, png, gif, webp)" };
+    }
+
+    const path = `approvals/${params.reportId}/${Date.now()}${ext}`;
+
+    const { error } = await supabase.storage
+      .from("reports")
+      .upload(path, chiefApprovalScreenshotFile, {
+        upsert: true,
+      });
+
+    if (error) {
+      return { ok: false, error: error.message };
+    }
+
+    // Save to chief_approve table
+    const saveResult = await saveChiefApproveAction({
+      report_id: params.reportId,
+      file_path: path,
+      file_name: chiefApprovalScreenshotFile.name,
+      file_type: chiefApprovalScreenshotFile.type,
+    });
+
+    if (!saveResult.ok) {
+      return { ok: false, error: saveResult.error };
+    }
+
+    return { ok: true };
   }
 
   async function handleSaveDraft() {
@@ -337,6 +455,18 @@ export function NewReportPageClient({
         return;
       }
 
+      // Upload chief approval screenshot first (if any)
+      if (chiefApprovalScreenshotFile) {
+        const chiefUploadResult = await uploadChiefApprovalScreenshot({
+          reportId: ensuredReport.id,
+        });
+        if (!chiefUploadResult.ok) {
+          toast.error(chiefUploadResult.error ?? "Upload failed", { title: "Error" });
+          setSaving(false);
+          return;
+        }
+      }
+
       const uploadResult = await uploadReportFiles({
         reportId: ensuredReport.id,
         versionNo: ensuredReport.current_version_no + 1,
@@ -353,15 +483,19 @@ export function NewReportPageClient({
         ticker: formTicker || null,
         rating: formRating || null,
         target_price: formTargetPrice || null,
-        region_id: formRegionId || null,
+        region_code: formRegionCode || null,
         sector_id: formSectorId || null,
         report_language: formLanguage,
-        contact_person: formContactPerson || null,
+        contact_person_id: formContactPersonId || null,
         investment_thesis: formInvestmentThesis || null,
         certificate_confirmed: formCertificate,
         analysts: analystsValue,
         word_file_path: uploadResult.data.word_file_path,
+        word_file_name: uploadResult.data.word_file_name,
+        pdf_file_path: uploadResult.data.pdf_file_path,
+        pdf_file_name: uploadResult.data.pdf_file_name,
         model_file_path: uploadResult.data.model_file_path,
+        model_file_name: uploadResult.data.model_file_name,
       });
 
       if (!saveResult.ok) {
@@ -371,7 +505,9 @@ export function NewReportPageClient({
 
       setActiveReport(saveResult.data);
       setReportFile(null);
+      setPdfFile(null);
       setModelFile(null);
+      setChiefApprovalScreenshotFile(null);
       toast.success("Draft saved.", { title: "Success" });
       router.refresh();
     } finally {
@@ -405,6 +541,18 @@ export function NewReportPageClient({
         return;
       }
 
+      // Upload chief approval screenshot first (if any)
+      if (chiefApprovalScreenshotFile) {
+        const chiefUploadResult = await uploadChiefApprovalScreenshot({
+          reportId: ensuredReport.id,
+        });
+        if (!chiefUploadResult.ok) {
+          toast.error(chiefUploadResult.error ?? "Upload failed", { title: "Error" });
+          setSaving(false);
+          return;
+        }
+      }
+
       const uploadResult = await uploadReportFiles({
         reportId: ensuredReport.id,
         versionNo: ensuredReport.current_version_no + 1,
@@ -421,15 +569,19 @@ export function NewReportPageClient({
         ticker: formTicker || null,
         rating: formRating || null,
         target_price: formTargetPrice || null,
-        region_id: formRegionId || null,
+        region_code: formRegionCode || null,
         sector_id: formSectorId || null,
         report_language: formLanguage,
-        contact_person: formContactPerson || null,
+        contact_person_id: formContactPersonId || null,
         investment_thesis: formInvestmentThesis || null,
         certificate_confirmed: formCertificate,
         analysts: analystsValue,
         word_file_path: uploadResult.data.word_file_path,
+        word_file_name: uploadResult.data.word_file_name,
+        pdf_file_path: uploadResult.data.pdf_file_path,
+        pdf_file_name: uploadResult.data.pdf_file_name,
         model_file_path: uploadResult.data.model_file_path,
+        model_file_name: uploadResult.data.model_file_name,
       });
 
       if (!directResult.ok) {
@@ -439,7 +591,9 @@ export function NewReportPageClient({
 
       setActiveReport(directResult.data);
       setReportFile(null);
+      setPdfFile(null);
       setModelFile(null);
+      setChiefApprovalScreenshotFile(null);
       toast.success("Report submitted.", { title: "Success" });
       router.push("/reports");
       router.refresh();
@@ -450,14 +604,14 @@ export function NewReportPageClient({
 
   return (
     <div className="min-h-screen">
-      <header className="border-b border-white/10 bg-zinc-900/60 backdrop-blur">
+      <header className="border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]/60 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-5xl items-center justify-between px-6">
           <div>
-            <div className="text-xl font-semibold text-zinc-50">
+            <div className="text-xl font-semibold text-[var(--fg-primary)]">
               Analyst Submit
             </div>
             {activeReport ? (
-              <div className="text-xs text-zinc-400">
+              <div className="text-xs text-[var(--fg-secondary)]">
                 Draft ID: {activeReport.id.slice(0, 8)}... / v
                 {activeReport.current_version_no}
               </div>
@@ -465,7 +619,7 @@ export function NewReportPageClient({
           </div>
           <Link
             href="/reports"
-            className="text-sm text-zinc-300 hover:text-zinc-100"
+            className="text-sm text-[var(--fg-secondary)] hover:text-[var(--fg-primary)]"
           >
             Back to Reports
           </Link>
@@ -473,16 +627,17 @@ export function NewReportPageClient({
       </header>
 
       <main className="mx-auto max-w-5xl space-y-6 px-6 py-8">
-        <section className="space-y-4 rounded-[12px] border border-white/10 bg-zinc-900/70 p-5">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-400">
+        <section className="space-y-4 rounded-[12px] border border-[var(--border-subtle)] bg-[var(--bg-surface)]/70 p-5">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-[var(--fg-secondary)]">
             Basic Information
           </h2>
 
-          <Input
+          <Textarea
             label="Report Title"
             value={formTitle}
             onChange={(event) => setFormTitle(event.target.value)}
             error={formErrors.title}
+            rows={3}
           />
 
           <Select
@@ -494,24 +649,52 @@ export function NewReportPageClient({
           />
 
           {isCompanyType(formReportType) ? (
-            <Input
+            <SearchableSelect
               label="Ticker"
               value={formTicker}
-              onChange={(event) => setFormTicker(event.target.value)}
+              onChange={setFormTicker}
+              placeholder="Search ticker..."
+              options={[
+                { value: "", label: "" },
+                ...coverages
+                  .filter((c) => c.analysts.length > 0)
+                  .map((c) => {
+                    const firstAnalyst = [...c.analysts]
+                      .sort((a, b) => a.sort_order - b.sort_order)[0];
+                    const analystName = firstAnalyst?.analyst?.full_name || "Unknown";
+                    return {
+                      value: c.ticker,
+                      label: `${c.ticker} - ${analystName}`,
+                    };
+                  }),
+              ]}
             />
           ) : null}
 
           {formReportType === "company" ? (
             <>
-              <Input
+              <Select
                 label="Rating"
                 value={formRating}
                 onChange={(event) => setFormRating(event.target.value)}
+                options={[
+                  { value: "", label: "Select rating..." },
+                  ...ratingOptions,
+                ]}
               />
               <Input
                 label="Target Price"
+                type="number"
+                min={0}
+                step={0.01}
                 value={formTargetPrice}
-                onChange={(event) => setFormTargetPrice(event.target.value)}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  // 只允许数字和小数点
+                  if (value === '' || /^\d*\.?\d*$/.test(value)) {
+                    setFormTargetPrice(value);
+                  }
+                }}
               />
             </>
           ) : null}
@@ -519,13 +702,13 @@ export function NewReportPageClient({
           {requiresRegion(formReportType) ? (
             <Select
               label="Region"
-              value={formRegionId}
-              onChange={(event) => setFormRegionId(event.target.value)}
+              value={formRegionCode}
+              onChange={(event) => setFormRegionCode(event.target.value)}
               options={[
                 { value: "", label: "Select region..." },
                 ...regions.map((item) => ({
-                  value: item.id,
-                  label: `${item.name} (${item.code})`,
+                  value: item.code,
+                  label: `${item.name_en} (${item.code})`,
                 })),
               ]}
             />
@@ -555,15 +738,15 @@ export function NewReportPageClient({
             options={LANGUAGE_OPTIONS}
           />
 
-          <div className="space-y-2 rounded-[8px] border border-white/10 bg-zinc-800/40 p-4">
+          <div className="space-y-2 rounded-[8px] border border-[var(--border-subtle)] bg-[var(--bg-surface-hover)]/40 p-4">
             <div className="flex items-center justify-between">
-              <div className="text-sm font-medium text-zinc-200">Analyst</div>
+              <div className="text-sm font-medium text-[var(--fg-primary)]">Analyst</div>
               <Button type="button" variant="ghost" onClick={addAnalyst}>
                 Add Analyst
               </Button>
             </div>
             {formAnalysts.length === 0 ? (
-              <p className="text-sm text-zinc-500">No analyst assigned.</p>
+              <p className="text-sm text-[var(--fg-primary)]0">No analyst assigned.</p>
             ) : (
               formAnalysts.map((item, index) => (
                 <div
@@ -579,7 +762,7 @@ export function NewReportPageClient({
                       options={getAnalystOptions(index)}
                     />
                   </div>
-                  <div className="col-span-1 flex items-center text-xs text-zinc-400">
+                  <div className="col-span-1 flex items-center text-xs text-[var(--fg-secondary)]">
                     #{index + 1}
                   </div>
                   <div className="col-span-2">
@@ -600,37 +783,36 @@ export function NewReportPageClient({
             ) : null}
           </div>
 
-          <Input
+          <SearchableSelect
             label="Contact Person"
-            value={formContactPerson}
-            onChange={(event) => setFormContactPerson(event.target.value)}
+            value={formContactPersonId}
+            onChange={setFormContactPersonId}
+            placeholder="Search user..."
+            options={[
+              { value: "", label: "Select contact person..." },
+              ...users.map((user) => ({
+                value: user.id,
+                label: user.fullName || user.email,
+              })),
+            ]}
           />
 
-          <div className="space-y-1">
-            <label
-              className="text-sm font-medium text-zinc-300"
-              htmlFor="investment-thesis"
-            >
-              Investment Thesis
-            </label>
-            <textarea
-              id="investment-thesis"
-              rows={6}
-              value={formInvestmentThesis}
-              onChange={(event) => setFormInvestmentThesis(event.target.value)}
-              placeholder="Report abstract"
-              className="w-full rounded-[8px] border border-white/10 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-500 outline-none focus-visible:ring-2 focus-visible:ring-blue-500/60"
-            />
-          </div>
+          <RichTextEditor
+            label="Investment Thesis"
+            value={formInvestmentThesis}
+            onChange={setFormInvestmentThesis}
+            placeholder="Report abstract..."
+            minHeight="150px"
+          />
 
-          <div className="space-y-2 rounded-[8px] border border-white/10 bg-zinc-800/30 p-4">
-            <div className="text-sm font-medium text-zinc-200">
+          <div className="space-y-2 rounded-[8px] border border-[var(--border-subtle)] bg-[var(--bg-surface-hover)]/30 p-4">
+            <div className="text-sm font-medium text-[var(--fg-primary)]">
               * certificate
             </div>
-            <label className="flex items-start gap-2 text-sm text-zinc-100">
+            <label className="flex items-start gap-2 text-sm text-[var(--fg-primary)]">
               <input
                 type="checkbox"
-                className="mt-1 h-4 w-4 rounded border-white/20 bg-zinc-900"
+                className="mt-1 h-4 w-4 rounded border-[var(--border-default)] bg-[var(--bg-surface)]"
                 checked={formCertificate}
                 onChange={(event) => {
                   setFormCertificate(event.target.checked);
@@ -646,7 +828,7 @@ export function NewReportPageClient({
                 notes, certify that'
               </span>
             </label>
-            <ol className="list-decimal space-y-1 pl-6 text-sm text-zinc-300">
+            <ol className="list-decimal space-y-1 pl-6 text-sm text-[var(--fg-secondary)]">
               {CERTIFICATE_CLAUSES.map((item) => (
                 <li key={item}>{item}</li>
               ))}
@@ -659,16 +841,23 @@ export function NewReportPageClient({
           </div>
         </section>
 
-        <section className="space-y-4 rounded-[12px] border border-white/10 bg-zinc-900/70 p-5">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-400">
+        <section className="space-y-4 rounded-[12px] border border-[var(--border-subtle)] bg-[var(--bg-surface)]/70 p-5">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-[var(--fg-secondary)]">
             Report Files
           </h2>
           <FileDropzone
-            label="Report File (Word)"
-            accept=".doc,.docx,.pdf"
+            label="Report File (Word/PPT)"
+            accept=".doc,.docx,.ppt,.pptx"
             file={reportFile}
             onFileChange={setReportFile}
-            hint="Required on submit. Supports .doc/.docx/.pdf"
+            hint="Supports .doc/.docx/.ppt/.pptx"
+          />
+          <FileDropzone
+            label="Report Pdf (PDF)"
+            accept=".pdf"
+            file={pdfFile}
+            onFileChange={setPdfFile}
+            hint="Supports .pdf"
           />
           <FileDropzone
             label="Model File"
@@ -680,6 +869,13 @@ export function NewReportPageClient({
                 ? "Required for Company report on submit"
                 : "Optional for non-Company reports"
             }
+          />
+          <FileDropzone
+            label="Chief Approval Screenshot"
+            accept=".jpg,.jpeg,.png,.gif,.webp"
+            file={chiefApprovalScreenshotFile}
+            onFileChange={setChiefApprovalScreenshotFile}
+            hint="Required for Submit (jpg, png, gif, webp)"
           />
         </section>
 

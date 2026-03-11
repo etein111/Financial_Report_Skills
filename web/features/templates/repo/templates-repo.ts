@@ -7,7 +7,8 @@ export type Template = {
   id: string;
   name: string;
   report_type: string;
-  file_type: "word" | "excel";
+  file_type: "report" | "model";
+  language: "en" | "zh";
   file_path: string;
   version: number;
   is_active: boolean;
@@ -18,9 +19,9 @@ export type Template = {
 
 export type TemplateGroup = {
   report_type: string;
-  file_type: "word" | "excel";
-  active_template: Template | null;
-  history: Template[];
+  language: "en" | "zh";
+  // All templates in this group (different file_types)
+  templates: Template[];
 };
 
 export type ReportType =
@@ -28,15 +29,19 @@ export type ReportType =
   | "sector"
   | "company_flash"
   | "sector_flash"
-  | "common";
-export type FileType = "word" | "excel";
+  | "macro"
+  | "strategy"
+  | "quantitative"
+  | "bond";
+export type FileType = "report" | "model";
+export type Language = "en" | "zh";
 
 function hasTemplateFile(template: Pick<Template, "file_path">): boolean {
   return template.file_path.trim().length > 0;
 }
 
 /**
- * List all templates grouped by report_type and file_type
+ * List all templates grouped by report_type and language
  */
 export async function listTemplatesGrouped(): Promise<Result<TemplateGroup[]>> {
   const supabase = await createServerClient();
@@ -49,11 +54,11 @@ export async function listTemplatesGrouped(): Promise<Result<TemplateGroup[]>> {
   if (error) return err(error.message);
   if (!data) return err("Failed to fetch templates");
 
-  // Group templates by (report_type, file_type)
+  // Group templates by (report_type, language)
   const groups = new Map<string, Template[]>();
 
   for (const template of data) {
-    const key = `${template.report_type}:${template.file_type}`;
+    const key = `${template.report_type}:${template.language}`;
     if (!groups.has(key)) {
       groups.set(key, []);
     }
@@ -64,26 +69,21 @@ export async function listTemplatesGrouped(): Promise<Result<TemplateGroup[]>> {
   const result: TemplateGroup[] = [];
 
   for (const [key, templates] of groups) {
-    const [report_type, file_type] = key.split(":") as [string, FileType];
-
-    const activeTemplate =
-      templates.find((t) => t.is_active && hasTemplateFile(t)) || null;
-    const history = templates.filter((t) => t.id !== activeTemplate?.id);
+    const [report_type, language] = key.split(":") as [string, "en" | "zh"];
 
     result.push({
       report_type,
-      file_type,
-      active_template: activeTemplate,
-      history,
+      language,
+      templates,
     });
   }
 
-  // Sort by report_type, then file_type
+  // Sort by report_type, then language
   result.sort((a, b) => {
     if (a.report_type !== b.report_type) {
       return a.report_type.localeCompare(b.report_type);
     }
-    return a.file_type.localeCompare(b.file_type);
+    return a.language.localeCompare(b.language);
   });
 
   return ok(result);
@@ -177,34 +177,36 @@ export async function listTemplateReportTypes(): Promise<Result<string[]>> {
   const supabase = await createServerClient();
 
   const { data, error } = await supabase
-    .from("template")
-    .select("report_type")
-    .order("report_type", { ascending: true });
+    .from("report_type")
+    .select("code")
+    .eq("is_active", true)
+    .order("sort", { ascending: true });
 
   if (error) return err(error.message);
-  if (!data) return err("Failed to fetch template report types");
+  if (!data) return err("Failed to fetch report types");
 
-  const distinct = Array.from(
-    new Set(
-      data
-        .map((item) => item.report_type?.trim())
-        .filter((value): value is string => Boolean(value)),
-    ),
-  );
+  const codes = data.map((item) => item.code).filter((code): code is string => Boolean(code));
 
-  return ok(distinct);
+  return ok(codes);
 }
 
 export async function hasValidTemplateForReportType(
   reportType: string,
+  language?: "en" | "zh",
 ): Promise<Result<boolean>> {
   const supabase = await createServerClient();
 
-  const { data, error } = await supabase
+  let query = supabase
     .from("template")
     .select("id, file_path, is_active")
     .eq("report_type", reportType)
     .eq("is_active", true);
+
+  if (language) {
+    query = query.eq("language", language);
+  }
+
+  const { data, error } = await query;
 
   if (error) return err(error.message);
   if (!data || data.length === 0) return ok(false);
@@ -215,11 +217,12 @@ export async function hasValidTemplateForReportType(
 }
 
 /**
- * Get the next version number for a report_type and file_type
+ * Get the next version number for a report_type, file_type, and language
  */
 export async function getNextVersion(
   report_type: ReportType,
-  file_type: FileType
+  file_type: FileType,
+  language: "en" | "zh" = "en"
 ): Promise<number> {
   const supabase = await createServerClient();
 
@@ -228,6 +231,7 @@ export async function getNextVersion(
     .select("version")
     .eq("report_type", report_type)
     .eq("file_type", file_type)
+    .eq("language", language)
     .order("version", { ascending: false })
     .limit(1)
     .single();
@@ -242,14 +246,28 @@ export async function createTemplate(params: {
   name: string;
   report_type: ReportType;
   file_type: FileType;
+  language?: "en" | "zh";
   file_path: string;
   uploaded_by: string;
   set_active?: boolean;
 }): Promise<Result<Template>> {
   const supabase = await createServerClient();
+  const language = params.language ?? "en";
 
   // Get next version number
-  const version = await getNextVersion(params.report_type, params.file_type);
+  const version = await getNextVersion(params.report_type, params.file_type, language);
+
+  // If set_active is true, deactivate existing active templates first
+  // to avoid unique constraint violation (template_report_type_file_type_active_idx)
+  if (params.set_active) {
+    await supabase
+      .from("template")
+      .update({ is_active: false })
+      .eq("report_type", params.report_type)
+      .eq("file_type", params.file_type)
+      .eq("language", language)
+      .eq("is_active", true);
+  }
 
   const { data, error } = await supabase
     .from("template")
@@ -257,9 +275,10 @@ export async function createTemplate(params: {
       name: params.name,
       report_type: params.report_type,
       file_type: params.file_type,
+      language,
       file_path: params.file_path,
       version,
-      is_active: params.set_active ?? false,
+      is_active: false, // Always insert as inactive first, then activate
       uploaded_by: params.uploaded_by,
     })
     .select()
@@ -303,7 +322,8 @@ export async function activateTemplate(id: string): Promise<Result<Template>> {
     .from("template")
     .update({ is_active: false })
     .eq("report_type", template.report_type)
-    .eq("file_type", template.file_type);
+    .eq("file_type", template.file_type)
+    .eq("language", template.language);
 
   if (deactivateError) return err(deactivateError.message);
 

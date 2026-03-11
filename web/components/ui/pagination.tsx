@@ -11,7 +11,7 @@ export function Pagination({ page, totalPages, onChange }: PaginationProps) {
 
   return (
     <div className="flex items-center justify-between">
-      <div className="text-sm text-zinc-400">
+      <div className="text-sm text-[var(--fg-secondary)]">
         Page {page} / {totalPages}
       </div>
       <div className="flex gap-2">

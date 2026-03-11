@@ -25,14 +25,14 @@ export default async function ComingSoonPage({
     <div className="flex min-h-screen items-center justify-center px-6">
       <Card className="w-full max-w-md text-center">
         <div className="text-[64px] leading-none">{meta?.icon ?? "✨"}</div>
-        <h1 className="mt-4 text-xl font-semibold text-zinc-100">
+        <h1 className="mt-4 text-xl font-semibold text-[var(--fg-primary)]">
           Coming Soon
         </h1>
-        <p className="mt-2 text-sm text-zinc-400">
+        <p className="mt-2 text-sm text-[var(--fg-secondary)]">
           This feature is coming soon
         </p>
         {meta ? (
-          <p className="mt-6 text-xs text-zinc-500">Feature: {meta.label}</p>
+          <p className="mt-6 text-xs text-[var(--fg-tertiary)]">Feature: {meta.label}</p>
         ) : null}
       </Card>
     </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useTheme } from "next-themes";
 
 type Particle = {
   x: number;
@@ -21,6 +22,7 @@ export function ParticleField({
   particleCount = 120,
 }: ParticleFieldProps) {
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
+  const { theme } = useTheme();
 
   React.useEffect(() => {
     const canvas = canvasRef.current;
@@ -37,8 +39,8 @@ export function ParticleField({
     let dpr = 1;
 
     const linkDistance = 140;
-    const speedFactor = 2; // per design: "速度系数: 2"
-    const pulseSpeed = 0.15; // per design
+    const speedFactor = 2;
+    const pulseSpeed = 0.15;
 
     const particles: Particle[] = [];
 
@@ -78,6 +80,11 @@ export function ParticleField({
 
       ctx2.clearRect(0, 0, width, height);
 
+      // Adjust colors based on theme
+      const isDark = theme === "dark";
+      const particleHue = isDark ? 210 : 200;
+      const particleLightness = isDark ? 70 : 50;
+
       // Move
       for (const p of particles) {
         p.x += p.vx;
@@ -112,7 +119,7 @@ export function ParticleField({
 
           const alpha = (1 - dist / linkDistance) * 0.35;
           const hue = (a.hue + b.hue) / 2;
-          ctx2.strokeStyle = `hsla(${hue}, 100%, 70%, ${alpha})`;
+          ctx2.strokeStyle = `hsla(${hue}, 100%, ${particleLightness}%, ${alpha})`;
           ctx2.lineWidth = 1.2;
           ctx2.beginPath();
           ctx2.moveTo(a.x, a.y);
@@ -125,7 +132,7 @@ export function ParticleField({
       for (const p of particles) {
         const pulse = (Math.sin(t * (Math.PI * 2) * pulseSpeed + p.phase) + 1) / 2;
         const alpha = p.baseAlpha * (0.6 + pulse * 0.4);
-        ctx2.fillStyle = `hsla(${p.hue}, 100%, 70%, ${alpha})`;
+        ctx2.fillStyle = `hsla(${particleHue}, 100%, ${particleLightness}%, ${alpha})`;
         ctx2.beginPath();
         ctx2.arc(p.x, p.y, p.r, 0, Math.PI * 2);
         ctx2.fill();
@@ -148,7 +155,7 @@ export function ParticleField({
       window.removeEventListener("resize", onResize);
       window.cancelAnimationFrame(raf);
     };
-  }, [particleCount]);
+  }, [particleCount, theme]);
 
   return (
     <canvas

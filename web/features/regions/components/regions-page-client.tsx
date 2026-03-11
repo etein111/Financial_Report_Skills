@@ -75,7 +75,7 @@ export function RegionsPageClient({
 
   function openEdit(region: Region) {
     setEditingRegion(region);
-    setFormName(region.name);
+    setFormName(region.name_en);
     setFormCode(region.code);
     setFormErrors({});
     setFormOpen(true);
@@ -140,9 +140,9 @@ export function RegionsPageClient({
 
   return (
     <div className="min-h-screen">
-      <header className="border-b border-white/10 bg-zinc-900/60 backdrop-blur">
+      <header className="border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]/60 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
-          <div className="text-xl font-semibold text-zinc-50">Regions</div>
+          <div className="text-xl font-semibold text-[var(--fg-primary)]">Regions</div>
           <Button onClick={openCreate}>Create Region</Button>
         </div>
       </header>
@@ -157,7 +157,7 @@ export function RegionsPageClient({
               onChange={(e) => setQueryDraft(e.target.value)}
             />
           </form>
-          <div className="hidden text-sm text-zinc-400 sm:block">
+          <div className="hidden text-sm text-[var(--fg-secondary)] sm:block">
             {total} regions
           </div>
         </div>
@@ -174,20 +174,20 @@ export function RegionsPageClient({
           <tbody>
             {regions.length === 0 ? (
               <TR className="hover:bg-transparent">
-                <TD colSpan={4} className="py-10 text-center text-zinc-400">
+                <TD colSpan={4} className="py-10 text-center text-[var(--fg-secondary)]">
                   No regions found
                 </TD>
               </TR>
             ) : (
               regions.map((region) => (
                 <TR key={region.id}>
-                  <TD className="font-medium text-zinc-100">{region.name}</TD>
+                  <TD className="font-medium text-[var(--fg-primary)]">{region.name_en}</TD>
                   <TD>
-                    <code className="rounded bg-zinc-800 px-1.5 py-0.5 text-xs text-zinc-300">
+                    <code className="rounded bg-[var(--bg-surface-hover)] px-1.5 py-0.5 text-xs text-[var(--fg-secondary)]">
                       {region.code}
                     </code>
                   </TD>
-                  <TD className="text-zinc-300">
+                  <TD className="text-[var(--fg-secondary)]">
                     {formatShanghaiYmd(region.created_at)}
                   </TD>
                   <TD>

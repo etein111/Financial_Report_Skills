@@ -202,9 +202,9 @@ export function SectorsPageClient({
 
   return (
     <div className="min-h-screen">
-      <header className="border-b border-white/10 bg-zinc-900/60 backdrop-blur">
+      <header className="border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]/60 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
-          <div className="text-xl font-semibold text-zinc-50">Sectors</div>
+          <div className="text-xl font-semibold text-[var(--fg-primary)]">Sectors</div>
           <Button onClick={openCreate}>Create Sector</Button>
         </div>
       </header>
@@ -233,7 +233,7 @@ export function SectorsPageClient({
               />
             </div>
           </form>
-          <div className="hidden text-sm text-zinc-400 sm:block">
+          <div className="hidden text-sm text-[var(--fg-secondary)] sm:block">
             {total} sectors
           </div>
         </div>
@@ -253,7 +253,7 @@ export function SectorsPageClient({
           <tbody>
             {sectors.length === 0 ? (
               <TR className="hover:bg-transparent">
-                <TD colSpan={7} className="py-10 text-center text-zinc-400">
+                <TD colSpan={7} className="py-10 text-center text-[var(--fg-secondary)]">
                   No sectors found
                 </TD>
               </TR>
@@ -271,11 +271,11 @@ export function SectorsPageClient({
                       L{sector.level}
                     </span>
                   </TD>
-                  <TD className="font-medium text-zinc-100">
+                  <TD className="font-medium text-[var(--fg-primary)]">
                     {sector.name_en}
                   </TD>
-                  <TD className="text-zinc-300">{sector.name_cn ?? "-"}</TD>
-                  <TD className="text-zinc-300">
+                  <TD className="text-[var(--fg-secondary)]">{sector.name_cn ?? "-"}</TD>
+                  <TD className="text-[var(--fg-secondary)]">
                     {sector.level === 2 ? getParentName(sector.parent_id) : "-"}
                   </TD>
                   <TD>
@@ -283,13 +283,13 @@ export function SectorsPageClient({
                       className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-medium ${
                         sector.is_active
                           ? "bg-green-500/20 text-green-300"
-                          : "bg-zinc-500/20 text-zinc-400"
+                          : "bg-zinc-500/20 text-[var(--fg-secondary)]"
                       }`}
                     >
                       {sector.is_active ? "Active" : "Inactive"}
                     </span>
                   </TD>
-                  <TD className="text-zinc-300">
+                  <TD className="text-[var(--fg-secondary)]">
                     {formatShanghaiYmd(sector.created_at)}
                   </TD>
                   <TD>

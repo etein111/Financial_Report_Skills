@@ -26,7 +26,8 @@ import {
   listReportTypeOptions,
   listReports,
   reportTypeExists,
-  regionExists,
+  regionCodeExists,
+  saveChiefApprove,
   saveReportContent,
   sectorExists,
   type ReportDetail,
@@ -57,11 +58,12 @@ function isEditableStatus(status: ReportStatus): boolean {
   return status === "draft" || status === "submitted";
 }
 
-function trimToNull(value?: string | null): string | null {
+function trimToNull(value?: string | number | null): string | null {
   if (!value) {
     return null;
   }
-  const trimmed = value.trim();
+  const strValue = String(value);
+  const trimmed = strValue.trim();
   return trimmed.length > 0 ? trimmed : null;
 }
 
@@ -138,7 +140,7 @@ async function validateAnalysts(
 
 async function validateSourceTables(input: {
   report_type: string;
-  region_id?: string | null;
+  region_code?: string | null;
   sector_id?: string | null;
 }): Promise<string | null> {
   const reportTypeCheck = await reportTypeExists(input.report_type);
@@ -146,11 +148,11 @@ async function validateSourceTables(input: {
     return "Failed to validate report type.";
   }
   if (!reportTypeCheck.data) {
-    return "Report Type must come from template source.";
+    return "Report Type must be a valid active type.";
   }
 
-  if (input.region_id) {
-    const regionCheck = await regionExists(input.region_id);
+  if (input.region_code) {
+    const regionCheck = await regionCodeExists(input.region_code);
     if (!regionCheck.ok) {
       return "Failed to validate region.";
     }
@@ -198,7 +200,7 @@ async function validateReportForSubmit(
 ): Promise<string | null> {
   const sourceCheck = await validateSourceTables({
     report_type: detail.report_type,
-    region_id: detail.region_id,
+    region_code: detail.region_code,
     sector_id: detail.sector_id,
   });
   if (sourceCheck) {
@@ -219,9 +221,10 @@ async function validateReportForSubmit(
   if (!detail.report_language) {
     return "Report language is required.";
   }
-  if (!trimToNull(detail.contact_person)) {
-    return "Contact Person is required.";
-  }
+  // Contact Person is optional
+  // if (!trimToNull(detail.contact_person)) {
+  //   return "Contact Person is required.";
+  // }
   if (!trimToNull(detail.investment_thesis)) {
     return "Investment thesis (report abstract) is required.";
   }
@@ -232,7 +235,7 @@ async function validateReportForSubmit(
     return "Certificate must be confirmed before submit.";
   }
 
-  if (requiresRegion(detail.report_type) && !detail.region_id) {
+  if (requiresRegion(detail.report_type) && !detail.region_code) {
     return "Region is required for this Report Type.";
   }
   if (requiresSector(detail.report_type) && !detail.sector_id) {
@@ -323,16 +326,20 @@ function toSavePayload(input: {
   ticker?: string | null;
   rating?: string | null;
   target_price?: string | null;
-  region_id?: string | null;
+  region_code?: string | null;
   sector_id?: string | null;
   report_language?: ReportLanguage | null;
-  contact_person?: string | null;
+  contact_person_id?: string | null;
   investment_thesis?: string | null;
   certificate_confirmed?: boolean;
   coverage_id?: string | null;
   analysts: ReportAnalystInput[];
   word_file_path?: string | null;
+  word_file_name?: string | null;
+  pdf_file_path?: string | null;
+  pdf_file_name?: string | null;
   model_file_path?: string | null;
+  model_file_name?: string | null;
   fallback?: Partial<ReportDetail>;
 }) {
   return {
@@ -344,15 +351,15 @@ function toSavePayload(input: {
       input.target_price,
       input.fallback?.target_price,
     ),
-    region_id: resolveOptionalId(input.region_id, input.fallback?.region_id),
+    region_code: resolveOptionalId(input.region_code, input.fallback?.region_code),
     sector_id: resolveOptionalId(input.sector_id, input.fallback?.sector_id),
     report_language:
       input.report_language === undefined
         ? (input.fallback?.report_language ?? null)
         : (input.report_language ?? null),
-    contact_person: resolveOptionalText(
-      input.contact_person,
-      input.fallback?.contact_person,
+    contact_person_id: resolveOptionalId(
+      input.contact_person_id,
+      input.fallback?.contact_person_id,
     ),
     investment_thesis: resolveOptionalText(
       input.investment_thesis,
@@ -371,10 +378,26 @@ function toSavePayload(input: {
       input.word_file_path === undefined
         ? (input.fallback?.latest_version?.word_file_path ?? null)
         : (input.word_file_path ?? null),
+    word_file_name:
+      input.word_file_name === undefined
+        ? (input.fallback?.latest_version?.word_file_name ?? null)
+        : (input.word_file_name ?? null),
+    pdf_file_path:
+      input.pdf_file_path === undefined
+        ? (input.fallback?.latest_version?.pdf_file_path ?? null)
+        : (input.pdf_file_path ?? null),
+    pdf_file_name:
+      input.pdf_file_name === undefined
+        ? (input.fallback?.latest_version?.pdf_file_name ?? null)
+        : (input.pdf_file_name ?? null),
     model_file_path:
       input.model_file_path === undefined
         ? (input.fallback?.latest_version?.model_file_path ?? null)
         : (input.model_file_path ?? null),
+    model_file_name:
+      input.model_file_name === undefined
+        ? (input.fallback?.latest_version?.model_file_name ?? null)
+        : (input.model_file_name ?? null),
   };
 }
 
@@ -411,8 +434,8 @@ export async function listReportsAction(input: {
   const { role } = actor.data;
   const page = Math.max(1, input.page ?? 1);
   const query = input.query ?? null;
-  // Default status: admin/sa see "submitted", others see all (null for query)
-  const defaultStatus = role === "admin" || role === "sa" ? "submitted" : null;
+  // Default status: all reports
+  const defaultStatus = null;
   const appliedStatus = input.status ?? defaultStatus;
 
   const listResult = await listReports({
@@ -469,7 +492,7 @@ export async function createReportAction(
 
   const sourceCheck = await validateSourceTables({
     report_type: parsed.data.report_type,
-    region_id: parsed.data.region_id,
+    region_code: parsed.data.region_code,
     sector_id: parsed.data.sector_id,
   });
   if (sourceCheck) {
@@ -496,11 +519,11 @@ export async function createReportAction(
     ticker: payload.ticker,
     rating: payload.rating,
     target_price: payload.target_price,
-    region_id: payload.region_id,
+    region_code: payload.region_code,
     coverage_id: payload.coverage_id,
     sector_id: payload.sector_id,
     report_language: payload.report_language,
-    contact_person: payload.contact_person,
+    contact_person_id: payload.contact_person_id,
     investment_thesis: payload.investment_thesis,
     certificate_confirmed: payload.certificate_confirmed,
     analysts: payload.analysts,
@@ -549,7 +572,7 @@ export async function saveReportContentAction(
 
   const sourceCheck = await validateSourceTables({
     report_type: parsed.data.report_type,
-    region_id: parsed.data.region_id,
+    region_code: parsed.data.region_code,
     sector_id: parsed.data.sector_id,
   });
   if (sourceCheck) {
@@ -661,7 +684,7 @@ export async function directSubmitReportAction(
 
   const sourceCheck = await validateSourceTables({
     report_type: parsed.data.report_type,
-    region_id: parsed.data.region_id,
+    region_code: parsed.data.region_code,
     sector_id: parsed.data.sector_id,
   });
   if (sourceCheck) {
@@ -691,11 +714,11 @@ export async function directSubmitReportAction(
       ticker: payload.ticker,
       rating: payload.rating,
       target_price: payload.target_price,
-      region_id: payload.region_id,
+      region_code: payload.region_code,
       coverage_id: payload.coverage_id,
       sector_id: payload.sector_id,
       report_language: payload.report_language,
-      contact_person: payload.contact_person,
+      contact_person_id: payload.contact_person_id,
       investment_thesis: payload.investment_thesis,
       certificate_confirmed: payload.certificate_confirmed,
       analysts: payload.analysts,
@@ -766,4 +789,23 @@ export async function getReportDownloadUrlAction(
   }
 
   return getReportDownloadUrl(parsed.data);
+}
+
+export async function saveChiefApproveAction(input: {
+  report_id: string;
+  file_path: string;
+  file_name: string;
+  file_type: string;
+}): Promise<Result<{ id: string }>> {
+  const actor = await getActor();
+  if (!actor.ok) {
+    return actor;
+  }
+
+  return saveChiefApprove({
+    report_id: input.report_id,
+    file_path: input.file_path,
+    file_name: input.file_name,
+    file_type: input.file_type,
+  });
 }

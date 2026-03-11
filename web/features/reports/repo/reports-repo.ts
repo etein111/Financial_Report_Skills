@@ -41,8 +41,13 @@ export type ReportVersion = {
   version_no: number;
   snapshot_json: Record<string, unknown>;
   word_file_path: string | null;
+  word_file_name: string | null;
+  pdf_file_path: string | null;
+  pdf_file_name: string | null;
   model_file_path: string | null;
+  model_file_name: string | null;
   changed_by: string;
+  changed_by_name?: string | null;
   changed_at: string;
   created_at: string;
 };
@@ -58,19 +63,27 @@ export type ReportStatusLog = {
   reason: string | null;
   version_no: number;
   created_at: string;
+  word_file_path: string | null;
+  word_file_name: string | null;
+  pdf_file_path: string | null;
+  pdf_file_name: string | null;
+  model_file_path: string | null;
+  model_file_name: string | null;
 };
 
 export type ReportSummary = {
   id: string;
   owner_user_id: string;
+  owner_name: string | null;
   title: string;
   report_type: ReportType;
   ticker: string | null;
   rating: string | null;
   target_price: string | null;
-  region_id: string | null;
+  region_code: string | null;
   report_language: ReportLanguage | null;
-  contact_person: string | null;
+  contact_person_id: string | null;
+  contact_person_name: string | null;
   investment_thesis: string | null;
   certificate_confirmed: boolean;
   status: ReportStatus;
@@ -92,14 +105,17 @@ export type ReportDetail = ReportSummary & {
   } | null;
   region?: {
     id: string;
-    name: string;
+    name_en: string;
+    name_cn: string;
     code: string;
+    is_active: boolean;
   } | null;
   sector?: {
     id: string;
     name_en: string;
     name_cn: string | null;
   } | null;
+  chief_approve: ChiefApprove | null;
   versions: ReportVersion[];
   latest_version: ReportVersion | null;
   status_logs: ReportStatusLog[];
@@ -111,6 +127,15 @@ export type CoverageMatch = {
   analyst_ids: string[];
 };
 
+export type ChiefApprove = {
+  id: string;
+  report_id: string;
+  file_path: string;
+  file_name: string;
+  file_type: string;
+  created_at: string;
+};
+
 export type CreateReportParams = {
   owner_user_id: string;
   title: string;
@@ -118,11 +143,11 @@ export type CreateReportParams = {
   ticker?: string | null;
   rating?: string | null;
   target_price?: string | null;
-  region_id?: string | null;
+  region_code?: string | null;
   coverage_id?: string | null;
   sector_id?: string | null;
   report_language?: ReportLanguage | null;
-  contact_person?: string | null;
+  contact_person_id?: string | null;
   investment_thesis?: string | null;
   certificate_confirmed?: boolean;
   analysts: ReportAnalystInput[];
@@ -135,23 +160,27 @@ export type SaveReportContentParams = {
   ticker?: string | null;
   rating?: string | null;
   target_price?: string | null;
-  region_id?: string | null;
+  region_code?: string | null;
   coverage_id?: string | null;
   sector_id?: string | null;
   report_language?: ReportLanguage | null;
-  contact_person?: string | null;
+  contact_person_id?: string | null;
   investment_thesis?: string | null;
   certificate_confirmed?: boolean;
   analysts: ReportAnalystInput[];
   changed_by: string;
   word_file_path?: string | null;
+  word_file_name?: string | null;
+  pdf_file_path?: string | null;
+  pdf_file_name?: string | null;
   model_file_path?: string | null;
+  model_file_name?: string | null;
 };
 
 export type ListReportsParams = {
   page: number;
   query: string | null;
-  status: ReportStatus | null;
+  status: "all" | ReportStatus | null;
 };
 
 type AnalystRelation = NonNullable<ReportAnalyst["analyst"]>;
@@ -192,17 +221,22 @@ function normalizeReportAnalystRow(row: ReportAnalystRow): ReportAnalyst {
 }
 
 function normalizeReportSummaryRow(row: ReportSummaryRow): ReportSummary {
+  // owner_name is pre-fetched via RPC in listReports
+  const ownerName = (row as unknown as { owner_name?: string | null }).owner_name ?? null;
+
   return {
     id: row.id,
     owner_user_id: row.owner_user_id,
+    owner_name: ownerName,
     title: row.title,
     report_type: row.report_type,
     ticker: row.ticker,
     rating: row.rating,
-    target_price: row.target_price,
-    region_id: row.region_id,
+    target_price: row.target_price != null ? String(row.target_price) : null,
+    region_code: row.region_code,
     report_language: row.report_language,
-    contact_person: row.contact_person,
+    contact_person_id: row.contact_person_id,
+    contact_person_name: (row as unknown as { contact_person_name?: string | null }).contact_person_name ?? null,
     investment_thesis: row.investment_thesis,
     certificate_confirmed: row.certificate_confirmed,
     status: row.status,
@@ -243,13 +277,80 @@ export function buildReportStoragePath(params: {
   return buildReportStoragePathValue(params);
 }
 
+export async function getChiefApproveByReportId(reportId: string): Promise<Result<ChiefApprove | null>> {
+  const supabase = await createServerClient();
+
+  const { data, error } = await supabase
+    .from("chief_approve")
+    .select("*")
+    .eq("report_id", reportId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .single();
+
+  if (error) {
+    if (error.code === "PGRST116") {
+      // No rows returned - this is ok, means no chief approval yet
+      return ok(null);
+    }
+    return err(error.message);
+  }
+
+  return ok(data as ChiefApprove);
+}
+
+export async function saveChiefApprove(params: {
+  report_id: string;
+  file_path: string;
+  file_name: string;
+  file_type: string;
+}): Promise<Result<ChiefApprove>> {
+  const supabase = await createServerClient();
+
+  // Delete existing chief_approve for this report first
+  await supabase.from("chief_approve").delete().eq("report_id", params.report_id);
+
+  const { data, error } = await supabase
+    .from("chief_approve")
+    .insert({
+      report_id: params.report_id,
+      file_path: params.file_path,
+      file_name: params.file_name,
+      file_type: params.file_type,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    return err(error.message);
+  }
+
+  return ok(data as ChiefApprove);
+}
+
+export async function deleteChiefApprove(reportId: string): Promise<Result<null>> {
+  const supabase = await createServerClient();
+
+  const { error } = await supabase
+    .from("chief_approve")
+    .delete()
+    .eq("report_id", reportId);
+
+  if (error) {
+    return err(error.message);
+  }
+
+  return ok(null);
+}
+
 export async function listReportTypeOptions(): Promise<Result<string[]>> {
   const supabase = await createServerClient();
 
   const { data, error } = await supabase
     .from("template")
     .select("report_type")
-    .order("report_type", { ascending: true });
+    .eq("is_active", true)
+    .neq("report_type", "");
 
   if (error) {
     return err(error.message);
@@ -270,9 +371,10 @@ export async function reportTypeExists(reportType: string): Promise<Result<boole
   const supabase = await createServerClient();
 
   const { data, error } = await supabase
-    .from("template")
+    .from("report_type")
     .select("id")
-    .eq("report_type", reportType)
+    .eq("code", reportType)
+    .eq("is_active", true)
     .limit(1);
 
   if (error) {
@@ -303,13 +405,14 @@ export async function hasValidTemplateForReportType(
   return ok(valid);
 }
 
-export async function regionExists(regionId: string): Promise<Result<boolean>> {
+export async function regionCodeExists(regionCode: string): Promise<Result<boolean>> {
   const supabase = await createServerClient();
 
   const { data, error } = await supabase
     .from("region")
-    .select("id")
-    .eq("id", regionId)
+    .select("code")
+    .eq("code", regionCode)
+    .eq("is_active", true)
     .limit(1);
 
   if (error) {
@@ -395,9 +498,9 @@ export async function listReports(
       ticker,
       rating,
       target_price,
-      region_id,
+      region_code,
       report_language,
-      contact_person,
+      contact_person_id,
       investment_thesis,
       certificate_confirmed,
       status,
@@ -432,7 +535,7 @@ export async function listReports(
     queryBuilder = queryBuilder.ilike("title", term);
   }
 
-  if (params.status) {
+  if (params.status && params.status !== "all") {
     queryBuilder = queryBuilder.eq("status", params.status);
   }
 
@@ -449,10 +552,43 @@ export async function listReports(
 
   const total = count ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const rows = (data ?? []) as ReportSummaryRow[];
+
+  // Get unique owner IDs to fetch names
+  const ownerIds = [...new Set((data ?? []).map((item) => item.owner_user_id).filter(Boolean))];
+  // Get unique contact_person_ids to fetch names
+  const contactPersonIds = [...new Set((data ?? []).map((item) => item.contact_person_id).filter(Boolean))];
+
+  // Fetch owner names via RPC
+  const ownerNamesMap: Record<string, string> = {};
+  for (const ownerId of ownerIds) {
+    const { data: ownerName } = await supabase.rpc("get_user_full_name", { p_user_id: ownerId });
+    if (ownerName) {
+      ownerNamesMap[ownerId] = ownerName;
+    }
+  }
+
+  // Fetch contact_person names via RPC
+  const contactPersonNamesMap: Record<string, string> = {};
+  for (const contactPersonId of contactPersonIds) {
+    const { data: contactPersonName } = await supabase.rpc("get_user_full_name", { p_user_id: contactPersonId });
+    if (contactPersonName) {
+      contactPersonNamesMap[contactPersonId] = contactPersonName;
+    }
+  }
+
+  // Process each row to add owner name and contact_person name
+  const items = (data ?? []).map((item) => {
+    const ownerName = ownerNamesMap[item.owner_user_id] ?? null;
+    const contactPersonName = item.contact_person_id ? (contactPersonNamesMap[item.contact_person_id] ?? null) : null;
+    return normalizeReportSummaryRow({
+      ...item,
+      owner_name: ownerName,
+      contact_person_name: contactPersonName,
+    } as ReportSummaryRow);
+  });
 
   return ok({
-    items: rows.map((item) => normalizeReportSummaryRow(item)),
+    items,
     total,
     page: params.page,
     totalPages,
@@ -475,9 +611,9 @@ export async function getReportDetail(
       ticker,
       rating,
       target_price,
-      region_id,
+      region_code,
       report_language,
-      contact_person,
+      contact_person_id,
       investment_thesis,
       certificate_confirmed,
       status,
@@ -493,9 +629,10 @@ export async function getReportDetail(
         ticker,
         english_full_name
       ),
-      region:region_id (
+      region:region_code (
         id,
-        name,
+        name_en,
+        name_cn,
         code
       ),
       sector:sector_id (
@@ -524,7 +661,8 @@ export async function getReportDetail(
     .single();
 
   if (reportError || !reportData) {
-    return err("Report not found or no permission.");
+    console.error("getReportDetail: report query failed", { reportId, reportError });
+    return err(reportError?.message ?? "Report not found or no permission.");
   }
 
   const { data: versions, error: versionError } = await supabase
@@ -547,18 +685,86 @@ export async function getReportDetail(
     return err(logError.message);
   }
 
-  const summary = normalizeReportSummaryRow(
-    reportData as unknown as ReportSummaryRow,
-  );
+  // Get chief_approve data
+  const chiefApproveResult = await getChiefApproveByReportId(reportId);
+  if (!chiefApproveResult.ok) {
+    return err(chiefApproveResult.error);
+  }
+
+  // Get unique user IDs from versions and status_logs
+  const allUserIds = [
+    ...(versions ?? []).map((v) => v.changed_by).filter(Boolean),
+    ...(logs ?? []).map((l) => l.action_by).filter(Boolean),
+  ];
+  const uniqueUserIds = [...new Set(allUserIds)];
+
+  // Fetch user names from auth.users
+  let userNamesMap: Record<string, string> = {};
+  if (uniqueUserIds.length > 0) {
+    for (const userId of uniqueUserIds) {
+      const { data: userData } = await supabase.rpc("get_user_full_name", { p_user_id: userId });
+      if (userData) {
+        userNamesMap[userId] = userData;
+      }
+    }
+  }
+
+  // Fetch contact_person name
+  let contactPersonName: string | null = null;
+  if (reportData.contact_person_id) {
+    const { data: contactPersonData } = await supabase.rpc("get_user_full_name", { p_user_id: reportData.contact_person_id });
+    contactPersonName = contactPersonData ?? null;
+  }
+
+  // Fetch owner name
+  let ownerName: string | null = null;
+  if (reportData.owner_user_id) {
+    const { data: ownerNameData } = await supabase.rpc("get_user_full_name", { p_user_id: reportData.owner_user_id });
+    ownerName = ownerNameData ?? null;
+  }
+
+  // Create version map for attachments
+  const versionMap = (versions ?? []).reduce((acc, v) => {
+    acc[v.version_no] = v;
+    return acc;
+  }, {} as Record<number, Record<string, unknown>>);
+
+  // Process versions to add changed_by_name
+  const processedVersions = (versions ?? []).map((v: Record<string, unknown>) => ({
+    ...v,
+    changed_by_name: userNamesMap[v.changed_by as string] ?? null,
+  }));
+
+  // Process status_logs to add action_by_name and attachments
+  const processedLogs = (logs ?? []).map((l: Record<string, unknown>) => {
+    const version = versionMap[l.version_no as number];
+    return {
+      ...l,
+      action_by_name: userNamesMap[l.action_by as string] ?? null,
+      word_file_path: version?.word_file_path ?? null,
+      word_file_name: version?.word_file_name ?? null,
+      pdf_file_path: version?.pdf_file_path ?? null,
+      pdf_file_name: version?.pdf_file_name ?? null,
+      model_file_path: version?.model_file_path ?? null,
+      model_file_name: version?.model_file_name ?? null,
+    };
+  });
+
+  const summary = normalizeReportSummaryRow({
+    ...reportData,
+    owner_name: ownerName,
+    contact_person_name: contactPersonName,
+  } as ReportSummaryRow);
   const detail: ReportDetail = {
     ...summary,
     coverage:
       firstRelation<ReportDetail["coverage"]>(reportData.coverage) ?? null,
     region: firstRelation<ReportDetail["region"]>(reportData.region) ?? null,
     sector: firstRelation<ReportDetail["sector"]>(reportData.sector) ?? null,
-    versions: (versions ?? []) as ReportVersion[],
-    latest_version: ((versions ?? [])[0] as ReportVersion | undefined) ?? null,
-    status_logs: (logs ?? []) as ReportStatusLog[],
+    chief_approve: chiefApproveResult.data,
+    versions: processedVersions as ReportVersion[],
+    latest_version: (processedVersions[0] as ReportVersion | undefined) ?? null,
+    status_logs: processedLogs as ReportStatusLog[],
   };
 
   return ok(detail);
@@ -577,12 +783,12 @@ export async function createReport(
       report_type: params.report_type,
       ticker: params.ticker?.trim() || null,
       rating: params.rating?.trim() || null,
-      target_price: params.target_price?.trim() || null,
-      region_id: params.region_id ?? null,
+      target_price: params.target_price != null ? String(params.target_price).trim() || null : null,
+      region_code: params.region_code ?? null,
       coverage_id: params.coverage_id ?? null,
       sector_id: params.sector_id ?? null,
       report_language: params.report_language ?? null,
-      contact_person: params.contact_person?.trim() || null,
+      contact_person_id: params.contact_person_id ?? null,
       investment_thesis: params.investment_thesis?.trim() || null,
       certificate_confirmed: Boolean(params.certificate_confirmed),
       status: "draft",
@@ -660,17 +866,21 @@ export async function saveReportContent(
     p_ticker: params.ticker ?? null,
     p_rating: params.rating ?? null,
     p_target_price: params.target_price ?? null,
-    p_region_id: params.region_id ?? null,
+    p_region_code: params.region_code ?? null,
     p_sector_id: params.sector_id ?? null,
     p_report_language: params.report_language ?? null,
-    p_contact_person: params.contact_person ?? null,
+    p_contact_person_id: params.contact_person_id ?? null,
     p_investment_thesis: params.investment_thesis ?? null,
     p_certificate_confirmed: Boolean(params.certificate_confirmed),
     p_coverage_id: params.coverage_id ?? null,
     p_analysts: params.analysts,
     p_changed_by: params.changed_by,
     p_word_file_path: params.word_file_path ?? null,
+    p_pdf_file_path: params.pdf_file_path ?? null,
     p_model_file_path: params.model_file_path ?? null,
+    p_word_file_name: params.word_file_name ?? null,
+    p_pdf_file_name: params.pdf_file_name ?? null,
+    p_model_file_name: params.model_file_name ?? null,
   });
 
   if (error) {

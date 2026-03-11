@@ -1,6 +1,8 @@
 import type { ReportFileLabel } from "@/domain/schemas/report";
 
-export const REPORT_FILE_EXTENSIONS = ["doc", "docx", "pdf"] as const;
+export const REPORT_FILE_EXTENSIONS = ["doc", "docx", "pdf", "ppt", "pptx"] as const;
+export const WORD_PPT_FILE_EXTENSIONS = ["doc", "docx", "ppt", "pptx"] as const;
+export const PDF_FILE_EXTENSIONS = ["pdf"] as const;
 export const MODEL_FILE_EXTENSIONS = ["xls", "xlsx", "csv"] as const;
 
 export function toUtcTimestamp(date = new Date()): string {
@@ -42,9 +44,39 @@ export function validateUploadExtension(
       ok: false,
       error:
         label === "report"
-          ? "Report file must be .doc, .docx, or .pdf"
+          ? "Report file must be .doc, .docx, .pdf, .ppt, or .pptx"
           : "Model file must be .xls, .xlsx, or .csv",
     };
+  }
+
+  return { ok: true, extension };
+}
+
+export function validateWordPptExtension(
+  fileName: string,
+): { ok: true; extension: string } | { ok: false; error: string } {
+  const extension = getFileExtension(fileName);
+  if (!extension) {
+    return { ok: false, error: "File extension is required." };
+  }
+
+  if (!WORD_PPT_FILE_EXTENSIONS.includes(extension as (typeof WORD_PPT_FILE_EXTENSIONS)[number])) {
+    return { ok: false, error: "Report file must be .doc, .docx, .ppt, or .pptx" };
+  }
+
+  return { ok: true, extension };
+}
+
+export function validatePdfExtension(
+  fileName: string,
+): { ok: true; extension: string } | { ok: false; error: string } {
+  const extension = getFileExtension(fileName);
+  if (!extension) {
+    return { ok: false, error: "File extension is required." };
+  }
+
+  if (!PDF_FILE_EXTENSIONS.includes(extension as (typeof PDF_FILE_EXTENSIONS)[number])) {
+    return { ok: false, error: "PDF file must be .pdf" };
   }
 
   return { ok: true, extension };
