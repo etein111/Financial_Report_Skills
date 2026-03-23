@@ -1,8 +1,8 @@
-# NeoSpace 工作台插件系统
+# NeoSkills 工作台插件系统
 
 ## 项目概述
 
-NeoSpace 是 Neolyst 研究报告管理系统的 **AI 工作台插件**，通过一组符合标准的 Skills 实现报告的自动化编辑与审核流程。
+NeoSkills 是 Neolyst 研究报告管理系统的 **AI 工作台插件**，通过一组符合标准的 Skills 实现报告的自动化编辑与审核流程。
 
 ## 系统架构
 
