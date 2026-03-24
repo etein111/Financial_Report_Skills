@@ -19,4 +19,12 @@ AI 编程助手的统一指导文件。Claude Code 和 Codex 共享此配置。
 - 关键考量/取舍
 - 不确定时的默认决策
 
+## 编码原则
+
+### Python 项目
+
+- **使用 uv 作为包管理工具**：优先使用 `uv` 而非 `pip` 或 `poetry` 进行依赖管理和项目初始化
+- 安装依赖：`uv pip install <package>` 或 `uv sync`
+- 创建项目：`uv init` 或 `uv venv`
+
 ---
