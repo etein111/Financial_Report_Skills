@@ -1,4 +1,4 @@
-﻿---
+---
 name: template_maker
 description: 创建和维护分析师报告模板。当用户需要创建新模板、分析 Word 文档结构生成 schema、维护现有模板字段或验证模板时使用此 skill。支持对话式参数收集和自动检测 elements.yaml 配置文件
 ---
@@ -6,6 +6,27 @@ description: 创建和维护分析师报告模板。当用户需要创建新模�
 # template_maker
 
 创建和维护分析师报告模板。
+
+## 报告类型
+
+系统支持的常见报告类型：
+
+| 报告类型 | 说明 |
+|---------|------|
+| `company` | 公司覆盖报告（首次覆盖、深度分析等） |
+| `sector` | 行业研究报告 |
+| `company_flash` | 公司快讯报告 |
+| `sector_flash` | 行业快讯报告 |
+| `macro` | 宏观报告（通常共用 common 模板） |
+| `strategy` | 策略报告（通常共用 common 模板） |
+| `quantitative` | 量化报告（通常共用 common 模板） |
+| `bond` | 债券报告（通常共用 common 模板） |
+
+**注意**：
+- 报告类型用于 `router.yaml` 配置，必须使用小写
+- 多个报告类型可以映射到同一个模板
+- 例如：`macro`、`strategy`、`quantitative`、`bond` 都可以映射到 `common` 模板
+- 报告类型不限于上述列表，可根据业务需要扩展
 
 ## 工作流程
 
@@ -16,15 +37,21 @@ description: 创建和维护分析师报告模板。当用户需要创建新模�
 对话式询问以下信息：
 
 1. **模板名称**（必需）
-   - 示例："西锐飞机首次覆盖"、"航空行业报告"
-   - 提示："请输入模板名称"
+   - 这是模板在 `templates/` 下的目录名
+   - 示例：`common`、`company_standard`、`sector_research`、`flash_report`
+   - 提示："请输入模板名称（如：common、company_standard）"
 
-2. **Word 样本文件路径**（必需）
-   - 示例：`samples/西锐飞机首次覆盖报告.docx`
+2. **报告类型映射**（必需）
+   - 指定哪些报告类型使用这个模板
+   - 示例：`company` 或 `macro, strategy, quantitative, bond`
+   - 提示："这个模板用于哪些报告类型？（用逗号分隔，如：company）"
+
+3. **Word 样本文件路径**（必需）
+   - 示例：`samples/company_sample.docx`
    - 验证文件存在性
    - 提示："请提供 Word 样本文件路径"
 
-3. **elements.yaml 文件路径**（可选）
+4. **elements.yaml 文件路径**（可选）
    - 如果不提供，系统将自动检测：
      - `<word_dir>/<word_name> elements.yaml`
      - `<word_dir>/<word_name>_elements.yaml`
@@ -64,23 +91,35 @@ templates/
 
 ## 使用示例
 
-### 示例 1: 创建新模板
+### 示例 1: 创建通用模板（多个报告类型共用）
 
-用户：`创建一个西锐飞机首次覆盖的模板`
+用户：`创建一个通用模板，供 macro、strategy、quantitative、bond 使用`
 
 流程：
-1. 询问模板名称 → "西锐飞机首次覆盖"
-2. 询问 Word 文件 → `samples/西锐飞机首次覆盖报告.docx`
-3. 询问 elements.yaml → 用户留空（自动检测）
-4. 执行创建
-5. 报告结果
+1. 模板名称 → `common`
+2. 报告类型映射 → `macro, strategy, quantitative, bond`
+3. Word 文件 → `samples/macro_sample.docx`
+4. elements.yaml → 用户留空（自动检测）
+5. 执行创建，`router.yaml` 自动添加映射
 
-### 示例 2: 命令行调用
+### 示例 2: 创建公司报告模板
+
+用户：`创建一个公司报告模板`
+
+流程：
+1. 模板名称 → `company_standard`
+2. 报告类型映射 → `company`
+3. Word 文件 → `samples/company_sample.docx`
+4. elements.yaml → 自动检测
+5. 执行创建
+
+### 示例 3: 命令行调用
 
 ```bash
 python3 skills/template_maker/scripts/invoke.py \
-  --name "西锐飞机首次覆盖" \
-  --word "samples/西锐飞机首次覆盖报告.docx"
+  --name "common" \
+  --report-types "macro,strategy,quantitative,bond" \
+  --word "samples/macro_sample.docx"
 ```
 
 ## 技术细节
@@ -178,15 +217,3 @@ fields:
     format: 2507.HK
     description: 股票代码
 ```
-
-## 模块说明
-
-本 skill 的代码模块位于 `scripts/` 目录：
-
-- `scripts/parser.py`: Word 文档结构分析器
-- `scripts/schema_gen.py`: Schema 生成器
-- `scripts/template_builder.py`: 模板构建器
-- `scripts/router_mgr.py`: 路由管理器
-- `scripts/validator.py`: 模板验证器
-- `scripts/core.py`: 核心编排器
-- `scripts/utils.py`: 工具函数
