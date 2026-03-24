@@ -30,33 +30,45 @@ description: 创建和维护分析师报告模板。当用户需要创建新模�
 
 ## 工作流程
 
-当用户请求创建或维护模板时，按以下步骤执行：
+当用户请求创建或维护模板时，使用**渐进式交互**：
 
-### 步骤 1: 收集必要信息
+### 核心原则
 
-对话式询问以下信息：
+- **一次只问一个问题**
+- **提供推荐值或默认值**
+- **多轮对话逐步收集信息**
 
-1. **模板名称**（必需）
-   - 这是模板在 `templates/` 下的目录名
-   - 示例：`common`、`company_standard`、`sector_research`、`flash_report`
-   - 提示："请输入模板名称（如：common、company_standard）"
+### 步骤 1: 确定用户意图
 
-2. **报告类型映射**（必需）
-   - 指定哪些报告类型使用这个模板
-   - 示例：`company` 或 `macro, strategy, quantitative, bond`
-   - 提示："这个模板用于哪些报告类型？（用逗号分隔，如：company）"
+首次回复只需要问一个简单问题：
 
-3. **Word 样本文件路径**（必需）
-   - 示例：`samples/company_sample.docx`
-   - 验证文件存在性
-   - 提示："请提供 Word 样本文件路径"
+```
+请问您想创建什么类型的模板？
+（例如：common 通用模板、company 公司报告）
+```
 
-4. **elements.yaml 文件路径**（可选）
-   - 如果不提供，系统将自动检测：
-     - `<word_dir>/<word_name> elements.yaml`
-     - `<word_dir>/<word_name>_elements.yaml`
-     - `<word_dir>/elements.yaml`
-   - 提示："请输入 elements.yaml 路径（留空自动检测）"
+- 如果用户不清楚选项，列出常见模板类型作为参考
+- 根据用户回答，给出**推荐配置**
+- 不要一次问多个问题
+
+### 步骤 2: 渐进式收集信息
+
+每轮只问一个下一步需要的信息：
+
+1. **第一轮**：获取模板名称和报告类型
+   - 示例回复："好的，创建 `common` 模板，用于 macro、strategy 等报告类型。
+      请提供 Word 样本文件路径（例如：samples/macro_sample.docx）"
+
+2. **第二轮**：获取 Word 文件路径
+   - 验证文件存在
+   - 自动检测 elements.yaml
+   - 如果检测到多个候选文件，让用户选择
+
+3. **第三轮**：确认配置并执行
+   - 展示汇总信息
+   - 询问："确认创建吗？"
+
+### 步骤 3: 执行创建
 
 ### 步骤 2: 执行创建
 
@@ -91,27 +103,47 @@ templates/
 
 ## 使用示例
 
-### 示例 1: 创建通用模板（多个报告类型共用）
+### 示例 1: 创建通用模板（多轮对话）
 
-用户：`创建一个通用模板，供 macro、strategy、quantitative、bond 使用`
+**用户**：`创建一个通用模板`
 
-流程：
-1. 模板名称 → `common`
-2. 报告类型映射 → `macro, strategy, quantitative, bond`
-3. Word 文件 → `samples/macro_sample.docx`
-4. elements.yaml → 用户留空（自动检测）
-5. 执行创建，`router.yaml` 自动添加映射
+**AI**：请问您想创建什么类型的模板？（例如：common 通用模板、company 公司报告）
 
-### 示例 2: 创建公司报告模板
+**用户**：`common`
 
-用户：`创建一个公司报告模板`
+**AI**：好的，创建 `common` 模板。这个模板用于哪些报告类型？
+（例如：macro, strategy, quantitative, bond）
 
-流程：
-1. 模板名称 → `company_standard`
-2. 报告类型映射 → `company`
-3. Word 文件 → `samples/company_sample.docx`
-4. elements.yaml → 自动检测
-5. 执行创建
+**用户**：`就用示例的`
+
+**AI**：明白了。请提供 Word 样本文件路径：
+（例如：samples/macro_sample.docx）
+
+**用户**：`samples/macro_sample.docx`
+
+**AI**：检测到 `samples/macro_sample elements.yaml`，将使用该配置文件。
+
+**汇总配置**：
+- 模板名称：common
+- 报告类型：macro, strategy, quantitative, bond
+- Word 文件：samples/macro_sample.docx
+- elements.yaml：samples/macro_sample elements.yaml
+
+确认创建吗？
+
+### 示例 2: 用户在一条消息中提供所有信息
+
+**用户**：`创建 common 模板，用于 macro 和 strategy，文件是 samples/macro_sample.docx`
+
+**AI**：收到配置。检测到 `samples/macro_sample elements.yaml`。
+
+**汇总配置**：
+- 模板名称：common
+- 报告类型：macro, strategy
+- Word 文件：samples/macro_sample.docx
+- elements.yaml：samples/macro_sample elements.yaml
+
+确认创建吗？
 
 ### 示例 3: 命令行调用
 
