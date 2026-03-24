@@ -85,6 +85,51 @@ python3 skills/template_maker/scripts/invoke.py \
 
 ## 技术细节
 
+### 职责边界
+
+**template-maker 只负责**：
+- `templates/` 目录下的正式模板资产
+- `template.docx` - 正式排版模板
+- `schema.yaml` - 提取规则说明书（包含 extraction_rules）
+- `meta.yaml` - 模板元数据
+- `router.yaml` - 路由配置
+
+**report-maker 负责**（单独 skill）：
+- `reports/` 目录下的报告处理
+- 从草稿抽取 `elements.yaml`、`abstract.docx`、`body.docx`
+- 合并生成 `output.docx` 和 `output.pdf`
+
+### schema.yaml 结构
+
+生成的 schema.yaml 包含三部分：
+
+```yaml
+name: 模板名称
+display_name: 模板显示名称
+version: 1.0.0
+fields:
+  company:
+    description: 公司名称
+    format: 西锐飞机
+  ticker:
+    description: 股票代码
+    format: 2507.HK
+
+extraction_rules:
+  abstract:
+    description: 报告摘要部分
+    scope: 从报告开头到第一个一级标题之前
+    hints:
+      - 通常包含投资亮点、核心观点
+      - 长度约 200-500 字
+  body:
+    description: 报告正文部分
+    scope: 从第一个一级标题之后到报告结尾
+    hints:
+      - 包含各章节详细内容
+      - 可能包含表格、图表引用
+```
+
 ### 自动检测逻辑
 
 系统按以下顺序查找 `elements.yaml`：
@@ -98,7 +143,7 @@ python3 skills/template_maker/scripts/invoke.py \
 - `scripts/core.py`: 核心编排器 TemplateMaker
 - `scripts/invoke.py`: CLI 调用入口
 - `scripts/parser.py`: Word 文档分析器
-- `scripts/schema_gen.py`: Schema 生成器
+- `scripts/schema_gen.py`: Schema 生成器（包含 extraction_rules）
 - `scripts/router_mgr.py`: 路由管理器
 - `scripts/validator.py`: 模板验证器
 - `scripts/utils.py`: 工具函数

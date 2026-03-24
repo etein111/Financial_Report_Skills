@@ -63,7 +63,7 @@ class TemplateMaker:
 
         # 4. 生成 schema
         elements = yaml.safe_load(elements_path.read_text())
-        schema = self.schema_gen.generate(elements)
+        schema = self.schema_gen.generate(elements, template_name=name)
 
         # 保存 schema.yaml
         schema_path = template_dir / "schema.yaml"
