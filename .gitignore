@@ -35,3 +35,4 @@ templates/template_[0-9]*/
 
 # Local skill installation
 ~/.claude/skills/
+.claude/skills/
