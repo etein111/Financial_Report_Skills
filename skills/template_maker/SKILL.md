@@ -85,20 +85,6 @@ python3 skills/template_maker/scripts/invoke.py \
 
 ## 技术细节
 
-### 职责边界
-
-**template-maker 只负责**：
-- `templates/` 目录下的正式模板资产
-- `template.docx` - 正式排版模板
-- `schema.yaml` - 提取规则说明书（包含 extraction_rules）
-- `meta.yaml` - 模板元数据
-- `router.yaml` - 路由配置
-
-**report-maker 负责**（单独 skill）：
-- `reports/` 目录下的报告处理
-- 从草稿抽取 `elements.yaml`、`abstract.docx`、`body.docx`
-- 合并生成 `output.docx` 和 `output.pdf`
-
 ### schema.yaml 结构
 
 生成的 schema.yaml 包含三部分：
@@ -129,6 +115,8 @@ extraction_rules:
       - 包含各章节详细内容
       - 可能包含表格、图表引用
 ```
+
+注意：`extraction_rules` 供 report-maker skill 使用，定义如何从草稿中抽取摘要和正文。
 
 ### 自动检测逻辑
 
