@@ -1,4 +1,4 @@
-"""测试 schema_gen.py。"""
+﻿"""测试 schema_gen.py。"""
 
 import pytest
 from pathlib import Path

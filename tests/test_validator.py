@@ -1,4 +1,4 @@
-"""测试 validator.py。"""
+﻿"""测试 validator.py。"""
 
 import pytest
 from pathlib import Path
