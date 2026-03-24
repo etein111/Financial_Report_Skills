@@ -3,6 +3,7 @@
 import yaml
 from pathlib import Path
 from typing import Dict, Any
+import copy
 
 
 # ==================== 文件操作 ====================
@@ -81,7 +82,7 @@ def update_mapping(data: Dict[str, Any], report_type: str, template_name: str) -
     Returns:
         新的 Router 数据
     """
-    new_data = data.copy()
+    new_data = copy.deepcopy(data)
     if "mappings" not in new_data:
         new_data["mappings"] = {}
     new_data["mappings"][report_type] = template_name
@@ -98,7 +99,7 @@ def remove_mapping(data: Dict[str, Any], report_type: str) -> Dict[str, Any]:
     Returns:
         新的 Router 数据
     """
-    new_data = data.copy()
+    new_data = copy.deepcopy(data)
     if "mappings" in new_data and report_type in new_data["mappings"]:
         del new_data["mappings"][report_type]
     return new_data
