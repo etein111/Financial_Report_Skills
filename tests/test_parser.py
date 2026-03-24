@@ -2,7 +2,7 @@
 
 import pytest
 from pathlib import Path
-from skills.template_maker.parser import WordStructureAnalyzer
+from skills.template_maker.scripts.parser import WordStructureAnalyzer
 
 @pytest.fixture
 def sample_doc():

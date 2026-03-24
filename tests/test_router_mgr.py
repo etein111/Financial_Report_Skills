@@ -3,7 +3,7 @@
 import pytest
 from pathlib import Path
 import yaml
-from skills.template_maker.router_mgr import RouterManager
+from skills.template_maker.scripts.router_mgr import RouterManager
 
 @pytest.fixture
 def temp_router(tmp_path):

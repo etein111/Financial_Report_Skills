@@ -4,7 +4,7 @@ import pytest
 from pathlib import Path
 from shutil import copy
 import yaml
-from skills.template_maker.validator import TemplateValidator
+from skills.template_maker.scripts.validator import TemplateValidator
 
 @pytest.fixture
 def sample_template(tmp_path):

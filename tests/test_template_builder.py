@@ -3,7 +3,7 @@
 import pytest
 from pathlib import Path
 from shutil import copy
-from skills.template_maker.template_builder import TemplateBuilder
+from skills.template_maker.scripts.template_builder import TemplateBuilder
 
 @pytest.fixture
 def sample_doc(tmp_path):

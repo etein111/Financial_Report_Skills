@@ -2,7 +2,7 @@
 
 import pytest
 from pathlib import Path
-from skills.template_maker.utils import find_elements_yaml
+from skills.template_maker.scripts.utils import find_elements_yaml
 
 def test_find_elements_yaml_with_pair(tmp_path):
     """测试找到配对的 elements.yaml。"""

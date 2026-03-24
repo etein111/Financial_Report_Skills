@@ -1,3 +1,8 @@
+---
+name: template-maker
+description: 创建和维护分析师报告模板，包括分析 Word 文档结构、生成 schema.yaml、创建模板文件、维护路由配置和验证模板可用性。使用场景：创建新的分析师报告模板、维护现有模板的字段、验证模板可用性、生成模板配置文件
+---
+
 # template-maker
 
 创建和维护分析师报告模板。
@@ -74,10 +79,12 @@ fields:
 
 ## 模块说明
 
-- `parser.py`: Word 文档结构分析器
-- `schema_gen.py`: Schema 生成器
-- `template_builder.py`: 模板构建器
-- `router_mgr.py`: 路由管理器
-- `validator.py`: 模板验证器
-- `core.py`: 核心编排器
-- `utils.py`: 工具函数
+本 skill 的代码模块位于 `scripts/` 目录：
+
+- `scripts/parser.py`: Word 文档结构分析器
+- `scripts/schema_gen.py`: Schema 生成器
+- `scripts/template_builder.py`: 模板构建器
+- `scripts/router_mgr.py`: 路由管理器
+- `scripts/validator.py`: 模板验证器
+- `scripts/core.py`: 核心编排器
+- `scripts/utils.py`: 工具函数

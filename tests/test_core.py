@@ -4,7 +4,7 @@ import pytest
 from pathlib import Path
 from shutil import copy, rmtree
 import yaml
-from skills.template_maker.core import TemplateMaker
+from skills.template_maker.scripts.core import TemplateMaker
 
 @pytest.fixture
 def sample_word(tmp_path):

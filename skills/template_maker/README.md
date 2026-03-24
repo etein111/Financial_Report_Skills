@@ -17,7 +17,7 @@ Template Maker 是一个 neoskills skill，用于自动化创建和维护分析�
 ## 安装
 
 ```bash
-pip install -r requirements.txt
+pip install -r scripts/requirements.txt
 ```
 
 依赖：
@@ -30,7 +30,7 @@ pip install -r requirements.txt
 ### 1. 创建新模板
 
 ```python
-from skills.template_maker.core import TemplateMaker
+from skills.template_maker.scripts.core import TemplateMaker
 from pathlib import Path
 
 # 初始化
@@ -50,7 +50,7 @@ print(result)
 ### 2. 验证模板
 
 ```python
-from skills.template_maker.validator import TemplateValidator
+from skills.template_maker.scripts.validator import TemplateValidator
 
 validator = TemplateValidator()
 success, message = validator.validate(
@@ -62,7 +62,7 @@ success, message = validator.validate(
 ### 3. 管理路由
 
 ```python
-from skills.template_maker.router_mgr import RouterManager
+from skills.template_maker.scripts.router_mgr import RouterManager
 
 router = RouterManager(Path("templates/router.yaml"))
 router.add_mapping("company", "西锐飞机首次覆盖")
@@ -73,17 +73,18 @@ router.remove_mapping("company", "旧模板")
 
 ```
 skills/template_maker/
-├── __init__.py
-├── core.py              # 核心编排器
-├── parser.py            # Word 文档分析器
-├── schema_gen.py        # Schema 生成器
-├── template_builder.py  # 模板构建器
-├── router_mgr.py        # 路由管理器
-├── validator.py         # 模板验证器
-├── utils.py             # 工具函数
-├── requirements.txt
-├── SKILL.md
-└── README.md
+├── SKILL.md             # Skill 定义文件
+├── README.md            # 本文档
+└── scripts/             # 代码模块
+    ├── __init__.py
+    ├── core.py              # 核心编排器
+    ├── parser.py            # Word 文档分析器
+    ├── schema_gen.py        # Schema 生成器
+    ├── template_builder.py  # 模板构建器
+    ├── router_mgr.py        # 路由管理器
+    ├── validator.py         # 模板验证器
+    ├── utils.py             # 工具函数
+    └── requirements.txt
 ```
 
 ## 测试
@@ -96,7 +97,7 @@ pytest tests/
 pytest tests/test_core.py -v
 
 # 查看覆盖率
-pytest tests/ --cov=skills/template_maker --cov-report=html
+pytest tests/ --cov=skills/template_maker/scripts --cov-report=html
 ```
 
 ## 配置文件
@@ -151,7 +152,7 @@ fields:
 
 ### 添加新模块
 
-1. 在 `skills/template_maker/` 创建新模块
+1. 在 `skills/template_maker/scripts/` 创建新模块
 2. 在 `tests/` 创建对应测试文件
 3. 保持 80%+ 测试覆盖率
 4. 运行 `pytest` 验证

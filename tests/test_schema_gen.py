@@ -2,7 +2,7 @@
 
 import pytest
 from pathlib import Path
-from skills.template_maker.schema_gen import SchemaGenerator
+from skills.template_maker.scripts.schema_gen import SchemaGenerator
 
 def test_generate_schema_from_elements():
     """测试从 elements.yaml 生成 schema。"""
