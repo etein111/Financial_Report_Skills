@@ -4,14 +4,15 @@ ticker: 2507.HK
 title: 首次覆盖：安全、创新与强大生态系统铸就西锐私人航空全球领导者地位
 rating_change: 首次覆盖
 rating: 优于大市
-current_price: null
+current_price: 60.40
 target_price: 11.12美元（对应港币86.72元）
-market_cap: null
-shares_in_issue: null
-one_year_high: null
-one_year_low: null
-current_price_date: null
+market_cap: 22.11bn
+shares_in_issue: 365.99mn
+one_year_high: 73.40
+one_year_low: 20.50
+current_price_date: 2026 年 01 月 15 日
 analysts:
-  - name: Bin Yang
-    sfc_code: null
+  - chinese_name: 杨斌
+    english_name: Bin Yang
+    sfc_code: BSQ313
     email: harryyang@hfisec.com.hk
