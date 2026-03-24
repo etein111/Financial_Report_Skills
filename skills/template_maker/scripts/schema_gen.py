@@ -27,7 +27,7 @@ class SchemaGenerator:
             "display_name": f"{template_name} 模板",
             "version": "1.0.0",
             "fields": fields,
-            # 抽取规则（供 report-maker 使用）
+            # 抽取规则（供 report_maker 使用）
             "extraction_rules": self._get_extraction_rules(),
         }
 

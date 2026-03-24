@@ -1,9 +1,9 @@
 ﻿---
-name: template-maker
+name: template_maker
 description: 创建和维护分析师报告模板。当用户需要创建新模板、分析 Word 文档结构生成 schema、维护现有模板字段或验证模板时使用此 skill。支持对话式参数收集和自动检测 elements.yaml 配置文件
 ---
 
-# template-maker
+# template_maker
 
 创建和维护分析师报告模板。
 
@@ -37,7 +37,7 @@ description: 创建和维护分析师报告模板。当用户需要创建新模�
 
 ```bash
 cd /mnt/c/_code/neoskills
-python3 skills/template-maker/scripts/invoke.py \
+python3 skills/template_maker/scripts/invoke.py \
   --name "模板名称" \
   --word "path/to/sample.docx" \
   --elements "path/to/elements.yaml"
@@ -46,7 +46,7 @@ python3 skills/template-maker/scripts/invoke.py \
 或使用对话式模式：
 
 ```bash
-python3 skills/template-maker/scripts/invoke.py
+python3 skills/template_maker/scripts/invoke.py
 ```
 
 ### 步骤 3: 验证结果
@@ -78,7 +78,7 @@ templates/
 ### 示例 2: 命令行调用
 
 ```bash
-python3 skills/template-maker/scripts/invoke.py \
+python3 skills/template_maker/scripts/invoke.py \
   --name "西锐飞机首次覆盖" \
   --word "samples/西锐飞机首次覆盖报告.docx"
 ```
@@ -116,7 +116,7 @@ extraction_rules:
       - 可能包含表格、图表引用
 ```
 
-注意：`extraction_rules` 供 report-maker skill 使用，定义如何从草稿中抽取摘要和正文。
+注意：`extraction_rules` 供 report_maker skill 使用，定义如何从草稿中抽取摘要和正文。
 
 ### 自动检测逻辑
 
@@ -139,7 +139,7 @@ extraction_rules:
 ### 依赖安装
 
 ```bash
-pip install -r skills/template-maker/scripts/requirements.txt
+pip install -r skills/template_maker/scripts/requirements.txt
 ```
 
 ## 模板目录结构

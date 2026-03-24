@@ -36,6 +36,11 @@ AI 编程助手的统一指导文件。Claude Code 和 Codex 共享此配置。
   - **必需**：SKILL.md 必须包含 YAML frontmatter（name 和 description 字段）
   - **标准结构**：代码文件放在 `scripts/` 子目录，SKILL.md 在根目录
 
+- **Skill 命名规范**：
+  - **目录名和模块名必须使用下划线分隔**（如 `template_maker`、`report_maker`）
+  - **禁止使用连字符**（如 `template-maker`），因为 Python 模块名不能包含连字符
+  - 这确保了 skill 可以被正确导入：`from skills.template_maker.scripts.core import ...`
+
 - **使用 skill-creator skill 开发新技能**：
   - 在创建或修改 skill 之前，**必须先调用** skill-creator skill
   - 使用 `init_skill.py` 脚本初始化正确的目录结构

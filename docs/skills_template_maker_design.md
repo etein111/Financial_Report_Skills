@@ -1,4 +1,4 @@
-# template-maker 设计文档
+﻿# template_maker 设计文档
 
 **日期**: 2026-03-24
 **状态**: 设计中
@@ -10,7 +10,7 @@
 
 ### 1.1 目标
 
-`template-maker` 是分析师报告自动化系统的核心技能之一，负责：
+`template_maker` 是分析师报告自动化系统的核心技能之一，负责：
 - 从标准 Word 样本创建可复用的报告模板
 - 通过自然语言维护模板和提取规则
 - 管理报告类型到模板的路由映射
@@ -38,7 +38,7 @@
 
 - 不处理单篇报告（不写入 `/reports/`）
 - 不直接修改已存在的报告目录
-- 不负责最终的报告渲染（由 `report-maker` 负责）
+- 不负责最终的报告渲染（由 `report_maker` 负责）
 
 ---
 
@@ -47,7 +47,7 @@
 ```
 neoskills/
 ├── skills/
-│   └── template-maker/
+│   └── template_maker/
 │       ├── SKILL.md              # Skill 定义文件
 │       ├── __init__.py
 │       ├── core.py               # 核心逻辑
@@ -55,7 +55,7 @@ neoskills/
 │       ├── validator.py          # 模板验证器
 │       └── utils.py              # 工具函数
 │
-├── templates/                    # 由 template-maker 写入
+├── templates/                    # 由 template_maker 写入
 │   ├── router.yaml               # 路由配置
 │   └── common/                   # 模板目录（按模板名组织）
 │       ├── schema.yaml           # 提取规则
@@ -160,7 +160,7 @@ sample_source: "西锐飞机首次覆盖报告（中文）提交版.docx"
 
 **流程：**
 ```
-用户: /template-maker
+用户: /template_maker
 
 系统: 好的，我来帮你创建模板。请提供以下信息：
 1. 模板名称是什么？（如：common）
@@ -336,7 +336,7 @@ python-docx 解析结构
 
 ### 9.2 为什么选择对话式交互？
 
-**决策**：`/template-maker` 触发，所有参数通过对话询问
+**决策**：`/template_maker` 触发，所有参数通过对话询问
 
 **理由**：
 1. 零学习成本，业务人员无需记忆命令参数
@@ -350,7 +350,7 @@ python-docx 解析结构
 **理由**：
 1. `python-docx` 负责文档结构解析（识别表格、段落）
 2. `python-docx-template` 负责模板占位符（基于 Jinja2）
-3. 与 `report-maker` 技术栈保持一致
+3. 与 `report_maker` 技术栈保持一致
 4. 成熟稳定，文档完善
 
 ### 9.4 为什么采用混合模式（提示词 + 代码）？

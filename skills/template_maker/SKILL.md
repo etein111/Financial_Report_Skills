@@ -1,9 +1,9 @@
----
-name: template-maker
+﻿---
+name: template_maker
 description: 创建和维护分析师报告模板。当用户需要创建新模板、分析 Word 文档结构生成 schema、维护现有模板字段或验证模板时使用此 skill。支持对话式参数收集和自动检测 elements.yaml 配置文件
 ---
 
-# template-maker
+# template_maker
 
 创建和维护分析师报告模板。
 
@@ -116,7 +116,7 @@ extraction_rules:
       - 可能包含表格、图表引用
 ```
 
-注意：`extraction_rules` 供 report-maker skill 使用，定义如何从草稿中抽取摘要和正文。
+注意：`extraction_rules` 供 report_maker skill 使用，定义如何从草稿中抽取摘要和正文。
 
 ### 自动检测逻辑
 
