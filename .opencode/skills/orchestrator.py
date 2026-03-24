@@ -1,7 +1,13 @@
 """工作流编排器 - 场景一"""
+import sys
+import os
+
+# 添加 skills 目录到 path
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
 from typing import Dict, Any, Optional
-from template_admin.template_manager import TemplateManager
-from rule_manager.feedback_handler import FeedbackHandler
+from template_admin import TemplateManager
+from rule_manager import FeedbackHandler
 
 
 class TemplateWorkflowOrchestrator:
