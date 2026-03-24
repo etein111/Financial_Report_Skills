@@ -17,10 +17,12 @@ import sys
 import argparse
 from pathlib import Path
 
-# 添加项目根目录到路径
-project_root = Path(__file__).parent.parent.parent.parent
+# 添加项目根目录到路径（支持作为脚本直接运行）
+scripts_dir = Path(__file__).parent
+project_root = scripts_dir.parent.parent.parent
 sys.path.insert(0, str(project_root))
 
+# 导入 TemplateMaker
 from skills.template_maker.scripts.core import TemplateMaker
 
 
