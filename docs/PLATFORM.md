@@ -74,7 +74,7 @@
 
 * **neolyst**：内部管理系统仓库。含 neolyst-web 代码及 neolyst-db 的物理模型。  
 * **neoport**：外部发布系统仓库。含 neoport-web、neoport-db 及 Publish Worker 进程。  
-* **neoskills**：业务逻辑库。封装解析、要素提取、排版渲染、模板自动生成、合规检查等所有原子能力。  
+* **neoskills**：业务逻辑库。封装解析、要素提取、排版渲染、模板自动生成、合规检查等所有原子能力。仓库内部按三类资产组织：`skills/` 存放符合 Agent Skills Open Standard 的技能插件，`templates/` 存放正式模板资产，`reports/` 存放每篇报告的处理现场与中间产物。  
 * **neospace**：工作台仓库。Skills 的运行载体，负责编排具体的业务流程。
 
 ## **6\. 技术栈总览**
@@ -91,7 +91,7 @@
 ### **7.1 第一阶段：业务启动 (MVP)**
 
 * **目标**：解决排版工作量最大的问题。  
-* **做法**：用 opencode 挂载技能库，由 Editor 手动提交原始报告进行解析排版。
+* **做法**：用 opencode 挂载技能库，由 Editor 通过对话调用 `template-maker` 与 `report-maker` 完成模板制作、字段维护和报告解析排版。第一版优先保留 Word 片段进行拼装与检查，暂不引入 Markdown 中间层。
 
 ### **7.2 第二阶段：工作台成型**
 
