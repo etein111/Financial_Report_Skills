@@ -64,7 +64,22 @@ description: 创建和维护分析师报告模板。当用户需要创建新模�
    - 自动检测 elements.yaml
    - 如果检测到多个候选文件，让用户选择
 
-3. **第三轮**：确认配置并执行
+3. **第三轮**：询问摘要和正文配置
+   - 询问："摘要在文档的哪个位置？"
+     - 告知用户关键结构特征：
+       - **摘要后面一定有换页符**（在 Word 中体现为分节）
+       - 摘要通常在首页的表格中，右侧区域
+     - 例如："首页右侧（长的话可能到第二页）"
+     - 摘要是必须的
+   - 询问："这份报告是否有正文部分？如果有，它从哪里开始？"
+     - 告知用户关键结构特征：
+       - **如果有正文，至少一页，正文结束后也有换页符**
+       - **附录（信息披露）一定从新的一页开始**
+     - 例如：flash 报告通常没有正文
+     - 如果有正文："从首页之后的第一个一级标题之后到附录之前"
+   - 如果用户回答"使用默认配置"，则使用自动检测
+
+4. **第四轮**：确认配置并执行
    - 展示汇总信息
    - 询问："确认创建吗？"
 
@@ -123,11 +138,35 @@ templates/
 
 **AI**：检测到 `samples/macro_sample elements.yaml`，将使用该配置文件。
 
+现在需要配置摘要和正文的抽取规则。
+
+**摘要配置：**
+- 摘要后面一定有换页符
+- 通常在首页的表格中，右侧区域
+
+摘要在文档的哪个位置？
+
+**用户**：`首页右侧，长的话可能到第二页`
+
+**AI**：好的。现在配置正文部分。
+
+**正文结构特征：**
+- 如果有正文，至少一页，正文结束后也有换页符
+- 附录（信息披露）一定从新的一页开始
+
+这份报告是否有正文部分？如果有，它从哪里开始？
+
+**用户**：`从首页之后开始`
+
+**AI**：明白了。
+
 **汇总配置**：
 - 模板名称：common
 - 报告类型：macro, strategy, quantitative, bond
 - Word 文件：samples/macro_sample.docx
 - elements.yaml：samples/macro_sample elements.yaml
+- 摘要位置：首页右侧（长的话可能到第二页）
+- 正文位置：从首页之后开始
 
 确认创建吗？
 
@@ -145,7 +184,55 @@ templates/
 
 确认创建吗？
 
-### 示例 3: 命令行调用
+### 示例 3: Flash 报告（无正文）
+
+**用户**：`创建一个 flash 报告模板`
+
+**AI**：请问您想创建什么类型的模板？（例如：common 通用模板、company 公司报告）
+
+**用户**：`company_flash`
+
+**AI**：好的，创建 `company_flash` 模板。这个模板用于哪些报告类型？
+
+**用户**：`company_flash`
+
+**AI**：明白了。请提供 Word 样本文件路径：
+
+**用户**：`samples/company_flash_sample.docx`
+
+**AI**：检测到 `samples/company_flash_sample elements.yaml`，将使用该配置文件。
+
+**摘要配置：**
+- 摘要后面一定有换页符
+- 通常在首页的表格中，右侧区域
+
+摘要在文档的哪个位置？
+
+**用户**：`首页右侧`
+
+**AI**：好的。现在配置正文部分。
+
+**正文结构特征：**
+- 如果有正文，至少一页，正文结束后也有换页符
+- 附录（信息披露）一定从新的一页开始
+
+这份报告是否有正文部分？
+
+**用户**：`没有正文，这是 flash 报告`
+
+**AI**：明白了。
+
+**汇总配置**：
+- 模板名称：company_flash
+- 报告类型：company_flash
+- Word 文件：samples/company_flash_sample.docx
+- elements.yaml：samples/company_flash_sample elements.yaml
+- 摘要位置：首页右侧
+- 正文：无
+
+确认创建吗？
+
+### 示例 4: 命令行调用
 
 ```bash
 python3 skills/template_maker/scripts/invoke.py \
@@ -158,36 +245,50 @@ python3 skills/template_maker/scripts/invoke.py \
 
 ### schema.yaml 结构
 
-生成的 schema.yaml 包含三部分：
+生成的 schema.yaml 采用扁平化结构：
 
 ```yaml
-name: 模板名称
-display_name: 模板显示名称
-version: 1.0.0
-fields:
-  company:
-    description: 公司名称
-    format: 西锐飞机
-  ticker:
-    description: 股票代码
-    format: 2507.HK
+# === 普通字段（从样本文档提取，用于填充模板）===
+company:
+  description: 公司名称
+  format: 西锐飞机
 
-extraction_rules:
-  abstract:
-    description: 报告摘要部分
-    scope: 从报告开头到第一个一级标题之前
-    hints:
-      - 通常包含投资亮点、核心观点
-      - 长度约 200-500 字
-  body:
-    description: 报告正文部分
-    scope: 从第一个一级标题之后到报告结尾
-    hints:
-      - 包含各章节详细内容
-      - 可能包含表格、图表引用
+ticker:
+  description: 股票代码
+  format: 2507.HK
+
+rating:
+  description: 评级
+  format: 优于大市
+
+# === Word 片段（从原始文档摘取，保存为独立 Word 文件）===
+abstract:
+  type: fragment
+  description: 报告摘要部分
+  scope: 首页右侧（长的话可能到第二页）
+  hints:
+    - 通常包含投资亮点、核心观点
+    - 长度约 200-500 字
+    - 位于首页右侧区域
+
+body:
+  type: fragment
+  description: 报告正文部分
+  scope: 从首页之后到报告结尾
+  hints:
+    - 包含各章节详细内容
+    - 可能包含表格、图表引用
+    - 按原文结构保留段落和标题层级
 ```
 
-注意：`extraction_rules` 供 report_maker skill 使用，定义如何从草稿中抽取摘要和正文。
+**字段类型说明：**
+- **普通字段**（无 `type`）：从样本文档提取的字段值，在生成报告时填充到模板中
+- **Word 片段**（`type: fragment`）：从原始文档摘取的 Word 片段文件，由 document_maker 使用
+
+**重要说明**：
+- `abstract`（摘要）是必须的，所有报告类型都有
+- `body`（正文）是可选的，例如 flash 报告通常没有正文
+- 如果用户指定某部分不存在，则该部分不会包含在 schema 中
 
 ### 自动检测逻辑
 
@@ -236,16 +337,31 @@ rating: 买入
 ## 生成的 schema.yaml 格式
 
 ```yaml
-name: 模板名称
-display_name: 模板显示名称
-version: 1.0.0
-fields:
-  company:
-    type: string
-    format: 西锐飞机
-    description: 公司名称
-  ticker:
-    type: string
-    format: 2507.HK
-    description: 股票代码
+# 扁平化结构，无顶层 fields 或 extraction_rules
+
+# 普通字段（从样本文档提取）
+company:
+  description: 公司名称
+  format: 西锐飞机
+
+ticker:
+  description: 股票代码
+  format: 2507.HK
+
+# Word 片段（从原始文档摘取）
+abstract:
+  type: fragment
+  description: 报告摘要
+  scope: 首页右侧
+  hints:
+    - 通常包含投资亮点
+    - 长度约 200-500 字
+
+body:
+  type: fragment
+  description: 报告正文
+  scope: 从首页之后到报告结尾
+  hints:
+    - 包含各章节详细内容
+    - 可能包含表格、图表引用
 ```

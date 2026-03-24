@@ -27,6 +27,51 @@ AI 编程助手的统一指导文件。Claude Code 和 Codex 共享此配置。
 - 安装依赖：`uv pip install <package>` 或 `uv sync`
 - 创建项目：`uv init` 或 `uv venv`
 
+- **优先使用函数式编程**：
+  - **使用纯函数代替类方法**：优先定义独立的函数，而不是将所有逻辑封装在类中
+  - **函数应该无副作用**：相同输入始终产生相同输出，不依赖外部状态
+  - **避免可变状态**：不要在函数内部修改传入的可变对象（如列表、字典），而是返回新对象
+  - **组合优于继承**：通过组合小函数来构建复杂功能，而不是通过类的继承
+  - **工具函数独立存在**：将功能拆分为独立的工具函数，便于 AI（Claude）按需调用
+
+  **示例**：
+
+  ```python
+  # ✅ 推荐：函数式风格
+  def find_content(doc_path: str, search_text: str) -> Dict:
+      """纯函数，无副作用"""
+      doc = Document(doc_path)
+      # ... 查找逻辑
+      return {"found": True, "location": ...}
+
+  def replace_content(doc_path: str, output_path: str, old: str, new: str) -> Dict:
+      """纯函数，不修改原始文件"""
+      doc = Document(doc_path)
+      # ... 替换逻辑
+      doc.save(output_path)
+      return {"success": True}
+
+  # ❌ 避免：面向对象风格（过度封装）
+  class DocumentProcessor:
+      def __init__(self, doc_path):
+          self.doc_path = doc_path
+          self.doc = Document(doc_path)
+
+      def find_content(self, search_text):
+          # 依赖 self.state
+          pass
+
+      def replace_content(self, old, new):
+          # 修改 self.state
+          pass
+  ```
+
+  **理由**：
+  - AI（Claude）可以直接调用单个函数，无需初始化类实例
+  - 函数更容易测试和维护
+  - 无副作用的函数可以安全地重试、并行执行
+  - 符合 Unix 哲学："做好一件事"的小工具组合
+
 ### Skills 开发
 
 - **严格遵循 Anthropic Agent Skills Open Standard**：所有 skill 必须符合官方标准规范
