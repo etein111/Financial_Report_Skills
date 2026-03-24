@@ -1,2 +1,4 @@
 mappings:
   company: company
+  common: common
+  company_flash: company_flash

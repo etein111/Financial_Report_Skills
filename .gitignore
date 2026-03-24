@@ -29,10 +29,44 @@ wheels/
 .coverage
 htmlcov/
 
-# Test templates (ignore test-only templates, not real ones)
-templates/test_*/
-templates/template_[0-9]*/
+# Skill test output (temporary, not versioned)
+skills/*/tests/output/
+skills/*/tests/*_workspace/
+skills/*/fixtures/*_output/
+
+# Production templates in project root are versioned
+# Only exclude auto-generated test outputs
 
 # Local skill installation
 ~/.claude/skills/
 .claude/skills/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+*.venv
+
+# Evaluation & Testing workspace
+*-workspace/
+*-workdir/
+test-results/
+eval-results/
+benchmark-results/
+/evals.json
+
+# Skill evaluation artifacts
+*.output
+transcripts/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db

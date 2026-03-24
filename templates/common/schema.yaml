@@ -1,0 +1,32 @@
+abstract:
+  description: 报告摘要部分
+  hints:
+  - 通常包含投资亮点、核心观点
+  - 长度约 200-500 字
+  - 不应包含表格和图表
+  - 位于首页右侧区域
+  scope: 首页右侧
+  type: fragment
+analyst:
+  description: analyst
+  format: 李四
+body:
+  description: 报告正文部分
+  hints:
+  - 包含各章节详细内容
+  - 可能包含表格、图表引用
+  - 按原文结构保留段落和标题层级
+  scope: 从首页之后到报告结尾
+  type: fragment
+region:
+  description: region
+  format: 中国
+report_date:
+  description: report_date
+  format: '2024-03-24'
+report_type:
+  description: report_type
+  format: macro
+title:
+  description: title
+  format: 宏观经济研究报告

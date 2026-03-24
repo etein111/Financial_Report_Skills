@@ -1,6 +1,6 @@
 ---
 name: template_maker
-description: 创建和维护分析师报告模板。当用户需要创建新模板、分析 Word 文档结构生成 schema、维护现有模板字段或验证模板时使用此 skill。支持对话式参数收集和自动检测 elements.yaml 配置文件
+description: 创建和维护分析师报告模板。当用户需要创建新模板、分析 Word 文档结构生成 schema、维护现有模板字段或验证模板时使用此 skill。支持交互式参数收集和自动化模式（invoke.py 脚本）。
 ---
 
 # template_maker
@@ -38,214 +38,53 @@ description: 创建和维护分析师报告模板。当用户需要创建新模�
 - **提供推荐值或默认值**
 - **多轮对话逐步收集信息**
 
-### 步骤 1: 确定用户意图
+### 交互步骤
 
-首次回复只需要问一个简单问题：
+1. **确定模板名称和报告类型**
+   - 示例回复："好的，创建 `common` 模板，用于 macro、strategy 等报告类型。请提供 Word 样本文件路径"
 
-```
-请问您想创建什么类型的模板？
-（例如：common 通用模板、company 公司报告）
-```
-
-- 如果用户不清楚选项，列出常见模板类型作为参考
-- 根据用户回答，给出**推荐配置**
-- 不要一次问多个问题
-
-### 步骤 2: 渐进式收集信息
-
-每轮只问一个下一步需要的信息：
-
-1. **第一轮**：获取模板名称和报告类型
-   - 示例回复："好的，创建 `common` 模板，用于 macro、strategy 等报告类型。
-      请提供 Word 样本文件路径（例如：samples/macro_sample.docx）"
-
-2. **第二轮**：获取 Word 文件路径
+2. **获取 Word 文件路径**
    - 验证文件存在
    - 自动检测 elements.yaml
    - 如果检测到多个候选文件，让用户选择
 
-3. **第三轮**：询问摘要和正文配置
-   - 询问："摘要在文档的哪个位置？"
-     - 告知用户关键结构特征：
-       - **摘要后面一定有换页符**（在 Word 中体现为分节）
-       - 摘要通常在首页的表格中，右侧区域
-     - 例如："首页右侧（长的话可能到第二页）"
-     - 摘要是必须的
-   - 询问："这份报告是否有正文部分？如果有，它从哪里开始？"
-     - 告知用户关键结构特征：
-       - **如果有正文，至少一页，正文结束后也有换页符**
-       - **附录（信息披露）一定从新的一页开始**
-     - 例如：flash 报告通常没有正文
-     - 如果有正文："从首页之后的第一个一级标题之后到附录之前"
-   - 如果用户回答"使用默认配置"，则使用自动检测
+3. **询问摘要和正文配置**
+   - 摘要位置询问（必须）
+   - 正文位置询问（可选，flash 报告可能没有正文）
+   - 告知用户关键结构特征：
+     - **摘要后面一定有换页符**（在 Word 中体现为分节）
+     - **如果有正文，至少一页，正文结束后也有换页符**
+     - **附录（信息披露）一定从新的一页开始**
 
-4. **第四轮**：确认配置并执行
+4. **确认并执行**
    - 展示汇总信息
    - 询问："确认创建吗？"
 
-### 步骤 3: 执行创建
+### 执行流程
 
-### 步骤 2: 执行创建
+确认后，按以下步骤创建模板：
 
-使用 `scripts/invoke.py` 执行模板创建：
+1. 加载 Word 文档和 elements.yaml
+2. 生成扁平化的 schema.yaml
+3. 替换模板中的字段值为占位符
+4. 替换摘要和正文区域
+5. 更新 router.yaml 路由配置
+6. 保存模板文件
 
-```bash
-cd /mnt/c/_code/neoskills
-python3 skills/template_maker/scripts/invoke.py \
-  --name "模板名称" \
-  --word "path/to/sample.docx" \
-  --elements "path/to/elements.yaml"
-```
-
-或使用对话式模式：
-
-```bash
-python3 skills/template_maker/scripts/invoke.py
-```
-
-### 步骤 3: 验证结果
-
-成功后会创建以下文件结构：
+成功后创建以下文件结构：
 
 ```
 templates/
 ├── router.yaml           # 自动更新路由配置
 └── <模板名>/
     ├── meta.yaml         # 模板元数据
-    ├── schema.yaml       # 字段 schema
+    ├── schema.yaml       # 字段 schema（扁平化结构）
     └── template.docx     # Word 模板文件
 ```
 
-## 使用示例
+## schema.yaml 结构
 
-### 示例 1: 创建通用模板（多轮对话）
-
-**用户**：`创建一个通用模板`
-
-**AI**：请问您想创建什么类型的模板？（例如：common 通用模板、company 公司报告）
-
-**用户**：`common`
-
-**AI**：好的，创建 `common` 模板。这个模板用于哪些报告类型？
-（例如：macro, strategy, quantitative, bond）
-
-**用户**：`就用示例的`
-
-**AI**：明白了。请提供 Word 样本文件路径：
-（例如：samples/macro_sample.docx）
-
-**用户**：`samples/macro_sample.docx`
-
-**AI**：检测到 `samples/macro_sample elements.yaml`，将使用该配置文件。
-
-现在需要配置摘要和正文的抽取规则。
-
-**摘要配置：**
-- 摘要后面一定有换页符
-- 通常在首页的表格中，右侧区域
-
-摘要在文档的哪个位置？
-
-**用户**：`首页右侧，长的话可能到第二页`
-
-**AI**：好的。现在配置正文部分。
-
-**正文结构特征：**
-- 如果有正文，至少一页，正文结束后也有换页符
-- 附录（信息披露）一定从新的一页开始
-
-这份报告是否有正文部分？如果有，它从哪里开始？
-
-**用户**：`从首页之后开始`
-
-**AI**：明白了。
-
-**汇总配置**：
-- 模板名称：common
-- 报告类型：macro, strategy, quantitative, bond
-- Word 文件：samples/macro_sample.docx
-- elements.yaml：samples/macro_sample elements.yaml
-- 摘要位置：首页右侧（长的话可能到第二页）
-- 正文位置：从首页之后开始
-
-确认创建吗？
-
-### 示例 2: 用户在一条消息中提供所有信息
-
-**用户**：`创建 common 模板，用于 macro 和 strategy，文件是 samples/macro_sample.docx`
-
-**AI**：收到配置。检测到 `samples/macro_sample elements.yaml`。
-
-**汇总配置**：
-- 模板名称：common
-- 报告类型：macro, strategy
-- Word 文件：samples/macro_sample.docx
-- elements.yaml：samples/macro_sample elements.yaml
-
-确认创建吗？
-
-### 示例 3: Flash 报告（无正文）
-
-**用户**：`创建一个 flash 报告模板`
-
-**AI**：请问您想创建什么类型的模板？（例如：common 通用模板、company 公司报告）
-
-**用户**：`company_flash`
-
-**AI**：好的，创建 `company_flash` 模板。这个模板用于哪些报告类型？
-
-**用户**：`company_flash`
-
-**AI**：明白了。请提供 Word 样本文件路径：
-
-**用户**：`samples/company_flash_sample.docx`
-
-**AI**：检测到 `samples/company_flash_sample elements.yaml`，将使用该配置文件。
-
-**摘要配置：**
-- 摘要后面一定有换页符
-- 通常在首页的表格中，右侧区域
-
-摘要在文档的哪个位置？
-
-**用户**：`首页右侧`
-
-**AI**：好的。现在配置正文部分。
-
-**正文结构特征：**
-- 如果有正文，至少一页，正文结束后也有换页符
-- 附录（信息披露）一定从新的一页开始
-
-这份报告是否有正文部分？
-
-**用户**：`没有正文，这是 flash 报告`
-
-**AI**：明白了。
-
-**汇总配置**：
-- 模板名称：company_flash
-- 报告类型：company_flash
-- Word 文件：samples/company_flash_sample.docx
-- elements.yaml：samples/company_flash_sample elements.yaml
-- 摘要位置：首页右侧
-- 正文：无
-
-确认创建吗？
-
-### 示例 4: 命令行调用
-
-```bash
-python3 skills/template_maker/scripts/invoke.py \
-  --name "common" \
-  --report-types "macro,strategy,quantitative,bond" \
-  --word "samples/macro_sample.docx"
-```
-
-## 技术细节
-
-### schema.yaml 结构
-
-生成的 schema.yaml 采用扁平化结构：
+生成的 schema.yaml 采用**扁平化结构**：
 
 ```yaml
 # === 普通字段（从样本文档提取，用于填充模板）===
@@ -285,12 +124,57 @@ body:
 - **普通字段**（无 `type`）：从样本文档提取的字段值，在生成报告时填充到模板中
 - **Word 片段**（`type: fragment`）：从原始文档摘取的 Word 片段文件，由 document_maker 使用
 
-**重要说明**：
+**重要说明：**
 - `abstract`（摘要）是必须的，所有报告类型都有
 - `body`（正文）是可选的，例如 flash 报告通常没有正文
-- 如果用户指定某部分不存在，则该部分不会包含在 schema 中
 
-### 自动检测逻辑
+## 自动化模式
+
+对于批量操作或自动化场景，可以直接使用 `scripts/invoke.py` 脚本：
+
+```bash
+# 交互式创建（会确认）
+python skills/template_maker/scripts/invoke.py \
+  --name common \
+  --word fixtures/macro_sample.docx \
+  --elements "fixtures/macro_sample elements.yaml"
+
+# 自动化模式（跳过确认）
+python skills/template_maker/scripts/invoke.py \
+  --name company \
+  --word fixtures/company_sample.docx \
+  --elements "fixtures/company_sample elements.yaml" \
+  --auto-confirm
+
+# 快讯报告（无正文）
+python skills/template_maker/scripts/invoke.py \
+  --name company_flash \
+  --word fixtures/flash_sample.docx \
+  --elements "fixtures/flash_sample elements.yaml" \
+  --no-body \
+  --auto-confirm
+
+# 自定义摘要/正文位置
+python skills/template_maker/scripts/invoke.py \
+  --name custom \
+  --word fixtures/custom.docx \
+  --elements fixtures/custom_elements.yaml \
+  --abstract-scope "首页第二栏" \
+  --body-scope "从第三章开始" \
+  --auto-confirm
+```
+
+**参数说明：**
+- `--name`: 模板名称（必需）
+- `--word`: Word 样本文件路径（必需）
+- `--elements`: elements.yaml 配置文件路径（必需）
+- `--abstract-scope`: 摘要位置描述（默认: "首页右侧"）
+- `--body-scope`: 正文位置描述（默认: "从首页之后到报告结尾"）
+- `--no-body`: 快讯报告，没有正文部分
+- `--output-dir`: 输出目录（默认: templates）
+- `--auto-confirm, -y`: 跳过确认，直接创建
+
+## elements.yaml 自动检测
 
 系统按以下顺序查找 `elements.yaml`：
 
@@ -298,21 +182,22 @@ body:
 2. `<word_name>_elements.yaml`
 3. `elements.yaml`（同目录）
 
-### 代码模块
+## 代码模块
 
-- `scripts/core.py`: 核心编排器 TemplateMaker
-- `scripts/invoke.py`: CLI 调用入口
-- `scripts/parser.py`: Word 文档分析器
-- `scripts/schema_gen.py`: Schema 生成器（包含 extraction_rules）
-- `scripts/router_mgr.py`: 路由管理器
-- `scripts/validator.py`: 模板验证器
-- `scripts/utils.py`: 工具函数
+函数式编程设计，按职责分为 6 个模块：
 
-### 依赖安装
+| 模块 | 函数数 | 职责 |
+|------|--------|------|
+| `router.py` | 6 | 路由配置管理（读写分离）|
+| `schema.py` | 6 | Schema 生成和更新（读写分离）|
+| `validate.py` | 1 | 模板验证 |
+| `document.py` | 9 | 文档结构分析 |
+| `template.py` | 10 | 模板内容操作 |
 
-```bash
-pip install -r skills/template_maker/scripts/requirements.txt
-```
+**关键特性：**
+- 纯函数设计（逻辑和 I/O 分离）
+- 支持批量操作（减少文件 I/O）
+- Document 对象传递（避免重复加载 Word 文档）
 
 ## 模板目录结构
 
@@ -321,7 +206,7 @@ templates/
 ├── router.yaml           # 路由配置
 └── <模板名>/
     ├── meta.yaml         # 模板元数据
-    ├── schema.yaml       # 字段 schema
+    ├── schema.yaml       # 字段 schema（扁平化）
     └── template.docx     # Word 模板文件
 ```
 
@@ -334,34 +219,83 @@ target_price: 15.0
 rating: 买入
 ```
 
-## 生成的 schema.yaml 格式
+## 使用示例
 
-```yaml
-# 扁平化结构，无顶层 fields 或 extraction_rules
+### 示例 1: 创建通用模板
 
-# 普通字段（从样本文档提取）
-company:
-  description: 公司名称
-  format: 西锐飞机
+**用户**：`创建一个通用模板`
 
-ticker:
-  description: 股票代码
-  format: 2507.HK
+**AI**：请问您想创建什么类型的模板？（例如：common 通用模板、company 公司报告）
 
-# Word 片段（从原始文档摘取）
-abstract:
-  type: fragment
-  description: 报告摘要
-  scope: 首页右侧
-  hints:
-    - 通常包含投资亮点
-    - 长度约 200-500 字
+**用户**：`common`
 
-body:
-  type: fragment
-  description: 报告正文
-  scope: 从首页之后到报告结尾
-  hints:
-    - 包含各章节详细内容
-    - 可能包含表格、图表引用
-```
+**AI**：好的，创建 `common` 模板，用于 macro、strategy 等报告类型。请提供 Word 样本文件路径：
+（例如：fixtures/macro_sample.docx）
+
+**用户**：`fixtures/macro_sample.docx`
+
+**AI**：检测到 `fixtures/macro_sample elements.yaml`，将使用该配置文件。
+
+现在需要配置摘要和正文的抽取规则。
+
+**摘要配置：**
+- 摘要后面一定有换页符
+- 通常在首页的表格中，右侧区域
+
+摘要在文档的哪个位置？
+
+**用户**：`首页右侧，长的话可能到第二页`
+
+**AI**：好的。现在配置正文部分。
+
+**正文结构特征：**
+- 如果有正文，至少一页，正文结束后也有换页符
+- 附录（信息披露）一定从新的一页开始
+
+这份报告是否有正文部分？如果有，它从哪里开始？
+
+**用户**：`从首页之后开始`
+
+**AI**：明白了。
+
+**汇总配置**：
+- 模板名称：common
+- Word 文件：fixtures/macro_sample.docx
+- elements.yaml：fixtures/macro_sample elements.yaml
+- 摘要位置：首页右侧（长的话可能到第二页）
+- 正文位置：从首页之后开始
+
+确认创建吗？
+
+### 示例 2: Flash 报告（无正文）
+
+**用户**：`创建一个 flash 报告模板`
+
+**AI**：请问您想创建什么类型的模板？
+
+**用户**：`company_flash`
+
+**AI**：好的，创建 `company_flash` 模板。请提供 Word 样本文件路径：
+
+**用户**：`fixtures/company_flash_sample.docx`
+
+**AI**：检测到 `fixtures/company_flash_sample elements.yaml`，将使用该配置文件。
+
+摘要在文档的哪个位置？
+
+**用户**：`首页右侧`
+
+**AI**：好的。这份报告是否有正文部分？
+
+**用户**：`没有正文，这是 flash 报告`
+
+**AI**：明白了。
+
+**汇总配置**：
+- 模板名称：company_flash
+- Word 文件：fixtures/company_flash_sample.docx
+- elements.yaml：fixtures/company_flash_sample elements.yaml
+- 摘要位置：首页右侧
+- 正文：无
+
+确认创建吗？

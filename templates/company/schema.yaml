@@ -1,66 +1,35 @@
-# 普通字段（从样本文档提取，用于填充模板）
-company:
-  description: 公司全称（中英文）
-  format: 西锐飞机
-
-current_price:
-  description: 现价
-
-current_price_date:
-  description: current_price_date
-
-market_cap:
-  description: 市值
-
-one_year_high:
-  description: one_year_high
-
-one_year_low:
-  description: one_year_low
-
-rating:
-  description: 评级
-  format: 优于大市
-
-rating_change:
-  description: rating_change
-  format: 首次覆盖
-
-report_date:
-  description: 报告日期
-  format: 21 Oct 2025
-
-shares_in_issue:
-  description: shares_in_issue
-
-target_price:
-  description: 目标价
-  format: 11.12美元（对应港币86.72元）
-
-ticker:
-  description: 股票代码
-  format: 2507.HK
-
-title:
-  description: 报告标题
-  format: 首次覆盖：安全、创新与强大生态系统铸就西锐私人航空全球领导者地位
-
-# Word 片段（从原始文档摘取，保存为独立 Word 文件）
 abstract:
-  type: fragment
   description: 报告摘要部分
-  scope: 首页右侧（长的话可能到第二页）
   hints:
-    - 通常包含投资亮点、核心观点
-    - 长度约 200-500 字
-    - 不应包含表格和图表
-    - 位于首页右侧区域
-
-body:
+  - 通常包含投资亮点、核心观点
+  - 长度约 200-500 字
+  - 不应包含表格和图表
+  - 位于首页右侧区域
+  scope: 首页右侧
   type: fragment
+analyst:
+  description: analyst
+  format: 张三
+body:
   description: 报告正文部分
-  scope: 从首页之后到报告结尾
   hints:
-    - 包含各章节详细内容
-    - 可能包含表格、图表引用
-    - 按原文结构保留段落和标题层级
+  - 包含各章节详细内容
+  - 可能包含表格、图表引用
+  - 按原文结构保留段落和标题层级
+  scope: 从首页之后到报告结尾
+  type: fragment
+company:
+  description: company
+  format: 西锐飞机
+rating:
+  description: rating
+  format: 买入
+report_date:
+  description: report_date
+  format: '2024-03-24'
+target_price:
+  description: target_price
+  format: '15.0'
+ticker:
+  description: ticker
+  format: 2507.HK

@@ -34,20 +34,40 @@ AI 编程助手的统一指导文件。Claude Code 和 Codex 共享此配置。
   - **组合优于继承**：通过组合小函数来构建复杂功能，而不是通过类的继承
   - **工具函数独立存在**：将功能拆分为独立的工具函数，便于 AI（Claude）按需调用
 
+  **详细规范**：参见 [CODING_STANDARDS.md](./docs/CODING_STANDARDS.md)
+  **审查清单**：参见 [CODE_REVIEW_CHECKLIST.md](./docs/CODE_REVIEW_CHECKLIST.md)
+
+  **核心原则**：
+  - **I/O 分离**：读写操作应该是独立的、显式的函数
+  - **批量操作**：支持批量修改，避免循环中的 I/O
+  - **扁平化结构**：数据结构优先扁平，不超过 2 层嵌套
+  - **删除冗余**：删除无意义的包装函数和重复代码
+  - **默认值常量化**：默认值定义为模块级常量
+
   **示例**：
 
   ```python
-  # ✅ 推荐：函数式风格
-  def find_content(doc_path: str, search_text: str) -> Dict:
-      """纯函数，无副作用"""
-      doc = Document(doc_path)
-      # ... 查找逻辑
-      return {"found": True, "location": ...}
+  # ✅ 推荐：I/O 分离 + 批量操作
+  def load_data(path) -> dict:
+      """纯 I/O"""
+      return yaml.safe_load(Path(path).read_text())
 
-  def replace_content(doc_path: str, output_path: str, old: str, new: str) -> Dict:
-      """纯函数，不修改原始文件"""
-      doc = Document(doc_path)
-      # ... 替换逻辑
+  def update_item(data: dict, key: str, value) -> dict:
+      """纯函数：返回新对象"""
+      new_data = data.copy()
+      new_data[key] = value
+      return new_data
+
+  def save_data(path: str, data: dict) -> None:
+      """纯 I/O"""
+      Path(path).write_text(yaml.dump(data))
+
+  # 使用：批量修改，一次 I/O
+  data = load_data("config.yaml")
+  data = update_item(data, "key1", "value1")
+  data = update_item(data, "key2", "value2")
+  data = update_item(data, "key3", "value3")
+  save_data("config.yaml", data)  # 一次写入
       doc.save(output_path)
       return {"success": True}
 
