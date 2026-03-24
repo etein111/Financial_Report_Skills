@@ -28,3 +28,7 @@ wheels/
 .pytest_cache/
 .coverage
 htmlcov/
+
+# Test templates (ignore test-only templates, not real ones)
+templates/test_*/
+templates/template_[0-9]*/

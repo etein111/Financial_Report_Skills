@@ -1,5 +1,0 @@
-name: test_template
-display_name: test_template 模板
-version: 1.0.0
-status: active
-sample_source: /tmp/pytest-of-jjh/pytest-24/test_create_template_success0/sample.docx

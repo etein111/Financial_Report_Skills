@@ -1,7 +1,0 @@
-fields:
-  company:
-    description: 公司名称
-    format: 西锐飞机
-  ticker:
-    description: 股票代码
-    format: 2507.HK
