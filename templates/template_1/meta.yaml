@@ -1,0 +1,5 @@
+name: template_1
+display_name: template_1 模板
+version: 1.0.0
+status: active
+sample_source: /tmp/pytest-of-jjh/pytest-24/test_create_multiple_templates0/sample.docx
