@@ -7,29 +7,47 @@ abstract:
   - 位于首页右侧区域
   scope: 首页右侧
   type: fragment
-analyst:
-  description: analyst
-  format: 张三
 body:
   description: 报告正文部分
   hints:
   - 包含各章节详细内容
   - 可能包含表格、图表引用
   - 按原文结构保留段落和标题层级
-  scope: 从首页之后到报告结尾
+  scope: 从第二页开始到附录之前
   type: fragment
 company:
   description: company
   format: 西锐飞机
+current_price:
+  description: current_price
+  format: '60.4'
+current_price_date:
+  description: current_price_date
+  format: 2026 年 01 月 15 日
+market_cap:
+  description: market_cap
+  format: 22.11bn
+one_year_high:
+  description: one_year_high
+  format: '73.4'
+one_year_low:
+  description: one_year_low
+  format: '20.5'
 rating:
   description: rating
-  format: 买入
+  format: OUTPERFORM
 report_date:
   description: report_date
-  format: '2024-03-24'
+  format: 21 Oct 2025
+shares_in_issue:
+  description: shares_in_issue
+  format: 365.99mn
 target_price:
   description: target_price
-  format: '15.0'
+  format: '86.72'
 ticker:
   description: ticker
   format: 2507.HK
+title:
+  description: title
+  format: 首次覆盖：安全、创新与强大生态系统铸就西锐私人航空全球领导者地位

@@ -280,12 +280,16 @@ def _replace_text_in_para(paragraph, old_text: str, new_text: str):
     if old_text not in paragraph.text:
         return
 
+    # 先保存原始文本（在清除 runs 之前）
+    original_text = paragraph.text
+
     # 清除现有 runs
     for run in paragraph.runs:
         run.text = ""
 
     # 添加新 run
+    new_text_value = original_text.replace(old_text, new_text)
     if paragraph.runs:
-        paragraph.runs[0].text = paragraph.text.replace(old_text, new_text)
+        paragraph.runs[0].text = new_text_value
     else:
-        paragraph.add_run(paragraph.text.replace(old_text, new_text))
+        paragraph.add_run(new_text_value)
