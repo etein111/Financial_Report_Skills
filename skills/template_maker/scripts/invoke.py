@@ -20,12 +20,12 @@ from template import (
     replace_body_in_doc
 )
 from router import load_router, update_mapping, save_router
-from document import find_abstract_by_elements, find_body_range_by_sections
+from document import find_abstract_by_elements, find_body_range_by_content
 import yaml
 
 
 DEFAULT_ABSTRACT_SCOPE = "首页右侧"
-DEFAULT_BODY_SCOPE = "从首页之后到报告结尾"
+DEFAULT_BODY_SCOPE = "首页之后到'附录APPENDIX'之前"
 
 
 def _flatten_elements(elements: dict, parent_key: str = '', sep: str = '_') -> dict:
@@ -170,7 +170,7 @@ def create_template(
 
     # 4.3 替换正文区域（如果存在）
     if body_scope:
-        body_location = find_body_range_by_sections(str(word_path))
+        body_location = find_body_range_by_content(str(word_path))
         if body_location["found"]:
             doc = replace_body_in_doc(
                 doc,
