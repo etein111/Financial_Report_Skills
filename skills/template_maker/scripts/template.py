@@ -53,13 +53,9 @@ def replace_field_value_in_doc(doc: Document, field_name: str, field_value: str)
         if value_str in para.text:
             _replace_text_in_para(para, value_str, placeholder)
 
-    # 在表格中替换
+    # 在表格中替换（包括嵌套表格）
     for table in doc.tables:
-        for row in table.rows:
-            for cell in row.cells:
-                for para in cell.paragraphs:
-                    if value_str in para.text:
-                        _replace_text_in_para(para, value_str, placeholder)
+        _replace_in_table(table, value_str, placeholder)
 
     # 在页眉页脚中替换
     for section in doc.sections:
@@ -73,16 +69,38 @@ def replace_field_value_in_doc(doc: Document, field_name: str, field_value: str)
     return doc
 
 
+def _replace_in_table(table, old_text: str, new_text: str):
+    """在表格中递归替换文本（包括嵌套表格）。
+
+    Args:
+        table: python-docx 表格对象
+        old_text: 要替换的文本
+        new_text: 新文本
+    """
+    for row in table.rows:
+        for cell in row.cells:
+            # 先处理嵌套表格
+            for nested_table in cell.tables:
+                _replace_in_table(nested_table, old_text, new_text)
+
+            # 再处理单元格段落
+            for para in cell.paragraphs:
+                if old_text in para.text:
+                    _replace_text_in_para(para, old_text, new_text)
+
+
 def replace_abstract_in_doc(doc: Document, table: int, row: int,
-                           col_start: int, col_end: int) -> Document:
+                           col_start: int, col_end: int,
+                           row_end: int = None) -> Document:
     """在文档中替换摘要区域为 {{ abstract }} 占位符（返回新文档）。
 
     Args:
         doc: Document 对象
         table: 表格索引
-        row: 行索引
+        row: 行索引（起始行）
         col_start: 起始列索引
         col_end: 结束列索引
+        row_end: 结束行索引（可选，默认与 row 相同）
 
     Returns:
         修改后的 Document 对象
@@ -94,20 +112,28 @@ def replace_abstract_in_doc(doc: Document, table: int, row: int,
     if row >= len(tbl.rows):
         raise ValueError(f"行索引 {row} 超出范围")
 
-    tbl_row = tbl.rows[row]
+    # 如果没有指定结束行，则只处理起始行
+    if row_end is None:
+        row_end = row
 
-    # 替换指定范围的单元格
-    for col_idx in range(col_start, min(col_end + 1, len(tbl_row.cells))):
-        cell = tbl_row.cells[col_idx]
-        # 清空所有段落
-        for paragraph in cell.paragraphs:
-            for run in paragraph.runs:
-                run.text = ""
-        # 添加摘要占位符
-        if cell.paragraphs:
-            cell.paragraphs[0].runs[0].text = "{{ abstract }}"
-        else:
-            cell.add_paragraph("{{ abstract }}")
+    # 清空所有涉及的行的内容
+    for row_idx in range(row, min(row_end + 1, len(tbl.rows))):
+        tbl_row = tbl.rows[row_idx]
+        for col_idx in range(col_start, min(col_end + 1, len(tbl_row.cells))):
+            cell = tbl_row.cells[col_idx]
+            # 清空所有段落
+            for paragraph in cell.paragraphs:
+                for run in paragraph.runs:
+                    run.text = ""
+
+    # 只在第一行第一列添加摘要占位符
+    first_cell = tbl.rows[row].cells[col_start]
+    if first_cell.paragraphs and first_cell.paragraphs[0].runs:
+        first_cell.paragraphs[0].runs[0].text = "{{ abstract }}"
+    elif first_cell.paragraphs:
+        first_cell.paragraphs[0].add_run("{{ abstract }}")
+    else:
+        first_cell.add_paragraph("{{ abstract }}")
 
     return doc
 
@@ -115,6 +141,9 @@ def replace_abstract_in_doc(doc: Document, table: int, row: int,
 def replace_body_in_doc(doc: Document, start_paragraph: int,
                        end_paragraph: int) -> Document:
     """在文档中替换正文区域为 {{ body }} 占位符（返回新文档）。
+
+    注意：此函数只处理段落，不处理表格。
+    如需处理包含表格的正文，请使用 replace_body_elements_in_doc。
 
     Args:
         doc: Document 对象
@@ -147,23 +176,90 @@ def replace_body_in_doc(doc: Document, start_paragraph: int,
     return doc
 
 
+def replace_body_elements_in_doc(doc: Document,
+                                 start_element_idx: int,
+                                 end_element_idx: int) -> Document:
+    """在文档中替换正文区域为 {{ body }} 占位符（包括所有元素）。
+
+    正文包括段落、表格、图表等所有块级元素。
+    附录部分保留不变。
+
+    Args:
+        doc: Document 对象
+        start_element_idx: body 中起始元素索引
+        end_element_idx: body 中结束元素索引（不包含）
+
+    Returns:
+        修改后的 Document 对象
+    """
+    from docx.oxml.ns import qn
+
+    body = doc._body._body
+
+    # 获取所有块级元素
+    all_elements = []
+    for child in body:
+        tag = child.tag
+        if tag in (qn('w:p'), qn('w:tbl'), qn('w:sdt')):
+            all_elements.append(child)
+
+    if start_element_idx >= len(all_elements):
+        raise ValueError(f"起始元素索引 {start_element_idx} 超出范围 {len(all_elements)}")
+
+    end_idx = min(end_element_idx, len(all_elements))
+
+    # 保存第一个元素的引用，用于插入占位符
+    first_element = all_elements[start_element_idx]
+
+    # 删除正文范围内的所有元素（从后往前删除，避免索引混乱）
+    for i in range(end_idx - 1, start_element_idx - 1, -1):
+        elem = all_elements[i]
+        parent = elem.getparent()
+        if parent is not None:
+            parent.remove(elem)
+
+    # 在第一个元素原来的位置插入占位符段落
+    # 创建新的段落元素
+    from docx.oxml import OxmlElement
+
+    new_para = OxmlElement('w:p')
+    new_run = OxmlElement('w:r')
+    new_text = OxmlElement('w:t')
+    new_text.text = "{{ body }}"
+    new_run.append(new_text)
+    new_para.append(new_run)
+
+    # 找到正确的插入位置
+    # 如果有剩余元素，插入到它们之前
+    if end_idx < len(all_elements):
+        next_element = all_elements[end_idx]
+        body.insert(list(body).index(next_element), new_para)
+    else:
+        # 附加到末尾
+        body.append(new_para)
+
+    return doc
+
+
 # ==================== 位置调整 ====================
 
 def adjust_abstract_position_in_doc(doc: Document, table: int, row: int,
-                                   col_start: int, col_end: int) -> Document:
+                                   col_start: int, col_end: int,
+                                   row_end: int = None) -> Document:
     """调整摘要位置（返回新文档）。
 
     Args:
         doc: Document 对象
         table: 表格索引
-        row: 行索引
+        row: 行索引（起始行）
         col_start: 起始列索引
         col_end: 结束列索引
+        row_end: 结束行索引（可选）
 
     Returns:
         修改后的 Document 对象
     """
-    return replace_abstract_in_doc(doc, table, row, col_start, col_end)
+    return replace_abstract_in_doc(doc, table, row, col_start, col_end, row_end)
 
 
 def adjust_body_range_in_doc(doc: Document, start_paragraph: int,
@@ -280,12 +376,16 @@ def _replace_text_in_para(paragraph, old_text: str, new_text: str):
     if old_text not in paragraph.text:
         return
 
+    # 先保存原始文本（在清空 runs 之前）
+    original_text = paragraph.text
+    replaced_text = original_text.replace(old_text, new_text)
+
     # 清除现有 runs
     for run in paragraph.runs:
         run.text = ""
 
-    # 添加新 run
+    # 设置替换后的文本
     if paragraph.runs:
-        paragraph.runs[0].text = paragraph.text.replace(old_text, new_text)
+        paragraph.runs[0].text = replaced_text
     else:
-        paragraph.add_run(paragraph.text.replace(old_text, new_text))
+        paragraph.add_run(replaced_text)

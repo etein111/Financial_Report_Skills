@@ -2,7 +2,7 @@
 
 import yaml
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 import copy
 
 
@@ -44,7 +44,7 @@ def save_router(router_path: Path, data: Dict[str, Any]) -> None:
 
 # ==================== 查询（纯函数）====================
 
-def get_router_mapping(data: Dict[str, Any], report_type: str) -> str | None:
+def get_router_mapping(data: Dict[str, Any], report_type: str) -> Optional[str]:
     """获取报告类型对应的模板名称。
 
     Args:

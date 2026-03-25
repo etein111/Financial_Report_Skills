@@ -7,7 +7,7 @@
   - body: 报告正文片段
 """
 
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 import yaml
 
 
@@ -39,8 +39,8 @@ DEFAULT_BODY = {
 # ==================== 生成 ====================
 
 def generate_schema(elements: Dict[str, Any],
-                   abstract_config: Dict[str, Any] | None = None,
-                   body_config: Dict[str, Any] | None = None) -> Dict[str, Any]:
+                   abstract_config: Optional[Dict[str, Any]] = None,
+                   body_config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """从 elements.yaml 生成扁平化的 schema 字典。
 
     Args:
@@ -55,7 +55,18 @@ def generate_schema(elements: Dict[str, Any],
 
     # 普通字段
     for name, value in elements.items():
-        if name not in ["analysts"]:
+        if name == "analysts":
+            # 处理分析师字段（展平为多个字段）
+            if isinstance(value, list):
+                for i, analyst in enumerate(value):
+                    prefix = f"analyst_{i+1}" if len(value) > 1 else "analyst"
+                    if isinstance(analyst, dict):
+                        for key, val in analyst.items():
+                            field_name = f"{prefix}_{key}"
+                            schema[field_name] = {"description": f"分析师{i+1}的{key}"}
+                            if val and val != "null":
+                                schema[field_name]["format"] = str(val)
+        else:
             schema[name] = {"description": name}
             if value and value != "null":
                 schema[name]["format"] = str(value)
@@ -151,7 +162,7 @@ def update_fragment(schema: Dict[str, Any],
 # ==================== 辅助函数 ====================
 
 def _apply_fragment_config(default: Dict[str, Any],
-                          config: Dict[str, Any] | None) -> Dict[str, Any]:
+                          config: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     """应用用户配置到默认片段。
 
     Args:
