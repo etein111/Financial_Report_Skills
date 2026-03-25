@@ -15,9 +15,12 @@ sys.path.insert(0, str(SCRIPTS_DIR))
 from schema import generate_schema, save_schema
 from template import (
     load_document, save_document,
-    replace_field_value_in_doc
+    replace_field_value_in_doc,
+    replace_abstract_in_doc,
+    replace_body_in_doc
 )
 from router import load_router, update_mapping, save_router
+from document import find_abstract_by_elements, find_body_range_by_sections
 import yaml
 
 
@@ -101,12 +104,37 @@ def create_template(
     # 4. 处理 Word 文档
     doc = load_document(str(word_path))
 
-    # 替换字段值为占位符
+    # 4.1 替换字段值为占位符
     for field_name, field_value in elements.items():
         if field_value is not None:
             doc = replace_field_value_in_doc(doc, field_name, str(field_value))
 
-    # 保存模板
+    # 4.2 替换摘要区域
+    abstract_location = find_abstract_by_elements(str(word_path), elements)
+    if abstract_location["found"]:
+        doc = replace_abstract_in_doc(
+            doc,
+            abstract_location["table"],
+            abstract_location["row"],
+            abstract_location["col_start"],
+            abstract_location["col_end"]
+        )
+    else:
+        print(f"警告：未能定位摘要位置 - {abstract_location.get('reason', '未知原因')}")
+
+    # 4.3 替换正文区域（如果存在）
+    if body_scope:
+        body_location = find_body_range_by_sections(str(word_path))
+        if body_location["found"]:
+            doc = replace_body_in_doc(
+                doc,
+                body_location["start_paragraph"],
+                body_location["end_paragraph"]
+            )
+        else:
+            print(f"警告：未能定位正文位置 - {body_location.get('reason', '未知原因')}")
+
+    # 4.4 保存模板
     template_docx_path = template_dir / "template.docx"
     save_document(doc, str(template_docx_path))
 
