@@ -7,6 +7,7 @@
 import argparse
 import sys
 from pathlib import Path
+from typing import Optional, Dict, Any
 
 # 添加 scripts 目录到 path
 SCRIPTS_DIR = Path(__file__).parent
@@ -17,7 +18,13 @@ from template import (
     load_document, save_document,
     replace_field_value_in_doc,
     replace_abstract_in_doc,
-    replace_body_in_doc
+    replace_body_in_doc,
+    replace_body_elements_in_doc
+)
+from document import (
+    find_abstract_by_elements,
+    find_body_range_by_sections,
+    find_body_elements
 )
 from router import load_router, update_mapping, save_router
 from document import find_abstract_by_elements, find_body_range_by_content
@@ -73,12 +80,35 @@ def _flatten_elements(elements: dict, parent_key: str = '', sep: str = '_') -> d
     return dict(items)
 
 
+def flatten_elements(elements: Dict[str, Any]) -> Dict[str, str]:
+    """展平 elements（处理 analysts 等嵌套字段）。
+
+    Args:
+        elements: 原始 elements 字典
+
+    Returns:
+        展平后的 field_name -> field_value 映射
+    """
+    flat = {}
+    for name, value in elements.items():
+        if name == "analysts" and isinstance(value, list):
+            for i, analyst in enumerate(value):
+                prefix = f"analyst_{i+1}" if len(value) > 1 else "analyst"
+                if isinstance(analyst, dict):
+                    for key, val in analyst.items():
+                        if val and val != "null":
+                            flat[f"{prefix}_{key}"] = str(val)
+        elif value is not None and value != "null":
+            flat[name] = str(value)
+    return flat
+
+
 def create_template(
     name: str,
     word_path: str,
     elements_path: str,
     abstract_scope: str = DEFAULT_ABSTRACT_SCOPE,
-    body_scope: str | None = DEFAULT_BODY_SCOPE,
+    body_scope: Optional[str] = DEFAULT_BODY_SCOPE,
     output_dir: str = "templates",
     auto_confirm: bool = False
 ) -> dict:
@@ -149,11 +179,36 @@ def create_template(
     # 4. 处理 Word 文档
     doc = load_document(str(word_path))
 
-    # 4.1 替换字段值为占位符（展平嵌套字段）
-    flattened_elements = _flatten_elements(elements)
-    for field_name, field_value in flattened_elements.items():
-        if field_value is not None:
-            doc = replace_field_value_in_doc(doc, field_name, str(field_value))
+    # 展平 elements（处理 analysts 等嵌套字段）
+    flat_elements = flatten_elements(elements)
+
+    # 替换字段值为占位符
+    for field_name, field_value in flat_elements.items():
+        doc = replace_field_value_in_doc(doc, field_name, field_value)
+
+    # 5. 定位并替换摘要区域
+    abstract_result = find_abstract_by_elements(str(word_path), elements)
+    if abstract_result.get('found'):
+        doc = replace_abstract_in_doc(
+            doc,
+            table=abstract_result['table'],
+            row=abstract_result['row_start'],
+            col_start=abstract_result['col_start'],
+            col_end=abstract_result['col_end'],
+            row_end=abstract_result.get('row_end')
+        )
+
+    # 6. 定位并替换正文区域（如果有正文）
+    # 使用 find_body_elements + replace_body_elements_in_doc
+    # 正文包括段落、表格、图表等所有块级元素，附录保留不替换
+    if body_scope:
+        body_result = find_body_elements(str(word_path))
+        if body_result.get('found'):
+            doc = replace_body_elements_in_doc(
+                doc,
+                start_element_idx=body_result['start_element_idx'],
+                end_element_idx=body_result['end_element_idx']
+            )
 
     # 4.2 替换摘要区域
     abstract_location = find_abstract_by_elements(str(word_path), elements)
@@ -184,7 +239,7 @@ def create_template(
     template_docx_path = template_dir / "template.docx"
     save_document(doc, str(template_docx_path))
 
-    # 5. 更新 router.yaml
+    # 7. 更新 router.yaml
     router_path = output_dir / "router.yaml"
     router_data = load_router(router_path)
     router_data = update_mapping(router_data, name, name)

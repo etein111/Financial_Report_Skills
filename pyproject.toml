@@ -1,0 +1,17 @@
+[project]
+name = "neoskills-yc"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "python-docx==1.1.0",
+    "docxtpl>=0.20.0",
+    "PyYAML==6.0.1",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+]
