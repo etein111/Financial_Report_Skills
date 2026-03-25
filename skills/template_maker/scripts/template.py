@@ -70,7 +70,7 @@ def replace_field_value_in_doc(doc: Document, field_name: str, field_value: str)
 
 
 def _replace_in_table_recursive(table, old_text: str, new_text: str):
-    """递归地在表格中替换文本（包括嵌套表格）。
+    """递归地在表格中替换文本（包括所有嵌套层级的表格）。
 
     Args:
         table: python-docx 表格对象
@@ -79,18 +79,24 @@ def _replace_in_table_recursive(table, old_text: str, new_text: str):
     """
     for row in table.rows:
         for cell in row.cells:
-            # 替换单元格段落中的文本
+            # 1. 替换单元格段落中的文本
             replaced = False
             for para in cell.paragraphs:
                 if old_text in para.text:
                     _replace_text_in_para(para, old_text, new_text)
                     replaced = True
 
-            # 如果段落级别没找到，尝试 run 级别的深度搜索
-            if not replaced:
-                _replace_in_cell_runs(cell, old_text, new_text)
+            # 2. 如果段落级别没找到，检查嵌套表格
+            if not replaced and len(cell.tables) > 0:
+                for nested_table in cell.tables:
+                    for nested_row in nested_table.rows:
+                        for nested_cell in nested_row.cells:
+                            for para in nested_cell.paragraphs:
+                                if old_text in para.text:
+                                    _replace_text_in_para(para, old_text, new_text)
+                                    replaced = True
 
-            # 递归处理嵌套表格
+            # 3. 递归处理所有嵌套表格（无论是否已找到）
             for nested_table in cell.tables:
                 _replace_in_table_recursive(nested_table, old_text, new_text)
 

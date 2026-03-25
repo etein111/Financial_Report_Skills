@@ -1,3 +1,15 @@
+a1_cn:
+  description: a1_cn
+  format: 杨斌
+a1_email:
+  description: a1_email
+  format: harryyang@hfisec.com.hk
+a1_en:
+  description: a1_en
+  format: Bin Yang
+a1_sfc:
+  description: a1_sfc
+  format: BSQ313
 abstract:
   description: 报告摘要部分
   hints:
