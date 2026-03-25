@@ -53,13 +53,9 @@ def replace_field_value_in_doc(doc: Document, field_name: str, field_value: str)
         if value_str in para.text:
             _replace_text_in_para(para, value_str, placeholder)
 
-    # 在表格中替换
+    # 在表格中替换（包括嵌套表格）
     for table in doc.tables:
-        for row in table.rows:
-            for cell in row.cells:
-                for para in cell.paragraphs:
-                    if value_str in para.text:
-                        _replace_text_in_para(para, value_str, placeholder)
+        _replace_in_table_recursive(table, value_str, placeholder)
 
     # 在页眉页脚中替换
     for section in doc.sections:
@@ -71,6 +67,110 @@ def replace_field_value_in_doc(doc: Document, field_name: str, field_value: str)
                 _replace_text_in_para(para, value_str, placeholder)
 
     return doc
+
+
+def _replace_in_table_recursive(table, old_text: str, new_text: str):
+    """递归地在表格中替换文本（包括嵌套表格）。
+
+    Args:
+        table: python-docx 表格对象
+        old_text: 要替换的文本
+        new_text: 新文本
+    """
+    for row in table.rows:
+        for cell in row.cells:
+            # 替换单元格段落中的文本
+            replaced = False
+            for para in cell.paragraphs:
+                if old_text in para.text:
+                    _replace_text_in_para(para, old_text, new_text)
+                    replaced = True
+
+            # 如果段落级别没找到，尝试 run 级别的深度搜索
+            if not replaced:
+                _replace_in_cell_runs(cell, old_text, new_text)
+
+            # 递归处理嵌套表格
+            for nested_table in cell.tables:
+                _replace_in_table_recursive(nested_table, old_text, new_text)
+
+
+def _replace_in_cell_runs(cell, old_text: str, new_text: str):
+    """在单元格的所有 runs 中递归搜索并替换文本。
+
+    有些表格单元格的文本可能被分散在多个嵌套结构中，
+    这个函数会深度搜索所有可能的文本位置。
+
+    Args:
+        cell: python-docx 单元格对象
+        old_text: 要替换的文本
+        new_text: 新文本
+    """
+    # 方法1: 检查是否有嵌套表格
+    if len(cell.tables) > 0:
+        # 在嵌套表格中查找并替换
+        for nested_table in cell.tables:
+            for row in nested_table.rows:
+                for nested_cell in row.cells:
+                    for para in nested_cell.paragraphs:
+                        if old_text in para.text:
+                            _replace_text_in_para(para, old_text, new_text)
+                            return  # 找到并替换后返回
+
+    # 方法2: 尝试直接搜索单元格的 XML 内容
+    cell_xml = cell._element.xml
+    if old_text in cell_xml:
+        # 在 XML 中找到了，尝试在段落级别替换
+        for para in cell.paragraphs:
+            _deep_replace_in_paragraph(para, old_text, new_text)
+
+
+def _deep_replace_in_paragraph(para, old_text: str, new_text: str):
+    """深度搜索段落中的所有文本节点并替换。
+
+    Args:
+        para: python-docx 段落对象
+        old_text: 要替换的文本
+        new_text: 新文本
+    """
+    # 方法1: 先尝试使用段落文本
+    full_text = para.text
+    if old_text in full_text:
+        import re
+        pattern = re.escape(old_text)
+
+        # 清除现有 runs 并重新创建
+        for run in para.runs:
+            run.text = ""
+
+        # 添加替换后的文本到第一个 run
+        if para.runs:
+            para.runs[0].text = re.sub(pattern, new_text, full_text)
+        else:
+            para.add_run(re.sub(pattern, new_text, full_text))
+        return
+
+    # 方法2: 如果段落文本为空，直接操作 XML
+    para_xml = para._element.xml
+    if old_text in para_xml:
+        _replace_text_in_xml(para._element, old_text, new_text)
+
+
+def _replace_text_in_xml(element, old_text: str, new_text: str):
+    """直接在 XML 元素中替换文本。
+
+    Args:
+        element: lxml 元素对象
+        old_text: 要替换的文本
+        new_text: 新文本
+    """
+    # 查找所有 w:t 文本节点
+    ns = {'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'}
+    text_nodes = element.findall('.//w:t', ns)
+
+    for text_node in text_nodes:
+        if text_node.text and old_text in text_node.text:
+            text_node.text = text_node.text.replace(old_text, new_text)
 
 
 def replace_abstract_in_doc(doc: Document, table: int, row: int,
