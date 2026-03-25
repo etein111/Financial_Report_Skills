@@ -1,0 +1,5 @@
+name: company_flash
+display_name: company_flash 模板
+version: 1.0.0
+status: active
+sample_source: skills/template_maker/samples/flash_sample.docx

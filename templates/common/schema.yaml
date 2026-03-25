@@ -1,73 +1,32 @@
-# 通用模板提取规则
-# 适用于: macro, strategy, quant, bond
-
-name: common
-version: "1.0"
-description: "通用报告模板 (宏观/策略/量化/债券)"
-
-required_fields:
-  - title
-  - report_date
-  - analysts
-  - region
-  - abstract
-  - body
-
-fields:
-  title:
-    description: "报告标题"
-    type: string
-    extraction_prompt: "提取报告标题，通常在首页显著位置"
-    
-  report_date:
-    description: "报告日期"
-    type: date
-    format: "YYYY-MM-DD"
-    extraction_prompt: "提取报告日期，格式如 '4 Feb 2026' 或 '2026-02-04'"
-    
-  region:
-    description: "区域"
-    type: string
-    extraction_prompt: "提取报告覆盖的区域，如 'China', 'Hong Kong', 'US'"
-    
-  analysts:
-    description: "分析师列表"
-    type: array
-    items:
-      name:
-        type: string
-        description: "分析师姓名"
-      email:
-        type: string
-        description: "分析师邮箱"
-      sfc:
-        type: string
-        description: "SFC 牌照号码"
-    extraction_prompt: "提取所有署名分析师的姓名、邮箱和 SFC 编号"
-    
-  contact_person:
-    description: "联系人"
-    type: string
-    extraction_prompt: "提取联系人信息"
-    
-  investment_thesis:
-    description: "投资要点"
-    type: string
-    extraction_prompt: "提取投资要点/核心观点，通常在首页表格中"
-    
-  abstract:
-    description: "摘要"
-    type: docx_fragment
-    extraction_prompt: "提取报告摘要部分，保留原始格式"
-    output_file: "abstract.docx"
-    
-  body:
-    description: "正文"
-    type: docx_fragment
-    extraction_prompt: "提取报告正文部分，保留原始格式"
-    output_file: "body.docx"
-    
-  certificate:
-    description: "证书声明"
-    type: boolean
-    extraction_prompt: "检查是否包含 Analyst Certification 声明"
+abstract:
+  description: 报告摘要部分
+  hints:
+  - 通常包含投资亮点、核心观点
+  - 长度约 200-500 字
+  - 不应包含表格和图表
+  - 位于首页右侧区域
+  scope: 首页右侧
+  type: fragment
+analyst:
+  description: analyst
+  format: 李四
+body:
+  description: 报告正文部分
+  hints:
+  - 包含各章节详细内容
+  - 可能包含表格、图表引用
+  - 按原文结构保留段落和标题层级
+  scope: 从首页之后到报告结尾
+  type: fragment
+region:
+  description: region
+  format: 中国
+report_date:
+  description: report_date
+  format: '2024-03-24'
+report_type:
+  description: report_type
+  format: macro
+title:
+  description: title
+  format: 宏观经济研究报告

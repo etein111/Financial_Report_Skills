@@ -1,0 +1,5 @@
+name: company
+display_name: company 模板
+version: 1.0.0
+status: active
+sample_source: /mnt/c/_code/neoskills/skills/template_maker/samples/company_sample.docx

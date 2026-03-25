@@ -1,0 +1,72 @@
+# Worktrees
+.worktrees/
+worktrees/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Skill test output (temporary, not versioned)
+skills/*/tests/output/
+skills/*/tests/*_workspace/
+skills/*/fixtures/*_output/
+
+# Production templates in project root are versioned
+# Only exclude auto-generated test outputs
+
+# Local skill installation
+~/.claude/skills/
+.claude/skills/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+*.venv
+
+# Evaluation & Testing workspace
+*-workspace/
+*-workdir/
+test-results/
+eval-results/
+benchmark-results/
+/evals.json
+
+# Skill evaluation artifacts
+*.output
+transcripts/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db

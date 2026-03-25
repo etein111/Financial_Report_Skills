@@ -6,14 +6,31 @@
 
 尽量把逻辑拆成独立Agent Skills的方式实现，即把各种自动化逻辑分类成不同的skill，彼此相对独立，通过流程编排进行触发，编排要可以修改定制。
 
+## 报告类型
+
+系统支持以下报告类型（全部使用小写）：
+
+| 报告类型 | 说明 |
+|---------|------|
+| `company` | 公司覆盖报告（首次覆盖、深度分析等） |
+| `sector` | 行业研究报告 |
+| `company_flash` | 公司快讯报告 |
+| `sector_flash` | 行业快讯报告 |
+| `macro` | 宏观报告（通常共用 common 模板） |
+| `strategy` | 策略报告（通常共用 common 模板） |
+| `quantitative` | 量化报告（通常共用 common 模板） |
+| `bond` | 债券报告（通常共用 common 模板） |
+
+**注意**：`macro`、`strategy`、`quantitative`、`bond` 四种报告类型通常共用 `common` 模板。
+
 ## Capabilities
 
 ### 检查报告基本信息
 
-- 检查报告类型（Company、Sector、Macro、Strategy、Quantitative、Bond、Company Flash、Sector Flash）所需的字段是否都填了。
+- 检查报告类型（`company`、`sector`、`macro`、`strategy`、`quantitative`、`bond`、`company_flash`、`sector_flash`）所需的字段是否都填了。
 - 自动从原始报告提取要素，要素如果不齐，需要提示补齐。
 
-#### 报告字段矩阵（提交态必填）（Common包括Macro、Strategy、Quantitative、Bond）
+#### 报告字段矩阵（提交态必填）
 
 提取字段示例如下：
 

@@ -1,0 +1,24 @@
+abstract:
+  description: 报告摘要部分
+  hints:
+  - 通常包含投资亮点、核心观点
+  - 长度约 200-500 字
+  - 不应包含表格和图表
+  - 位于首页右侧区域
+  scope: 首页右侧
+  type: fragment
+analyst:
+  description: analyst
+  format: 王五
+company:
+  description: company
+  format: 西锐飞机
+event:
+  description: event
+  format: 业绩预告
+flash_date:
+  description: flash_date
+  format: '2024-03-24'
+ticker:
+  description: ticker
+  format: 2507.HK

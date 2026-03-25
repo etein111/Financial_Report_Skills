@@ -1,20 +1,4 @@
-# 报告类型 -> 模板名 的静态映射
-# 第一版只做静态路由，不引入关键词、作者或语言等复杂匹配规则
-
 mappings:
-  # 公司类
   company: company
-  company_flash: company
-  
-  # 行业类
-  sector: sector
-  sector_flash: sector
-  
-  # 通用类 (宏观/策略/量化/债券)
-  macro: common
-  strategy: common
-  quant: common
-  bond: common
-
-# 默认模板 (当报告类型无法识别时使用)
-default: common
+  common: common
+  company_flash: company_flash
