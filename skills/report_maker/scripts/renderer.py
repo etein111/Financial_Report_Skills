@@ -411,38 +411,193 @@ def _copy_table_to_doc(target_doc: Document, source_table) -> None:
         print(f"复制表格失败: {e}")
 
 
-def convert_to_pdf(docx_path: str, pdf_path: str) -> bool:
-    """转换 Word 文档为 PDF。"""
-    try:
-        output_dir = Path(pdf_path).parent
-        
-        # 查找 LibreOffice
-        libreoffice_cmd = None
-        for cmd in ['libreoffice', 'libreoffice7.5', 'libreoffice7.6', 'soffice']:
+def find_libreoffice() -> str:
+    """查找 LibreOffice 可执行文件。
+
+    支持跨平台检测：
+    - Windows: 检查常见安装路径
+    - Linux/Mac: 使用 which 命令查找
+
+    Returns:
+        LibreOffice 可执行文件路径，如果找不到返回 None
+    """
+    import platform
+
+    system = platform.system()
+    libreoffice_cmd = None
+
+    if system == "Windows":
+        # Windows 特定路径
+        possible_paths = [
+            r"C:\Program Files\LibreOffice\program\soffice.exe",
+            r"C:\Program Files (x86)\LibreOffice\program\soffice.exe",
+            r"C:\Program Files\LibreOffice 7\program\soffice.exe",
+            r"C:\Program Files\LibreOffice 6\program\soffice.exe",
+        ]
+
+        for path in possible_paths:
+            if Path(path).exists():
+                libreoffice_cmd = path
+                break
+
+        # 如果没有找到，尝试通过 PATH 查找
+        if not libreoffice_cmd:
+            for cmd in ['soffice', 'libreoffice']:
+                found = shutil.which(cmd)
+                if found:
+                    libreoffice_cmd = found
+                    break
+    else:
+        # Linux/Mac: 使用 which 查找
+        possible_commands = ['libreoffice', 'libreoffice7.5', 'libreoffice7.6', 'soffice']
+
+        for cmd in possible_commands:
             found = shutil.which(cmd)
             if found:
-                libreoffice_cmd = cmd
+                libreoffice_cmd = found
                 break
-        
-        if not libreoffice_cmd:
-            print("LibreOffice 未找到，跳过 PDF 转换")
-            return False
-        
-        result = subprocess.run([
-            libreoffice_cmd,
-            '--headless',
-            '--convert-to', 'pdf',
-            '--outdir', str(output_dir),
-            str(docx_path)
-        ], capture_output=True, text=True, timeout=60)
-        
-        if result.returncode != 0:
-            return False
-        
-        return Path(pdf_path).exists()
-    except Exception as e:
-        print(f"PDF 转换失败: {e}")
+
+    return libreoffice_cmd
+
+
+def verify_pdf_output(pdf_path: str, min_size: int = 1024) -> bool:
+    """验证 PDF 输出文件。
+
+    Args:
+        pdf_path: PDF 文件路径
+        min_size: 最小文件大小（字节），默认 1KB
+
+    Returns:
+        是否验证通过
+    """
+    if not Path(pdf_path).exists():
         return False
+
+    # 检查文件大小
+    try:
+        size = Path(pdf_path).stat().st_size
+        if size < min_size:
+            print(f"PDF 文件太小: {size} 字节")
+            return False
+
+        # 可选：验证 PDF 文件头
+        with open(pdf_path, 'rb') as f:
+            header = f.read(4)
+            if header != b'%PDF':
+                print("PDF 文件头无效")
+                return False
+
+        return True
+    except Exception as e:
+        print(f"PDF 验证失败: {e}")
+        return False
+
+
+def convert_to_pdf_with_retry(
+    docx_path: str,
+    pdf_path: str,
+    max_retries: int = 2,
+    timeout: int = 120
+) -> bool:
+    """带重试机制的 PDF 转换。
+
+    Args:
+        docx_path: Word 文档路径
+        pdf_path: 输出 PDF 路径
+        max_retries: 最大重试次数（默认 2）
+        timeout: 超时时间（秒，默认 120）
+
+    Returns:
+        是否转换成功
+    """
+    import time
+
+    libreoffice_cmd = find_libreoffice()
+
+    if not libreoffice_cmd:
+        print("LibreOffice 未找到，跳过 PDF 转换")
+        print("提示: 请安装 LibreOffice 以启用 PDF 转换功能")
+        return False
+
+    output_dir = Path(pdf_path).parent
+
+    # 如果 PDF 已存在，先删除
+    if Path(pdf_path).exists():
+        Path(pdf_path).unlink()
+
+    for attempt in range(max_retries):
+        try:
+            print(f"PDF 转换尝试 {attempt + 1}/{max_retries}...")
+
+            result = subprocess.run(
+                [
+                    libreoffice_cmd,
+                    '--headless',
+                    '--convert-to', 'pdf',
+                    '--outdir', str(output_dir),
+                    str(docx_path)
+                ],
+                capture_output=True,
+                text=True,
+                timeout=timeout
+            )
+
+            # 检查返回码
+            if result.returncode != 0:
+                print(f"LibreOffice 返回错误: {result.stderr}")
+                if attempt < max_retries - 1:
+                    print(f"等待 2 秒后重试...")
+                    time.sleep(2)
+                    continue
+                else:
+                    return False
+
+            # 验证输出文件
+            if not verify_pdf_output(pdf_path):
+                print("PDF 输出验证失败")
+                if attempt < max_retries - 1:
+                    print(f"等待 2 秒后重试...")
+                    time.sleep(2)
+                    continue
+                else:
+                    return False
+
+            print(f"PDF 转换成功: {pdf_path}")
+            return True
+
+        except subprocess.TimeoutExpired:
+            print(f"PDF 转换超时（超过 {timeout} 秒）")
+            if attempt < max_retries - 1:
+                print(f"等待 2 秒后重试...")
+                time.sleep(2)
+                continue
+            else:
+                return False
+
+        except Exception as e:
+            print(f"PDF 转换异常: {e}")
+            if attempt < max_retries - 1:
+                print(f"等待 2 秒后重试...")
+                time.sleep(2)
+                continue
+            else:
+                return False
+
+    return False
+
+
+def convert_to_pdf(docx_path: str, pdf_path: str) -> bool:
+    """转换 Word 文档为 PDF（简化接口）。
+
+    Args:
+        docx_path: Word 文档路径
+        pdf_path: 输出 PDF 路径
+
+    Returns:
+        是否转换成功
+    """
+    return convert_to_pdf_with_retry(docx_path, pdf_path, max_retries=2)
+
 
 
 def prepare_render_context(elements: Dict[str, Any], report_dir: str) -> Dict[str, Any]:

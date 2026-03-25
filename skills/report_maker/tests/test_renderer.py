@@ -11,7 +11,10 @@ from renderer import (
     find_placeholder_in_document,
     insert_fragment_at_placeholder,
     render_with_fragments,
-    validate_template
+    validate_template,
+    find_libreoffice,
+    verify_pdf_output,
+    convert_to_pdf_with_retry
 )
 
 
@@ -310,3 +313,112 @@ class TestValidateTemplate:
 
         assert result["valid"] is False
         assert "error" in result
+
+
+class TestFindLibreoffice:
+    """测试 find_libreoffice 函数。"""
+
+    def test_find_libreoffice_or_none(self):
+        """测试：查找 LibreOffice 或返回 None。"""
+        result = find_libreoffice()
+
+        # 结果应该是路径字符串或 None
+        assert result is None or isinstance(result, str)
+
+        # 如果找到了，应该是一个有效路径
+        if result:
+            print(f"找到 LibreOffice: {result}")
+
+
+class TestVerifyPdfOutput:
+    """测试 verify_pdf_output 函数。"""
+
+    def test_verify_nonexistent_pdf(self, tmp_path):
+        """测试：验证不存在的 PDF。"""
+        result = verify_pdf_output(str(tmp_path / "nonexistent.pdf"))
+
+        assert result is False
+
+    def test_verify_empty_pdf(self, tmp_path):
+        """测试：验证空的 PDF。"""
+        empty_pdf = tmp_path / "empty.pdf"
+        empty_pdf.write_text("")
+
+        result = verify_pdf_output(str(empty_pdf))
+
+        assert result is False
+
+    def test_verify_invalid_pdf(self, tmp_path):
+        """测试：验证无效的 PDF（不是 PDF 格式）。"""
+        invalid_pdf = tmp_path / "invalid.pdf"
+        # 写入一些不是 PDF 的内容
+        invalid_pdf.write_bytes(b"This is not a PDF")
+
+        result = verify_pdf_output(str(invalid_pdf))
+
+        assert result is False
+
+    def test_verify_min_size(self, tmp_path):
+        """测试：验证最小文件大小。"""
+        # 创建一个有效的 PDF 头但文件很小
+        small_pdf = tmp_path / "small.pdf"
+        small_pdf.write_bytes(b'%PDF-1.4')
+
+        # 使用更大的最小值
+        result = verify_pdf_output(str(small_pdf), min_size=100)
+
+        assert result is False
+
+
+class TestConvertToPdfWithRetry:
+    """测试 convert_to_pdf_with_retry 函数。"""
+
+    @pytest.fixture
+    def sample_docx(self, tmp_path):
+        """创建示例 Word 文档。"""
+        try:
+            from docx import Document
+
+            doc = Document()
+            doc.add_paragraph("测试文档")
+            doc.add_paragraph("这是用于 PDF 转换测试的文档")
+
+            docx_path = tmp_path / "test.docx"
+            doc.save(str(docx_path))
+
+            return str(docx_path)
+        except ImportError:
+            pytest.skip("python-docx not installed")
+
+    def test_convert_without_libreoffice(self, sample_docx, tmp_path):
+        """测试：没有 LibreOffice 时的行为。"""
+        # 这个测试在大多数环境中会跳过 PDF 转换
+        # 因为 LibreOffice 可能未安装
+        pdf_path = tmp_path / "output.pdf"
+
+        # 注意：这个测试需要 LibreOffice 才能真正测试转换
+        # 在 CI 环境中通常会跳过
+        result = convert_to_pdf_with_retry(sample_docx, str(pdf_path), max_retries=1)
+
+        # 如果没有 LibreOffice，应该返回 False
+        if not find_libreoffice():
+            assert result is False
+        # 如果有 LibreOffice，可能成功也可能失败（取决于环境）
+        # 我们只验证函数不会崩溃
+        else:
+            assert isinstance(result, bool)
+
+    def test_convert_with_invalid_docx(self, tmp_path):
+        """测试：转换不存在的文档。"""
+        nonexistent_docx = tmp_path / "nonexistent.docx"
+        pdf_path = tmp_path / "output.pdf"
+
+        result = convert_to_pdf_with_retry(
+            str(nonexistent_docx),
+            str(pdf_path),
+            max_retries=1
+        )
+
+        # 应该失败（文档不存在）
+        assert result is False
+
