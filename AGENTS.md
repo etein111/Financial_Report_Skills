@@ -112,4 +112,63 @@ AI 编程助手的统一指导文件。Claude Code 和 Codex 共享此配置。
   - 使用 `package_skill.py` 脚本验证和打包 skill
   - 参考 skill-creator 的设计模式和最佳实践
 
+## 技术栈与工具库
+
+### Word 文档操作
+
+本项目涉及大量 Word 文档处理（模板生成、报告创建等），以下 Python 库按重要性和使用场景分类：
+
+#### ✅ 核心库
+
+| 库名 | 用途 | 安装 | 使用场景 |
+|------|------|------|----------|
+| **python-docx** | 创建、读取、修改 .docx 文件 | `uv pip install python-docx` | **最常用** - 基础文本、段落、表格、图片操作 |
+| **docx2txt** | 提取 Word 文档纯文本 | `uv pip install docx2txt` | 文档分析、内容提取（复杂结构可读） |
+
+**注意事项**：
+- `python-docx` 的 `cell.text` **只返回直接段落的文本，不包括嵌套表格**
+- 处理嵌套表格需要递归遍历 `cell.tables`
+- 复杂结构建议用 `docx2txt` 先分析，再定位到 `python-docx` 操作
+
+#### 📌 扩展/生态库
+
+| 库名 | 用途 | 安装 | 使用场景 |
+|------|------|------|----------|
+| **docxtpl** | Jinja2 模板驱动的 Word 生成 | `uv pip install docxtpl` | 模板变量替换、循环、条件渲染 |
+| **docxcompose** | 合并多个 Word 文档 | `uv pip install docxcompose` | 拼接报表、合并章节 |
+| **docxedit** | 编辑 Word 文档且保留原有格式 | `uv pip install docxedit` | 复杂格式文档自动化处理 |
+| **docx2python** | 提取复杂表格结构 | `uv pip install docx2python` | 嵌套表格、合并单元格的准确提取 |
+
+#### 选择建议
+
+| 任务 | 推荐库 | 理由 |
+|------|--------|------|
+| **创建模板** | `python-docx` | 精细控制文档结构 |
+| **填充模板** | `docxtpl` | 支持循环、条件等高级功能 |
+| **批量报告** | `docxtpl` + `python-docx` | 模板 + 精细调整 |
+| **文档分析** | `docx2txt` | 可读性更好 |
+| **合并文档** | `docxcompose` | 专为合并设计 |
+
+#### 示例代码
+
+**递归处理嵌套表格**（本项目常用）：
+
+```python
+from docx import Document
+
+def replace_in_nested_tables(doc, old_text, new_text):
+    """递归替换所有层级的表格文本"""
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                # 替换单元格段落
+                for para in cell.paragraphs:
+                    if old_text in para.text:
+                        para.text = para.text.replace(old_text, new_text)
+
+                # 递归处理嵌套表格
+                for nested_table in cell.tables:
+                    replace_in_nested_tables(nested_table, old_text, new_text)
+```
+
 ---
