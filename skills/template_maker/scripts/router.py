@@ -1,9 +1,9 @@
 """Router.yaml 管理函数。"""
 
-import yaml
 from pathlib import Path
 from typing import Dict, Any, Optional
-import copy
+
+from . import common
 
 
 # ==================== 文件操作 ====================
@@ -17,10 +17,7 @@ def load_router(router_path: Path) -> Dict[str, Any]:
     Returns:
         Router 数据，格式：{"mappings": {report_type: template_name}}
     """
-    if not router_path.exists():
-        return {"mappings": {}}
-
-    data = yaml.safe_load(router_path.read_text())
+    data = common.load_yaml(router_path)
     if not data:
         return {"mappings": {}}
 
@@ -38,8 +35,7 @@ def save_router(router_path: Path, data: Dict[str, Any]) -> None:
         router_path: router.yaml 文件路径
         data: Router 数据
     """
-    router_path.parent.mkdir(parents=True, exist_ok=True)
-    router_path.write_text(yaml.dump(data, allow_unicode=True, sort_keys=False))
+    common.save_yaml(router_path, data)
 
 
 # ==================== 查询（纯函数）====================
@@ -82,9 +78,10 @@ def update_mapping(data: Dict[str, Any], report_type: str, template_name: str) -
     Returns:
         新的 Router 数据
     """
-    new_data = copy.deepcopy(data)
+    new_data = data.copy()
     if "mappings" not in new_data:
         new_data["mappings"] = {}
+    new_data["mappings"] = new_data["mappings"].copy()
     new_data["mappings"][report_type] = template_name
     return new_data
 
@@ -99,7 +96,9 @@ def remove_mapping(data: Dict[str, Any], report_type: str) -> Dict[str, Any]:
     Returns:
         新的 Router 数据
     """
-    new_data = copy.deepcopy(data)
-    if "mappings" in new_data and report_type in new_data["mappings"]:
-        del new_data["mappings"][report_type]
+    new_data = data.copy()
+    if "mappings" in new_data:
+        new_data["mappings"] = new_data["mappings"].copy()
+        if report_type in new_data["mappings"]:
+            del new_data["mappings"][report_type]
     return new_data

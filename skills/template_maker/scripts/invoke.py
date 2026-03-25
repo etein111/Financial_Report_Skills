@@ -13,102 +13,27 @@ from typing import Optional, Dict, Any
 SCRIPTS_DIR = Path(__file__).parent
 sys.path.insert(0, str(SCRIPTS_DIR))
 
-from schema import generate_schema, save_schema
-from template import (
+from . import common
+from .schema import generate_schema, save_schema
+from .template import (
     load_document, save_document,
     replace_field_value_in_doc,
     replace_abstract_in_doc,
-    replace_body_in_doc,
     replace_body_elements_in_doc
 )
-from document import (
+from .document import (
     find_abstract_by_elements,
-    find_body_range_by_sections,
     find_body_elements
 )
-from router import load_router, update_mapping, save_router
-from document import find_abstract_by_elements, find_body_range_by_content
-import yaml
-
-
-DEFAULT_ABSTRACT_SCOPE = "首页右侧"
-DEFAULT_BODY_SCOPE = "首页之后到'附录APPENDIX'之前"
-
-
-def _flatten_elements(elements: dict, parent_key: str = '', sep: str = '_') -> dict:
-    """展平嵌套的 elements 字典。
-
-    例如：
-        {
-            'company': '西锐飞机',
-            'analysts': [{'chinese_name': '杨斌', 'english_name': 'Bin Yang'}]
-        }
-    展平为：
-        {
-            'company': '西锐飞机',
-            'analyst_chinese_name': '杨斌',
-            'analyst_english_name': 'Bin Yang'
-        }
-
-    Args:
-        elements: 嵌套的 elements 字典
-        parent_key: 父键名（用于递归）
-        sep: 键名分隔符
-
-    Returns:
-        展平后的字典
-    """
-    items = []
-    for key, value in elements.items():
-        new_key = f"{parent_key}{sep}{key}" if parent_key else key
-
-        if isinstance(value, dict):
-            # 递归处理字典
-            items.extend(_flatten_elements(value, new_key, sep=sep).items())
-        elif isinstance(value, list) and len(value) > 0 and isinstance(value[0], dict):
-            # 处理列表中的字典（如 analysts: [{...}]）
-            # 使用单数形式作为前缀（analyst 而不是 analysts）
-            singular_key = key.rstrip('s')  # 简单的单数化
-            for i, item in enumerate(value):
-                if isinstance(item, dict):
-                    items.extend(_flatten_elements(item, singular_key, sep=sep).items())
-                else:
-                    items.append((f"{new_key}_{i}", item))
-        else:
-            items.append((new_key, value))
-
-    return dict(items)
-
-
-def flatten_elements(elements: Dict[str, Any]) -> Dict[str, str]:
-    """展平 elements（处理 analysts 等嵌套字段）。
-
-    Args:
-        elements: 原始 elements 字典
-
-    Returns:
-        展平后的 field_name -> field_value 映射
-    """
-    flat = {}
-    for name, value in elements.items():
-        if name == "analysts" and isinstance(value, list):
-            for i, analyst in enumerate(value):
-                prefix = f"analyst_{i+1}" if len(value) > 1 else "analyst"
-                if isinstance(analyst, dict):
-                    for key, val in analyst.items():
-                        if val and val != "null":
-                            flat[f"{prefix}_{key}"] = str(val)
-        elif value is not None and value != "null":
-            flat[name] = str(value)
-    return flat
+from .router import load_router, update_mapping, save_router
 
 
 def create_template(
     name: str,
     word_path: str,
     elements_path: str,
-    abstract_scope: str = DEFAULT_ABSTRACT_SCOPE,
-    body_scope: Optional[str] = DEFAULT_BODY_SCOPE,
+    abstract_scope: str = None,
+    body_scope: Optional[str] = None,
     output_dir: str = "templates",
     auto_confirm: bool = False
 ) -> dict:
@@ -126,6 +51,12 @@ def create_template(
     Returns:
         {"success": bool, "message": str, "files": list}
     """
+    # 使用默认值
+    if abstract_scope is None:
+        abstract_scope = common.DEFAULT_ABSTRACT_SCOPE
+    if body_scope is None:
+        body_scope = common.DEFAULT_BODY_SCOPE
+
     word_path = Path(word_path)
     elements_path = Path(elements_path)
     output_dir = Path(output_dir)
@@ -134,10 +65,10 @@ def create_template(
     if not word_path.exists():
         return {"success": False, "message": f"Word 文件不存在: {word_path}"}
     if not elements_path.exists():
-        return {"success": False, "message": f"elements.yaml 不存在: {elements_path}"}
+        return {"success": False, "message": f"{common.FILE_ELEMENTS} 不存在: {elements_path}"}
 
     # 加载 elements.yaml
-    elements = yaml.safe_load(elements_path.read_text())
+    elements = common.load_yaml(elements_path)
 
     if not auto_confirm:
         print(f"\n=== 模板创建配置 ===")
@@ -162,7 +93,7 @@ def create_template(
         # 快讯报告，禁用 body
         body_config = {"enabled": False}
     schema = generate_schema(elements, abstract_config, body_config)
-    schema_path = template_dir / "schema.yaml"
+    schema_path = template_dir / common.FILE_SCHEMA
     save_schema(schema_path, schema)
 
     # 3. 生成 meta.yaml
@@ -173,14 +104,14 @@ def create_template(
         "status": "active",
         "sample_source": str(word_path)
     }
-    meta_path = template_dir / "meta.yaml"
-    meta_path.write_text(yaml.dump(meta, allow_unicode=True, sort_keys=False))
+    meta_path = template_dir / common.FILE_META
+    common.save_yaml(meta_path, meta)
 
     # 4. 处理 Word 文档
     doc = load_document(str(word_path))
 
     # 展平 elements（处理 analysts 等嵌套字段）
-    flat_elements = flatten_elements(elements)
+    flat_elements = common.flatten_elements(elements)
 
     # 替换字段值为占位符
     for field_name, field_value in flat_elements.items():
@@ -197,6 +128,8 @@ def create_template(
             col_end=abstract_result['col_end'],
             row_end=abstract_result.get('row_end')
         )
+    else:
+        print(f"警告：未能定位摘要位置 - {abstract_result.get('reason', '未知原因')}")
 
     # 6. 定位并替换正文区域（如果有正文）
     # 使用 find_body_elements + replace_body_elements_in_doc
@@ -209,38 +142,15 @@ def create_template(
                 start_element_idx=body_result['start_element_idx'],
                 end_element_idx=body_result['end_element_idx']
             )
-
-    # 4.2 替换摘要区域
-    abstract_location = find_abstract_by_elements(str(word_path), elements)
-    if abstract_location["found"]:
-        doc = replace_abstract_in_doc(
-            doc,
-            abstract_location["table"],
-            abstract_location["row"],
-            abstract_location["col_start"],
-            abstract_location["col_end"]
-        )
-    else:
-        print(f"警告：未能定位摘要位置 - {abstract_location.get('reason', '未知原因')}")
-
-    # 4.3 替换正文区域（如果存在）
-    if body_scope:
-        body_location = find_body_range_by_content(str(word_path))
-        if body_location["found"]:
-            doc = replace_body_in_doc(
-                doc,
-                body_location["start_paragraph"],
-                body_location["end_paragraph"]
-            )
         else:
-            print(f"警告：未能定位正文位置 - {body_location.get('reason', '未知原因')}")
+            print(f"警告：未能定位正文位置 - {body_result.get('reason', '未知原因')}")
 
-    # 4.4 保存模板
-    template_docx_path = template_dir / "template.docx"
+    # 7. 保存模板
+    template_docx_path = template_dir / common.FILE_TEMPLATE
     save_document(doc, str(template_docx_path))
 
-    # 7. 更新 router.yaml
-    router_path = output_dir / "router.yaml"
+    # 8. 更新 router.yaml
+    router_path = output_dir / common.FILE_ROUTER
     router_data = load_router(router_path)
     router_data = update_mapping(router_data, name, name)
     save_router(router_path, router_data)
@@ -257,7 +167,12 @@ def create_template(
     }
 
 
-def main():
+def main() -> int:
+    """命令行入口函数。
+
+    Returns:
+        退出码（0 表示成功，1 表示失败）
+    """
     parser = argparse.ArgumentParser(
         description="创建分析师报告模板",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -276,9 +191,9 @@ def main():
 
     parser.add_argument("--name", required=True, help="模板名称")
     parser.add_argument("--word", required=True, help="Word 样本文件路径")
-    parser.add_argument("--elements", required=True, help="elements.yaml 配置文件路径")
-    parser.add_argument("--abstract-scope", default=DEFAULT_ABSTRACT_SCOPE, help="摘要位置描述")
-    parser.add_argument("--body-scope", default=DEFAULT_BODY_SCOPE, help="正文位置描述")
+    parser.add_argument("--elements", required=True, help=f"{common.FILE_ELEMENTS} 配置文件路径")
+    parser.add_argument("--abstract-scope", default=common.DEFAULT_ABSTRACT_SCOPE, help="摘要位置描述")
+    parser.add_argument("--body-scope", default=common.DEFAULT_BODY_SCOPE, help="正文位置描述")
     parser.add_argument("--no-body", action="store_true", help="快讯报告，没有正文部分")
     parser.add_argument("--output-dir", default="templates", help="输出目录（默认: templates）")
     parser.add_argument("--auto-confirm", "-y", action="store_true", help="跳过确认，直接创建")

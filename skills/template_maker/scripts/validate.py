@@ -2,8 +2,9 @@
 
 from pathlib import Path
 from docxtpl import DocxTemplate
-import yaml
 from typing import Tuple
+
+from . import common
 
 
 def validate_template(template_path: Path, elements_path: Path) -> Tuple[bool, str]:
@@ -18,7 +19,7 @@ def validate_template(template_path: Path, elements_path: Path) -> Tuple[bool, s
     """
     try:
         # 加载 elements
-        elements = yaml.safe_load(elements_path.read_text())
+        elements = common.load_yaml(elements_path)
 
         # 加载模板
         template = DocxTemplate(template_path)
