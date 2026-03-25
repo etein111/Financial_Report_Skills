@@ -27,11 +27,57 @@ from document import (
     find_body_elements
 )
 from router import load_router, update_mapping, save_router
+from document import find_abstract_by_elements, find_body_range_by_content
 import yaml
 
 
 DEFAULT_ABSTRACT_SCOPE = "首页右侧"
-DEFAULT_BODY_SCOPE = "从首页之后到报告结尾"
+DEFAULT_BODY_SCOPE = "首页之后到'附录APPENDIX'之前"
+
+
+def _flatten_elements(elements: dict, parent_key: str = '', sep: str = '_') -> dict:
+    """展平嵌套的 elements 字典。
+
+    例如：
+        {
+            'company': '西锐飞机',
+            'analysts': [{'chinese_name': '杨斌', 'english_name': 'Bin Yang'}]
+        }
+    展平为：
+        {
+            'company': '西锐飞机',
+            'analyst_chinese_name': '杨斌',
+            'analyst_english_name': 'Bin Yang'
+        }
+
+    Args:
+        elements: 嵌套的 elements 字典
+        parent_key: 父键名（用于递归）
+        sep: 键名分隔符
+
+    Returns:
+        展平后的字典
+    """
+    items = []
+    for key, value in elements.items():
+        new_key = f"{parent_key}{sep}{key}" if parent_key else key
+
+        if isinstance(value, dict):
+            # 递归处理字典
+            items.extend(_flatten_elements(value, new_key, sep=sep).items())
+        elif isinstance(value, list) and len(value) > 0 and isinstance(value[0], dict):
+            # 处理列表中的字典（如 analysts: [{...}]）
+            # 使用单数形式作为前缀（analyst 而不是 analysts）
+            singular_key = key.rstrip('s')  # 简单的单数化
+            for i, item in enumerate(value):
+                if isinstance(item, dict):
+                    items.extend(_flatten_elements(item, singular_key, sep=sep).items())
+                else:
+                    items.append((f"{new_key}_{i}", item))
+        else:
+            items.append((new_key, value))
+
+    return dict(items)
 
 
 def flatten_elements(elements: Dict[str, Any]) -> Dict[str, str]:
@@ -164,7 +210,32 @@ def create_template(
                 end_element_idx=body_result['end_element_idx']
             )
 
-    # 保存模板
+    # 4.2 替换摘要区域
+    abstract_location = find_abstract_by_elements(str(word_path), elements)
+    if abstract_location["found"]:
+        doc = replace_abstract_in_doc(
+            doc,
+            abstract_location["table"],
+            abstract_location["row"],
+            abstract_location["col_start"],
+            abstract_location["col_end"]
+        )
+    else:
+        print(f"警告：未能定位摘要位置 - {abstract_location.get('reason', '未知原因')}")
+
+    # 4.3 替换正文区域（如果存在）
+    if body_scope:
+        body_location = find_body_range_by_content(str(word_path))
+        if body_location["found"]:
+            doc = replace_body_in_doc(
+                doc,
+                body_location["start_paragraph"],
+                body_location["end_paragraph"]
+            )
+        else:
+            print(f"警告：未能定位正文位置 - {body_location.get('reason', '未知原因')}")
+
+    # 4.4 保存模板
     template_docx_path = template_dir / "template.docx"
     save_document(doc, str(template_docx_path))
 
