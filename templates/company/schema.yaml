@@ -10,6 +10,90 @@ a1_en:
 a1_sfc:
   description: a1_sfc
   format: BSQ313
+a2_cn:
+  description: a2_cn
+  format: ''
+a2_email:
+  description: a2_email
+  format: ''
+a2_en:
+  description: a2_en
+  format: ''
+a2_sfc:
+  description: a2_sfc
+  format: ''
+a3_cn:
+  description: a3_cn
+  format: ''
+a3_email:
+  description: a3_email
+  format: ''
+a3_en:
+  description: a3_en
+  format: ''
+a3_sfc:
+  description: a3_sfc
+  format: ''
+a4_cn:
+  description: a4_cn
+  format: ''
+a4_email:
+  description: a4_email
+  format: ''
+a4_en:
+  description: a4_en
+  format: ''
+a4_sfc:
+  description: a4_sfc
+  format: ''
+a5_cn:
+  description: a5_cn
+  format: ''
+a5_email:
+  description: a5_email
+  format: ''
+a5_en:
+  description: a5_en
+  format: ''
+a5_sfc:
+  description: a5_sfc
+  format: ''
+a6_cn:
+  description: a6_cn
+  format: ''
+a6_email:
+  description: a6_email
+  format: ''
+a6_en:
+  description: a6_en
+  format: ''
+a6_sfc:
+  description: a6_sfc
+  format: ''
+a7_cn:
+  description: a7_cn
+  format: ''
+a7_email:
+  description: a7_email
+  format: ''
+a7_en:
+  description: a7_en
+  format: ''
+a7_sfc:
+  description: a7_sfc
+  format: ''
+a8_cn:
+  description: a8_cn
+  format: ''
+a8_email:
+  description: a8_email
+  format: ''
+a8_en:
+  description: a8_en
+  format: ''
+a8_sfc:
+  description: a8_sfc
+  format: ''
 abstract:
   description: 报告摘要部分
   hints:
