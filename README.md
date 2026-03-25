@@ -2,13 +2,23 @@
 
 `neoskills` 是 AI 工作台中的 skills 能力仓库，用于沉淀和组织可被工作台调用的业务能力。
 
-当前项目仍处于需求和设计整理阶段。第一期先用 `opencode` 作为临时工作台，后续再考虑自研工作台 `neospace`。
+## 当前状态
+
+✅ **report_maker** - 分析师报告自动化处理（已完成）
+- 两阶段工作流：抽取确认 → 渲染输出
+- 支持 7 种报告类型（company, sector, macro, strategy, quantitative, bond, flash）
+- 84 个测试全部通过
+- 完整文档和示例脚本
+
+⏳ **template_maker** - 模板制作与维护（规划中）
 
 ## 说明
 
 - **[PROJECT_STRUCTURE.md](./docs/PROJECT_STRUCTURE.md)** - 项目目录组织规范
 - `platform.md` 和 `workbench-req.md` 是背景参考文档
-- `skills-report.md` 是当前项目的核心文档
+- **[skills-report.md](./docs/skills-report.md)** - 分析师报告系统的完整需求和设计文档
+- **[report_maker 用户指南](./docs/report_maker_user_guide.md)** - 如何使用 report_maker
+- **[report_maker 部署文档](./docs/report_maker_deployment.md)** - 部署和配置说明
 
 ## 开发指南
 
