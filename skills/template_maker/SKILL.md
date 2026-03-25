@@ -1,152 +1,152 @@
----
+﻿---
 name: template_maker
-description: 创建和维护分析师报告模板。当用户需要创建新模板、分析 Word 文档结构生成 schema、维护现有模板字段或验证模板时使用此 skill。支持交互式参数收集和自动化模式（invoke.py 脚本）。
+description: Î¬Ê¦Ä£å¡£Ã»ÒªÄ£å¡¢ Word Äµá¹¹ schemaÎ¬Ä£Ö¶Î»Ö¤Ä£Ê±Ê¹Ã´ skillÖ§Ö½Ê½Õ¼Ô¶Ä£Ê½invoke.py Å±
 ---
 
 # template_maker
 
-创建和维护分析师报告模板。
+Î¬Ê¦Ä£å¡£
 
-## 报告类型
+## 
 
-系统支持的常见报告类型：
+ÏµÍ³Ö§ÖµÄ³Í£
 
-| 报告类型 | 说明 |
+|  | Ëµ |
 |---------|------|
-| `company` | 公司覆盖报告（首次覆盖、深度分析等） |
-| `sector` | 行业研究报告 |
-| `company_flash` | 公司快讯报告 |
-| `sector_flash` | 行业快讯报告 |
-| `macro` | 宏观报告（通常共用 common 模板） |
-| `strategy` | 策略报告（通常共用 common 模板） |
-| `quantitative` | 量化报告（通常共用 common 模板） |
-| `bond` | 债券报告（通常共用 common 模板） |
+| `company` | Ë¾Ç±æ£¨×´Î¸Ç¡È·È£ |
+| `sector` | ÒµÐ¾ |
+| `company_flash` | Ë¾Ñ¶ |
+| `sector_flash` | ÒµÑ¶ |
+| `macro` | Û±æ£¨Í¨ common Ä£å£© |
+| `strategy` | Ô±æ£¨Í¨ common Ä£å£© |
+| `quantitative` | æ£¨Í¨ common Ä£å£© |
+| `bond` | Õ®È¯æ£¨Í¨ common Ä£å£© |
 
-**注意**：
-- 报告类型用于 `router.yaml` 配置，必须使用小写
-- 多个报告类型可以映射到同一个模板
-- 例如：`macro`、`strategy`、`quantitative`、`bond` 都可以映射到 `common` 模板
-- 报告类型不限于上述列表，可根据业务需要扩展
+**×¢**
+-  `router.yaml` Ã£Ê¹Ð¡Ð´
+- ö±¨¸Í¿Ó³äµ½Í¬Ò»Ä£
+- ç£º`macro``strategy``quantitative``bond` Ó³äµ½ `common` Ä£
+- Í²Ð±É¸ÒµÒªÕ¹
 
-## 工作流程
+## 
 
-当用户请求创建或维护模板时，使用**渐进式交互**：
+Ã»ó´´½Î¬Ä£Ê±Ê¹**Ê½**
 
-### 核心原则
+### Ô­
 
-- **一次只问一个问题**
-- **提供推荐值或默认值**
-- **多轮对话逐步收集信息**
+- **Ò»Ö»Ò»**
+- **á¹©Æ¼ÖµÄ¬Öµ**
+- **Ö¶Ô»Õ¼Ï¢**
 
-### 交互步骤
+### 
 
-1. **确定模板名称和报告类型**
-   - 示例回复："好的，创建 `common` 模板，用于 macro、strategy 等报告类型。请提供 Word 样本文件路径"
+1. **È·Ä£ÆºÍ±**
+   - Ê¾Ø¸"ÃµÄ£ `common` Ä£å£¬ macrostrategy È±Í¡á¹© Word Ä¼Â·"
 
-2. **获取 Word 文件路径**
-   - 验证文件存在
-   - 自动检测 elements.yaml
-   - 如果检测到多个候选文件，让用户选择
+2. **È¡ Word Ä¼Â·**
+   - Ö¤Ä¼
+   - Ô¶ elements.yaml
+   - âµ½Ñ¡Ä¼Ã»Ñ¡
 
-3. **询问摘要和正文配置**
-   - 摘要位置询问（必须）
-   - 正文位置询问（可选，flash 报告可能没有正文）
-   - 告知用户关键结构特征：
-     - **摘要后面一定有换页符**（在 Word 中体现为分节）
-     - **如果有正文，至少一页，正文结束后也有换页符**
-     - **附录（信息披露）一定从新的一页开始**
+3. **Ñ¯ÕªÒª**
+   - ÕªÒªÎ»Ñ¯Ê£ë£©
+   - Î»Ñ¯Ê£Ñ¡flash Ã»Ä£
+   - ÖªÃ»Ø¼á¹¹
+     - **ÕªÒªÒ»Ð»Ò³** Word ÎªÖ½Ú£
+     - **Ä£Ò»Ò³Ä½Ò²Ð»Ò³**
+     - **Â¼Ï¢Â¶Ò»ÂµÒ»Ò³Ê¼**
 
-4. **确认并执行**
-   - 展示汇总信息
-   - 询问："确认创建吗？"
+4. **È·Ï²Ö´**
+   - Õ¹Ê¾Ï¢
+   - Ñ¯Ê£"È·Ï´"
 
-### 执行流程
+### Ö´
 
-确认后，按以下步骤创建模板：
+È·Ïºó£¬°Â²è´´Ä£å£º
 
-1. 加载 Word 文档和 elements.yaml
-2. 生成扁平化的 schema.yaml
-3. 替换模板中的字段值为占位符
-4. 替换摘要和正文区域
-5. 更新 router.yaml 路由配置
-6. 保存模板文件
+1.  Word Äµ elements.yaml
+2. É±Æ½ schema.yaml
+3. æ»»Ä£ÐµÖ¶ÖµÎªÕ¼Î»
+4. æ»»ÕªÒª
+5.  router.yaml Â·
+6. Ä£Ä¼
 
-成功后创建以下文件结构：
+É¹ó´´½Ä¼á¹¹
 
 ```
 templates/
-├── router.yaml           # 自动更新路由配置
-└── <模板名>/
-    ├── meta.yaml         # 模板元数据
-    ├── schema.yaml       # 字段 schema（扁平化结构）
-    └── template.docx     # Word 模板文件
+ router.yaml           # Ô¶Â·
+ <Ä£>/
+     meta.yaml         # Ä£Ôª
+     schema.yaml       # Ö¶ schemaÆ½á¹¹
+     template.docx     # Word Ä£Ä¼
 ```
 
-## schema.yaml 结构
+## schema.yaml á¹¹
 
-生成的 schema.yaml 采用**扁平化结构**：
+Éµ schema.yaml **Æ½á¹¹**
 
 ```yaml
-# === 普通字段（从样本文档提取，用于填充模板）===
+# === Í¨Ö¶Î£ÄµÈ¡Ä£å£©===
 company:
-  description: 公司名称
-  format: 西锐飞机
+  description: Ë¾
+  format: É»
 
 ticker:
-  description: 股票代码
+  description: Æ±
   format: 2507.HK
 
 rating:
-  description: 评级
-  format: 优于大市
+  description: 
+  format: Ú´
 
-# === Word 片段（从原始文档摘取，保存为独立 Word 文件）===
+# === Word Æ¬Î£Ô­Ê¼ÄµÕªÈ¡Îª Word Ä¼===
 abstract:
   type: fragment
-  description: 报告摘要部分
-  scope: 首页右侧（长的话可能到第二页）
+  description: ÕªÒª
+  scope: Ò³Ò²à£¨Ä»ÜµÚ¶Ò³
   hints:
-    - 通常包含投资亮点、核心观点
-    - 长度约 200-500 字
-    - 位于首页右侧区域
+    - Í¨Í¶ã¡¢Ä¹Ûµ
+    - Ô¼ 200-500 
+    - Î»Ò³Ò²
 
 body:
   type: fragment
-  description: 报告正文部分
-  scope: 从首页之后到报告结尾
+  description: Ä²
+  scope: Ò³Ö®óµ½±Î²
   hints:
-    - 包含各章节详细内容
-    - 可能包含表格、图表引用
-    - 按原文结构保留段落和标题层级
+    - Â½Ï¸
+    - Ü°Í¼
+    - Ô­Ä½á¹¹Í±ã¼¶
 ```
 
-**字段类型说明：**
-- **普通字段**（无 `type`）：从样本文档提取的字段值，在生成报告时填充到模板中
-- **Word 片段**（`type: fragment`）：从原始文档摘取的 Word 片段文件，由 document_maker 使用
+**Ö¶Ëµ**
+- **Í¨Ö¶** `type`ÄµÈ¡Ö¶ÖµÉ±Ê±äµ½Ä£
+- **Word Æ¬**`type: fragment`Ô­Ê¼ÄµÕªÈ¡ Word Æ¬Ä¼ document_maker Ê¹
 
-**重要说明：**
-- `abstract`（摘要）是必须的，所有报告类型都有
-- `body`（正文）是可选的，例如 flash 报告通常没有正文
+**ÒªËµ**
+- `abstract`ÕªÒªÇ±Ä£Ð±Í¶
+- `body`Ä£Ç¿Ñ¡Ä£ flash Í¨Ã»
 
-## 自动化模式
+## Ô¶Ä£Ê½
 
-对于批量操作或自动化场景，可以直接使用 `scripts/invoke.py` 脚本：
+Ô¶Ö±Ê¹ `scripts/invoke.py` Å±
 
 ```bash
-# 交互式创建（会确认）
+# Ê½È·Ï£
 python skills/template_maker/scripts/invoke.py \
   --name common \
   --word fixtures/macro_sample.docx \
   --elements "fixtures/macro_sample elements.yaml"
 
-# 自动化模式（跳过确认）
+# Ô¶Ä£Ê½È·Ï£
 python skills/template_maker/scripts/invoke.py \
   --name company \
   --word fixtures/company_sample.docx \
   --elements "fixtures/company_sample elements.yaml" \
   --auto-confirm
 
-# 快讯报告（无正文）
+# Ñ¶æ£¨Ä£
 python skills/template_maker/scripts/invoke.py \
   --name company_flash \
   --word fixtures/flash_sample.docx \
@@ -154,63 +154,67 @@ python skills/template_maker/scripts/invoke.py \
   --no-body \
   --auto-confirm
 
-# 自定义摘要/正文位置
+# Ô¶ÕªÒª/Î»
 python skills/template_maker/scripts/invoke.py \
   --name custom \
   --word fixtures/custom.docx \
   --elements fixtures/custom_elements.yaml \
-  --abstract-scope "首页第二栏" \
-  --body-scope "从第三章开始" \
+  --abstract-scope "Ò³Ú¶" \
+  --body-scope "ÓµÂ¿Ê¼" \
   --auto-confirm
 ```
 
-**参数说明：**
-- `--name`: 模板名称（必需）
-- `--word`: Word 样本文件路径（必需）
-- `--elements`: elements.yaml 配置文件路径（必需）
-- `--abstract-scope`: 摘要位置描述（默认: "首页右侧"）
-- `--body-scope`: 正文位置描述（默认: "从首页之后到报告结尾"）
-- `--no-body`: 快讯报告，没有正文部分
-- `--output-dir`: 输出目录（默认: templates）
-- `--auto-confirm, -y`: 跳过确认，直接创建
+**Ëµ**
+- `--name`: Ä£Æ£è£©
+- `--word`: Word Ä¼Â·è£©
+- `--elements`: elements.yaml Ä¼Â·è£©
+- `--abstract-scope`: ÕªÒªÎ»Ä¬: "Ò³Ò²"
+- `--body-scope`: Î»Ä¬: "Ò³Ö®óµ½±Î²"
+- `--no-body`: Ñ¶æ£¬Ã»Ä²
+- `--output-dir`: Ä¿Â¼Ä¬: templates
+- `--auto-confirm, -y`: È·Ï£Ö±Ó´
 
-## elements.yaml 自动检测
+## elements.yaml Ô¶
 
-系统按以下顺序查找 `elements.yaml`：
+ÏµÍ³Ë³ `elements.yaml`
 
 1. `<word_name> elements.yaml`
 2. `<word_name>_elements.yaml`
-3. `elements.yaml`（同目录）
+3. `elements.yaml`Í¬Ä¿Â¼
 
-## 代码模块
+## Ä£
 
-函数式编程设计，按职责分为 6 个模块：
+Ê½Æ£Ö°Îª 6 Ä£é£º
 
-| 模块 | 函数数 | 职责 |
+| Ä£ |  | Ö° |
 |------|--------|------|
-| `router.py` | 6 | 路由配置管理（读写分离）|
-| `schema.py` | 6 | Schema 生成和更新（读写分离）|
-| `validate.py` | 1 | 模板验证 |
-| `document.py` | 9 | 文档结构分析 |
-| `template.py` | 10 | 模板内容操作 |
+| `router.py` | 6 | Â·Ã¹Ð´ë£©|
+| `schema.py` | 6 | Schema ÉºÍ¸Â£Ð´ë£©|
+| `validate.py` | 1 | Ä£Ö¤ |
+| `document.py` | 9 | Äµá¹¹ |
+| `template.py` | 10 | Ä£Ý² |
 
-**关键特性：**
-- 纯函数设计（逻辑和 I/O 分离）
-- 支持批量操作（减少文件 I/O）
-- Document 对象传递（避免重复加载 Word 文档）
+**Ø¼Ô£**
+- Æ£ß¼ I/O ë£©
+- Ö§÷£¨¼Ä¼ I/O
+- Document ó´«µÝ£Ø¸ Word Äµ
 
-## 模板目录结构
+## Ä£Ä¿Â¼á¹¹
 
 ```
 templates/
-├── router.yaml           # 路由配置
-└── <模板名>/
-    ├── meta.yaml         # 模板元数据
-    ├── schema.yaml       # 字段 schema（扁平化）
-    └── template.docx     # Word 模板文件
+ router.yaml           # Â·
+ <Ä£>/
+     meta.yaml         # Ä£Ôª
+     schema.yaml       # Ö¶ schemaÆ½
+     template.docx     # Word Ä£Ä¼
 ```
 
 ## elements.yaml 格式
+
+elements.yaml 采用**扁平化结构**，所有字段都是简单的键值对。
+
+### 基础字段
 
 ```yaml
 company: 西锐飞机
@@ -219,83 +223,110 @@ target_price: 15.0
 rating: 买入
 ```
 
-## 使用示例
+### 分析师字段（支持多个分析师）
 
-### 示例 1: 创建通用模板
+分析师字段采用扁平化命名：`a{序号}_{属性}`，支持 `a1_*` 到 `a8_*`。
 
-**用户**：`创建一个通用模板`
+```yaml
+# 第一个分析师
+a1_cn: 杨斌
+a1_en: Bin Yang
+a1_sfc: BSQ313
+a1_email: harryyang@hfisec.com.hk
 
-**AI**：请问您想创建什么类型的模板？（例如：common 通用模板、company 公司报告）
+# 第二个分析师（可选）
+a2_cn: 张三
+a2_en: Zhang San
+a2_sfc: XXX123
+a2_email: zhangsan@hfisec.com.hk
 
-**用户**：`common`
+# ... 支持 a3_* 到 a8_*
+```
 
-**AI**：好的，创建 `common` 模板，用于 macro、strategy 等报告类型。请提供 Word 样本文件路径：
-（例如：fixtures/macro_sample.docx）
+**设计说明：**
+- 扁平化结构避免模板中的循环处理
+- 所有分析师字段都预定义在模板中（固定布局）
+- 字段命名规则：`a{序号}_{属性}`，属性包括 `cn`, `en`, `sfc`, `email`
 
-**用户**：`fixtures/macro_sample.docx`
 
-**AI**：检测到 `fixtures/macro_sample elements.yaml`，将使用该配置文件。
+## Ê¹Ê¾
 
-现在需要配置摘要和正文的抽取规则。
+### Ê¾ 1: Í¨Ä£
 
-**摘要配置：**
-- 摘要后面一定有换页符
-- 通常在首页的表格中，右侧区域
+**Ã»**`Ò»Í¨Ä£`
 
-摘要在文档的哪个位置？
+**AI**ë´´Ê²Ã´ÍµÄ£å£¿ç£ºcommon Í¨Ä£å¡¢company Ë¾æ£©
 
-**用户**：`首页右侧`
+**Ã»**`common`
 
-**AI**：好的。现在配置正文部分。
+**AI**ÃµÄ£ `common` Ä£å£¬ macrostrategy È±Í¡á¹© Word Ä¼Â·
+ç£ºfixtures/macro_sample.docx
 
-**正文结构特征：**
-- 如果有正文，至少一页，正文结束后也有换页符
-- 附录（信息披露）一定从新的一页开始
+**Ã»**`fixtures/macro_sample.docx`
 
-这份报告是否有正文部分？如果有，它从哪里开始？
+**AI**âµ½ `fixtures/macro_sample elements.yaml`Ê¹Ã¸Ä¼
 
-**用户**：`首页之后到'附录APPENDIX'之前`
+ÒªÕªÒªÄµÄ³È¡
 
-**AI**：明白了。
+**ÕªÒªÃ£**
+- ÕªÒªÒ»Ð»Ò³
+- Í¨Ò³Ä±Ð£Ò²
 
-**汇总配置**：
-- 模板名称：common
-- Word 文件：fixtures/macro_sample.docx
-- elements.yaml：fixtures/macro_sample elements.yaml
-- 摘要位置：首页右侧（长的话可能到第二页）
-- 正文位置：从首页之后开始
+ÕªÒªÄµÄ¸Î»Ã£
 
-确认创建吗？
+**Ã»**`Ò³Ò²`
 
-### 示例 2: Flash 报告（无正文）
+**AI**ÃµÄ¡Ä²Ö¡
 
-**用户**：`创建一个 flash 报告模板`
+**Ä½á¹¹**
+- Ä£Ò»Ò³Ä½Ò²Ð»Ò³
+- Â¼Ï¢Â¶Ò»ÂµÒ»Ò³Ê¼
 
-**AI**：请问您想创建什么类型的模板？
+Ý±Ç·Ä²Ö£Ð£ï¿ªÊ¼
 
-**用户**：`company_flash`
+**Ã»**`Ò³Ö®'Â¼APPENDIX'Ö®Ç°`
 
-**AI**：好的，创建 `company_flash` 模板。请提供 Word 样本文件路径：
+**AI**Ë¡
 
-**用户**：`fixtures/company_flash_sample.docx`
+****
+- Ä£Æ£common
+- Word Ä¼fixtures/macro_sample.docx
+- elements.yamlfixtures/macro_sample elements.yaml
+- ÕªÒªÎ»Ã£Ò³Ò²à£¨Ä»ÜµÚ¶Ò³
+- Î»Ã£Ò³Ö®Ê¼
 
-**AI**：检测到 `fixtures/company_flash_sample elements.yaml`，将使用该配置文件。
+È·Ï´
 
-摘要在文档的哪个位置？
+### Ê¾ 2: Flash æ£¨Ä£
 
-**用户**：`首页右侧`
+**Ã»**`Ò» flash Ä£`
 
-**AI**：好的。这份报告是否有正文部分？
+**AI**ë´´Ê²Ã´ÍµÄ£å£¿
 
-**用户**：`没有正文，这是 flash 报告`
+**Ã»**`company_flash`
 
-**AI**：明白了。
+**AI**ÃµÄ£ `company_flash` Ä£å¡£á¹© Word Ä¼Â·
 
-**汇总配置**：
-- 模板名称：company_flash
-- Word 文件：fixtures/company_flash_sample.docx
-- elements.yaml：fixtures/company_flash_sample elements.yaml
-- 摘要位置：首页右侧
-- 正文：无
+**Ã»**`fixtures/company_flash_sample.docx`
 
-确认创建吗？
+**AI**âµ½ `fixtures/company_flash_sample elements.yaml`Ê¹Ã¸Ä¼
+
+ÕªÒªÄµÄ¸Î»Ã£
+
+**Ã»**`Ò³Ò²`
+
+**AI**ÃµÄ¡Ý±Ç·Ä²Ö£
+
+**Ã»**`Ã»Ä£ flash `
+
+**AI**Ë¡
+
+****
+- Ä£Æ£company_flash
+- Word Ä¼fixtures/company_flash_sample.docx
+- elements.yamlfixtures/company_flash_sample elements.yaml
+- ÕªÒªÎ»Ã£Ò³Ò²
+- Ä£
+
+È·Ï´
+

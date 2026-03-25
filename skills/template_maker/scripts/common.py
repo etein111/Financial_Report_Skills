@@ -12,7 +12,6 @@ import yaml
 # ==================== 常量定义 ====================
 
 # 字段名常量
-FIELD_ANALYSTS = "analysts"
 FRAGMENT_TYPE_ABSTRACT = "abstract"
 FRAGMENT_TYPE_BODY = "body"
 
@@ -68,28 +67,6 @@ def save_yaml(path: Union[str, Path], data: Dict[str, Any], sort_keys: bool = Fa
 
 # ==================== Elements 工具函数 ====================
 
-def flatten_analysts_field(analysts: List[Dict[str, Any]]) -> Dict[str, str]:
-    """展平 analysts 字段为扁平字典。
-
-    将 [{'chinese_name': '张三', 'english_name': 'Zhang San'}]
-    转换为 {'analyst_chinese_name': '张三', 'analyst_english_name': 'Zhang San'}
-
-    Args:
-        analysts: 分析师列表
-
-    Returns:
-        展平后的字段字典
-    """
-    flat = {}
-    for i, analyst in enumerate(analysts):
-        prefix = f"analyst_{i+1}" if len(analysts) > 1 else "analyst"
-        if isinstance(analyst, dict):
-            for key, val in analyst.items():
-                if val and val != "null":
-                    flat[f"{prefix}_{key}"] = str(val)
-    return flat
-
-
 def flatten_elements(elements: Dict[str, Any]) -> Dict[str, str]:
     """展平所有 elements 字段。
 
@@ -101,9 +78,7 @@ def flatten_elements(elements: Dict[str, Any]) -> Dict[str, str]:
     """
     flat = {}
     for name, value in elements.items():
-        if name == FIELD_ANALYSTS and isinstance(value, list):
-            flat.update(flatten_analysts_field(value))
-        elif value is not None and value != "null":
+        if value is not None and value != "null":
             flat[name] = str(value)
     return flat
 

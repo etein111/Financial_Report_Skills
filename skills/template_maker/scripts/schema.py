@@ -54,20 +54,11 @@ def generate_schema(elements: Dict[str, Any],
     """
     schema = {}
 
-    # 普通字段
+    # 普通字段（扁平化结构，支持 a1_* 到 a8_* 等多个分析师）
     for name, value in elements.items():
-        if name == common.FIELD_ANALYSTS:
-            # 处理分析师字段（展平为多个字段）
-            if isinstance(value, list):
-                analysts_flat = common.flatten_analysts_field(value)
-                for field_name, field_value in analysts_flat.items():
-                    schema[field_name] = {"description": field_name}
-                    if field_value and field_value != "null":
-                        schema[field_name]["format"] = field_value
-        else:
-            schema[name] = {"description": name}
-            if value and value != "null":
-                schema[name]["format"] = str(value)
+        schema[name] = {"description": name}
+        if value and value != "null":
+            schema[name]["format"] = str(value)
 
     # abstract（必须）
     schema["abstract"] = _apply_fragment_config(DEFAULT_ABSTRACT, abstract_config)

@@ -19,18 +19,6 @@ abstract:
   - 位于首页右侧区域
   scope: 首页右侧
   type: fragment
-analyst_chinese_name:
-  description: 分析师1的chinese_name
-  format: 杨斌
-analyst_email:
-  description: 分析师1的email
-  format: harryyang@hfisec.com.hk
-analyst_english_name:
-  description: 分析师1的english_name
-  format: Bin Yang
-analyst_sfc_code:
-  description: 分析师1的sfc_code
-  format: BSQ313
 body:
   description: 报告正文部分
   hints:
