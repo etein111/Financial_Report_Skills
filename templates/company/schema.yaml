@@ -25,7 +25,7 @@ body:
   - 包含各章节详细内容
   - 可能包含表格、图表引用
   - 按原文结构保留段落和标题层级
-  scope: 从第二页开始到附录之前
+  scope: 首页之后到'附录APPENDIX'之前
   type: fragment
 company:
   description: company
