@@ -55,17 +55,34 @@ description: 当用户上传报告草稿或要求生成/解析研究报告时使
 
 ### 2. 路由到模板
 
-从 `templates/router.yaml` 获取模板名，加载 `templates/{template_name}/schema.yaml`
+从 `templates/router.yaml` 获取模板名，加载对应的模板文件：
+- `templates/{template_name}/schema.yaml` - **定义要提取哪些字段**
+- `templates/{template_name}/template.docx` - **定义字段在文档中的位置**
 
 ### 3. 提取字段
+
+**⚠️ 核心原则**：
+- **schema.yaml** 明确要提取哪些字段
+- **template.docx** 明确字段在文档中的位置（占位符位置）
+- **elements.yaml** 必须严格按照 schema.yaml 的字段（顺序、名称、类型）
 
 **使用自动化提取**（优先）：
 
 ```bash
 python3 -c "
 from skills.report_maker.scripts import extractor, common
-schema = common.load_yaml('templates/company/schema.yaml')
+
+# 1. 根据报告类型路由到模板
+template_name = common.get_template_name(report_type)
+
+# 2. 加载 schema.yaml（定义要提取哪些字段）
+schema = common.load_yaml(f'templates/{template_name}/schema.yaml')
+
+# 3. 执行提取（从草稿中提取 schema 中定义的字段）
 elements = extractor.extract_elements(draft_path, schema)
+
+# 4. 确保所有字段存在（与 schema 严格一致）
+elements = common.ensure_all_fields(elements, schema)
 "
 ```
 
@@ -188,9 +205,17 @@ body: "body.docx"
 
 1. **交互式确认是必须的** - 不能跳过第一阶段直接生成
 2. **空字段处理** - 必须保留空字段，值为 `""`
-3. **字段名一致性** - elements.yaml 的键名必须与 schema.yaml 完全一致
-4. **模板切换限制** - 只能在第一阶段切换模板，第二阶段不支持切换
-5. **只读 templates/** - report_maker 永远不修改模板资产
+3. **字段严格一致性** - elements.yaml 必须与 schema.yaml 完全一致
+   - 字段名称相同
+   - 字段顺序相同
+   - 字段数量相同
+   - 空字段也必须存在（值为 `""`）
+4. **模板依赖关系**：
+   - **schema.yaml** 是"字段清单"（提取什么）
+   - **template.docx** 是"位置地图"（在哪里提取）
+   - **elements.yaml** 是"提取结果"（必须严格按照 schema）
+5. **模板切换限制** - 只能在第一阶段切换模板，第二阶段不支持切换
+6. **只读 templates/** - report_maker 永远不修改模板资产
 
 ---
 
