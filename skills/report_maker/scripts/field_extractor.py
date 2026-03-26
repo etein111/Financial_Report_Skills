@@ -23,10 +23,10 @@ FIELD_ALIASES = {
     'target_price': ['目标价', 'Target Price'],
     'market_cap': ['市值', 'Market Cap', 'Market Capitalization'],
     'shares_in_issue': ['发行股票数目', '股本', 'Shares', 'Shares Outstanding'],
-    'one_year_high': ['52周高', '一年高', '52 Week High', '1 Year High'],
-    'one_year_low': ['52周低', '一年低', '52 Week Low', '1 Year Low'],
+    'one_year_high': ['52周高', '一年高', '52 Week High', '1 Year High', '1年股价最高最低值'],
+    'one_year_low': ['52周低', '一年低', '52 Week Low', '1 Year Low', '1年股价最高最低值'],
     'current_price_date': ['现价日期', '价格日期', 'Price Date'],
-    'analysts': ['分析师', 'Analyst'],
+    'analysts': ['分析师', 'Analyst', 'Table_Author'],
     'source': ['资料来源', '来源', 'Source', 'Data Source'],
 }
 
