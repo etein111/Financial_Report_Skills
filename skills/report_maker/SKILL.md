@@ -105,29 +105,17 @@ description: 当用户上传报告草稿或要求生成/解析研究报告时使
 
 #### 步骤 3：LLM 提取要素 ⚠️
 
-> **关键技术提示：处理嵌套表格**
+> **关键技术提示：嵌套表格处理**
 >
-> - python-docx 的 `cell.text` **只返回直接段落文本，不包括嵌套表格**
-> - 许多关键字段（如 current_price, market_cap, shares_in_issue 等）通常在首页表格的**嵌套表格**中
-> - 必须递归遍历 `cell.tables` 来获取嵌套表格内容
+> **问题**：python-docx 的 `cell.text` 只返回直接段落文本，**不包括嵌套表格**。
 >
-> ```python
-> # ❌ 错误做法：只读取 cell.text
-> for cell in row.cells:
->     print(cell.text)  # 不会包含嵌套表格
+> **影响**：许多关键字段（如 current_price, market_cap, shares_in_issue 等）通常在首页表格的**嵌套表格**中。
 >
-> # ✅ 正确做法：递归读取嵌套表格
-> for cell in row.cells:
->     print(cell.text)
->     for nested_table in cell.tables:
->         for nested_row in nested_table.rows:
->             for nested_cell in nested_row.cells:
->                 print(nested_cell.text)
-> ```
+> **解决方案**：本 skill 已在 `docx_reader.py` 和 `field_extractor.py` 中实现自动化的递归读取，无需手动处理。使用 `extractor.extract_elements()` 即可自动提取所有字段。
 
-- 将草稿内容和 schema.yaml 发送给 LLM
+- 将草稿内容和 schema.yaml 发送给 LLM（或使用自动化提取）
 - LLM 根据 schema 中的字段定义提取数据
-- **递归检查所有嵌套表格**，确保提取完整
+- **使用自动化 scripts** 递归检查所有嵌套表格，确保提取完整
 
 #### 步骤 4：交互式确认 ⚠️
 
