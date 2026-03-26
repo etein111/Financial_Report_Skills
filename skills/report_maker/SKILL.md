@@ -7,118 +7,176 @@ description: 当用户上传报告草稿或要求生成/解析研究报告时使
 
 负责 `reports/` 目录的所有写操作。采用两阶段流程：**抽取确认 → 渲染输出**。
 
-核心原则：**只写 reports/，不写 templates/**
+**核心原则**：只写 reports/，不写 templates/
+
+---
+
+## 📋 目录
+
+- [使用时机](#使用时机)
+- [工作流程](#工作流程)
+  - [第一阶段：抽取与确认](#第一阶段抽取与确认交互式)
+  - [第二阶段：渲染与输出](#第二阶段渲染与输出)
+- [报告目录结构](#报告目录结构)
+- [数据格式规范](#数据格式规范)
+- [权限边界](#权限边界)
+- [常见操作](#常见操作)
+- [注意事项](#注意事项)
+- [技术细节](#技术细节)
+
+---
 
 ## 使用时机
 
-**使用场景**：
-- 用户上传报告草稿（.docx），说"生成标准排版报告"
+### ✅ 适用场景
+
+- 用户上传报告草稿（.docx），要求"生成标准排版报告"
 - 用户说"处理这篇草稿"、"解析报告"、"提取报告要素"
-- Editor 修正提取的要素
+- Editor 需要修正已提取的要素
 - Editor 确认后继续生成标准报告
 
-**报告类型**（需用户指定）：
-- `company` - 公司覆盖报告
-- `sector` - 行业研究报告
-- `macro` - 宏观报告
-- `strategy` - 策略报告
-- `quantitative` - 量化报告
-- `bond` - 债券报告
+### 📊 支持的报告类型
 
-**不适用的场景**：
-- 创建/修改模板（使用 template_maker）
-- 修改 schema.yaml（使用 template_maker）
-- 修改 router.yaml（使用 template_maker）
+| 类型 | 说明 |
+|------|------|
+| `company` | 公司覆盖报告 |
+| `sector` | 行业研究报告 |
+| `macro` | 宏观研究报告 |
+| `strategy` | 策略报告 |
+| `quantitative` | 量化报告 |
+| `bond` | 债券报告 |
 
-## 语言要求
+### ❌ 不适用场景
+
+- 创建/修改模板 → 使用 **template_maker**
+- 修改 schema.yaml → 使用 **template_maker**
+- 修改 router.yaml → 使用 **template_maker**
+
+### 🌐 语言要求
 
 **必须使用中文与用户沟通** - 所有对话、提示、确认和说明都必须使用中文。
 
-## 两阶段流程
+---
+
+## 工作流程
 
 ### 第一阶段：抽取与确认（交互式）
 
 **目标**：从草稿中提取要素，与用户确认后保存
 
-**⚠️ 交互原则：一个问题一个问题地问，不要一次性列出多个问题**
+#### ⚠️ 交互原则
 
-1. **接收输入** - 逐个问题询问
-   ```
-   问题 1/3：这是什么类型的报告？
-   - 等待用户回答（company/sector/macro/strategy/quantitative/bond）
+**一个问题一个问题地问，不要一次性列出多个问题**
 
-   问题 2/3：草稿文件在哪里？
-   - 等待用户提供 .docx 文件路径
+#### 步骤 1：接收输入
 
-   问题 3/3：报告名称是什么？（用于创建 reports/<名称>/ 目录）
-   - 等待用户回答，提供单一的缺省建议值
-   - 命名规则（日期统一放在最后）：
-     * company: {公司简写}({ticker})_{日期}，例：cirrus(2507)_20251021
-     * 其他类型: 从报告标题提取核心主题词_{日期}
-       - **提取原则**：提取"讲了什么"（主题），跳过"怎么讲的"（描述）
-       - ✅ 主题词：新能源汽车、AI芯片、美联储、利率政策
-       - ❌ 描述性词汇：深度分析、研究、报告、解读、提交版
-       - 示例："新能源汽车行业研究.docx" → "new_energy_20251021"
-   - 优先使用英文或拼音，避免中文特殊字符
-   ```
+逐个询问以下问题：
 
-2. **路由到模板**
-   - 从 `templates/router.yaml` 获取模板名
-   - 加载 `templates/{template_name}/schema.yaml`
+```
+问题 1/3：这是什么类型的报告？
+- 等待用户回答（company/sector/macro/strategy/quantitative/bond）
 
-3. **LLM 提取要素**
-   - 将草稿内容和 schema.yaml 发送给 LLM
-   - LLM 根据 schema 中的字段定义提取数据
+问题 2/3：草稿文件在哪里？
+- 等待用户提供 .docx 文件路径
 
-4. **交互式确认** ⚠️ 关键步骤 - 逐个字段确认
-   ```
-   对每个字段（除了 abstract 和 body），一次只问一个：
-   - 展示当前字段的 LLM 提取值
-   - 如果未提取到：询问用户"是否留空或补充？"
-   - 如果提取到了：询问用户"正确吗？(y=确认/n=修改/输入新值)"
-   - 等待用户响应后再处理下一个字段
-   ```
+问题 3/3：报告名称是什么？（用于创建 reports/<名称>/ 目录）
+- 等待用户回答，提供单一的缺省建议值
+```
 
-5. **确保所有字段存在**
-   - elements.yaml 必须与 schema.yaml 严格对应
-   - 空字段使用空字符串 `""`，不要省略
+**命名规则**（日期统一放在最后）：
 
-6. **拆分摘要和正文**
-   - 根据 schema 中 `abstract.scope` 提取摘要
-   - 根据 schema 中 `body.scope` 提取正文
-   - 保存为 `abstract.docx` 和 `body.docx`
+| 报告类型 | 格式 | 示例 |
+|---------|------|------|
+| company | `{公司简写}({ticker})_{日期}` | `cirrus(2507)_20251021` |
+| 其他类型 | `{核心主题词}_{日期}` | `new_energy_20251021` |
 
-7. **保存结果**
-   - 保存 `elements.yaml`
-   - 保存 `abstract.docx`
-   - 保存 `body.docx`
-   - 复制 `draft.docx`
+**主题词提取原则**：
+- 提取"讲了什么"（主题），跳过"怎么讲的"（描述）
+- ✅ 主题词：新能源汽车、AI芯片、美联储、利率政策
+- ❌ 描述性词汇：深度分析、研究、报告、解读、提交版
+- 示例："新能源汽车行业研究.docx" → `new_energy_20251021`
 
-8. **展示摘要并暂停**
-   - 展示提取结果摘要
-   - 等待用户确认或修正
+> **注意**：优先使用英文或拼音，避免中文特殊字符
+
+#### 步骤 2：路由到模板
+
+- 从 `templates/router.yaml` 获取模板名
+- 加载 `templates/{template_name}/schema.yaml`
+
+#### 步骤 3：LLM 提取要素
+
+- 将草稿内容和 schema.yaml 发送给 LLM
+- LLM 根据 schema 中的字段定义提取数据
+
+#### 步骤 4：交互式确认 ⚠️
+
+**对每个字段（除了 abstract 和 body），一次只问一个**：
+
+```
+展示当前字段的 LLM 提取值
+- 如果未提取到：询问用户"是否留空或补充？"
+- 如果提取到了：询问用户"正确吗？(y=确认/n=修改/输入新值)"
+- 等待用户响应后再处理下一个字段
+```
+
+#### 步骤 5：确保所有字段存在
+
+- elements.yaml 必须与 schema.yaml 严格对应
+- 空字段使用空字符串 `""`，不要省略
+
+#### 步骤 6：拆分摘要和正文
+
+- 根据 schema 中 `abstract.scope` 提取摘要
+- 根据 schema 中 `body.scope` 提取正文
+- 保存为 `abstract.docx` 和 `body.docx`
+
+#### 步骤 7：保存结果
+
+```
+reports/<report_name>/
+├── draft.docx           # 原始草稿
+├── elements.yaml        # 提取的要素
+├── abstract.docx        # 摘要片段
+└── body.docx            # 正文片段
+```
+
+#### 步骤 8：展示摘要并暂停
+
+- 展示提取结果摘要
+- 等待用户确认或修正
+
+---
 
 ### 第二阶段：渲染与输出
 
 **目标**：基于确认后的要素生成标准报告
 
-1. **更新修正数据**
-   - 加载 `elements.yaml`
-   - 应用用户修正
-   - 保存更新后的 `elements.yaml`
+#### 步骤 1：更新修正数据
 
-2. **渲染短字段**
-   - 使用 python-docx-template（Jinja2）
-   - 加载 `templates/{template_name}/template.docx`
-   - 用 elements.yaml 中的值替换占位符
+- 加载 `elements.yaml`
+- 应用用户修正
+- 保存更新后的 `elements.yaml`
 
-3. **插入长文本片段**
-   - 用 python-docx 插入 `abstract.docx` 内容
-   - 用 python-docx 插入 `body.docx` 内容
+#### 步骤 2：渲染短字段
 
-4. **保存并转换**
-   - 保存 `output.docx`
-   - 调用 LibreOffice 转换为 `output.pdf`
+- 使用 python-docx-template（Jinja2）
+- 加载 `templates/{template_name}/template.docx`
+- 用 elements.yaml 中的值替换占位符
+
+#### 步骤 3：插入长文本片段
+
+- 用 python-docx 插入 `abstract.docx` 内容
+- 用 python-docx 插入 `body.docx` 内容
+
+#### 步骤 4：保存并转换
+
+```
+reports/<report_name>/
+├── output.docx          # 最终 Word
+└── output.pdf           # 最终 PDF（通过 LibreOffice 转换）
+```
+
+---
 
 ## 报告目录结构
 
@@ -132,7 +190,11 @@ reports/<report_name>/
 └── output.pdf           # 最终 PDF
 ```
 
-## elements.yaml 格式
+---
+
+## 数据格式规范
+
+### elements.yaml 格式
 
 **必须与 schema.yaml 严格保持一致**：
 
@@ -158,28 +220,40 @@ ticker: "2507.HK"
 title: "首次覆盖：..."
 ```
 
-## 写权限边界
+---
 
-| 可写 | 不可写 |
-|------|--------|
-| `reports/{report_name}/*` | `templates/*` |
-| 报告的 draft.docx | schema.yaml |
-| 报告的 elements.yaml | router.yaml |
-| 报告的 abstract.docx | 任何模板文件 |
-| 报告的 body.docx | |
-| 报告的 output.docx | |
-| 报告的 output.pdf | |
+## 权限边界
 
-## 常见用户指令
+### ✅ 可写
+
+- `reports/{report_name}/*`
+  - draft.docx
+  - elements.yaml
+  - abstract.docx
+  - body.docx
+  - output.docx
+  - output.pdf
+
+### ❌ 不可写
+
+- `templates/*`（任何模板文件）
+- schema.yaml
+- router.yaml
+
+---
+
+## 常见操作
 
 | 用户指令 | 阶段 | 触发动作 |
 |---------|------|----------|
 | "生成标准排版报告" | 第一阶段 | extract_and_confirm |
-| "ticker 应该是 700 HK" | 第一阶段 | update_elements |
+| "ticker 应该是 700.HK" | 第一阶段 | update_elements |
 | "确认，继续生成" | 第二阶段 | render_output |
 | "重新提取摘要" | 第一阶段 | re_extract |
 
-## 关键注意事项
+---
+
+## 注意事项
 
 1. **交互式确认是必须的** - 不能跳过第一阶段直接生成
 2. **空字段处理** - 必须保留空字段，值为 `""`
@@ -187,7 +261,11 @@ title: "首次覆盖：..."
 4. **模板切换限制** - 只能在第一阶段切换模板，第二阶段不支持切换
 5. **只读 templates/** - report_maker 永远不修改模板资产
 
-## 渲染技术细节
+---
+
+## 技术细节
+
+> 本部分供开发参考，详细说明了渲染实现的技术细节。
 
 ### 文档合并流程
 
@@ -220,12 +298,15 @@ Output Section 结构：
 ```
 
 **分节符 sectPr 必须包含完整属性**：
-- `pgSz` - 页面尺寸（A4: w=11910, h=16840 twips）
-- `pgMar` - 页边距，包括 header 和 footer 距离
-- `cols` - 列设置
-- `docGrid` - 文档网格
 
-缺少这些属性会导致页面尺寸为 0，页眉页脚显示不全。
+| 属性 | 说明 | 示例值 |
+|------|------|--------|
+| `pgSz` | 页面尺寸 | A4: w=11910, h=16840 twips |
+| `pgMar` | 页边距 | 包括 header 和 footer 距离 |
+| `cols` | 列设置 | - |
+| `docGrid` | 文档网格 | - |
+
+⚠️ 缺少这些属性会导致页面尺寸为 0，页眉页脚显示不全。
 
 ### 页眉页脚复制
 
@@ -242,12 +323,14 @@ Body.docx Section 结构：
 
 ### 空白页问题处理
 
-body.docx 可能带来空白页的原因：
+**body.docx 可能带来空白页的原因**：
+
 1. **sectPr 分节符**：每个 sectPr type=nextPage 会强制换页
 2. **连续空段落**：大量空段落会占用页面空间
 3. **文档开头空段落**：body.docx 开头可能有多个空段落
 
-解决方案（在 renderer.py 中实现）：
+**解决方案**（在 renderer.py 中实现）：
+
 1. 追加前删除 body.docx 所有 sectPr
 2. 追加后清理连续空段落（保留最多 1 个）
 3. 删除 body.docx 开头的空段落
@@ -255,5 +338,6 @@ body.docx 可能带来空白页的原因：
 ### Abstract 插入
 
 abstract 插入到表格单元格，使用 deepcopy 保留完整格式：
+
 - 删除单元格内所有段落
 - 逐段复制 abstract.docx 内容（保留字体、颜色等格式）
