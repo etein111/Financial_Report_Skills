@@ -1,6 +1,6 @@
 ---
 name: report_maker
-description: Use when user uploads a draft report or asks to generate/parse a research report. Handles draft parsing, element extraction with LLM, interactive confirmation, and standard report generation using two-stage workflow. This skill processes analyst research reports (company, sector, macro, strategy, quantitative, bond reports) from draft Word documents to formatted output with template-based rendering.
+description: 当用户上传报告草稿或要求生成/解析研究报告时使用此技能。负责草稿解析、使用 LLM 提取要素、交互式确认以及使用两阶段工作流生成标准报告。此技能处理分析师研究报告（公司、行业、宏观、策略、量化、债券报告），从 Word 草稿文档转换为基于模板的格式化输出。**必须使用中文与用户沟通**。
 ---
 
 # Report Maker - 研究报告生成与验证
@@ -9,7 +9,7 @@ description: Use when user uploads a draft report or asks to generate/parse a re
 
 核心原则：**只写 reports/，不写 templates/**
 
-## When to Use
+## 使用时机
 
 **使用场景**：
 - 用户上传报告草稿（.docx），说"生成标准排版报告"
@@ -25,10 +25,14 @@ description: Use when user uploads a draft report or asks to generate/parse a re
 - `quantitative` - 量化报告
 - `bond` - 债券报告
 
-**Do NOT use for**：
+**不适用的场景**：
 - 创建/修改模板（使用 template_maker）
 - 修改 schema.yaml（使用 template_maker）
 - 修改 router.yaml（使用 template_maker）
+
+## 语言要求
+
+**必须使用中文与用户沟通** - 所有对话、提示、确认和说明都必须使用中文。
 
 ## 两阶段流程
 

@@ -37,9 +37,8 @@ skills/*/fixtures/*_output/
 # Production templates in project root are versioned
 # Only exclude auto-generated test outputs
 
-# Local skill installation
-~/.claude/skills/
-.claude/skills/
+# Claude Code local configuration
+.claude/
 
 # Virtual environments
 .venv/
