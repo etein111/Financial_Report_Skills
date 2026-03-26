@@ -3,8 +3,9 @@
 负责 Word 模板渲染、fragment 插入和 PDF 转换。
 """
 
-from typing import Dict, Any, List, Tuple
+from typing import Dict, Any, List, Tuple, Optional
 from pathlib import Path
+from copy import deepcopy
 import sys
 import subprocess
 import shutil
@@ -15,7 +16,7 @@ sys.path.insert(0, str(SCRIPTS_DIR))
 # 尝试导入依赖
 try:
     from docx import Document
-    from docx.shared import Inches, Pt
+    from docx.shared import Inches, Pt, Cm
     from docx.oxml import OxmlElement
     from docx.oxml.ns import qn
     from docxtpl import DocxTemplate
@@ -25,12 +26,17 @@ except ImportError as e:
     Document = None
     Inches = None
     Pt = None
+    Cm = None
     OxmlElement = None
     qn = None
     DocxTemplate = None
     DOCX_AVAILABLE = False
 
 import common
+
+# 占位符标记（用于避免 docxtpl 破坏文档结构）
+ABSTRACT_MARKER = '###ABSTRACT_MARKER###'
+BODY_MARKER = '###BODY_MARKER###'
 
 
 def render_template(
@@ -612,11 +618,11 @@ def validate_template(template_path: str) -> Dict[str, Any]:
     """验证模板文件。"""
     if not DOCX_AVAILABLE:
         return {"valid": False, "error": "python-docx not installed"}
-    
+
     try:
         from docx import Document
         doc = Document(template_path)
-        
+
         return {
             "valid": True,
             "paragraphs": len(doc.paragraphs),
@@ -625,3 +631,738 @@ def validate_template(template_path: str) -> Dict[str, Any]:
         }
     except Exception as e:
         return {"valid": False, "error": str(e)}
+
+
+def prepare_context_with_analysts(elements: Dict[str, Any]) -> Dict[str, Any]:
+    """准备渲染上下文，展平分析师字段。
+
+    将 a1_cn, a1_en, a1_sfc, a1_email 等展平为：
+    analyst_chinese_name, analyst_english_name, analyst_sfc_code, analyst_email
+
+    Args:
+        elements: 原始要素字典
+
+    Returns:
+        处理后的上下文字典
+    """
+    context = {}
+
+    # 跳过分析师原始字段和 fragment 字段
+    skip_prefixes = ['a1_', 'a2_', 'a3_', 'a4_', 'a5_', 'a6_', 'a7_', 'a8_']
+    for k, v in elements.items():
+        if k in ['abstract', 'body']:
+            continue
+        if any(k.startswith(p) for p in skip_prefixes):
+            continue
+        context[k] = v
+
+    # 展平第一个分析师字段（用于模板渲染）
+    context['analyst_chinese_name'] = elements.get('a1_cn', '')
+    context['analyst_english_name'] = elements.get('a1_en', '')
+    context['analyst_sfc_code'] = elements.get('a1_sfc', '')
+    context['analyst_email'] = elements.get('a1_email', '')
+
+    # 收集所有分析师（用于循环渲染，如果模板支持）
+    analysts = []
+    for i in range(1, 9):
+        cn = elements.get(f'a{i}_cn', '')
+        if cn:
+            analysts.append({
+                'chinese_name': cn,
+                'english_name': elements.get(f'a{i}_en', ''),
+                'sfc_code': elements.get(f'a{i}_sfc', ''),
+                'email': elements.get(f'a{i}_email', '')
+            })
+    context['analysts'] = analysts
+
+    return context
+
+
+def insert_abstract_to_cell(doc: Document, abstract_doc: Document, marker: str) -> bool:
+    """在表格单元格中插入 abstract 内容，完整保留格式。
+
+    Args:
+        doc: 目标文档
+        abstract_doc: abstract 文档
+        marker: 占位符标记
+
+    Returns:
+        是否成功插入
+    """
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                if marker in cell.text:
+                    # 完全清空单元格（删除所有段落，只保留一个空段落）
+                    tc = cell._tc
+                    # 删除所有段落元素
+                    for p in tc.findall('.//{http://schemas.openxmlformats.org/wordprocessingml/2006/main}p'):
+                        tc.remove(p)
+
+                    # 插入 abstract 内容（使用 deepcopy 完整保留格式）
+                    for src_para in abstract_doc.paragraphs:
+                        if src_para.text.strip():
+                            # 直接复制整个段落元素
+                            tc.append(deepcopy(src_para._element))
+
+                    return True
+    return False
+
+
+def insert_body_at_marker_compose(doc_path: str, body_path: str, marker: str, output_path: str) -> bool:
+    """使用 docxcompose 在标记位置插入 body 内容。
+
+    将模板分成 marker 之前和之后两部分，然后用 docxcompose 合并。
+
+    Args:
+        doc_path: 渲染后的模板路径
+        body_path: body 文档路径
+        marker: 占位符标记
+        output_path: 输出路径
+
+    Returns:
+        是否成功插入
+    """
+    try:
+        from docxcompose.composer import Composer
+
+        # 加载文档
+        doc = Document(doc_path)
+        body_doc = Document(body_path)
+
+        # 找到 marker 位置
+        body_element = doc.element.body
+        marker_idx = None
+
+        for i, elem in enumerate(body_element):
+            if elem.tag.endswith('}p'):
+                text = ''.join(t.text for t in elem.iter() if t.text)
+                if marker in text:
+                    marker_idx = i
+                    break
+
+        if marker_idx is None:
+            print(f"  未找到 marker: {marker}")
+            return False
+
+        # 创建两个临时文档：marker 之前和之后
+        # 方法：删除 marker 段落，然后用 docxcompose 插入 body
+
+        # 删除 marker 段落
+        marker_elem = list(body_element)[marker_idx]
+        body_element.remove(marker_elem)
+
+        # 保存临时文档（没有 marker）
+        temp_path = Path(output_path).parent / "temp_no_marker.docx"
+        doc.save(str(temp_path))
+
+        # 使用 docxcompose 合并
+        # 策略：将 body 内容插入到正确位置
+        # docxcompose 默认是追加到末尾，我们需要更复杂的处理
+
+        # 另一种方法：直接操作 XML，但用 body_doc 的原始内容
+        doc = Document(str(temp_path))
+        body_element = doc.element.body
+        elements = list(body_element)
+
+        # 计算插入位置（marker 原来的位置）
+        insert_idx = marker_idx
+
+        # 从 body_doc 复制所有元素
+        for body_elem in body_doc.element.body:
+            tag = body_elem.tag.split('}')[-1]
+            if tag in ['p', 'tbl', 'sdt']:
+                new_elem = deepcopy(body_elem)
+                body_element.insert(insert_idx, new_elem)
+                insert_idx += 1
+
+        doc.save(output_path)
+
+        # 清理临时文件
+        Path(temp_path).unlink(missing_ok=True)
+
+        # 使用 docxcompose 修复图片引用
+        # 重新打开并用 composer 合并空文档来触发资源整理
+        master = Document(output_path)
+        composer = Composer(master)
+        # 不实际追加任何文档，只是用 composer 保存
+        composer.save(output_path)
+
+        return True
+
+    except Exception as e:
+        print(f"  docxcompose 插入失败: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+
+def insert_body_at_marker(doc: Document, body_doc: Document, marker: str) -> bool:
+    """在标记位置插入 body 内容，保留完整格式（包括图片、表格、目录）。
+
+    使用 deepcopy 复制 XML 元素。图片保持原有引用（依赖后续的资源复制）。
+
+    Args:
+        doc: 目标文档
+        body_doc: body 文档
+        marker: 占位符标记
+
+    Returns:
+        是否成功插入
+    """
+    body_element = doc.element.body
+
+    for i, elem in enumerate(body_element):
+        if elem.tag.endswith('}p'):
+            # 获取段落文本
+            text = ''.join(t.text for t in elem.iter() if t.text)
+            if marker in text:
+                # 在此位置插入 body 内容
+                insert_idx = i
+
+                # 从 body_doc 复制所有元素（使用 deepcopy 保留格式）
+                # 包括段落(p)、表格(tbl)、目录控件(sdt)等
+                for body_elem in body_doc.element.body:
+                    tag = body_elem.tag.split('}')[-1]
+                    # 复制段落、表格和目录控件，跳过 section 属性
+                    if tag in ['p', 'tbl', 'sdt']:
+                        new_elem = deepcopy(body_elem)
+                        body_element.insert(insert_idx, new_elem)
+                        insert_idx += 1
+
+                # 删除原占位符段落
+                body_element.remove(elem)
+                return True
+
+    return False
+
+
+def fix_body_margins(body_doc: Document, left_margin_cm: float = 1.0, right_margin_cm: float = 1.0) -> None:
+    """修复 body 文档的页边距。
+
+    body 从 draft 提取时可能带有首页的特殊页边距（如 6.35cm），
+    需要重置为标准值。
+
+    Args:
+        body_doc: body 文档
+        left_margin_cm: 左边距（厘米）
+        right_margin_cm: 右边距（厘米）
+    """
+    if Cm is None:
+        return
+
+    for section in body_doc.sections:
+        section.left_margin = Cm(left_margin_cm)
+        section.right_margin = Cm(right_margin_cm)
+
+
+def copy_headers_footers(source_doc: Document, target_doc: Document, target_section_start: int = 1) -> None:
+    """复制源文档的页眉页脚到目标文档。
+
+    复制所有类型的页眉页脚：默认、首页、奇偶页。
+
+    Args:
+        source_doc: 源文档（body.docx）
+        target_doc: 目标文档（output.docx）
+        target_section_start: 目标文档中开始复制的 section 索引
+    """
+    source_sections = list(source_doc.sections)
+    target_sections = list(target_doc.sections)
+
+    def copy_element(source, target):
+        """复制 XML 元素内容"""
+        if source is None or target is None:
+            return
+        source_elem = source._element
+        target_elem = target._element
+        for child in list(target_elem):
+            target_elem.remove(child)
+        for child in source_elem:
+            target_elem.append(deepcopy(child))
+
+    # 复制页眉页脚到目标 section
+    for i, source_section in enumerate(source_sections):
+        target_idx = target_section_start + i
+        if target_idx >= len(target_sections):
+            break
+
+        target_section = target_sections[target_idx]
+
+        # 复制 section 的页眉页脚设置
+        target_section.different_first_page_header_footer = source_section.different_first_page_header_footer
+
+        # 断开所有链接
+        try:
+            target_section.header.is_linked_to_previous = False
+        except:
+            pass
+        try:
+            target_section.footer.is_linked_to_previous = False
+        except:
+            pass
+        try:
+            target_section.first_page_header.is_linked_to_previous = False
+        except:
+            pass
+        try:
+            target_section.first_page_footer.is_linked_to_previous = False
+        except:
+            pass
+        try:
+            target_section.even_page_header.is_linked_to_previous = False
+        except:
+            pass
+        try:
+            target_section.even_page_footer.is_linked_to_previous = False
+        except:
+            pass
+
+        # 复制页眉
+        try:
+            copy_element(source_section.header, target_section.header)
+        except:
+            pass
+        try:
+            copy_element(source_section.first_page_header, target_section.first_page_header)
+        except:
+            pass
+        try:
+            copy_element(source_section.even_page_header, target_section.even_page_header)
+        except:
+            pass
+
+        # 复制页脚
+        try:
+            copy_element(source_section.footer, target_section.footer)
+        except:
+            pass
+        try:
+            copy_element(source_section.first_page_footer, target_section.first_page_footer)
+        except:
+            pass
+        try:
+            copy_element(source_section.even_page_footer, target_section.even_page_footer)
+        except:
+            pass
+
+
+def render_report(
+    template_path: str,
+    elements: Dict[str, Any],
+    abstract_path: str,
+    body_path: str,
+    output_path: str
+) -> bool:
+    """渲染报告，正确处理分析师字段、abstract 和 body。
+
+    使用 docxcompose 正确合并 body 文档，保留图片和格式。
+
+    Args:
+        template_path: 模板文件路径
+        elements: 要素字典
+        abstract_path: 摘要文件路径
+        body_path: 正文文件路径
+        output_path: 输出文件路径
+
+    Returns:
+        是否成功
+    """
+    if not DOCX_AVAILABLE:
+        print("Error: python-docx or docxtpl not installed")
+        return False
+
+    try:
+        from docxcompose.composer import Composer
+
+        # 1. 准备渲染上下文（展平分析师字段）
+        context = prepare_context_with_analysts(elements)
+
+        # 使用标记替代 abstract 和 body（避免破坏文档结构）
+        context['abstract'] = ABSTRACT_MARKER
+        context['body'] = BODY_MARKER
+
+        # 2. 使用 docxtpl 渲染短字段
+        tpl = DocxTemplate(template_path)
+        tpl.render(context)
+
+        # 保存临时文件
+        temp_path = Path(output_path).parent / "temp_rendered.docx"
+        tpl.save(str(temp_path))
+
+        # 3. 加载渲染后的文档
+        doc = Document(str(temp_path))
+        template_section_count = len(doc.sections)
+
+        # 4. 加载并处理 abstract
+        abstract_inserted = False
+        if Path(abstract_path).exists() and Path(abstract_path).stat().st_size > 0:
+            abstract_doc = Document(abstract_path)
+            abstract_inserted = insert_abstract_to_cell(doc, abstract_doc, ABSTRACT_MARKER)
+            if abstract_inserted:
+                print(f"  已插入 abstract")
+            else:
+                print(f"  警告: 未找到 abstract 占位符")
+
+        # 5. 找到 BODY_MARKER 位置，准备用 docxcompose 插入 body
+        body_element = doc.element.body
+        marker_idx = None
+        marker_elem = None
+
+        for i, elem in enumerate(body_element):
+            if elem.tag.endswith('}p'):
+                text = ''.join(t.text for t in elem.iter() if t.text)
+                if BODY_MARKER in text:
+                    marker_idx = i
+                    marker_elem = elem
+                    break
+
+        if marker_idx is None:
+            print(f"  警告: 未找到 body 占位符")
+            doc.save(output_path)
+            temp_path.unlink(missing_ok=True)
+            return True
+
+        # 6. 提取 marker 之后的元素（法律附录等）
+        # 注意：要同时提取末尾的 sectPr，因为它定义了文档的 section 属性
+        elements_after_marker = []
+        final_sectPr = None
+        all_elements = list(body_element)
+
+        for elem in all_elements[marker_idx + 1:]:
+            tag = elem.tag.split('}')[-1]
+            if tag == 'sectPr':
+                # 保存文档末尾的 sectPr
+                final_sectPr = deepcopy(elem)
+                body_element.remove(elem)
+            else:
+                elements_after_marker.append(deepcopy(elem))
+                body_element.remove(elem)
+
+        # 7. 删除 marker 段落
+        body_element.remove(marker_elem)
+
+        # 8. 保存临时文档（只有模板前半部分）
+        temp_before_path = Path(output_path).parent / "temp_before.docx"
+        doc.save(str(temp_before_path))
+
+        # 9. 使用 docxcompose 合并 body
+        master = Document(str(temp_before_path))
+        composer = Composer(master)
+
+        body_doc = None
+        if Path(body_path).exists() and Path(body_path).stat().st_size > 0:
+            body_doc = Document(body_path)
+
+            # 9.5 在追加之前清理 body_doc 中的所有 sectPr（防止空白页）
+            # 这些 sectPr 会导致强制换页
+            ns = {'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'}
+            body_body = body_doc.element.body
+
+            # 删除段落内的 sectPr
+            for p_elem in body_body.findall('.//w:p', ns):
+                pPr = p_elem.find('w:pPr', ns)
+                if pPr is not None:
+                    sectPr = pPr.find('w:sectPr', ns)
+                    if sectPr is not None:
+                        pPr.remove(sectPr)
+
+            # 删除独立的 sectPr（除了文档末尾的）
+            body_elements = list(body_body)
+            for elem in body_elements[:-1]:  # 排除最后一个元素
+                if elem.tag.split('}')[-1] == 'sectPr':
+                    body_body.remove(elem)
+
+            # 删除 body_doc 开头的空段落（保留目录控件 sdt）
+            body_elements = list(body_body)
+            for elem in body_elements:
+                tag = elem.tag.split('}')[-1]
+                if tag == 'p':
+                    texts = elem.findall('.//w:t', ns)
+                    text = ''.join([t.text or '' for t in texts]).strip()
+                    if not text:
+                        body_body.remove(elem)
+                    else:
+                        break  # 遇到有内容的段落就停止
+                elif tag != 'sdt':  # sdt (目录) 保留
+                    break
+
+            composer.append(body_doc)
+            print(f"  已使用 docxcompose 插入 body（已预清理 sectPr）")
+
+        # 10. 在附录前添加分节符，隔离正文和附录
+        # 这样附录可以使用独立的页边距设置（保持 template 原始值）
+        master_body = master.element.body
+        ns_local = {'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'}
+
+        # 创建一个分节符段落（sectPr in pPr）
+        # 这会让附录之后的内容属于新的 section
+        if elements_after_marker:
+            # 创建空段落
+            from docx.oxml import OxmlElement
+            from docx.oxml.ns import qn
+
+            # 创建 p 元素
+            p_elem = OxmlElement('w:p')
+            pPr = OxmlElement('w:pPr')
+
+            # 创建 sectPr（分节符）
+            sectPr = OxmlElement('w:sectPr')
+            # 使用 nextPage 类型（新页面开始）
+            sect_type = OxmlElement('w:type')
+            sect_type.set(qn('w:val'), 'nextPage')
+            sectPr.append(sect_type)
+
+            # 设置页面尺寸（A4: 21.01cm x 29.70cm）
+            pgSz = OxmlElement('w:pgSz')
+            pgSz.set(qn('w:w'), '11910')  # A4 宽度 in twips
+            pgSz.set(qn('w:h'), '16840')  # A4 高度 in twips
+            sectPr.append(pgSz)
+
+            # 设置页边距为 body.docx 的值（6.35cm）
+            # 这个 sectPr 定义的是前面 section（正文）的属性
+            pgMar = OxmlElement('w:pgMar')
+            pgMar.set(qn('w:left'), '3600')  # 6.35cm in twips
+            pgMar.set(qn('w:right'), '567')  # 1.00cm in twips
+            pgMar.set(qn('w:top'), '567')    # 1.00cm in twips
+            pgMar.set(qn('w:bottom'), '1021')  # 1.80cm in twips
+            pgMar.set(qn('w:header'), '567')  # 页眉距离 1.00cm
+            pgMar.set(qn('w:footer'), '919')  # 页脚距离 1.62cm
+            pgMar.set(qn('w:gutter'), '0')
+            sectPr.append(pgMar)
+
+            # 设置列
+            cols = OxmlElement('w:cols')
+            cols.set(qn('w:space'), '425')
+            cols.set(qn('w:num'), '1')
+            sectPr.append(cols)
+
+            # 设置文档网格
+            docGrid = OxmlElement('w:docGrid')
+            docGrid.set(qn('w:linePitch'), '299')
+            docGrid.set(qn('w:charSpace'), '0')
+            sectPr.append(docGrid)
+
+            pPr.append(sectPr)
+            p_elem.append(pPr)
+
+            # 添加分节符段落
+            master_body.append(p_elem)
+
+        # 10.5 把法律附录等内容添加回去
+        for elem in elements_after_marker:
+            master_body.append(elem)
+
+        # 10.6 确保文档末尾有正确的 sectPr
+        # 先删除 body.docx 带来的所有末尾 sectPr
+        master_body = master.element.body
+        while True:
+            last_elem = list(master_body)[-1] if list(master_body) else None
+            if last_elem is not None and last_elem.tag.split('}')[-1] == 'sectPr':
+                master_body.remove(last_elem)
+            else:
+                break
+
+        # 添加原来 template 的 sectPr
+        if final_sectPr is not None:
+            master_body.append(final_sectPr)
+
+        # 11. 保存最终文档
+        composer.save(output_path)
+
+        # 12. 复制 body 的页眉页脚和页边距到 output
+        # 注意：必须在保存后重新加载文档才能正确复制
+        if body_doc:
+            # 确保文件已完全写入
+            import time
+            time.sleep(0.1)
+
+            # 重新加载文档
+            final_doc = Document(output_path)
+            body_doc_fresh = Document(body_path)
+
+            # 使用 body Section 1 的页眉（蓝色 23558C），Section 0 的页眉是红色
+            # Body Section 结构：
+            # - Section 0: header=红色(A7242B), first_page_header=蓝色(23558C), left_margin=6.35cm
+            # - Section 1: header=蓝色(23558C), left_margin=6.35cm
+            #
+            # Output Section 结构：
+            # - Section 0: 封面（保持原样）
+            # - Section 1: 正文（复制 body 的页边距和页眉）
+            # - Section 2: 附录（保持 template 原样，不修改）
+            if len(body_doc_fresh.sections) > 1 and len(final_doc.sections) > 2:
+                # 使用 Section 1 的 header（蓝色），Section 0 的页边距
+                header_source = body_doc_fresh.sections[1]  # 蓝色页眉
+                margin_source = body_doc_fresh.sections[0]  # 页边距 6.35cm
+                footer_source = body_doc_fresh.sections[0]  # 页脚
+
+                # 只复制到正文 section（Section 1），不影响附录（最后一个 section）
+                # 附录应该保持 template 原始的页边距
+                for target_idx in range(1, len(final_doc.sections) - 1):
+                    target_section = final_doc.sections[target_idx]
+
+                    # 复制页边距
+                    target_section.left_margin = margin_source.left_margin
+                    target_section.right_margin = margin_source.right_margin
+
+                    # 复制设置
+                    target_section.different_first_page_header_footer = header_source.different_first_page_header_footer
+
+                    # 复制默认页眉（使用蓝色 Section 1 的 header）
+                    target_section.header.is_linked_to_previous = False
+                    for child in list(target_section.header._element):
+                        target_section.header._element.remove(child)
+                    for child in header_source.header._element:
+                        target_section.header._element.append(deepcopy(child))
+
+                    # 复制默认页脚
+                    target_section.footer.is_linked_to_previous = False
+                    for child in list(target_section.footer._element):
+                        target_section.footer._element.remove(child)
+                    for child in footer_source.footer._element:
+                        target_section.footer._element.append(deepcopy(child))
+
+                    # 复制首页页眉（也使用蓝色页眉）
+                    try:
+                        target_section.first_page_header.is_linked_to_previous = False
+                        for child in list(target_section.first_page_header._element):
+                            target_section.first_page_header._element.remove(child)
+                        for child in header_source.header._element:
+                            target_section.first_page_header._element.append(deepcopy(child))
+                    except Exception:
+                        pass
+
+                    # 复制首页页脚
+                    try:
+                        target_section.first_page_footer.is_linked_to_previous = False
+                        for child in list(target_section.first_page_footer._element):
+                            target_section.first_page_footer._element.remove(child)
+                        for child in footer_source.footer._element:
+                            target_section.first_page_footer._element.append(deepcopy(child))
+                    except Exception:
+                        pass
+
+                final_doc.save(output_path)
+                print(f"  已复制 body 页眉页脚和页边距到 {len(final_doc.sections) - 1} 个 sections")
+
+        # 12.5 清理 body 带来的 section breaks 和多余空段落（防止空白页）
+        final_doc = Document(output_path)
+        body_element = final_doc.element.body
+        ns = {'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'}
+
+        elements = list(body_element)
+
+        # 找到法律附录表格的位置（附录是 template 的内容，不应被修改）
+        appendix_idx = len(elements)
+        for i, elem in enumerate(elements):
+            tag = elem.tag.split('}')[-1]
+            if tag == 'tbl':
+                texts = elem.findall('.//w:t', ns)
+                text = ''.join([t.text or '' for t in texts])
+                if '[Table_disclaimer]' in text or 'APPENDIX' in text or '附录' in text:
+                    appendix_idx = i
+                    break
+
+        # 找到封面结束位置（第一个 sectPr 之后）
+        cover_end_idx = 0
+        for i, elem in enumerate(elements):
+            tag = elem.tag.split('}')[-1]
+            if tag == 'p':
+                pPr = elem.find('w:pPr', ns)
+                if pPr is not None and pPr.find('w:sectPr', ns) is not None:
+                    cover_end_idx = i + 1
+                    break
+
+        # 只清理封面之后、附录之前的 body 区域的 sectPr
+        # 不要删除附录之后的任何元素（包括文档末尾的 sectPr）
+        # 保留附录前一个元素的 sectPr（用于隔离正文和附录）
+        elements_to_remove = []
+        sectPrs_removed = 0
+
+        for i, elem in enumerate(elements):
+            # 只处理封面之后、附录之前的元素
+            # 排除 appendix_idx - 1（附录前一个元素，用于隔离）
+            if i <= cover_end_idx or i >= appendix_idx - 1:
+                continue
+
+            tag = elem.tag.split('}')[-1]
+
+            # 删除独立的 sectPr 元素（在 body 区域内）
+            if tag == 'sectPr':
+                elements_to_remove.append(elem)
+                sectPrs_removed += 1
+
+            # 移除段落内的 sectPr
+            elif tag == 'p':
+                pPr = elem.find('w:pPr', ns)
+                if pPr is not None:
+                    sectPr = pPr.find('w:sectPr', ns)
+                    if sectPr is not None:
+                        pPr.remove(sectPr)
+                        sectPrs_removed += 1
+
+        # 删除独立的 sectPr 元素
+        for elem in elements_to_remove:
+            body_element.remove(elem)
+
+        # 重新获取元素列表（因为删除了一些元素）
+        elements = list(body_element)
+
+        # 重新找到附录位置
+        appendix_idx = len(elements)
+        for i, elem in enumerate(elements):
+            tag = elem.tag.split('}')[-1]
+            if tag == 'tbl':
+                texts = elem.findall('.//w:t', ns)
+                text = ''.join([t.text or '' for t in texts])
+                if '[Table_disclaimer]' in text or 'APPENDIX' in text or '附录' in text:
+                    appendix_idx = i
+                    break
+
+        # 清理附录前的多余空段落（保留最多 1 个）
+        paragraphs_to_remove = []
+        consecutive_empty = 0
+
+        for i in range(cover_end_idx, appendix_idx):
+            elem = elements[i]
+            tag = elem.tag.split('}')[-1]
+            if tag == 'p':
+                texts = elem.findall('.//w:t', ns)
+                text_content = ''.join([t.text or '' for t in texts]).strip()
+                if not text_content:
+                    consecutive_empty += 1
+                    # 只保留 1 个连续空段落
+                    if consecutive_empty > 1:
+                        paragraphs_to_remove.append(elem)
+                else:
+                    consecutive_empty = 0
+            else:
+                consecutive_empty = 0
+
+        # 删除多余的空段落
+        for elem in paragraphs_to_remove:
+            body_element.remove(elem)
+
+        changes_made = len(paragraphs_to_remove) > 0 or sectPrs_removed > 0 or len(elements_to_remove) > 0
+        if changes_made:
+            final_doc.save(output_path)
+            if paragraphs_to_remove:
+                print(f"  已清理 {len(paragraphs_to_remove)} 个多余空段落")
+            if sectPrs_removed > 0:
+                print(f"  已移除 {sectPrs_removed} 个 body 带来的 section breaks")
+
+        # 13. 清理临时文件
+        temp_path.unlink(missing_ok=True)
+        temp_before_path.unlink(missing_ok=True)
+
+        # 14. 验证输出
+        final_doc = Document(output_path)
+        image_count = sum(1 for rel in final_doc.part.rels.values() if 'image' in rel.reltype)
+        print(f"  输出: 段落={len(final_doc.paragraphs)}, 表格={len(final_doc.tables)}, 图片={image_count}")
+
+        return True
+
+    except Exception as e:
+        print(f"渲染失败: {e}")
+        import traceback
+        traceback.print_exc()
+        return False

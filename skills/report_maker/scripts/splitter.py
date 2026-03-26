@@ -1,10 +1,13 @@
 """splitter.py - 摘要/正文拆分模块。
 
 使用 python-docx 从草稿中拆分摘要和正文片段。
+支持保留完整格式（字体、加粗、样式等）和图片。
 """
 
-from typing import Dict, Any, List, Tuple
+from typing import Dict, Any, List, Tuple, Optional
 from pathlib import Path
+from copy import deepcopy
+import shutil
 import sys
 
 SCRIPTS_DIR = Path(__file__).parent
@@ -25,108 +28,226 @@ except ImportError:
 import common
 
 
-def extract_abstract(draft_path: str, scope: str) -> Path:
-    """提取摘要片段。
+def extract_abstract(draft_path: str, scope: str, output_path: Optional[str] = None) -> Path:
+    """提取摘要片段，保留完整格式。
 
     根据位置描述从草稿中提取摘要区域。
+    使用 deepcopy 保留原始格式（字体、加粗、样式等）。
 
     Args:
         draft_path: 草稿文件路径
         scope: 位置描述（如"首页右侧"）
+        output_path: 输出路径（可选）
 
     Returns:
         abstract.docx 文件路径
     """
     if Document is None:
-        return Path(common.FILE_ABSTRACT)
-    
+        return Path(output_path or common.FILE_ABSTRACT)
+
+    out_path = Path(output_path or common.FILE_ABSTRACT)
+
     try:
         doc = Document(draft_path)
-        
-        # 简化实现：提取首页的某些表格或段落
-        # 实际应该根据 scope 解析位置，这里先做简单版本
-        
+
+        # 创建新文档
         abstract_doc = Document()
-        
-        # 策略：提取首页的特定表格
-        # 根据观察，摘要通常在首页的某个表格中
+
+        # 删除新文档的默认空段落
+        for para in abstract_doc.paragraphs:
+            p = para._element
+            p.getparent().remove(p)
+
+        # 策略1：从首页表格中查找摘要（常见于公司报告模板）
+        abstract_found = False
         if len(doc.tables) > 0:
-            # 假设第一个表格包含摘要信息
-            table = doc.tables[0]
-            
-            # 复制表格到新文档
-            for row in table.rows:
-                # 添加空段落
-                abstract_doc.add_paragraph()
-                
-                # 复制行内容
+            first_table = doc.tables[0]
+
+            # 搜索包含摘要内容特征的单元格
+            for row in first_table.rows:
                 for cell in row.cells:
-                    if cell.text:
-                        abstract_doc.add_paragraph(cell.text)
-        
-        return Path(common.FILE_ABSTRACT)
+                    cell_text = cell.text.strip()
+                    # 摘要通常以公司名或关键词开头
+                    if any(marker in cell_text for marker in [
+                        '是私人航空业', '是全球', '公司是', '本报告',
+                        '投资亮点', '核心观点', '摘要'
+                    ]) and len(cell_text) > 200:  # 摘要通常较长
+                        # 使用 deepcopy 复制段落，保留所有格式
+                        for para in cell.paragraphs:
+                            if para.text.strip():
+                                new_para = deepcopy(para._element)
+                                abstract_doc.element.body.append(new_para)
+                        abstract_found = True
+                        break
+                if abstract_found:
+                    break
+
+        # 策略2：如果表格中没找到，从段落中查找
+        if not abstract_found:
+            in_abstract = False
+            for para in doc.paragraphs:
+                text = para.text.strip()
+
+                # 开始标记
+                if any(marker in text for marker in ['摘要', '投资亮点', '核心观点']):
+                    in_abstract = True
+                    continue
+
+                # 结束标记
+                if in_abstract and any(marker in text for marker in ['目录', '1 ', '1.']):
+                    break
+
+                if in_abstract and text:
+                    new_para = deepcopy(para._element)
+                    abstract_doc.element.body.append(new_para)
+
+        abstract_doc.save(str(out_path))
+        return out_path
+
     except Exception as e:
         print(f"提取摘要失败: {e}")
-        return Path(common.FILE_ABSTRACT)
+        import traceback
+        traceback.print_exc()
+        return out_path
 
 
-def extract_body(draft_path: str, scope: str) -> Path:
-    """提取正文片段。
+def extract_body(draft_path: str, scope: str, output_path: Optional[str] = None) -> Path:
+    """提取正文片段，保留完整格式、表格和图片。
 
-    从草稿中提取正文区域（排除首页和摘要）。
+    使用"复制整个文档 → 删除范围外元素"的方式，
+    确保所有格式、图片和表格都被完整保留。
+
+    包含目录（如果存在）。
 
     Args:
         draft_path: 草稿文件路径
         scope: 位置描述（如"从第三页开始"）
+        output_path: 输出路径（可选）
 
     Returns:
         body.docx 文件路径
     """
     if Document is None:
-        return Path(common.FILE_BODY)
-    
+        return Path(output_path or common.FILE_BODY)
+
+    out_path = Path(output_path or common.FILE_BODY)
+
     try:
-        doc = Document(draft_path)
-        
-        # 简化实现：从第二页开始提取所有内容
-        # 实际应该根据 scope 解析页面位置
-        
-        body_doc = Document()
-        
-        # 跳过首页，复制剩余内容
-        # 这里简化处理：复制所有段落和表格
-        
-        # 复制段落（跳过首页部分）
-        start_index = 20  # 跳过首页的大约段落数
-        
-        for i, para in enumerate(doc.paragraphs[start_index:], start=start_index):
-            if para.text.strip():
-                new_para = body_doc.add_paragraph(para.text)
-                # 复制样式
-                if para.style:
-                    new_para.style = para.style
-        
-        # 复制表格（跳过首页的表格）
-        start_table = 2  # 跳过首页的前 2 个表格
-        
-        for table in doc.tables[start_table:]:
-            # 复制表格结构
-            # 注意：完整复制表格比较复杂，这里做简化处理
-            
-            # 添加表格标题
-            body_doc.add_paragraph(f"[表格: {len(table.rows)} 行 x {len(table.columns)} 列]")
-            
-            # 复制表格内容
-            for row_idx, row in enumerate(table.rows):
-                row_data = []
-                for cell in row.cells:
-                    row_data.append(cell.text)
-                body_doc.add_paragraph(" | ".join(row_data))
-        
-        return Path(common.FILE_BODY)
+        # 步骤1：复制整个文档（保留所有资源引用）
+        shutil.copy(draft_path, str(out_path))
+
+        # 步骤2：打开复制的文档进行编辑
+        doc = Document(str(out_path))
+        body = doc.element.body
+        elements = list(body)
+
+        # 步骤3：找到正文的起始和结束位置
+        start_idx = None
+        end_idx = len(elements)
+        toc_idx = None  # 目录位置
+
+        # 正文结束标记（附录/免责声明）
+        end_markers = ['重要信息披露', '[Table_disclaimer]', '免责声明', 'APPENDIX', '附录']
+
+        # 首先找到目录位置和正文结束位置
+        for i, elem in enumerate(elements):
+            text = ''.join(elem.itertext()).strip()
+            tag = elem.tag.split('}')[-1]
+
+            # 找目录位置（"目录"标题或 sdt 目录控件）
+            if toc_idx is None:
+                # 检查是否是目录标题
+                if text == '目录':
+                    toc_idx = i
+                    print(f"找到目录位置: 元素 {i}")
+                # 检查是否是 sdt 目录控件（Word 自动生成的目录）
+                elif tag == 'sdt' and '目录' in text:
+                    toc_idx = i
+                    print(f"找到目录控件: 元素 {i}")
+
+            # 找结束位置
+            for marker in end_markers:
+                if marker in text:
+                    end_idx = i
+                    break
+            if end_idx < len(elements):
+                break
+
+        # 确定起始位置
+        if toc_idx is not None:
+            # 如果有目录，从目录开始
+            start_idx = toc_idx
+        else:
+            # 如果没有目录，找正文第一章
+            # 正文起始标记（章节1开头）- 排除目录条目（包含Tab+页码）
+            for i, elem in enumerate(elements):
+                text = ''.join(elem.itertext()).strip()
+
+                # 检查是否是正文标题（以 "1 " 开头，但不是目录条目）
+                if text.startswith('1 ') or text.startswith('1.'):
+                    # 目录条目通常包含 Tab 字符和页码
+                    # 正文标题通常不包含 Tab 或以数字结尾
+                    if '\t' not in text and not text[-1].isdigit():
+                        start_idx = i
+                        break
+                    # 或者检查是否是 Heading 样式
+                    if elem.tag.endswith('}p'):
+                        pPr = elem.find('.//{http://schemas.openxmlformats.org/wordprocessingml/2006/main}pStyle')
+                        if pPr is not None:
+                            style_val = pPr.get('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}val', '')
+                            if 'Heading' in style_val or '标题' in style_val:
+                                start_idx = i
+                                break
+
+        if start_idx is None:
+            print("警告：未找到正文起始位置，使用默认值")
+            start_idx = 10  # 默认跳过前10个元素
+
+        print(f"正文范围: 元素 {start_idx} - {end_idx}")
+
+        # 步骤4：删除范围外的元素
+        elements_to_remove = []
+
+        # 删除结束位置之后的元素（倒序）
+        for i in range(len(elements) - 1, end_idx - 1, -1):
+            elem = elements[i]
+            tag = elem.tag.split('}')[-1]
+            if tag not in ['sectPr']:  # 保留节属性
+                elements_to_remove.append(elem)
+
+        # 删除起始位置之前的元素（倒序）
+        for i in range(start_idx - 1, -1, -1):
+            elem = elements[i]
+            tag = elem.tag.split('}')[-1]
+            if tag not in ['sectPr']:
+                elements_to_remove.append(elem)
+
+        # 执行删除
+        for elem in elements_to_remove:
+            try:
+                body.remove(elem)
+            except ValueError:
+                pass  # 元素可能已被删除
+
+        # 注意：不重置页边距，保留原始草稿的 section 格式
+        # 原始草稿可能有不同的 section 和边距设置，这是设计意图的一部分
+
+        # 步骤5：保存
+        doc.save(str(out_path))
+
+        # 验证结果
+        final_doc = Document(str(out_path))
+        print(f"正文提取完成: {len(final_doc.paragraphs)} 段落, "
+              f"{len(final_doc.tables)} 表格, "
+              f"{len(final_doc.inline_shapes)} 图片")
+
+        return out_path
+
     except Exception as e:
         print(f"提取正文失败: {e}")
-        return Path(common.FILE_BODY)
+        import traceback
+        traceback.print_exc()
+        return out_path
 
 
 def locate_fragment_by_content(doc_path: str, keywords: List[str]) -> Dict[str, Any]:
@@ -464,31 +585,17 @@ def _is_element_after(elem1, elem2) -> bool:
 
 
 def _copy_paragraph(target_doc: Document, source_para) -> None:
-    """复制段落到目标文档。
+    """复制段落到目标文档，保留完整格式。
+
+    使用 deepcopy 复制段落的 XML 元素，确保所有格式信息都被保留。
 
     Args:
         target_doc: 目标文档
         source_para: 源段落
     """
-    new_para = target_doc.add_paragraph(source_para.text)
-
-    # 复制样式
-    if source_para.style:
-        try:
-            new_para.style = source_para.style
-        except Exception:
-            pass
-
-    # 复制段落格式（粗体、斜体等）
-    for run in source_para.runs:
-        if run.text:
-            new_run = new_para.add_run(run.text)
-            if run.bold:
-                new_run.bold = True
-            if run.italic:
-                new_run.italic = True
-            if run.underline:
-                new_run.underline = True
+    # 使用 deepcopy 复制完整的段落元素（包括所有格式）
+    new_para_element = deepcopy(source_para._element)
+    target_doc.element.body.append(new_para_element)
 
 
 def _copy_table(target_doc: Document, source_table) -> None:

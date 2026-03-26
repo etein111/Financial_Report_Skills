@@ -42,5 +42,6 @@ shares_in_issue: 365.99mn
 one_year_high: '73.40'
 one_year_low: '20.50'
 current_price_date: 2026 年 01 月 15 日
-abstract: ''
-body: ''
+source: xxx
+abstract: abstract.docx
+body: body.docx

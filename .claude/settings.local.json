@@ -17,7 +17,9 @@
       "Bash(python:*)",
       "Bash(uv run:*)",
       "Bash(robocopy:*)",
-      "Bash(cmd //c \"robocopy skills\\\\report_maker .claude\\\\skills\\\\report_maker /E\")"
+      "Bash(cmd //c \"robocopy skills\\\\report_maker .claude\\\\skills\\\\report_maker /E\")",
+      "Bash(uv pip install:*)",
+      "Bash(copy:*)"
     ]
   }
 }

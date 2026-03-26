@@ -163,3 +163,74 @@ title: "首次覆盖：..."
 3. **字段名一致性** - elements.yaml 的键名必须与 schema.yaml 完全一致
 4. **模板切换限制** - 只能在第一阶段切换模板，第二阶段不支持切换
 5. **只读 templates/** - report_maker 永远不修改模板资产
+
+## 渲染技术细节
+
+### 文档合并流程
+
+渲染使用 **docxcompose** 合并 body.docx，流程如下：
+
+1. **提取附录**：从 template 中提取 `{{body}}` 之后的内容（法律附录等）和末尾 sectPr
+2. **预清理 body.docx**：
+   - 删除所有段落内的 sectPr（防止强制换页导致空白页）
+   - 删除独立的 sectPr 元素
+   - 删除开头的空段落（保留目录控件 sdt）
+3. **合并**：使用 docxcompose.append() 插入 body
+4. **创建分节符**：在附录前添加 sectPr，隔离正文和附录
+5. **恢复附录**：将提取的附录追加回文档末尾
+6. **修正末尾 sectPr**：恢复 template 原始的 sectPr
+
+### 附录隔离机制
+
+**关键原则**：附录完全来自 template，不做任何修改
+
+```
+Output Section 结构：
+- Section 0: 封面（保持 template 原样，left=1.00cm）
+- Section 1: 正文（使用 body.docx 的页边距 left=6.35cm）
+- Section 2: 附录（保持 template 原样，left=1.00cm）
+
+隔离方式：
+1. 在附录前创建 sectPr（nextPage 类型），隔离正文和附录
+2. 清理时排除附录前的 sectPr（appendix_idx - 1）
+3. 页边距复制只影响 Section 1，不影响 Section 2
+```
+
+**分节符 sectPr 必须包含完整属性**：
+- `pgSz` - 页面尺寸（A4: w=11910, h=16840 twips）
+- `pgMar` - 页边距，包括 header 和 footer 距离
+- `cols` - 列设置
+- `docGrid` - 文档网格
+
+缺少这些属性会导致页面尺寸为 0，页眉页脚显示不全。
+
+### 页眉页脚复制
+
+```
+Body.docx Section 结构：
+- Section 0: header=红色(A7242B), first_page_header=蓝色(23558C), left_margin=6.35cm
+- Section 1: header=蓝色(23558C), left_margin=6.35cm
+
+复制策略：
+- 页眉：使用 Section 1 的 header（蓝色 23558C）
+- 页边距：使用 Section 0 的 margins（6.35cm）
+- 页脚：使用 Section 0 的 footer
+```
+
+### 空白页问题处理
+
+body.docx 可能带来空白页的原因：
+1. **sectPr 分节符**：每个 sectPr type=nextPage 会强制换页
+2. **连续空段落**：大量空段落会占用页面空间
+3. **文档开头空段落**：body.docx 开头可能有多个空段落
+
+解决方案（在 renderer.py 中实现）：
+1. 追加前删除 body.docx 所有 sectPr
+2. 追加后清理连续空段落（保留最多 1 个）
+3. 删除 body.docx 开头的空段落
+
+### Abstract 插入
+
+abstract 插入到表格单元格，使用 deepcopy 保留完整格式：
+- 删除单元格内所有段落
+- 逐段复制 abstract.docx 内容（保留字体、颜色等格式）
