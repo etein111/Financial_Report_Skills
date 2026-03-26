@@ -103,21 +103,52 @@ description: 当用户上传报告草稿或要求生成/解析研究报告时使
 - 从 `templates/router.yaml` 获取模板名
 - 加载 `templates/{template_name}/schema.yaml`
 
-#### 步骤 3：LLM 提取要素
+#### 步骤 3：LLM 提取要素 ⚠️
+
+> **关键技术提示：处理嵌套表格**
+>
+> - python-docx 的 `cell.text` **只返回直接段落文本，不包括嵌套表格**
+> - 许多关键字段（如 current_price, market_cap, shares_in_issue 等）通常在首页表格的**嵌套表格**中
+> - 必须递归遍历 `cell.tables` 来获取嵌套表格内容
+>
+> ```python
+> # ❌ 错误做法：只读取 cell.text
+> for cell in row.cells:
+>     print(cell.text)  # 不会包含嵌套表格
+>
+> # ✅ 正确做法：递归读取嵌套表格
+> for cell in row.cells:
+>     print(cell.text)
+>     for nested_table in cell.tables:
+>         for nested_row in nested_table.rows:
+>             for nested_cell in nested_row.cells:
+>                 print(nested_cell.text)
+> ```
 
 - 将草稿内容和 schema.yaml 发送给 LLM
 - LLM 根据 schema 中的字段定义提取数据
+- **递归检查所有嵌套表格**，确保提取完整
 
 #### 步骤 4：交互式确认 ⚠️
 
-**对每个字段（除了 abstract 和 body），一次只问一个**：
+**一次性确认所有字段（表格形式）**：
 
 ```
-展示当前字段的 LLM 提取值
-- 如果未提取到：询问用户"是否留空或补充？"
-- 如果提取到了：询问用户"正确吗？(y=确认/n=修改/输入新值)"
-- 等待用户响应后再处理下一个字段
+展示所有提取的字段（Markdown 表格）
+- 字段名称 | 提取值 | 状态
+- 用户可以一次性确认或修正多个字段
+- 不需要一个一个字段地确认
 ```
+
+**示例**：
+| 字段 | 提取值 | 状态 |
+|------|--------|------|
+| report_date | `21 Oct 2025` | ✅ |
+| company | `西锐飞机` | ✅ |
+| ticker | `2507.HK` | ✅ |
+| current_price | `60.40` | ✅ |
+
+⚠️ **重要**：使用表格形式一次性展示，让用户可以快速浏览和修正
 
 #### 步骤 5：确保所有字段存在
 
