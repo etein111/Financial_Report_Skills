@@ -7,6 +7,8 @@ from pathlib import Path
 from typing import Dict, Any
 from docx import Document
 
+from . import common
+
 
 # ==================== 文档操作 ====================
 
@@ -45,7 +47,7 @@ def replace_field_value_in_doc(doc: Document, field_name: str, field_value: str)
     Returns:
         修改后的 Document 对象
     """
-    placeholder = "{{" + f" {field_name} " + "}}"
+    placeholder = common.format_placeholder(field_name)
     value_str = str(field_value)
 
     # 在段落中替换
@@ -129,11 +131,11 @@ def replace_abstract_in_doc(doc: Document, table: int, row: int,
     # 只在第一行第一列添加摘要占位符
     first_cell = tbl.rows[row].cells[col_start]
     if first_cell.paragraphs and first_cell.paragraphs[0].runs:
-        first_cell.paragraphs[0].runs[0].text = "{{ abstract }}"
+        first_cell.paragraphs[0].runs[0].text = common.format_abstract_placeholder()
     elif first_cell.paragraphs:
-        first_cell.paragraphs[0].add_run("{{ abstract }}")
+        first_cell.paragraphs[0].add_run(common.format_abstract_placeholder())
     else:
-        first_cell.add_paragraph("{{ abstract }}")
+        first_cell.add_paragraph(common.format_abstract_placeholder())
 
     return doc
 
@@ -163,9 +165,9 @@ def replace_body_in_doc(doc: Document, start_paragraph: int,
     for run in para.runs:
         run.text = ""
     if para.runs:
-        para.runs[0].text = "{{ body }}"
+        para.runs[0].text = common.format_body_placeholder()
     else:
-        para.add_run("{{ body }}")
+        para.add_run(common.format_body_placeholder())
 
     # 删除正文区域的其他段落（从后往前删除）
     for i in range(end_idx - 1, start_paragraph, -1):
@@ -225,7 +227,7 @@ def replace_body_elements_in_doc(doc: Document,
     new_para = OxmlElement('w:p')
     new_run = OxmlElement('w:r')
     new_text = OxmlElement('w:t')
-    new_text.text = "{{ body }}"
+    new_text.text = common.format_body_placeholder()
     new_run.append(new_text)
     new_para.append(new_run)
 
@@ -294,26 +296,23 @@ def add_field_to_doc(doc: Document, field_name: str, field_value: str,
 
     Returns:
         修改后的 Document 对象
+
+    Raises:
+        NotImplementedError: 当位置提示类型未实现时
     """
-    placeholder = "{{" + f" {field_name} " + "}}"
+    placeholder = common.format_placeholder(field_name)
 
     # 解析位置提示
     if position_hint.startswith("after:"):
-        # 在指定字段之后插入
-        existing_field = position_hint[6:]
-        # 这里需要调用 document.py 的 find_content_location
-        # 暂时跳过实现
-        pass
+        raise NotImplementedError(
+            f"位置提示 'after:{position_hint[6:]}' 尚未实现。"
+            "需要集成 document.py 的 find_content_location 函数。"
+        )
 
     elif position_hint.startswith("table:"):
-        # 直接指定表格位置
-        parts = position_hint.split(",")
-        table_idx = int(parts[0].split(":")[1])
-
-        table = doc.tables[table_idx]
-        # 在指定位置插入占位符
-        # ... (具体实现)
-        pass
+        raise NotImplementedError(
+            f"位置提示 '{position_hint}' 尚未实现。"
+        )
 
     elif position_hint.startswith("paragraph:"):
         # 在指定段落之后插入
@@ -329,6 +328,8 @@ def add_field_to_doc(doc: Document, field_name: str, field_value: str,
             from docx.text.paragraph import Paragraph
             new_para_obj = Paragraph(new_para, doc)
             new_para_obj.text = placeholder
+    else:
+        raise ValueError(f"未知的位置提示格式: {position_hint}")
 
     return doc
 
@@ -343,7 +344,7 @@ def remove_field_from_doc(doc: Document, field_name: str) -> Document:
     Returns:
         修改后的 Document 对象
     """
-    placeholder = "{{" + f" {field_name} " + "}}"
+    placeholder = common.format_placeholder(field_name)
 
     # 在段落中查找并删除
     for para in doc.paragraphs:

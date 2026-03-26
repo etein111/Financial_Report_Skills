@@ -8,7 +8,8 @@
 """
 
 from typing import Dict, Any, Optional
-import yaml
+
+from . import common
 
 
 # 片段默认值
@@ -53,23 +54,11 @@ def generate_schema(elements: Dict[str, Any],
     """
     schema = {}
 
-    # 普通字段
+    # 普通字段（扁平化结构，支持 a1_* 到 a8_* 等多个分析师）
     for name, value in elements.items():
-        if name == "analysts":
-            # 处理分析师字段（展平为多个字段）
-            if isinstance(value, list):
-                for i, analyst in enumerate(value):
-                    prefix = f"analyst_{i+1}" if len(value) > 1 else "analyst"
-                    if isinstance(analyst, dict):
-                        for key, val in analyst.items():
-                            field_name = f"{prefix}_{key}"
-                            schema[field_name] = {"description": f"分析师{i+1}的{key}"}
-                            if val and val != "null":
-                                schema[field_name]["format"] = str(val)
-        else:
-            schema[name] = {"description": name}
-            if value and value != "null":
-                schema[name]["format"] = str(value)
+        schema[name] = {"description": name}
+        if value and value != "null":
+            schema[name]["format"] = str(value)
 
     # abstract（必须）
     schema["abstract"] = _apply_fragment_config(DEFAULT_ABSTRACT, abstract_config)
@@ -92,8 +81,7 @@ def load_schema(path: str) -> Dict[str, Any]:
     Returns:
         schema 字典
     """
-    with open(path, 'r', encoding='utf-8') as f:
-        return yaml.safe_load(f)
+    return common.load_yaml(path)
 
 
 def save_schema(path: str, schema: Dict[str, Any]) -> None:
@@ -103,8 +91,7 @@ def save_schema(path: str, schema: Dict[str, Any]) -> None:
         path: schema.yaml 文件路径
         schema: schema 字典
     """
-    with open(path, 'w', encoding='utf-8') as f:
-        yaml.dump(schema, f, allow_unicode=True, default_flow_style=False)
+    common.save_yaml(path, schema)
 
 
 # ==================== 修改（纯函数）====================

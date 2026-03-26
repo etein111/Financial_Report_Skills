@@ -70,3 +70,7 @@ transcripts/
 # OS
 .DS_Store
 Thumbs.db
+
+# WSL file system sync issues
+skills/template_maker/SKILL.md
+skills/template_maker/scripts/common.py

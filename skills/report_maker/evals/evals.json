@@ -1,0 +1,23 @@
+{
+  "skill_name": "report_maker",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "上传了一个公司报告草稿 draft.docx，报告类型是 company，生成标准排版报告",
+      "expected_output": "系统应该：1) 询问报告类型（用户说 company），2) 提取要素并与用户交互确认，3) 拆分摘要和正文，4) 保存到 reports/ 目录，5) 等待用户确认后继续生成 output.docx",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "我上传了一份宏观报告草稿，帮我解析一下",
+      "expected_output": "系统应该识别这是报告处理请求，询问报告类型（macro），然后进入要素提取和确认流程",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "ticker 应该是 700 HK，不是 2507.HK",
+      "expected_output": "系统应该更新 elements.yaml 中的 ticker 字段为 '700 HK'，并保存更新后的文件",
+      "files": []
+    }
+  ]
+}

@@ -7,6 +7,8 @@ from pathlib import Path
 from typing import Dict, List, Any, Union, Optional
 from docx import Document
 
+from . import common
+
 
 def find_content_location(doc_path: str, search_text: str) -> Dict[str, Any]:
     """在文档中查找指定文本的位置。
@@ -214,8 +216,8 @@ def find_abstract_by_elements(doc_path: str, elements: Dict[str, Any]) -> Dict[s
     for row_idx, row in enumerate(table.rows):
         for col_idx, cell in enumerate(row.cells):
             text = cell.text.strip()
-            # 摘要通常是长文本（> 50 字符）
-            if len(text) > 50:
+            # 摘要通常是长文本
+            if len(text) > common.MIN_ABSTRACT_LENGTH:
                 col_end = col_idx
                 for c in range(col_idx + 1, len(row.cells)):
                     if row.cells[c].text.strip():
@@ -232,7 +234,7 @@ def find_abstract_by_elements(doc_path: str, elements: Dict[str, Any]) -> Dict[s
                     next_cell = table.rows[r].cells[col_idx]
                     next_text = next_cell.text.strip()
                     # 如果下一行同列有内容且不是表头类短文本，认为是摘要的延续
-                    if next_text and len(next_text) > 20:
+                    if next_text and len(next_text) > common.MIN_CONTINUATION_LENGTH:
                         row_end = r
                     elif not next_text:
                         # 空行，继续检查
