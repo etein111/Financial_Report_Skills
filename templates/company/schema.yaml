@@ -25,7 +25,7 @@ body:
   - 包含各章节详细内容
   - 可能包含表格、图表引用
   - 按原文结构保留段落和标题层级
-  scope: 从第三页开始
+  scope: 从第二页开始
   type: fragment
 company:
   description: company
@@ -54,6 +54,9 @@ report_date:
 shares_in_issue:
   description: shares_in_issue
   format: 365.99mn
+source:
+  description: source
+  format: xxx
 target_price:
   description: target_price
   format: '86.72'
