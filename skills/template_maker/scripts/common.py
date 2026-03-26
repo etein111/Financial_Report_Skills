@@ -68,7 +68,16 @@ def save_yaml(path: Union[str, Path], data: Dict[str, Any], sort_keys: bool = Fa
 # ==================== Elements 工具函数 ====================
 
 def flatten_elements(elements: Dict[str, Any]) -> Dict[str, str]:
-    """展平所有 elements 字段。
+    """展平所有 elements 字段，包括嵌套结构。
+
+    支持以下嵌套结构：
+    - 嵌套字典: sections.viewpoint -> sections_viewpoint
+    - 单个元素列表: analysts[0].chinese_name -> analyst_chinese_name
+    - 多个元素列表: analysts[0..n] -> analyst_0_chinese_name, analyst_1_chinese_name...
+
+    注意：
+    - 跳过超过 2 层嵌套的复杂结构（如 financial_data.rows.xxx.values）
+    - 跳过空值和 "null" 字符串
 
     Args:
         elements: 原始 elements 字典
@@ -77,9 +86,66 @@ def flatten_elements(elements: Dict[str, Any]) -> Dict[str, str]:
         展平后的 field_name -> field_value 映射
     """
     flat = {}
-    for name, value in elements.items():
-        if value is not None and value != "null":
-            flat[name] = str(value)
+
+    def _is_simple_value(v: Any) -> bool:
+        """判断是否为简单值（字符串、数字等，非容器类型）。"""
+        return not isinstance(v, (dict, list))
+
+    def _flatten_dict(prefix: str, d: Dict[str, Any], depth: int = 0) -> None:
+        """展平字典，限制嵌套深度。"""
+        if depth > 2:
+            # 超过 2 层嵌套，整体作为字符串（如 financial_data）
+            return
+
+        for k, v in d.items():
+            new_key = f"{prefix}_{k}" if prefix else k
+
+            if v is None or v == "null":
+                continue
+            elif _is_simple_value(v):
+                flat[new_key] = str(v)
+            elif isinstance(v, dict):
+                _flatten_dict(new_key, v, depth + 1)
+            elif isinstance(v, list):
+                _flatten_list(new_key, v, depth + 1)
+
+    def _flatten_list(prefix: str, lst: List[Any], depth: int = 0) -> None:
+        """展平列表。"""
+        if not lst or depth > 2:
+            return
+
+        # 检查列表元素类型
+        first = lst[0]
+
+        if _is_simple_value(first):
+            # 简单值列表，跳过（如 columns: [Dec-24A, Dec-25E, ...]）
+            return
+
+        if isinstance(first, dict):
+            # 字典列表（如 analysts）
+            # 单数形式前缀：analysts -> analyst
+            singular = prefix.rstrip('s') if prefix.endswith('s') else prefix
+
+            if len(lst) == 1:
+                # 单个元素：直接展平，不带索引
+                for k, v in first.items():
+                    if v is None or v == "null":
+                        continue
+                    elif _is_simple_value(v):
+                        flat[f"{singular}_{k}"] = str(v)
+            else:
+                # 多个元素：带索引展平
+                for idx, item in enumerate(lst):
+                    if isinstance(item, dict):
+                        for k, v in item.items():
+                            if v is None or v == "null":
+                                continue
+                            elif _is_simple_value(v):
+                                flat[f"{singular}_{idx}_{k}"] = str(v)
+
+    # 从顶层开始展平
+    _flatten_dict("", elements, 0)
+
     return flat
 
 

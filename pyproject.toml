@@ -1,0 +1,15 @@
+[project]
+name = "neoskills-yc"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "docxtpl>=0.20.0",
+    "python-docx==1.1.0",
+    "pyyaml==6.0.1",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+]

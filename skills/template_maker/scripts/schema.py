@@ -60,10 +60,11 @@ def generate_schema(elements: Dict[str, Any],
         if value and value != "null":
             schema[name]["format"] = str(value)
 
-    # abstract（必须）
-    schema["abstract"] = _apply_fragment_config(DEFAULT_ABSTRACT, abstract_config)
+    # abstract（可选，默认启用）
+    if abstract_config is None or abstract_config.get("enabled", True):
+        schema["abstract"] = _apply_fragment_config(DEFAULT_ABSTRACT, abstract_config)
 
-    # body（可选）
+    # body（可选，默认启用）
     if body_config is None or body_config.get("enabled", True):
         schema["body"] = _apply_fragment_config(DEFAULT_BODY, body_config)
 

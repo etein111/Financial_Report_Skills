@@ -36,8 +36,17 @@ def save_document(doc: Document, output_path: str) -> None:
 
 # ==================== 字段替换 ====================
 
+# 长文本阈值：超过此长度的字段值使用前缀匹配
+LONG_TEXT_THRESHOLD = 100
+# 前缀匹配长度：用于匹配长文本的前缀字符数
+PREFIX_MATCH_LENGTH = 50
+
+
 def replace_field_value_in_doc(doc: Document, field_name: str, field_value: str) -> Document:
     """在文档中替换单个字段值为占位符（返回新文档）。
+
+    对于长文本（超过 100 字符），使用前缀匹配策略：
+    如果段落以字段值的前 50 个字符开头，则将整个段落替换为占位符。
 
     Args:
         doc: Document 对象
@@ -50,14 +59,24 @@ def replace_field_value_in_doc(doc: Document, field_name: str, field_value: str)
     placeholder = common.format_placeholder(field_name)
     value_str = str(field_value)
 
+    # 判断是否为长文本
+    is_long_text = len(value_str) > LONG_TEXT_THRESHOLD
+    prefix = value_str[:PREFIX_MATCH_LENGTH] if is_long_text else None
+
     # 在段落中替换
     for para in doc.paragraphs:
-        if value_str in para.text:
-            _replace_text_in_para(para, value_str, placeholder)
+        if is_long_text:
+            # 长文本：前缀匹配，替换整个段落
+            if para.text.strip().startswith(prefix):
+                _replace_entire_para(para, placeholder)
+        else:
+            # 短文本：完整匹配
+            if value_str in para.text:
+                _replace_text_in_para(para, value_str, placeholder)
 
     # 在表格中替换（包括嵌套表格）
     for table in doc.tables:
-        _replace_in_table(table, value_str, placeholder)
+        _replace_in_table(table, value_str, placeholder, is_long_text, prefix)
 
     # 在页眉页脚中替换
     for section in doc.sections:
@@ -71,24 +90,77 @@ def replace_field_value_in_doc(doc: Document, field_name: str, field_value: str)
     return doc
 
 
-def _replace_in_table(table, old_text: str, new_text: str):
+def _replace_in_table(table, old_text: str, new_text: str,
+                      is_long_text: bool = False, prefix: str = None):
     """在表格中递归替换文本（包括嵌套表格）。
 
     Args:
         table: python-docx 表格对象
         old_text: 要替换的文本
         new_text: 新文本
+        is_long_text: 是否为长文本
+        prefix: 长文本的前缀（用于前缀匹配）
     """
     for row in table.rows:
         for cell in row.cells:
             # 先处理嵌套表格
             for nested_table in cell.tables:
-                _replace_in_table(nested_table, old_text, new_text)
+                _replace_in_table(nested_table, old_text, new_text, is_long_text, prefix)
 
             # 再处理单元格段落
-            for para in cell.paragraphs:
-                if old_text in para.text:
-                    _replace_text_in_para(para, old_text, new_text)
+            if is_long_text:
+                # 长文本：查找以前缀开头的段落，替换该段落及其后续段落（直到遇到标题）
+                _replace_long_text_in_cell(cell, prefix, new_text)
+            else:
+                for para in cell.paragraphs:
+                    if old_text in para.text:
+                        _replace_text_in_para(para, old_text, new_text)
+
+
+def _replace_long_text_in_cell(cell, prefix: str, placeholder: str):
+    """在单元格中替换长文本内容。
+
+    查找以 prefix 开头的段落，将该段落替换为占位符，
+    并删除后续的内容段落（直到遇到下一个标题或单元格结束）。
+
+    Args:
+        cell: python-docx 单元格对象
+        prefix: 长文本的前缀
+        placeholder: 占位符文本
+    """
+    paragraphs = cell.paragraphs
+    start_idx = None
+
+    # 查找以 prefix 开头的段落
+    for i, para in enumerate(paragraphs):
+        if para.text.strip().startswith(prefix):
+            start_idx = i
+            break
+
+    if start_idx is None:
+        return
+
+    # 找到内容结束位置（下一个标题段落或单元格结束）
+    # 标题通常是短文本（<50 字符）且独占一行
+    end_idx = start_idx + 1
+    for i in range(start_idx + 1, len(paragraphs)):
+        text = paragraphs[i].text.strip()
+        # 如果是空段落，继续
+        if not text:
+            end_idx = i + 1
+            continue
+        # 如果是短文本标题（如"投资建议"、"风险"等），停止
+        if len(text) < 50 and not text.startswith(prefix[:20]):
+            break
+        end_idx = i + 1
+
+    # 替换第一个段落为占位符
+    _replace_entire_para(paragraphs[start_idx], placeholder)
+
+    # 删除后续的内容段落（从后往前删除）
+    for i in range(end_idx - 1, start_idx, -1):
+        para = paragraphs[i]
+        para._element.getparent().remove(para._element)
 
 
 def replace_abstract_in_doc(doc: Document, table: int, row: int,
@@ -194,7 +266,49 @@ def replace_body_elements_in_doc(doc: Document,
     Returns:
         修改后的 Document 对象
     """
+    return _replace_elements_region(doc, start_element_idx, end_element_idx,
+                                    common.format_body_placeholder())
+
+
+def replace_appendix_in_doc(doc: Document,
+                            start_element_idx: int,
+                            end_element_idx: int) -> Document:
+    """在文档中替换 APPENDIX 区域为 {{ appendix }} 占位符。
+
+    Args:
+        doc: Document 对象
+        start_element_idx: APPENDIX 起始元素索引
+        end_element_idx: APPENDIX 结束元素索引（不包含）
+
+    Returns:
+        修改后的 Document 对象
+    """
+    return _replace_elements_region(doc, start_element_idx, end_element_idx,
+                                    common.format_placeholder("appendix"))
+
+
+def _replace_elements_region(doc: Document,
+                             start_element_idx: int,
+                             end_element_idx: int,
+                             placeholder: str) -> Document:
+    """通用的元素区域替换函数。
+
+    删除指定范围的元素，并在原位置插入占位符。
+    保留原始段落的格式（字体、大小等）。
+    保留区域末尾的分页符和分节符。
+
+    Args:
+        doc: Document 对象
+        start_element_idx: 起始元素索引
+        end_element_idx: 结束元素索引（不包含）
+        placeholder: 要插入的占位符文本
+
+    Returns:
+        修改后的 Document 对象
+    """
     from docx.oxml.ns import qn
+    from docx.oxml import OxmlElement
+    from copy import deepcopy
 
     body = doc._body._body
 
@@ -210,34 +324,81 @@ def replace_body_elements_in_doc(doc: Document,
 
     end_idx = min(end_element_idx, len(all_elements))
 
-    # 保存第一个元素的引用，用于插入占位符
-    first_element = all_elements[start_element_idx]
+    # 保存第一个段落的格式属性（在删除之前）
+    first_elem = all_elements[start_element_idx]
+    saved_pPr = None
+    saved_rPr = None
+    if first_elem.tag == qn('w:p'):
+        # 保存段落属性
+        pPr = first_elem.find(qn('w:pPr'))
+        if pPr is not None:
+            saved_pPr = deepcopy(pPr)
+        # 保存第一个 run 的属性
+        first_run = first_elem.find(qn('w:r'))
+        if first_run is not None:
+            rPr = first_run.find(qn('w:rPr'))
+            if rPr is not None:
+                saved_rPr = deepcopy(rPr)
 
-    # 删除正文范围内的所有元素（从后往前删除，避免索引混乱）
+    # 检查并保存区域末尾的分页符/分节符段落
+    trailing_break_elements = []
+    for i in range(end_idx - 1, start_element_idx - 1, -1):
+        elem = all_elements[i]
+        if elem.tag == qn('w:p'):
+            # 检查是否是分节符段落
+            pPr = elem.find(qn('w:pPr'))
+            has_sectPr = pPr is not None and pPr.find(qn('w:sectPr')) is not None
+
+            # 检查是否是分页符段落
+            has_page_break = any(
+                br.get(qn('w:type')) == 'page'
+                for br in elem.iter(qn('w:br'))
+            )
+
+            # 检查是否是空段落（只有分页符或分节符）
+            texts = [t.text for t in elem.iter(qn('w:t')) if t.text]
+            is_empty = not ''.join(texts).strip()
+
+            if is_empty and (has_sectPr or has_page_break):
+                trailing_break_elements.insert(0, deepcopy(elem))
+                end_idx = i  # 不删除这个分页符元素
+            else:
+                break
+        else:
+            break
+
+    # 删除范围内的所有元素（从后往前删除，避免索引混乱）
     for i in range(end_idx - 1, start_element_idx - 1, -1):
         elem = all_elements[i]
         parent = elem.getparent()
         if parent is not None:
             parent.remove(elem)
 
-    # 在第一个元素原来的位置插入占位符段落
-    # 创建新的段落元素
-    from docx.oxml import OxmlElement
-
+    # 创建新的占位符段落（保留原始格式）
     new_para = OxmlElement('w:p')
+    if saved_pPr is not None:
+        # 移除分节符（如果有），只保留格式
+        new_pPr = deepcopy(saved_pPr)
+        sectPr = new_pPr.find(qn('w:sectPr'))
+        if sectPr is not None:
+            new_pPr.remove(sectPr)
+        new_para.append(new_pPr)
+
     new_run = OxmlElement('w:r')
+    if saved_rPr is not None:
+        new_run.append(saved_rPr)
+
     new_text = OxmlElement('w:t')
-    new_text.text = common.format_body_placeholder()
+    new_text.text = placeholder
     new_run.append(new_text)
     new_para.append(new_run)
 
-    # 找到正确的插入位置
-    # 如果有剩余元素，插入到它们之前
+    # 在正确的位置插入占位符
     if end_idx < len(all_elements):
         next_element = all_elements[end_idx]
-        body.insert(list(body).index(next_element), new_para)
+        insert_pos = list(body).index(next_element)
+        body.insert(insert_pos, new_para)
     else:
-        # 附加到末尾
         body.append(new_para)
 
     return doc
@@ -390,3 +551,23 @@ def _replace_text_in_para(paragraph, old_text: str, new_text: str):
         paragraph.runs[0].text = replaced_text
     else:
         paragraph.add_run(replaced_text)
+
+
+def _replace_entire_para(paragraph, new_text: str):
+    """将整个段落替换为新文本。
+
+    用于长文本的前缀匹配替换。
+
+    Args:
+        paragraph: python-docx 段落对象
+        new_text: 新文本（占位符）
+    """
+    # 清除现有 runs
+    for run in paragraph.runs:
+        run.text = ""
+
+    # 设置新文本
+    if paragraph.runs:
+        paragraph.runs[0].text = new_text
+    else:
+        paragraph.add_run(new_text)

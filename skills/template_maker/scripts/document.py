@@ -315,21 +315,15 @@ def find_body_range_by_sections(doc_path: str) -> Dict[str, Any]:
 
 
 def find_body_elements(doc_path: str) -> Dict[str, Any]:
-    """根据分节结构定位正文范围内的所有元素（段落和表格）。
+    """根据分节结构和关键字定位正文范围内的所有元素（段落和表格）。
 
     正文不只是文字，还包括目录、所有的图表和表格。
     附录不属于正文，保留不替换。
 
     策略：
-    - 分节 0: 封面/标题（保留）
-    - 分节 1: 目录 + 首页摘要区域（目录属于正文，摘要单独处理）
-    - 分节 2: 正文内容（包括段落、表格、图表）
-    - 分节 3: 附录（保留）
-
-    正文范围定义：
-    - 起始：跳过首页表格，从目录（SDT）或第一个非首页表格的元素开始
-    - 结束：到分节2的最后一个段落（分节边界）结束
-    - 分节边界之后的所有元素（表格、段落等）属于附录，保留不替换
+    - 正文开始：第一个分节边界之后的第一个元素
+    - 正文结束：遇到 "APPENDIX" 或 "附录" 关键字之前
+    - 如果没有找到附录标记，使用最后一个分节边界作为结束
 
     Args:
         doc_path: Word 文档路径
@@ -354,51 +348,57 @@ def find_body_elements(doc_path: str) -> Dict[str, Any]:
     # 获取分节边界
     section_boundaries = _detect_section_boundaries(doc)
 
-    if len(section_boundaries) < 2:
+    if len(section_boundaries) < 1:
         return {
             "found": False,
-            "reason": f"分节数量不足（{len(section_boundaries)} 个边界），需要至少 2 个分节边界"
+            "reason": "未找到分节边界"
         }
 
-    # 正文起始：跳过首页表格，从目录（SDT）或第一个非表格元素开始
-    # 首页表格通常是元素0，目录通常是元素1或2（可能是SDT）
-    start_element_idx = None
+    # 正文起始：第一个分节边界之后
+    first_boundary_para_idx = section_boundaries[0]
+    start_element_idx = _find_element_index_by_paragraph(doc, all_elements, first_boundary_para_idx)
+    if start_element_idx is not None:
+        start_element_idx += 1  # 分节边界之后的下一个元素
+    else:
+        start_element_idx = 1  # 默认从元素1开始（跳过首页表格）
+
+    # 正文结束：查找 APPENDIX 或 附录 关键字
+    end_element_idx = None
+    appendix_keywords = ["APPENDIX", "附录"]
+
     for i, elem in enumerate(all_elements):
-        # 跳过首页表格（通常是第一个表格）
-        if i == 0 and elem.tag == qn('w:tbl'):
+        if i <= start_element_idx:
             continue
-        # 跳过首页表格后的空段落
+
+        # 只检查段落元素
         if elem.tag == qn('w:p'):
             texts = []
             for t in elem.iter(qn('w:t')):
                 if t.text:
                     texts.append(t.text)
             text = ''.join(texts).strip()
-            if not text:
-                continue
-        # 找到第一个有内容的元素（目录SDT或有内容的段落）
-        start_element_idx = i
-        break
 
-    if start_element_idx is None:
-        # 如果没找到，默认从元素1开始（跳过首页表格）
-        start_element_idx = 1 if len(all_elements) > 1 else 0
+            # 检查是否是附录标题（以 APPENDIX 或 附录 开头）
+            for keyword in appendix_keywords:
+                if text.startswith(keyword):
+                    end_element_idx = i
+                    break
 
-    # 正文结束位置：分节2的最后一个段落（含分节边界标记）
-    # 分节边界列表中第三个边界（索引2）就是正文的结束段落
-    if len(section_boundaries) >= 3:
-        body_end_para_idx = section_boundaries[2]  # 分节边界所在的段落（包含在正文中）
-    else:
-        # 没有分节3（附录），正文到文档结尾
-        body_end_para_idx = len(doc.paragraphs) - 1
+            if end_element_idx is not None:
+                break
 
-    # 将段落索引转换为 body 元素索引
-    end_element_idx = _find_element_index_by_paragraph(doc, all_elements, body_end_para_idx)
-    if end_element_idx is not None:
-        end_element_idx += 1  # 不包含结束索引，所以 +1
+    # 如果没找到附录标记，使用最后一个分节边界
+    if end_element_idx is None:
+        if len(section_boundaries) >= 2:
+            last_boundary_para_idx = section_boundaries[-1]
+            end_element_idx = _find_element_index_by_paragraph(doc, all_elements, last_boundary_para_idx)
+            if end_element_idx is not None:
+                end_element_idx += 1  # 包含分节边界段落
+        else:
+            # 只有一个分节，正文到文档结尾（但保留最后10个元素作为可能的附录）
+            end_element_idx = max(start_element_idx + 1, len(all_elements) - 10)
 
     if end_element_idx is None:
-        # 如果结束索引找不到，使用所有元素的末尾
         end_element_idx = len(all_elements)
 
     return {
@@ -406,7 +406,7 @@ def find_body_elements(doc_path: str) -> Dict[str, Any]:
         "start_element_idx": start_element_idx,
         "end_element_idx": end_element_idx,
         "elements_count": end_element_idx - start_element_idx,
-        "context": f"body 元素 {start_element_idx} 到 {end_element_idx}，共 {end_element_idx - start_element_idx} 个元素（含目录）"
+        "context": f"body 元素 {start_element_idx} 到 {end_element_idx}，共 {end_element_idx - start_element_idx} 个元素"
     }
 
 
@@ -534,3 +534,181 @@ def _get_section_paragraphs(doc: Document) -> Dict[int, List[int]]:
             section_paragraphs[current_section].append(i)
 
     return section_paragraphs
+
+
+def find_appendix_elements(doc_path: str) -> Dict[str, Any]:
+    """定位 APPENDIX 区域（英文摘要）的元素范围。
+
+    策略：
+    - 起始：以 "APPENDIX" 开头的段落
+    - 结束：下一个分节边界，或 "附录" 开头的段落，或文档末尾
+
+    Args:
+        doc_path: Word 文档路径
+
+    Returns:
+        {
+            "found": bool,
+            "start_element_idx": int,
+            "end_element_idx": int,
+            "elements_count": int,
+            "context": str,
+        }
+    """
+    from docx.oxml.ns import qn
+
+    doc = Document(doc_path)
+    body = doc._body._body
+
+    all_elements = _get_body_elements(body)
+
+    # 查找 APPENDIX 开始位置
+    start_element_idx = None
+    for i, elem in enumerate(all_elements):
+        if elem.tag == qn('w:p'):
+            texts = [t.text for t in elem.iter(qn('w:t')) if t.text]
+            text = ''.join(texts).strip()
+            if text.startswith("APPENDIX"):
+                start_element_idx = i
+                break
+
+    if start_element_idx is None:
+        return {"found": False, "reason": "未找到 APPENDIX 区域"}
+
+    # 查找结束位置：下一个分节边界或 "附录" 开头
+    end_element_idx = None
+    section_boundaries = _detect_section_boundaries(doc)
+
+    for i, elem in enumerate(all_elements):
+        if i <= start_element_idx:
+            continue
+
+        if elem.tag == qn('w:p'):
+            texts = [t.text for t in elem.iter(qn('w:t')) if t.text]
+            text = ''.join(texts).strip()
+
+            # 检查是否是附录（中文法律免责声明）
+            if text.startswith("附录"):
+                end_element_idx = i
+                break
+
+            # 检查是否是分节边界
+            sectPr = elem.find('.//{http://schemas.openxmlformats.org/wordprocessingml/2006/main}sectPr')
+            if sectPr is not None:
+                end_element_idx = i + 1  # 包含分节边界
+                break
+
+    if end_element_idx is None:
+        # 没有找到结束标记，使用文档末尾（但保留最后的表格/段落作为可能的免责声明）
+        for i in range(len(all_elements) - 1, start_element_idx, -1):
+            elem = all_elements[i]
+            if elem.tag == qn('w:tbl'):
+                end_element_idx = i
+                break
+        if end_element_idx is None:
+            end_element_idx = len(all_elements)
+
+    return {
+        "found": True,
+        "start_element_idx": start_element_idx,
+        "end_element_idx": end_element_idx,
+        "elements_count": end_element_idx - start_element_idx,
+        "context": f"APPENDIX 元素 {start_element_idx} 到 {end_element_idx}，共 {end_element_idx - start_element_idx} 个元素"
+    }
+
+
+def find_section_by_title(doc_path: str, start_title: str, end_titles: List[str]) -> Dict[str, Any]:
+    """根据标题定位文档中的一个区域（不包含标题本身）。
+
+    策略：
+    - 起始：以 start_title 开头的段落的**下一个元素**（保留标题）
+    - 结束：以 end_titles 中任意一个开头的段落之前
+
+    Args:
+        doc_path: Word 文档路径
+        start_title: 起始标题（如 "核心观点"）
+        end_titles: 结束标题列表（如 ["投资建议", "风险提示"]）
+
+    Returns:
+        {
+            "found": bool,
+            "start_element_idx": int,
+            "end_element_idx": int,
+            "elements_count": int,
+            "context": str,
+        }
+    """
+    from docx.oxml.ns import qn
+
+    doc = Document(doc_path)
+    body = doc._body._body
+
+    all_elements = _get_body_elements(body)
+
+    # 查找起始位置（标题的下一个元素）
+    start_element_idx = None
+    for i, elem in enumerate(all_elements):
+        if elem.tag == qn('w:p'):
+            texts = [t.text for t in elem.iter(qn('w:t')) if t.text]
+            text = ''.join(texts).strip()
+            if text.startswith(start_title):
+                # 找到标题，起始位置是下一个元素
+                start_element_idx = i + 1
+                break
+
+    if start_element_idx is None:
+        return {"found": False, "reason": f"未找到以 '{start_title}' 开头的段落"}
+
+    if start_element_idx >= len(all_elements):
+        return {"found": False, "reason": f"'{start_title}' 标题后没有内容"}
+
+    # 查找结束位置：同时考虑结束标题和分节边界，取更靠前的位置
+    end_by_title = None
+    end_by_section = None
+
+    # 1. 查找结束标题
+    for i, elem in enumerate(all_elements):
+        if i <= start_element_idx:
+            continue
+
+        if elem.tag == qn('w:p'):
+            texts = [t.text for t in elem.iter(qn('w:t')) if t.text]
+            text = ''.join(texts).strip()
+
+            for end_title in end_titles:
+                if text.startswith(end_title):
+                    end_by_title = i
+                    break
+
+            if end_by_title is not None:
+                break
+
+    # 2. 查找分节边界（在起始位置及之后的第一个）
+    section_boundaries = _detect_section_boundaries(doc)
+    for boundary_para_idx in section_boundaries:
+        elem_idx = _find_element_index_by_paragraph(doc, all_elements, boundary_para_idx)
+        if elem_idx is not None and elem_idx >= start_element_idx:
+            # 分节边界段落本身属于当前区域，结束位置是它的下一个元素
+            end_by_section = elem_idx + 1
+            break
+
+    # 3. 取两者中更靠前的位置（优先使用分节边界，因为它定义了页面结构）
+    if end_by_title is not None and end_by_section is not None:
+        end_element_idx = min(end_by_title, end_by_section)
+    elif end_by_section is not None:
+        end_element_idx = end_by_section
+    elif end_by_title is not None:
+        end_element_idx = end_by_title
+    else:
+        end_element_idx = None
+
+    if end_element_idx is None:
+        return {"found": False, "reason": f"未找到结束标题 {end_titles}"}
+
+    return {
+        "found": True,
+        "start_element_idx": start_element_idx,
+        "end_element_idx": end_element_idx,
+        "elements_count": end_element_idx - start_element_idx,
+        "context": f"区域 '{start_title}' 内容：元素 {start_element_idx} 到 {end_element_idx}"
+    }

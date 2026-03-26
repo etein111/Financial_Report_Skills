@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mklink /D skill-creator ....skillsskill-creator)",
+      "Bash(mklink:*)",
+      "Bash(cmd //c \"mklink /D .claude\\\\skills\\\\skill-creator skills\\\\skill-creator\")",
+      "Bash(cmd //c \"mklink /D .claude\\\\skills\\\\template-maker skills\\\\template-maker\")",
+      "Bash(cmd //c \"mklink /D .claude\\\\skills\\\\template_maker skills\\\\template_maker\")",
+      "Bash(python .claude/skills/template_maker/scripts/invoke.py --name company --word \"samples/西锐飞机首次覆盖报告（中文）提交版.docx\" --elements \"samples/西锐飞机首次覆盖报告（中文）提交版 elements.yaml\" --abstract-scope \"首页右侧\" --body-scope \"第三页开始\" --auto-confirm)",
+      "Bash(python .claude/skills/template_maker/scripts/invoke.py --name company --word \"samples/西锐飞机首次覆盖报告（中文）提交版.docx\" --elements \"samples/西锐飞机首次覆盖报告（中文）提交版 elements.yaml\" --abstract-scope \"首页右侧\" --body-scope \"第三页开始（目录在第二页）\" --auto-confirm)",
+      "Bash(uv python list)",
+      "Bash(uv sync --python 3.12)",
+      "Bash(uv run python .claude/skills/template_maker/scripts/invoke.py --name company --word \"samples/西锐飞机首次覆盖报告（中文）提交版.docx\" --elements \"samples/西锐飞机首次覆盖报告（中文）提交版 elements.yaml\" --abstract-scope \"首页右侧\" --body-scope \"第三页开始（目录在第二页）\" --auto-confirm)",
+      "Bash(uv sync)",
+      "Bash(uv run python D:/yechuan/work/Finance_AI/neoskills-yc/.claude/skills/template_maker/scripts/invoke.py --name company --word \"samples/西锐飞机首次覆盖报告.docx\" --elements \"samples/西锐飞机首次覆盖报告（中文）提交版 elements.yaml\" --abstract-scope \"首页右侧\" --body-scope \"第三页开始\" --auto-confirm)",
+      "Bash(python test_template_creation.py:*)",
+      "Bash(python:*)",
+      "Bash(uv run:*)",
+      "Bash(robocopy:*)",
+      "Bash(cmd //c \"robocopy skills\\\\report_maker .claude\\\\skills\\\\report_maker /E\")"
+    ]
+  }
+}
