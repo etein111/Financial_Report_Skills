@@ -35,42 +35,119 @@ def find_content_location(doc_path: str, search_text: str) -> Dict[str, Any]:
     """
     doc = Document(doc_path)
 
-    # 在表格中搜索（包括嵌套表格）
-    for table_idx, table in enumerate(doc.tables):
-        for row_idx, row in enumerate(table.rows):
-            for col_idx, cell in enumerate(row.cells):
-                # 先搜索嵌套表格
-                for nested_idx, nested_table in enumerate(cell.tables):
-                    for n_row_idx, n_row in enumerate(nested_table.rows):
-                        for n_col_idx, n_cell in enumerate(n_row.cells):
-                            if search_text in n_cell.text:
-                                return {
-                                    "found": True,
-                                    "type": "nested_table",
-                                    "table": table_idx,
-                                    "row": row_idx,
-                                    "col": col_idx,
-                                    "nested": True,
-                                    "nested_table": nested_idx,
-                                    "nested_row": n_row_idx,
-                                    "nested_col": n_col_idx,
-                                    "context": f"在表格 {table_idx} 第 {row_idx} 行第 {col_idx} 列的嵌套表格中"
-                                }
+    # 在表格中搜索
+    table_result = _search_in_tables(doc.tables, search_text)
+    if table_result:
+        return table_result
 
-                # 再搜索单元格本身
-                if search_text in cell.text:
+    # 在段落中搜索
+    paragraph_result = _search_in_paragraphs(doc.paragraphs, search_text)
+    if paragraph_result:
+        return paragraph_result
+
+    return {"found": False, "context": "未找到"}
+
+
+def _search_in_tables(tables, search_text: str) -> Optional[Dict[str, Any]]:
+    """在表格中搜索文本（包括嵌套表格）。
+
+    Args:
+        tables: python-docx 表格列表
+        search_text: 要搜索的文本
+
+    Returns:
+        找到时返回位置字典，未找到返回 None
+    """
+    for table_idx, table in enumerate(tables):
+        result = _search_in_single_table(table, table_idx, search_text)
+        if result:
+            return result
+    return None
+
+
+def _search_in_single_table(table, table_idx: int, search_text: str) -> Optional[Dict[str, Any]]:
+    """在单个表格中搜索文本。
+
+    Args:
+        table: python-docx Table 对象
+        table_idx: 表格索引
+        search_text: 要搜索的文本
+
+    Returns:
+        找到时返回位置字典，未找到返回 None
+    """
+    for row_idx, row in enumerate(table.rows):
+        for col_idx, cell in enumerate(row.cells):
+            # 先搜索嵌套表格
+            nested_result = _search_nested_tables(
+                cell.tables, table_idx, row_idx, col_idx, search_text
+            )
+            if nested_result:
+                return nested_result
+
+            # 再搜索单元格本身
+            if search_text in cell.text:
+                return {
+                    "found": True,
+                    "type": "table",
+                    "table": table_idx,
+                    "row": row_idx,
+                    "col": col_idx,
+                    "nested": False,
+                    "context": f"在表格 {table_idx} 的第 {row_idx} 行第 {col_idx} 列"
+                }
+    return None
+
+
+def _search_nested_tables(
+    nested_tables,
+    table_idx: int,
+    row_idx: int,
+    col_idx: int,
+    search_text: str
+) -> Optional[Dict[str, Any]]:
+    """在嵌套表格中搜索文本。
+
+    Args:
+        nested_tables: 嵌套表格列表
+        table_idx: 主表格索引
+        row_idx: 主表格行索引
+        col_idx: 主表格列索引
+        search_text: 要搜索的文本
+
+    Returns:
+        找到时返回位置字典，未找到返回 None
+    """
+    for nested_idx, nested_table in enumerate(nested_tables):
+        for n_row_idx, n_row in enumerate(nested_table.rows):
+            for n_col_idx, n_cell in enumerate(n_row.cells):
+                if search_text in n_cell.text:
                     return {
                         "found": True,
-                        "type": "table",
+                        "type": "nested_table",
                         "table": table_idx,
                         "row": row_idx,
                         "col": col_idx,
-                        "nested": False,
-                        "context": f"在表格 {table_idx} 的第 {row_idx} 行第 {col_idx} 列"
+                        "nested": True,
+                        "nested_table": nested_idx,
+                        "nested_row": n_row_idx,
+                        "nested_col": n_col_idx,
+                        "context": f"在表格 {table_idx} 第 {row_idx} 行第 {col_idx} 列的嵌套表格中"
                     }
+    return None
 
-    # 在段落中搜索
-    for para_idx, para in enumerate(doc.paragraphs):
+
+def _search_in_paragraphs(paragraphs, search_text: str) -> Optional[Dict[str, Any]]:
+    """在段落中搜索文本。
+
+    Args:
+        paragraphs: python-docx 段落列表
+        search_text: 要搜索的文本
+
+    Returns:
+        找到时返回位置字典，未找到返回 None
+    """
+    for para_idx, para in enumerate(paragraphs):
         if search_text in para.text:
             return {
                 "found": True,
@@ -79,8 +156,7 @@ def find_content_location(doc_path: str, search_text: str) -> Dict[str, Any]:
                 "nested": False,
                 "context": f"在段落 {para_idx}"
             }
-
-    return {"found": False, "context": "未找到"}
+    return None
 
 
 def get_document_structure(doc_path: str) -> Dict[str, Any]:
