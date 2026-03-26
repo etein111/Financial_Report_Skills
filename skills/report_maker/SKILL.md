@@ -3,74 +3,32 @@ name: report_maker
 description: 当用户上传报告草稿或要求生成/解析研究报告时使用此技能。负责草稿解析、使用 LLM 提取要素、交互式确认以及使用两阶段工作流生成标准报告。此技能处理分析师研究报告（公司、行业、宏观、策略、量化、债券报告），从 Word 草稿文档转换为基于模板的格式化输出。**必须使用中文与用户沟通**。
 ---
 
-# Report Maker - 研究报告生成与验证
+# Report Maker - 研究报告生成
 
-负责 `reports/` 目录的所有写操作。采用两阶段流程：**抽取确认 → 渲染输出**。
+**核心原则**：只写 `reports/`，不写 `templates/`
 
-**核心原则**：只写 reports/，不写 templates/
-
----
-
-## 📋 目录
-
-- [使用时机](#使用时机)
-- [工作流程](#工作流程)
-  - [第一阶段：抽取与确认](#第一阶段抽取与确认交互式)
-  - [第二阶段：渲染与输出](#第二阶段渲染与输出)
-- [报告目录结构](#报告目录结构)
-- [数据格式规范](#数据格式规范)
-- [权限边界](#权限边界)
-- [常见操作](#常见操作)
-- [注意事项](#注意事项)
-- [技术细节](#技术细节)
+**工作流程**：抽取确认 → 渲染输出
 
 ---
 
-## 使用时机
+## 使用条件
 
-### ✅ 适用场景
-
-- 用户上传报告草稿（.docx），要求"生成标准排版报告"
+**触发场景**：
+- 用户上传报告草稿（.docx），说"生成标准排版报告"
 - 用户说"处理这篇草稿"、"解析报告"、"提取报告要素"
-- Editor 需要修正已提取的要素
-- Editor 确认后继续生成标准报告
+- Editor 需要修正已提取的要素或继续生成报告
 
-### 📊 支持的报告类型
+**不适用**：创建/修改模板 → 使用 `template_maker`
 
-| 类型 | 说明 |
-|------|------|
-| `company` | 公司覆盖报告 |
-| `sector` | 行业研究报告 |
-| `macro` | 宏观研究报告 |
-| `strategy` | 策略报告 |
-| `quantitative` | 量化报告 |
-| `bond` | 债券报告 |
+**语言要求**：必须使用中文与用户沟通
 
-### ❌ 不适用场景
-
-- 创建/修改模板 → 使用 **template_maker**
-- 修改 schema.yaml → 使用 **template_maker**
-- 修改 router.yaml → 使用 **template_maker**
-
-### 🌐 语言要求
-
-**必须使用中文与用户沟通** - 所有对话、提示、确认和说明都必须使用中文。
+**报告类型**：company, sector, macro, strategy, quantitative, bond
 
 ---
 
-## 工作流程
+## 第一阶段：抽取与确认
 
-### 第一阶段：抽取与确认（交互式）
-
-**目标**：从草稿中提取要素，与用户确认后保存
-
-#### ⚠️ 交互原则
-
-**一个问题一个问题地问，不要一次性列出多个问题**
-
-#### 步骤 1：接收输入
-
-逐个询问以下问题：
+### 1. 询问基本信息（逐个询问）
 
 ```
 问题 1/3：这是什么类型的报告？
@@ -94,62 +52,59 @@ description: 当用户上传报告草稿或要求生成/解析研究报告时使
 - 提取"讲了什么"（主题），跳过"怎么讲的"（描述）
 - ✅ 主题词：新能源汽车、AI芯片、美联储、利率政策
 - ❌ 描述性词汇：深度分析、研究、报告、解读、提交版
-- 示例："新能源汽车行业研究.docx" → `new_energy_20251021`
 
-> **注意**：优先使用英文或拼音，避免中文特殊字符
+### 2. 路由到模板
 
-#### 步骤 2：路由到模板
+从 `templates/router.yaml` 获取模板名，加载 `templates/{template_name}/schema.yaml`
 
-- 从 `templates/router.yaml` 获取模板名
-- 加载 `templates/{template_name}/schema.yaml`
+### 3. 提取字段
 
-#### 步骤 3：LLM 提取要素 ⚠️
+**使用自动化提取**（优先）：
 
-> **关键技术提示：嵌套表格处理**
->
-> **问题**：python-docx 的 `cell.text` 只返回直接段落文本，**不包括嵌套表格**。
->
-> **影响**：许多关键字段（如 current_price, market_cap, shares_in_issue 等）通常在首页表格的**嵌套表格**中。
->
-> **解决方案**：本 skill 已在 `docx_reader.py` 和 `field_extractor.py` 中实现自动化的递归读取，无需手动处理。使用 `extractor.extract_elements()` 即可自动提取所有字段。
-
-- 将草稿内容和 schema.yaml 发送给 LLM（或使用自动化提取）
-- LLM 根据 schema 中的字段定义提取数据
-- **使用自动化 scripts** 递归检查所有嵌套表格，确保提取完整
-
-#### 步骤 4：交互式确认 ⚠️
-
-**一次性确认所有字段（表格形式）**：
-
-```
-展示所有提取的字段（Markdown 表格）
-- 字段名称 | 提取值 | 状态
-- 用户可以一次性确认或修正多个字段
-- 不需要一个一个字段地确认
+```bash
+python3 -c "
+from skills.report_maker.scripts import extractor, common
+schema = common.load_yaml('templates/company/schema.yaml')
+elements = extractor.extract_elements(draft_path, schema)
+"
 ```
 
-**示例**：
+**或使用 LLM 辅助提取**（自动化失败时）：
+
+将草稿内容和 schema.yaml 发送给 LLM，LLM 根据 schema 中的字段定义提取数据。
+
+**⚠️ 关键技术提示：嵌套表格处理**
+
+- python-docx 的 `cell.text` 只返回直接段落文本，**不包括嵌套表格**
+- 许多关键字段（如 current_price, market_cap 等）在首页表格的**嵌套表格**中
+- 本 skill 已在 `docx_reader.py` 和 `field_extractor.py` 中实现自动化递归读取
+
+### 4. 一次性确认所有字段
+
+**展示所有提取的字段（表格形式）**：
+
+```
 | 字段 | 提取值 | 状态 |
 |------|--------|------|
 | report_date | `21 Oct 2025` | ✅ |
 | company | `西锐飞机` | ✅ |
 | ticker | `2507.HK` | ✅ |
 | current_price | `60.40` | ✅ |
+| ... | ... | ... |
+```
 
-⚠️ **重要**：使用表格形式一次性展示，让用户可以快速浏览和修正
+用户可以一次性确认或修正多个字段。
 
-#### 步骤 5：确保所有字段存在
+### 5. 确保所有字段存在
 
 - elements.yaml 必须与 schema.yaml 严格对应
 - 空字段使用空字符串 `""`，不要省略
 
-#### 步骤 6：拆分摘要和正文
+### 6. 拆分摘要和正文
 
-- 根据 schema 中 `abstract.scope` 提取摘要
-- 根据 schema 中 `body.scope` 提取正文
-- 保存为 `abstract.docx` 和 `body.docx`
+根据 schema 中 `abstract.scope` 和 `body.scope` 提取内容，保存为 `abstract.docx` 和 `body.docx`
 
-#### 步骤 7：保存结果
+### 7. 保存结果
 
 ```
 reports/<report_name>/
@@ -159,54 +114,32 @@ reports/<report_name>/
 └── body.docx            # 正文片段
 ```
 
-#### 步骤 8：展示摘要并暂停
+### 8. 展示摘要并暂停
 
-- 展示提取结果摘要
-- 等待用户确认或修正
+展示提取结果摘要，等待用户确认或修正
 
 ---
 
-### 第二阶段：渲染与输出
+## 第二阶段：渲染与输出
 
-**目标**：基于确认后的要素生成标准报告
+### 1. 更新修正数据
 
-#### 步骤 1：更新修正数据
+加载 `elements.yaml`，应用用户修正，保存更新后的 `elements.yaml`
 
-- 加载 `elements.yaml`
-- 应用用户修正
-- 保存更新后的 `elements.yaml`
+### 2. 渲染短字段
 
-#### 步骤 2：渲染短字段
+使用 python-docx-template（Jinja2）加载 `templates/{template_name}/template.docx`，用 elements.yaml 中的值替换占位符
 
-- 使用 python-docx-template（Jinja2）
-- 加载 `templates/{template_name}/template.docx`
-- 用 elements.yaml 中的值替换占位符
+### 3. 插入长文本片段
 
-#### 步骤 3：插入长文本片段
+用 python-docx 插入 `abstract.docx` 和 `body.docx` 内容
 
-- 用 python-docx 插入 `abstract.docx` 内容
-- 用 python-docx 插入 `body.docx` 内容
-
-#### 步骤 4：保存并转换
+### 4. 保存并转换
 
 ```
 reports/<report_name>/
 ├── output.docx          # 最终 Word
 └── output.pdf           # 最终 PDF（通过 LibreOffice 转换）
-```
-
----
-
-## 报告目录结构
-
-```
-reports/<report_name>/
-├── draft.docx           # 原始草稿
-├── elements.yaml        # 提取的要素（与 schema 一致）
-├── abstract.docx        # 摘要片段
-├── body.docx            # 正文片段
-├── output.docx          # 最终 Word
-└── output.pdf           # 最终 PDF
 ```
 
 ---
@@ -219,24 +152,22 @@ reports/<report_name>/
 
 ```yaml
 # 所有字段都存在，空字段用空字符串
-a1_cn: "杨斌"
-a1_email: "harryyang@hfisec.com.hk"
-a1_en: "Bin Yang"
-a1_sfc: "BSQ313"
-abstract: "abstract.docx"      # 文件路径引用
-body: "body.docx"              # 文件路径引用
-company: "西锐飞机"
-current_price: ""              # 空字段
-current_price_date: ""
-market_cap: ""
-one_year_high: ""
-one_year_low: ""
-rating: "OUTPERFORM"
 report_date: "21 Oct 2025"
-shares_in_issue: ""
-target_price: "86.72"
+company: "西锐飞机"
 ticker: "2507.HK"
 title: "首次覆盖：..."
+rating: "OUTPERFORM"
+current_price: "60.40"
+target_price: "86.72"
+market_cap: "22.11bn"
+shares_in_issue: "365.99mn"
+one_year_high: "73.40"
+one_year_low: "20.50"
+current_price_date: "2026 年 01 月 15 日"
+analysts: "[{'chinese_name': '杨斌', 'english_name': 'Bin Yang', 'sfc_code': 'BSQ313', 'email': 'harryyang@hfisec.com.hk'}]"
+source: "xxx"
+abstract: "abstract.docx"
+body: "body.docx"
 ```
 
 ---
@@ -244,31 +175,12 @@ title: "首次覆盖：..."
 ## 权限边界
 
 ### ✅ 可写
-
-- `reports/{report_name}/*`
-  - draft.docx
-  - elements.yaml
-  - abstract.docx
-  - body.docx
-  - output.docx
-  - output.pdf
+- `reports/{report_name}/*`（所有文件）
 
 ### ❌ 不可写
-
 - `templates/*`（任何模板文件）
 - schema.yaml
 - router.yaml
-
----
-
-## 常见操作
-
-| 用户指令 | 阶段 | 触发动作 |
-|---------|------|----------|
-| "生成标准排版报告" | 第一阶段 | extract_and_confirm |
-| "ticker 应该是 700.HK" | 第一阶段 | update_elements |
-| "确认，继续生成" | 第二阶段 | render_output |
-| "重新提取摘要" | 第一阶段 | re_extract |
 
 ---
 
@@ -282,9 +194,9 @@ title: "首次覆盖：..."
 
 ---
 
-## 技术细节
+## 技术参考（仅供开发参考）
 
-> 本部分供开发参考，详细说明了渲染实现的技术细节。
+> 本部分详细说明了渲染实现的技术细节，用于问题排查和功能扩展。
 
 ### 文档合并流程
 
@@ -309,11 +221,6 @@ Output Section 结构：
 - Section 0: 封面（保持 template 原样，left=1.00cm）
 - Section 1: 正文（使用 body.docx 的页边距 left=6.35cm）
 - Section 2: 附录（保持 template 原样，left=1.00cm）
-
-隔离方式：
-1. 在附录前创建 sectPr（nextPage 类型），隔离正文和附录
-2. 清理时排除附录前的 sectPr（appendix_idx - 1）
-3. 页边距复制只影响 Section 1，不影响 Section 2
 ```
 
 **分节符 sectPr 必须包含完整属性**：
@@ -327,29 +234,14 @@ Output Section 结构：
 
 ⚠️ 缺少这些属性会导致页面尺寸为 0，页眉页脚显示不全。
 
-### 页眉页脚复制
-
-```
-Body.docx Section 结构：
-- Section 0: header=红色(A7242B), first_page_header=蓝色(23558C), left_margin=6.35cm
-- Section 1: header=蓝色(23558C), left_margin=6.35cm
-
-复制策略：
-- 页眉：使用 Section 1 的 header（蓝色 23558C）
-- 页边距：使用 Section 0 的 margins（6.35cm）
-- 页脚：使用 Section 0 的 footer
-```
-
 ### 空白页问题处理
 
-**body.docx 可能带来空白页的原因**：
+**原因**：
+1. sectPr 分节符：每个 sectPr type=nextPage 会强制换页
+2. 连续空段落：大量空段落会占用页面空间
+3. 文档开头空段落：body.docx 开头可能有多个空段落
 
-1. **sectPr 分节符**：每个 sectPr type=nextPage 会强制换页
-2. **连续空段落**：大量空段落会占用页面空间
-3. **文档开头空段落**：body.docx 开头可能有多个空段落
-
-**解决方案**（在 renderer.py 中实现）：
-
+**解决方案**：
 1. 追加前删除 body.docx 所有 sectPr
 2. 追加后清理连续空段落（保留最多 1 个）
 3. 删除 body.docx 开头的空段落
@@ -357,6 +249,5 @@ Body.docx Section 结构：
 ### Abstract 插入
 
 abstract 插入到表格单元格，使用 deepcopy 保留完整格式：
-
 - 删除单元格内所有段落
 - 逐段复制 abstract.docx 内容（保留字体、颜色等格式）
