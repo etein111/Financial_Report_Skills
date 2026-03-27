@@ -22,7 +22,6 @@ from template import (
     replace_section_by_text,
     replace_body_in_doc,
     replace_appendix_in_doc,
-    replace_analyst_fields_in_doc,
     replace_analyst_fields_auto
 )
 from document import find_abstract_by_elements, find_body_range_by_sections, find_abstract_on_first_page, find_abstract_by_text, find_appendix_auto
