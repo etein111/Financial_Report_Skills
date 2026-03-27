@@ -10,6 +10,27 @@ from typing import Dict, Any, List, Optional, Tuple
 from . import docx_reader
 
 
+# ==================== 常量定义 ====================
+
+# 字段分组常量
+BASIC_FIELDS = frozenset(['abstract', 'body', 'report_date', 'company', 'ticker', 'title'])
+SPECIAL_FIELDS = frozenset(['current_price_date', 'analysts'])
+SKIP_FIELDS = BASIC_FIELDS | SPECIAL_FIELDS
+
+# 正则表达式模式
+PATTERN_ENGLISH_DATE = re.compile(r'\b\d{1,2}\s+[A-Za-z]{3}\s+\d{4}\b')
+PATTERN_CHINESE_DATE = re.compile(r'(\d{4}\s*年\s*\d{1,2}\s*月\s*\d{1,2}\s*日)')
+PATTERN_TITLE = re.compile(r'首次覆盖[：:]\s*(.{10,100})')
+PATTERN_EMAIL = re.compile(r'[\w.-]+@[\w.-]+\.\w+')
+PATTERN_CHINESE_NAME = re.compile(r'([\u4e00-\u9fa5]{2,})')
+PATTERN_ENGLISH_NAME = re.compile(r'([A-Z][a-z]+\s+[A-Z][a-z]+)')
+PATTERN_SFC_CODE = re.compile(r'[SFC:]*([A-Z]{4}\d{3})', re.IGNORECASE)
+
+# 关键词常量
+KEYWORDS_PRICE_NOTE = ('注', '现价', '收盘价')
+KEYWORDS_ANALYST = ('yang', '杨斌', 'analyst')
+
+
 # ==================== 字段提取规则 ====================
 
 # 常见字段的中英文别名
@@ -149,17 +170,17 @@ def _extract_basic_fields_from_main_tables(
 
     main_table = tables[0]
     all_lines = docx_reader.flatten_table_text([main_table])
+    # 计算 full_text 一次，避免重复操作
+    full_text = ' '.join(all_lines)
 
     # 提取 report_date（格式如 "21 Oct 2025"）
     if 'report_date' in schema:
-        full_text = ' '.join(all_lines)
         date_match = _find_date_in_text(full_text)
         if date_match:
             extracted['report_date'] = date_match
 
     # 提取 company 和 ticker（格式如 "西锐飞机 (2507.HK)"）
     if 'company' in schema or 'ticker' in schema:
-        full_text = ' '.join(all_lines)
         company_ticker = _find_company_ticker_in_text(full_text)
         if company_ticker:
             if 'company' in schema and company_ticker.get('company'):
@@ -191,7 +212,6 @@ def _extract_financial_fields_from_nested_tables(
     Returns:
         提取的字段字典
     """
-    import re
     extracted = {}
     nested_tables = docx_reader.extract_nested_tables_only(tables)
 
@@ -209,8 +229,7 @@ def _extract_financial_fields_from_nested_tables(
     # 处理常规字段
     for field_name, field_def in schema.items():
         # 跳过已处理的特殊字段和 fragment 字段
-        if field_name in ['abstract', 'body', 'report_date', 'company', 'ticker', 'title',
-                          'current_price_date', 'analysts']:
+        if field_name in SKIP_FIELDS:
             continue
 
         value = _extract_field_from_nested_tables(
@@ -235,26 +254,22 @@ def _handle_split_fields(elements: Dict[str, Any]) -> None:
     Args:
         elements: 元素字典（会直接修改）
     """
-    import re
-
     # 处理 one_year_high 和 one_year_low 组合字段
-    # 如果 one_year_high 包含 "-"，说明是组合值，需要拆分
-    if 'one_year_high' in elements and 'one_year_low' in elements:
-        high_value = elements.get('one_year_high', '')
-        low_value = elements.get('one_year_low', '')
+    high_value = elements.get('one_year_high', '')
+    low_value = elements.get('one_year_low', '')
 
-        # 检查是否是组合值（如 "73.40-20.50"）
-        if '-' in high_value and not low_value:
-            parts = high_value.split('-')
-            if len(parts) == 2:
-                elements['one_year_high'] = parts[0].strip()
-                elements['one_year_low'] = parts[1].strip()
-        # 检查是否 low 也包含相同的组合值
-        elif '-' in low_value and high_value == low_value:
-            parts = low_value.split('-')
-            if len(parts) == 2:
-                elements['one_year_high'] = parts[0].strip()
-                elements['one_year_low'] = parts[1].strip()
+    # 统一处理逻辑：找到包含 "-" 的值并拆分
+    source_value = None
+    if '-' in high_value and not low_value:
+        source_value = high_value
+    elif '-' in low_value and high_value == low_value:
+        source_value = low_value
+
+    if source_value:
+        parts = source_value.split('-')
+        if len(parts) == 2:
+            elements['one_year_high'] = parts[0].strip()
+            elements['one_year_low'] = parts[1].strip()
 
 
 def _find_date_in_text(text: str) -> Optional[str]:
@@ -268,10 +283,7 @@ def _find_date_in_text(text: str) -> Optional[str]:
     Returns:
         找到的日期，未找到返回 None
     """
-    import re
-    # 匹配 "21 Oct 2025" 格式
-    pattern = r'\b\d{1,2}\s+[A-Za-z]{3}\s+\d{4}\b'
-    match = re.search(pattern, text)
+    match = PATTERN_ENGLISH_DATE.search(text)
     if match:
         return match.group(0)
     return None
@@ -288,7 +300,6 @@ def _find_company_ticker_in_text(text: str) -> Optional[Dict[str, str]]:
     Returns:
         {'company': '西锐飞机', 'ticker': '2507.HK'}，未找到返回 None
     """
-    import re
     # 匹配 "公司名 (TICKER)" 格式
     pattern = r'([\u4e00-\u9fa5a-zA-Z\s]+)\s*\(([A-Z0-9\.HK]+)\)'
     match = re.search(pattern, text)
@@ -296,26 +307,6 @@ def _find_company_ticker_in_text(text: str) -> Optional[Dict[str, str]]:
         company = match.group(1).strip()
         ticker = match.group(2).strip()
         return {'company': company, 'ticker': ticker}
-    return None
-
-
-def _find_title_in_text(text: str) -> Optional[str]:
-    """从文本中查找标题（已弃用，使用 _find_title_in_lines）。
-
-    通常是"首次覆盖：..."或"首次覆盖：..."
-
-    Args:
-        text: 文本
-
-    Returns:
-        找到的标题，未找到返回 None
-    """
-    import re
-    # 匹配 "首次覆盖：..." 或 "首次覆盖:..."
-    pattern = r'首次覆盖[：:]\s*([^\n]{10,100})'
-    match = re.search(pattern, text)
-    if match:
-        return '首次覆盖：' + match.group(1).strip()
     return None
 
 
@@ -330,12 +321,10 @@ def _find_title_in_lines(lines: List[str]) -> Optional[str]:
     Returns:
         找到的标题，未找到返回 None
     """
-    import re
     for line in lines:
         if '首次覆盖' in line:
             # 匹配完整的标题
-            pattern = r'首次覆盖[：:]\s*(.{10,100})'
-            match = re.search(pattern, line)
+            match = PATTERN_TITLE.search(line)
             if match:
                 return '首次覆盖：' + match.group(1).strip()
     return None
@@ -588,15 +577,13 @@ def _extract_current_price_date_from_notes(
     Returns:
         提取的日期字符串，未找到返回 None
     """
-    import re
-
     for table in nested_tables:
         lines = docx_reader.flatten_table_text([table])
         for line in lines:
             # 查找包含"注"、"现价"、"收盘价"的行
-            if '注' in line and '现价' in line and '收盘价' in line:
+            if all(keyword in line for keyword in KEYWORDS_PRICE_NOTE):
                 # 提取日期（格式：2026 年 01 月 15 日）
-                date_match = re.search(r'(\d{4}\s*年\s*\d{1,2}\s*月\s*\d{1,2}\s*日)', line)
+                date_match = PATTERN_CHINESE_DATE.search(line)
                 if date_match:
                     return date_match.group(1)
 
@@ -617,14 +604,12 @@ def _extract_analysts_from_tables(
     Returns:
         格式化后的分析师信息字符串，未找到返回 None
     """
-    import re
-
     for table in nested_tables:
         lines = docx_reader.flatten_table_text([table])
         text = ' '.join(lines)
 
         # 查找包含分析师信息的表格
-        if 'yang' in text.lower() or '杨斌' in text or 'analyst' in text.lower():
+        if any(keyword in text.lower() for keyword in KEYWORDS_ANALYST):
             # 解析分析师信息
             chinese_name = None
             english_name = None
@@ -633,23 +618,23 @@ def _extract_analysts_from_tables(
 
             for line in lines:
                 # 提取中文姓名
-                if re.search(r'[\u4e00-\u9fa5]{2,}', line):
-                    chinese_match = re.search(r'([\u4e00-\u9fa5]{2,})', line)
+                if PATTERN_CHINESE_NAME.search(line):
+                    chinese_match = PATTERN_CHINESE_NAME.search(line)
                     if chinese_match:
                         chinese_name = chinese_match.group(1)
 
                 # 提取英文姓名
-                english_match = re.search(r'([A-Z][a-z]+\s+[A-Z][a-z]+)', line)
+                english_match = PATTERN_ENGLISH_NAME.search(line)
                 if english_match:
                     english_name = english_match.group(1)
 
                 # 提取 SFC 代码
-                sfc_match = re.search(r'[SFC:]*([A-Z]{4}\d{3})', line, re.IGNORECASE)
+                sfc_match = PATTERN_SFC_CODE.search(line)
                 if sfc_match:
                     sfc_code = sfc_match.group(1)
 
                 # 提取邮箱
-                email_match = re.search(r'[\w.-]+@[\w.-]+\.\w+', line)
+                email_match = PATTERN_EMAIL.search(line)
                 if email_match:
                     email = email_match.group(0)
 
