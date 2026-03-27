@@ -66,7 +66,7 @@ description: 当用户上传报告草稿或要求生成/解析研究报告时使
 - **template.docx** 明确字段在文档中的位置（占位符位置）
 - **elements.yaml** 必须严格按照 schema.yaml 的字段（顺序、名称、类型）
 
-**使用自动化提取**（优先）：
+**使用自动化提取**（默认，推荐）：
 
 ```bash
 python3 -c "
@@ -86,7 +86,14 @@ elements = common.ensure_all_fields(elements, schema)
 "
 ```
 
-**或使用 LLM 辅助提取**（自动化失败时）：
+自动化提取功能现已完善，可以正确处理：
+- ✅ 嵌套表格中的财务数据（current_price, target_price, market_cap 等）
+- ✅ 组合字段的拆分（one_year_high/low 从 "73.40-20.50" 拆分）
+- ✅ 从注释中提取的数据（current_price_date）
+- ✅ 特殊格式化字段（analysts）
+- ✅ 保留单位（22.11bn, 365.99mn）
+
+**或使用 LLM 辅助提取**（仅在自动化提取完全失败时）：
 
 将草稿内容和 schema.yaml 发送给 LLM，LLM 根据 schema 中的字段定义提取数据。
 
@@ -216,6 +223,7 @@ body: "body.docx"
    - **elements.yaml** 是"提取结果"（必须严格按照 schema）
 5. **模板切换限制** - 只能在第一阶段切换模板，第二阶段不支持切换
 6. **只读 templates/** - report_maker 永远不修改模板资产
+7. **自动化提取能力** - 现已支持一次性正确提取所有字段，包括嵌套表格、组合字段拆分、注释提取、特殊格式化等
 
 ---
 

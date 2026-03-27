@@ -148,17 +148,18 @@ def _extract_basic_fields_from_main_tables(
         return extracted
 
     main_table = tables[0]
-    all_text = docx_reader.flatten_table_text([main_table])
-    full_text = ' '.join(all_text)
+    all_lines = docx_reader.flatten_table_text([main_table])
 
     # 提取 report_date（格式如 "21 Oct 2025"）
     if 'report_date' in schema:
+        full_text = ' '.join(all_lines)
         date_match = _find_date_in_text(full_text)
         if date_match:
             extracted['report_date'] = date_match
 
     # 提取 company 和 ticker（格式如 "西锐飞机 (2507.HK)"）
     if 'company' in schema or 'ticker' in schema:
+        full_text = ' '.join(all_lines)
         company_ticker = _find_company_ticker_in_text(full_text)
         if company_ticker:
             if 'company' in schema and company_ticker.get('company'):
@@ -166,9 +167,9 @@ def _extract_basic_fields_from_main_tables(
             if 'ticker' in schema and company_ticker.get('ticker'):
                 extracted['ticker'] = company_ticker['ticker']
 
-    # 提取 title（通常是"首次覆盖：..."）
+    # 提取 title（只取第一个匹配，避免重复）
     if 'title' in schema:
-        title = _find_title_in_text(full_text)
+        title = _find_title_in_lines(all_lines)
         if title:
             extracted['title'] = title
 
@@ -190,11 +191,26 @@ def _extract_financial_fields_from_nested_tables(
     Returns:
         提取的字段字典
     """
+    import re
     extracted = {}
     nested_tables = docx_reader.extract_nested_tables_only(tables)
 
+    # 先处理特殊字段（需要从注释中提取或特殊格式化）
+    if 'current_price_date' in schema:
+        date_value = _extract_current_price_date_from_notes(nested_tables)
+        if date_value:
+            extracted['current_price_date'] = date_value
+
+    if 'analysts' in schema:
+        analysts_value = _extract_analysts_from_tables(nested_tables)
+        if analysts_value:
+            extracted['analysts'] = analysts_value
+
+    # 处理常规字段
     for field_name, field_def in schema.items():
-        if field_name in ['abstract', 'body', 'report_date', 'company', 'ticker', 'title']:
+        # 跳过已处理的特殊字段和 fragment 字段
+        if field_name in ['abstract', 'body', 'report_date', 'company', 'ticker', 'title',
+                          'current_price_date', 'analysts']:
             continue
 
         value = _extract_field_from_nested_tables(
@@ -219,9 +235,26 @@ def _handle_split_fields(elements: Dict[str, Any]) -> None:
     Args:
         elements: 元素字典（会直接修改）
     """
-    # 检查是否有未拆分的高低值字段
-    # 这个逻辑需要在提取阶段处理，这里暂时留空
-    pass
+    import re
+
+    # 处理 one_year_high 和 one_year_low 组合字段
+    # 如果 one_year_high 包含 "-"，说明是组合值，需要拆分
+    if 'one_year_high' in elements and 'one_year_low' in elements:
+        high_value = elements.get('one_year_high', '')
+        low_value = elements.get('one_year_low', '')
+
+        # 检查是否是组合值（如 "73.40-20.50"）
+        if '-' in high_value and not low_value:
+            parts = high_value.split('-')
+            if len(parts) == 2:
+                elements['one_year_high'] = parts[0].strip()
+                elements['one_year_low'] = parts[1].strip()
+        # 检查是否 low 也包含相同的组合值
+        elif '-' in low_value and high_value == low_value:
+            parts = low_value.split('-')
+            if len(parts) == 2:
+                elements['one_year_high'] = parts[0].strip()
+                elements['one_year_low'] = parts[1].strip()
 
 
 def _find_date_in_text(text: str) -> Optional[str]:
@@ -267,7 +300,7 @@ def _find_company_ticker_in_text(text: str) -> Optional[Dict[str, str]]:
 
 
 def _find_title_in_text(text: str) -> Optional[str]:
-    """从文本中查找标题。
+    """从文本中查找标题（已弃用，使用 _find_title_in_lines）。
 
     通常是"首次覆盖：..."或"首次覆盖：..."
 
@@ -283,6 +316,28 @@ def _find_title_in_text(text: str) -> Optional[str]:
     match = re.search(pattern, text)
     if match:
         return '首次覆盖：' + match.group(1).strip()
+    return None
+
+
+def _find_title_in_lines(lines: List[str]) -> Optional[str]:
+    """从行列表中查找标题（只取第一个匹配，避免重复）。
+
+    通常是"首次覆盖：..."或"首次覆盖：..."
+
+    Args:
+        lines: 文本行列表
+
+    Returns:
+        找到的标题，未找到返回 None
+    """
+    import re
+    for line in lines:
+        if '首次覆盖' in line:
+            # 匹配完整的标题
+            pattern = r'首次覆盖[：:]\s*(.{10,100})'
+            match = re.search(pattern, line)
+            if match:
+                return '首次覆盖：' + match.group(1).strip()
     return None
 
 
@@ -419,24 +474,14 @@ def _clean_field_value(value: str, field_def: Dict[str, Any]) -> str:
     prefixes_to_remove = [
         '资料来源：', '来源：', 'Source:',
         '注：', 'Note:', '说明：',
-        'HK', 'hk', '港元', '港币',
-        '美元', '$',
     ]
 
     for prefix in prefixes_to_remove:
         if value.startswith(prefix):
             value = value[len(prefix):].strip()
 
-    # 移除常见的无用后缀
-    suffixes_to_remove = [
-        '港元', '港币', 'HKD', 'HK',
-        '亿元', '亿', 'bn', 'B',
-        '百万', 'mn', 'M',
-    ]
-
-    for suffix in suffixes_to_remove:
-        if value.endswith(suffix):
-            value = value[:-len(suffix)].strip()
+    # 注意：不再移除单位后缀（bn, mn 等），因为它们是值的一部分
+    # 例如：22.11bn, 365.99mn
 
     # 特殊处理：analysts 字段
     if field_def.get('description') == 'analysts':
@@ -528,3 +573,93 @@ def _get_table_text(table: Dict[str, Any]) -> str:
 
     _collect_text(table)
     return ' '.join(texts)
+
+
+def _extract_current_price_date_from_notes(
+    nested_tables: List[Dict[str, Any]]
+) -> Optional[str]:
+    """从注释中提取 current_price_date。
+
+    注释格式如：注：现价60.40为2026 年 01 月 15 日收盘价
+
+    Args:
+        nested_tables: 嵌套表格列表
+
+    Returns:
+        提取的日期字符串，未找到返回 None
+    """
+    import re
+
+    for table in nested_tables:
+        lines = docx_reader.flatten_table_text([table])
+        for line in lines:
+            # 查找包含"注"、"现价"、"收盘价"的行
+            if '注' in line and '现价' in line and '收盘价' in line:
+                # 提取日期（格式：2026 年 01 月 15 日）
+                date_match = re.search(r'(\d{4}\s*年\s*\d{1,2}\s*月\s*\d{1,2}\s*日)', line)
+                if date_match:
+                    return date_match.group(1)
+
+    return None
+
+
+def _extract_analysts_from_tables(
+    nested_tables: List[Dict[str, Any]]
+) -> Optional[str]:
+    """从嵌套表格中提取分析师信息并格式化。
+
+    查找包含分析师信息的表格（Table_Author），并格式化为标准格式：
+    [{'chinese_name': '杨斌', 'english_name': 'Bin Yang', 'sfc_code': 'BSQ313', 'email': 'harryyang@hfisec.com.hk'}]
+
+    Args:
+        nested_tables: 嵌套表格列表
+
+    Returns:
+        格式化后的分析师信息字符串，未找到返回 None
+    """
+    import re
+
+    for table in nested_tables:
+        lines = docx_reader.flatten_table_text([table])
+        text = ' '.join(lines)
+
+        # 查找包含分析师信息的表格
+        if 'yang' in text.lower() or '杨斌' in text or 'analyst' in text.lower():
+            # 解析分析师信息
+            chinese_name = None
+            english_name = None
+            sfc_code = None
+            email = None
+
+            for line in lines:
+                # 提取中文姓名
+                if re.search(r'[\u4e00-\u9fa5]{2,}', line):
+                    chinese_match = re.search(r'([\u4e00-\u9fa5]{2,})', line)
+                    if chinese_match:
+                        chinese_name = chinese_match.group(1)
+
+                # 提取英文姓名
+                english_match = re.search(r'([A-Z][a-z]+\s+[A-Z][a-z]+)', line)
+                if english_match:
+                    english_name = english_match.group(1)
+
+                # 提取 SFC 代码
+                sfc_match = re.search(r'[SFC:]*([A-Z]{4}\d{3})', line, re.IGNORECASE)
+                if sfc_match:
+                    sfc_code = sfc_match.group(1)
+
+                # 提取邮箱
+                email_match = re.search(r'[\w.-]+@[\w.-]+\.\w+', line)
+                if email_match:
+                    email = email_match.group(0)
+
+            # 如果找到了至少一个字段，返回格式化结果
+            if chinese_name or english_name:
+                chinese_name = chinese_name or ''
+                english_name = english_name or ''
+                sfc_code = sfc_code or ''
+                email = email or ''
+
+                return f"[{{'chinese_name': '{chinese_name}', 'english_name': '{english_name}', 'sfc_code': '{sfc_code}', 'email': '{email}'}}]"
+
+    return None
