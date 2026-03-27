@@ -9,7 +9,7 @@
 
 from typing import Dict, Any, Optional
 
-from . import common
+import common
 
 
 # 片段默认值

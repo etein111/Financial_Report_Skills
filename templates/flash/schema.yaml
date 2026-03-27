@@ -1,3 +1,47 @@
+a1_cn:
+  description: a1_cn
+  format: 杨斌
+a1_email:
+  description: a1_email
+  format: harryyang@hfisec.com.hk
+a1_en:
+  description: a1_en
+  format: Bin Yang
+a1_sfc:
+  description: a1_sfc
+  format: BSQ313
+a2_cn:
+  description: a2_cn
+a2_email:
+  description: a2_email
+a2_en:
+  description: a2_en
+a2_sfc:
+  description: a2_sfc
+a3_cn:
+  description: a3_cn
+a3_email:
+  description: a3_email
+a3_en:
+  description: a3_en
+a3_sfc:
+  description: a3_sfc
+a4_cn:
+  description: a4_cn
+a4_email:
+  description: a4_email
+a4_en:
+  description: a4_en
+a4_sfc:
+  description: a4_sfc
+a5_cn:
+  description: a5_cn
+a5_email:
+  description: a5_email
+a5_en:
+  description: a5_en
+a5_sfc:
+  description: a5_sfc
 report_date:
   description: report_date
   format: 20 Mar 2026
@@ -18,14 +62,6 @@ title_en:
   format: 'HK consumption rebounds amid volatility, elevated oil prices weigh on risk
     appetite; Overseas internet sector: Tencent FY2025 results released, long-term
     AI thesis continues to strengthen'
-sections:
-  description: sections
-  format: '{''viewpoint'': ''一、 海外消费：板块持续震荡，油价高企压制风险偏好港股消费：本周板块震荡，中证港股通消费主题指数（931454）本周下跌0.025%（截至3/19），恒生指数本周上涨0.14%。油价虽维持100美元上方，但前期超跌修复需求及南向资金流入提供支撑。当前估值偏低（931454市盈率25.59），具备安全边际。重点看好高端餐饮、运动服饰及"以旧换新"受益股。美股消费：本周承压，SPLRCS下跌2.83%，可选消费YTD
-    -7.57%，关注具备韧性的龙头标的。二、 海外互联网：港股腾讯年报落地，美股科技板块振荡上行港股互联网：本周恒生科技指数延续反弹，累计上涨1.24%，但个股分化剧烈。腾讯控股3月18日发布2025年年报，业绩整体稳健，但资本开支792亿元低于市场预期、AI新产品投入180亿元且今年将翻倍的指引引发市场对短期利润压力的担忧，3月19日股价大跌5.72%；美团、小米则表现强劲；南向资金本周呈现分化。美股互联网：美联储3月FOMC维持利率不变，点阵图显示年内两次降息；英伟达GTC大会释放AI算力新信号。AI产业正从技术研发加速向规模化商业落地演进，长期趋势未变。建议逢低布局兼具云基础设施、数据优势及场景闭环的科技龙头。三、
-    通用航空：全球交付稳步增长行业复苏： 2025年全球通用航空器交付量达3,230架（+3.3%），预计2026年将进一步增至3,410架。公务喷气机交付量显著增长（+11.8%），带动交付总价值创历史新高（310亿美元）。竞争格局：
-    北美市场主导增长。在活塞及喷气式飞机领域，西锐飞机市场份额持续提升，其中活塞机型市占率达37.2%稳居榜首。'', ''advice'': ''短期市场受地缘扰动及油价高企影响处于震荡筑底期，但中长期逻辑未变。消费板块关注具备品牌护城河与出海能力的龙头，如L’Oreal，Ulta
-    Beauty，Costco，P&G等；互联网科技板，美联储3月FOMC维持利率不变但点阵图仍指向年内两次降息，叠加腾讯等龙头年报验证AI商业化推进，中长期配置价值凸显。坚定看好AI向商业落地转化，建议关注阿里巴巴、微软、亚马逊及Alphabet等；通用航空领域，关注市场份额持续扩张的高端制造龙头。…'',
-    ''risks'': ''地缘政治风险加剧；宏观经济复苏不及预期；AI商业化落地受阻；政策与贸易不确定性。''}'
 appendix:
   description: appendix
   format: '{''summary'': ''Overseas consumption: Rebounding amid Volatility, Elevated
@@ -68,14 +104,10 @@ appendix:
     P&G. In internet/tech, stay constructive on AI’s transition to commercial scalability;
     focus on Tencent, Alibaba, Microsoft, Amazon, and Alphabet. In general aviation,
     favor high-end manufacturing leaders with expanding market share.''}'
-analysts:
-  description: analysts
-  format: '[{''chinese_name'': ''杨斌'', ''english_name'': ''Bin Yang'', ''sfc_code'':
-    ''BSQ313'', ''email'': ''harryyang@hfisec.com.hk''}]'
 abstract:
   type: fragment
   description: 报告摘要部分
-  scope: 首页
+  scope: 首页右侧
   hints:
   - 通常包含投资亮点、核心观点
   - 长度约 200-500 字
@@ -84,7 +116,7 @@ abstract:
 body:
   type: fragment
   description: 报告正文部分
-  scope: 从第三页开始
+  scope: 第二页开始
   hints:
   - 包含各章节详细内容
   - 可能包含表格、图表引用

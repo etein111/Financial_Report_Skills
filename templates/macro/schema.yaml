@@ -1,3 +1,27 @@
+a1_cn:
+  description: a1_cn
+  format: 杨斌
+a1_email:
+  description: a1_email
+  format: harryyang@hfisec.com.hk
+a1_en:
+  description: a1_en
+  format: Bin Yang
+a1_sfc:
+  description: a1_sfc
+  format: BSQ313
+a2_cn:
+  description: a2_cn
+  format: 邓轶达
+a2_email:
+  description: a2_email
+  format: dengyida@hfisec.com.hk
+a2_en:
+  description: a2_en
+  format: Yida Deng
+a2_sfc:
+  description: a2_sfc
+  format: BVF321
 report_date:
   description: report_date
   format: 20 Mar 2026
@@ -38,8 +62,12 @@ appendix:
     Investors should now view such assets as "environmental compliance operators,"
     where relicensing costs, not just generation potential, define intrinsic value
     and risk profiles globally.''}'
-analysts:
-  description: analysts
-  format: '[{''chinese_name'': ''杨斌'', ''english_name'': ''Bin Yang'', ''sfc_code'':
-    ''BSQ313'', ''email'': ''harryyang@hfisec.com.hk''}, {''chinese_name'': ''邓轶达'',
-    ''english_name'': ''Yida Deng'', ''sfc_code'': ''BVF321'', ''email'': ''dengyida@hfisec.com.hk''}]'
+abstract:
+  type: fragment
+  description: 报告摘要部分
+  scope: 首页右侧
+  hints:
+  - 通常包含投资亮点、核心观点
+  - 长度约 200-500 字
+  - 不应包含表格和图表
+  - 位于首页右侧区域

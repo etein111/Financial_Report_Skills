@@ -1,3 +1,11 @@
+a1_cn: 杨斌
+a1_email: harryyang@hfisec.com.hk
+a1_en: Bin Yang
+a1_sfc: BSQ313
+a2_cn: '邓轶达'
+a2_email: 'dengyida@hfisec.com.hk'
+a2_en: 'Yida Deng'
+a2_sfc: 'BVF321'
 report_date: 20 Mar 2026
 type_ch: 全球宏观
 type_en: World Macro
@@ -14,12 +22,3 @@ sections:
   risks: '费率上调受阻风险，通胀与成本超支风险，法律执行风险。'
 appendix:
   summary: 'Seattle City Light (SCL) secured a $3.8 billion settlement to relicense the Skagit River Hydroelectric Project, critical for 20% of the city’s power and carbon goals. This cost, covering fish protection, tribal compensation, and habitat restoration, will be passed to consumers via rate hikes. The deal marks a structural shift in utility valuation: hydropower is transitioning from a low-cost energy source to a high-compliance asset. With nearly one-third of spending dedicated to regulatory and social obligations rather than generation capacity, levelized energy costs face upward pressure. While securing long-term operational certainty amidst surging AI demand, the "Skagit standard" signals that future hydropower investments must account for massive environmental liabilities. Investors should now view such assets as "environmental compliance operators," where relicensing costs, not just generation potential, define intrinsic value and risk profiles globally.'
-analysts:
-  - chinese_name: 杨斌
-    english_name: Bin Yang
-    sfc_code: BSQ313
-    email: harryyang@hfisec.com.hk
-  - chinese_name: 邓轶达
-    english_name: Yida Deng
-    sfc_code: BVF321
-    email: dengyida@hfisec.com.hk

@@ -3,7 +3,7 @@
 from pathlib import Path
 from typing import Dict, Any, Optional
 
-from . import common
+import common
 
 
 # ==================== 文件操作 ====================

@@ -1,13 +1,29 @@
+a1_cn: 杨斌
+a1_email: harryyang@hfisec.com.hk
+a1_en: Bin Yang
+a1_sfc: BSQ313
+a2_cn: ''
+a2_email: ''
+a2_en: ''
+a2_sfc: ''
+a3_cn: ''
+a3_email: ''
+a3_en: ''
+a3_sfc: ''
+a4_cn: ''
+a4_email: ''
+a4_en: ''
+a4_sfc: ''
+a5_cn: ''
+a5_email: ''
+a5_en: ''
+a5_sfc: ''
 report_date: 20 Mar 2026
 theme_ch: 全球消费及互联网
 theme_en: Global Consumption & Internet Sector
 ticker: Stock Code
 title_ch: '周报(03/16-03/19): 消费板块：港股消费震荡，油价高企压制风险偏好；海外互联网板块：腾讯年报落地，AI长期逻辑未变'
 title_en: 'HK consumption rebounds amid volatility, elevated oil prices weigh on risk appetite; Overseas internet sector: Tencent FY2025 results released, long-term AI thesis continues to strengthen'
-sections:
-  viewpoint: '一、 海外消费：板块持续震荡，油价高企压制风险偏好港股消费：本周板块震荡，中证港股通消费主题指数（931454）本周下跌0.025%（截至3/19），恒生指数本周上涨0.14%。油价虽维持100美元上方，但前期超跌修复需求及南向资金流入提供支撑。当前估值偏低（931454市盈率25.59），具备安全边际。重点看好高端餐饮、运动服饰及"以旧换新"受益股。美股消费：本周承压，SPLRCS下跌2.83%，可选消费YTD -7.57%，关注具备韧性的龙头标的。二、 海外互联网：港股腾讯年报落地，美股科技板块振荡上行港股互联网：本周恒生科技指数延续反弹，累计上涨1.24%，但个股分化剧烈。腾讯控股3月18日发布2025年年报，业绩整体稳健，但资本开支792亿元低于市场预期、AI新产品投入180亿元且今年将翻倍的指引引发市场对短期利润压力的担忧，3月19日股价大跌5.72%；美团、小米则表现强劲；南向资金本周呈现分化。美股互联网：美联储3月FOMC维持利率不变，点阵图显示年内两次降息；英伟达GTC大会释放AI算力新信号。AI产业正从技术研发加速向规模化商业落地演进，长期趋势未变。建议逢低布局兼具云基础设施、数据优势及场景闭环的科技龙头。三、 通用航空：全球交付稳步增长行业复苏： 2025年全球通用航空器交付量达3,230架（+3.3%），预计2026年将进一步增至3,410架。公务喷气机交付量显著增长（+11.8%），带动交付总价值创历史新高（310亿美元）。竞争格局： 北美市场主导增长。在活塞及喷气式飞机领域，西锐飞机市场份额持续提升，其中活塞机型市占率达37.2%稳居榜首。'
-  advice: '短期市场受地缘扰动及油价高企影响处于震荡筑底期，但中长期逻辑未变。消费板块关注具备品牌护城河与出海能力的龙头，如L’Oreal，Ulta Beauty，Costco，P&G等；互联网科技板，美联储3月FOMC维持利率不变但点阵图仍指向年内两次降息，叠加腾讯等龙头年报验证AI商业化推进，中长期配置价值凸显。坚定看好AI向商业落地转化，建议关注阿里巴巴、微软、亚马逊及Alphabet等；通用航空领域，关注市场份额持续扩张的高端制造龙头。…'
-  risks: '地缘政治风险加剧；宏观经济复苏不及预期；AI商业化落地受阻；政策与贸易不确定性。'
 appendix:
   summary: 'Overseas consumption: Rebounding amid Volatility, Elevated Oil Prices Weigh on Risk Appetite
     Hong Kong consumption: The sector rebounded this week, outperforming the broader market. Despite oil prices remaining above $100 and ongoing Strait of Hormuz shipping disruptions, prior oversold conditions drove a technical recovery, supported by structural southbound capital inflows. Valuations remain at historically low levels (931454 P/E2 at 25.59x), offering a margin of safety. Looking into 2026, we expect a structural recovery driven by policy support and domestic demand improvement; favor high-end dining, sportswear, and stocks benefiting from “trade-in” programs.
@@ -19,8 +35,3 @@ appendix:
     Global general aviation deliveries reached 3,230 units in 2025 (+3.3%), expected to rise to 3,410 in 2026. Business jet deliveries grew +11.8%, driving total delivery value to a record $31.0 billion. North America leads growth; Cirrus continues gaining share with 37.2% in piston aircraft.
     Investment recommendations
     Short-term markets are in a corrective phase amid geopolitical tensions and elevated oil, but long-term fundamentals remain intact. The Fed’s dovish FOMC and Tencent’s results validating AI commercialization reinforce medium-to-long-term allocation value. In consumption, focus on leaders with brand moats and overseas capabilities—e.g., L’Oreal, Ulta Beauty, Costco, P&G. In internet/tech, stay constructive on AI’s transition to commercial scalability; focus on Tencent, Alibaba, Microsoft, Amazon, and Alphabet. In general aviation, favor high-end manufacturing leaders with expanding market share.'
-analysts:
-  - chinese_name: 杨斌
-    english_name: Bin Yang
-    sfc_code: BSQ313
-    email: harryyang@hfisec.com.hk

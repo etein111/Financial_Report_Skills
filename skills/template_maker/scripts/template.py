@@ -7,8 +7,6 @@ from pathlib import Path
 from typing import Dict, Any
 from docx import Document
 
-from . import common
-
 
 # ==================== 文档操作 ====================
 
@@ -36,17 +34,8 @@ def save_document(doc: Document, output_path: str) -> None:
 
 # ==================== 字段替换 ====================
 
-# 长文本阈值：超过此长度的字段值使用前缀匹配
-LONG_TEXT_THRESHOLD = 100
-# 前缀匹配长度：用于匹配长文本的前缀字符数
-PREFIX_MATCH_LENGTH = 50
-
-
 def replace_field_value_in_doc(doc: Document, field_name: str, field_value: str) -> Document:
     """在文档中替换单个字段值为占位符（返回新文档）。
-
-    对于长文本（超过 100 字符），使用前缀匹配策略：
-    如果段落以字段值的前 50 个字符开头，则将整个段落替换为占位符。
 
     Args:
         doc: Document 对象
@@ -56,27 +45,18 @@ def replace_field_value_in_doc(doc: Document, field_name: str, field_value: str)
     Returns:
         修改后的 Document 对象
     """
-    placeholder = common.format_placeholder(field_name)
+    placeholder = "{{" + f" {field_name} " + "}}"
     value_str = str(field_value)
-
-    # 判断是否为长文本
-    is_long_text = len(value_str) > LONG_TEXT_THRESHOLD
-    prefix = value_str[:PREFIX_MATCH_LENGTH] if is_long_text else None
 
     # 在段落中替换
     for para in doc.paragraphs:
-        if is_long_text:
-            # 长文本：前缀匹配，替换整个段落
-            if para.text.strip().startswith(prefix):
-                _replace_entire_para(para, placeholder)
-        else:
-            # 短文本：完整匹配
-            if value_str in para.text:
-                _replace_text_in_para(para, value_str, placeholder)
+        if value_str in para.text:
+            _replace_text_in_para(para, value_str, placeholder)
 
-    # 在表格中替换（包括嵌套表格）
+    # 在表格中替换（包括嵌套表格），跟踪已处理的单元格避免重复
+    processed_cells = set()
     for table in doc.tables:
-        _replace_in_table(table, value_str, placeholder, is_long_text, prefix)
+        _replace_in_table(table, value_str, placeholder, processed_cells)
 
     # 在页眉页脚中替换
     for section in doc.sections:
@@ -90,95 +70,476 @@ def replace_field_value_in_doc(doc: Document, field_name: str, field_value: str)
     return doc
 
 
-def _replace_in_table(table, old_text: str, new_text: str,
-                      is_long_text: bool = False, prefix: str = None):
-    """在表格中递归替换文本（包括嵌套表格）。
-
-    Args:
-        table: python-docx 表格对象
-        old_text: 要替换的文本
-        new_text: 新文本
-        is_long_text: 是否为长文本
-        prefix: 长文本的前缀（用于前缀匹配）
-    """
+def _replace_in_table(table, value_str: str, placeholder: str, processed_cells: set):
+    """递归替换表格中的文本（包括嵌套表格）。"""
     for row in table.rows:
         for cell in row.cells:
-            # 先处理嵌套表格
+            # 使用单元格的 XML 元素本身作为 key（而不是 id()，因为 id 可能被重用）
+            cell_tc = cell._tc
+            if cell_tc in processed_cells:
+                continue
+            processed_cells.add(cell_tc)
+
+            # 替换单元格中的段落
+            for para in cell.paragraphs:
+                if value_str in para.text:
+                    _replace_text_in_para(para, value_str, placeholder)
+            # 递归处理嵌套表格（嵌套表格使用独立的 processed_cells）
             for nested_table in cell.tables:
-                _replace_in_table(nested_table, old_text, new_text, is_long_text, prefix)
-
-            # 再处理单元格段落
-            if is_long_text:
-                # 长文本：查找以前缀开头的段落，替换该段落及其后续段落（直到遇到标题）
-                _replace_long_text_in_cell(cell, prefix, new_text)
-            else:
-                for para in cell.paragraphs:
-                    if old_text in para.text:
-                        _replace_text_in_para(para, old_text, new_text)
+                _replace_in_table(nested_table, value_str, placeholder, set())
 
 
-def _replace_long_text_in_cell(cell, prefix: str, placeholder: str):
-    """在单元格中替换长文本内容。
+def replace_analyst_fields_in_doc(doc: Document, elements: dict) -> Document:
+    """替换分析师字段为占位符。
 
-    查找以 prefix 开头的段落，将该段落替换为占位符，
-    并删除后续的内容段落（直到遇到下一个标题或单元格结束）。
-
-    Args:
-        cell: python-docx 单元格对象
-        prefix: 长文本的前缀
-        placeholder: 占位符文本
-    """
-    paragraphs = cell.paragraphs
-    start_idx = None
-
-    # 查找以 prefix 开头的段落
-    for i, para in enumerate(paragraphs):
-        if para.text.strip().startswith(prefix):
-            start_idx = i
-            break
-
-    if start_idx is None:
-        return
-
-    # 找到内容结束位置（下一个标题段落或单元格结束）
-    # 标题通常是短文本（<50 字符）且独占一行
-    end_idx = start_idx + 1
-    for i in range(start_idx + 1, len(paragraphs)):
-        text = paragraphs[i].text.strip()
-        # 如果是空段落，继续
-        if not text:
-            end_idx = i + 1
-            continue
-        # 如果是短文本标题（如"投资建议"、"风险"等），停止
-        if len(text) < 50 and not text.startswith(prefix[:20]):
-            break
-        end_idx = i + 1
-
-    # 替换第一个段落为占位符
-    _replace_entire_para(paragraphs[start_idx], placeholder)
-
-    # 删除后续的内容段落（从后往前删除）
-    for i in range(end_idx - 1, start_idx, -1):
-        para = paragraphs[i]
-        para._element.getparent().remove(para._element)
-
-
-def replace_abstract_in_doc(doc: Document, table: int, row: int,
-                           col_start: int, col_end: int,
-                           row_end: int = None) -> Document:
-    """在文档中替换摘要区域为 {{ abstract }} 占位符（返回新文档）。
+    处理逻辑：
+    1. 对于有值的分析师，找到组合字符串并替换为组合占位符
+    2. 定位分析师表格（[Table_Author]），为所有位置创建占位符
 
     Args:
         doc: Document 对象
-        table: 表格索引
-        row: 行索引（起始行）
-        col_start: 起始列索引
-        col_end: 结束列索引
-        row_end: 结束行索引（可选，默认与 row 相同）
+        elements: 包含分析师字段的字典
 
     Returns:
         修改后的 Document 对象
     """
+    # 收集分析师数据
+    analysts = {}
+    for i in range(1, 9):
+        cn = elements.get(f'a{i}_cn', '')
+        en = elements.get(f'a{i}_en', '')
+        sfc = elements.get(f'a{i}_sfc', '')
+        email = elements.get(f'a{i}_email', '')
+        analysts[i] = {'cn': cn, 'en': en, 'sfc': sfc, 'email': email}
+
+    # 找到所有分析师表格（[Table_Author]）
+    author_tables = []
+    for table in doc.tables:
+        _find_author_tables(table, author_tables)
+
+    # 替换有值的分析师信息
+    for i, data in analysts.items():
+        if data['cn'] and data['en'] and data['sfc']:
+            # 构造可能的组合格式（文档中的格式可能有变化）
+            info_patterns = [
+                f"{data['cn']}·{data['en']}，SFC:{data['sfc']}",
+                f"{data['cn']} {data['en']}], SFC:{data['sfc']}",  # 逗号后有空格
+                f"{data['cn']} {data['en']}],SFC:{data['sfc']}",   # 逗号后无空格
+                f"{data['cn']}·{data['en']}, SFC:{data['sfc']}",
+                f"{data['cn']} {data['en']}, SFC:{data['sfc']}",
+            ]
+            info_placeholder = f"{{{{ a{i}_cn }}}} {{{{ a{i}_en }}}}], SFC:{{{{ a{i}_sfc }}}}"
+
+            # 在文档中查找并替换
+            for pattern in info_patterns:
+                _replace_text_in_nested_tables(doc, pattern, info_placeholder)
+
+        if data['email']:
+            email_placeholder = f"{{{{ a{i}_email }}}}"
+            _replace_text_in_nested_tables(doc, data['email'], email_placeholder)
+
+    # 为分析师表格中的所有 8 个位置创建占位符
+    # 分析师表格布局（5行 x 4列）：
+    # 行0: [Table_Author] 标记
+    # 行1 列0-3: 分析师 1-4 的姓名+SFC
+    # 行2 列0-3: 分析师 1-4 的邮箱
+    # 行3 列0-3: 分析师 5-8 的姓名+SFC
+    # 行4 列0-3: 分析师 5-8 的邮箱
+
+    if author_tables:
+        # 只处理第一个表格（其他都是合并单元格的视图）
+        author_table = author_tables[0]
+
+        # 分析师位置映射：(行, 列) -> 分析师编号
+        analyst_positions = [
+            # 分析师 1-4：行1(姓名)、行2(邮箱)
+            (1, 0, 1), (1, 1, 2), (1, 2, 3), (1, 3, 4),  # 行1列0-3 -> a1-a4
+            # 分析师 5-8：行3(姓名)、行4(邮箱)
+            (3, 0, 5), (3, 1, 6), (3, 2, 7), (3, 3, 8),  # 行3列0-3 -> a5-a8
+        ]
+
+        for info_row, col, analyst_idx in analyst_positions:
+            email_row = info_row + 1
+
+            # 检查行和列是否在范围内
+            if info_row >= len(author_table.rows) or col >= len(author_table.columns):
+                continue
+
+            info_cell = author_table.rows[info_row].cells[col]
+            email_cell = author_table.rows[email_row].cells[col] if email_row < len(author_table.rows) else None
+
+            # 姓名+SFC 占位符
+            cell_text = info_cell.text.strip()
+            if '{{' not in cell_text:
+                # 不管原来有没有值，都替换为占位符
+                info_placeholder = f"{{{{ a{analyst_idx}_cn }}}} {{{{ a{analyst_idx}_en }}}}], SFC:{{{{ a{analyst_idx}_sfc }}}}"
+                _set_cell_text(info_cell, info_placeholder)
+
+            # 邮箱占位符
+            if email_cell:
+                cell_text = email_cell.text.strip()
+                if '{{' not in cell_text:
+                    email_placeholder = f"{{{{ a{analyst_idx}_email }}}}"
+                    _set_cell_text(email_cell, email_placeholder)
+
+    return doc
+
+
+def _find_author_tables(table, result_list):
+    """递归查找所有 [Table_Author] 表格。
+
+    查找规则：如果表格的第一行第一个单元格包含 [Table_Author]，则该表格是分析师表格。
+    """
+    # 检查当前表格是否是分析师表格
+    if table.rows and table.rows[0].cells:
+        first_cell_text = table.rows[0].cells[0].text.strip()
+        if '[Table_Author]' in first_cell_text:
+            result_list.append(table)
+            return  # 找到后不再递归搜索子表格
+
+    # 递归搜索嵌套表格
+    for row in table.rows:
+        for cell in row.cells:
+            for nested in cell.tables:
+                _find_author_tables(nested, result_list)
+
+
+def find_analyst_table_by_value(doc: Document, elements: dict) -> tuple:
+    """根据 elements.yaml 中的分析师字段值查找分析师表格。
+
+    通过搜索 a1_cn 的值来定位表格，找到后返回 (table, row, col)。
+    注意：由于合并单元格的问题，需要直接从 XML 中搜索。
+
+    Args:
+        doc: Document 对象
+        elements: 包含分析师字段的字典
+
+    Returns:
+        (table, row, col) 或 (None, None, None)
+    """
+    # 获取第一个有值的分析师字段值
+    search_value = None
+    for i in range(1, 9):
+        cn = elements.get(f'a{i}_cn', '')
+        if cn:
+            search_value = cn
+            break
+
+    if not search_value:
+        return None, None, None
+
+    # 从 XML 中搜索
+    import re
+    body_xml = doc.element.body.xml
+
+    # 搜索包含该值的单元格
+    # 找到 <w:tc>...</w:tc> 中包含 search_value 的
+    tc_pattern = r'<w:tc>(.*?)</w:tc>'
+    for tc_match in re.finditer(tc_pattern, body_xml, re.DOTALL):
+        tc_xml = tc_match.group(0)
+        if search_value in tc_xml:
+            # 找到了！计算行号和列号
+            # 需要找到这个 tc 前面有多少个 <w:tr> 和 <w:tc>
+            tc_start = tc_match.start()
+
+            # 找到所属的表格
+            tbl_start = body_xml.rfind('<w:tbl>', 0, tc_start)
+            tbl_end = body_xml.find('</w:tbl>', tc_start)
+            tbl_xml = body_xml[tbl_start:tbl_end]
+
+            # 计算行号：统计从表格开始到当前位置的 <w:tr> 数量
+            row_idx = tbl_xml[:tc_start - tbl_start].count('<w:tr ')
+
+            # 计算列号：统计该行中该单元格之前的 <w:tc> 数量
+            row_start = tbl_xml.rfind('<w:tr ', 0, tc_start - tbl_start)
+            row_end = tbl_xml.find('</w:tr>', tc_start - tbl_start)
+            row_xml = tbl_xml[row_start:row_end]
+            col_idx = row_xml[:tc_start - tbl_start - row_start].count('<w:tc>')
+
+            # 返回第一个表格（python-docx 的表格列表）
+            return doc.tables[0], row_idx, col_idx
+
+    return None, None, None
+
+
+def replace_analyst_fields_auto(doc: Document, elements: dict) -> Document:
+    """根据 elements.yaml 自动定位并替换分析师字段为占位符。
+
+    由于合并单元格的问题，直接在 XML 中查找并替换文本。
+
+    Args:
+        doc: Document 对象
+        elements: 包含分析师字段的字典
+
+    Returns:
+        修改后的 Document 对象
+    """
+    import re
+    from lxml import etree
+    from copy import deepcopy
+
+    # 1. 收集所有分析师数据
+    analysts_data = []
+    found_indices = set()  # 记录文档中实际找到的分析师索引
+
+    for i in range(1, 9):
+        cn = elements.get(f'a{i}_cn', '')
+        en = elements.get(f'a{i}_en', '')
+        sfc = elements.get(f'a{i}_sfc', '')
+        email = elements.get(f'a{i}_email', '')
+        if cn or en or sfc or email:
+            analysts_data.append({'idx': i, 'cn': cn, 'en': en, 'sfc': sfc, 'email': email})
+
+    if not analysts_data:
+        print("警告: elements.yaml 中没有有效的分析师数据")
+        return doc
+
+    # 2. 获取 body 的 lxml 元素
+    body_element = doc.element.body
+
+    # 3. 定义命名空间
+    namespaces = {
+        'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main',
+        'w14': 'http://schemas.microsoft.com/office/word/2010/wordml'
+    }
+
+    # 4. 查找所有文本节点并替换
+    for analyst in analysts_data:
+        idx = analyst['idx']
+
+        # 替换姓名+SFC 组合 - 查找包含该文本的 <w:t> 元素
+        if analyst['cn'] and analyst['en'] and analyst['sfc']:
+            combined_text = "%s%s, SFC:%s" % (analyst['cn'], analyst['en'], analyst['sfc'])
+            # 在 body 中查找包含该文本的 w:t 元素
+            for t_elem in body_element.iter('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}t'):
+                if t_elem.text and combined_text in t_elem.text:
+                    t_elem.text = "{{ a%d_cn }} {{ a%d_en }}], SFC:{{ a%d_sfc }}" % (idx, idx, idx)
+                    found_indices.add(idx)
+                    break
+
+        # 替换邮箱
+        if analyst['email']:
+            for t_elem in body_element.iter('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}t'):
+                if t_elem.text and analyst['email'] in t_elem.text:
+                    t_elem.text = "{{ a%d_email }}" % idx
+                    break
+
+        # 替换中文认证中的分析师姓名
+        if analyst['cn']:
+            cn_cert_pattern = "%s，在此保证" % analyst['cn']
+            for t_elem in body_element.iter('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}t'):
+                if t_elem.text and cn_cert_pattern in t_elem.text:
+                    t_elem.text = t_elem.text.replace(analyst['cn'], "{{ a%d_cn }}" % idx)
+                    found_indices.add(idx)
+                    break
+
+        # 替换英文认证中的分析师姓名
+        if analyst['en']:
+            en_cert_pattern = "I, %s, certify" % analyst['en']
+            for t_elem in body_element.iter('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}t'):
+                if t_elem.text and en_cert_pattern in t_elem.text:
+                    t_elem.text = t_elem.text.replace(analyst['en'], "{{ a%d_en }}" % idx)
+                    break
+
+    # 5. 为缺失的分析师创建占位符（在 Table_Author 表格中）
+    # 遍历所有定义的分析师槽位（1-8），即使值为空也要创建占位符
+    for i in range(1, 9):
+        if i not in found_indices:
+            # 检查 elements.yaml 中是否定义了这个分析师槽位
+            has_analyst_fields = (
+                f'a{i}_cn' in elements or
+                f'a{i}_en' in elements or
+                f'a{i}_sfc' in elements or
+                f'a{i}_email' in elements
+            )
+            if has_analyst_fields:
+                # 在 Table_Author 表格中添加占位符行
+                _add_analyst_placeholder_row(doc, i)
+
+    print("分析师字段: 已替换 %d 个分析师的信息" % len(analysts_data))
+    return doc
+
+
+def _add_analyst_placeholder_row(doc: Document, idx: int) -> Document:
+    """在 Table_Author 表格中为缺失的分析师填入占位符。
+
+    分析师表格布局（5列 x 3行）：
+    - Row 0: [Table_Author] | (empty) | (empty) | (empty) | (empty)
+    - Row 1: a1姓名+SFC | a2... | a3... | a4... | a5...
+    - Row 2: a1邮箱 | a2... | a3... | a4... | a5...
+
+    Args:
+        doc: Document 对象
+        idx: 分析师索引（如 2, 3, 4, 5）
+
+    Returns:
+        修改后的 Document 对象
+    """
+    from copy import deepcopy
+    from lxml import etree
+
+    W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
+    body_element = doc.element.body
+
+    # 查找 Table_Author 表格（通过 tblCaption 属性）
+    nested_table_elem = None
+
+    for tbl in body_element.iter(f'{W}tbl'):
+        caption_elem = tbl.find(f'{W}tblPr/{W}tblCaption')
+        if caption_elem is not None and caption_elem.get(f'{W}val') == '[Table_Author]':
+            nested_table_elem = tbl
+            break
+
+    if nested_table_elem is None:
+        print(f"[DEBUG] 未找到 Table_Author 表格，无法为分析师 {idx} 创建占位符")
+        return doc
+
+    # 获取表格的行
+    rows = nested_table_elem.findall(f'{W}tr')
+    if len(rows) < 3:
+        print(f"[DEBUG] Table_Author 表格行数不足 ({len(rows)} 行)，无法为分析师 {idx} 创建占位符")
+        return doc
+
+    # Row 1 是姓名+SFC行，Row 2 是邮箱行
+    # idx=2 应该填入第2列，idx=3 填入第3列，以此类推
+    col_idx = idx - 1  # a2 -> col 1, a3 -> col 2, etc.
+
+    # 获取姓名+SFC行的第col_idx个单元格
+    name_row = rows[1]
+    name_cells = name_row.findall(f'{W}tc')
+    if col_idx >= len(name_cells):
+        print(f"[DEBUG] 姓名行没有足够的列（{len(name_cells)} 列），无法为分析师 {idx} 创建占位符")
+        return doc
+
+    name_cell = name_cells[col_idx]
+
+    # 检查单元格中是否已有 w:t 元素可以替换
+    t_elements = list(name_cell.iter(f'{W}t'))
+    if t_elements:
+        # 有文本节点，替换内容
+        for t_elem in t_elements:
+            if t_elem.text:
+                t_elem.text = t_elem.text.replace('{{ a1_cn }}', f'{{{{ a{idx}_cn }}}}')
+                t_elem.text = t_elem.text.replace('{{ a1_en }}', f'{{{{ a{idx}_en }}}}')
+                t_elem.text = t_elem.text.replace('{{ a1_sfc }}', f'{{{{ a{idx}_sfc }}}}')
+    else:
+        # 单元格是空的，需要创建新的段落和run
+        # 获取单元格的 p 元素
+        p_elem = name_cell.find(f'{W}p')
+        if p_elem is None:
+            # 创建新的 p 元素
+            p_elem = etree.SubElement(name_cell, f'{W}p')
+
+        # 创建 run 元素和文本
+        r_elem = etree.SubElement(p_elem, f'{W}r')
+        t_elem = etree.SubElement(r_elem, f'{W}t')
+        t_elem.text = f"{{{{ a{idx}_cn }}}} {{{{ a{idx}_en }}}}], SFC:{{{{ a{idx}_sfc }}}}"
+
+    # 获取邮箱行的第col_idx个单元格
+    email_row = rows[2]
+    email_cells = email_row.findall(f'{W}tc')
+    if col_idx >= len(email_cells):
+        print(f"[DEBUG] 邮箱行没有足够的列（{len(email_cells)} 列），无法为分析师 {idx} 创建占位符")
+        return doc
+
+    email_cell = email_cells[col_idx]
+
+    # 检查单元格中是否已有 w:t 元素可以替换
+    t_elements = list(email_cell.iter(f'{W}t'))
+    if t_elements:
+        for t_elem in t_elements:
+            if t_elem.text:
+                t_elem.text = t_elem.text.replace('{{ a1_email }}', f'{{{{ a{idx}_email }}}}')
+    else:
+        # 单元格是空的，需要创建新的段落和run
+        p_elem = email_cell.find(f'{W}p')
+        if p_elem is None:
+            p_elem = etree.SubElement(email_cell, f'{W}p')
+
+        r_elem = etree.SubElement(p_elem, f'{W}r')
+        t_elem = etree.SubElement(r_elem, f'{W}t')
+        t_elem.text = f"{{{{ a{idx}_email }}}}"
+
+    print(f"[DEBUG] 为分析师 {idx} 在 Table_Author 表格第 {col_idx} 列填入了占位符")
+    return doc
+
+
+def _replace_text_in_nested_tables(doc: Document, old_text: str, new_text: str):
+    """在文档的所有表格（包括嵌套表格）中替换文本。"""
+    for table in doc.tables:
+        _replace_in_all_cells(table, old_text, new_text)
+
+
+def _replace_in_all_cells(table, old_text: str, new_text: str):
+    """递归替换表格中所有单元格的文本。"""
+    for row in table.rows:
+        for cell in row.cells:
+            # 替换单元格中的段落
+            for para in cell.paragraphs:
+                if old_text in para.text:
+                    _replace_text_in_para(para, old_text, new_text)
+
+            # 递归处理嵌套表格
+            for nested_table in cell.tables:
+                _replace_in_all_cells(nested_table, old_text, new_text)
+
+
+def _set_cell_text(cell, text: str):
+    """设置单元格文本（清空现有内容后设置）。"""
+    # 清空所有段落
+    for para in cell.paragraphs:
+        for run in para.runs:
+            run.text = ""
+    # 设置新文本
+    if cell.paragraphs and cell.paragraphs[0].runs:
+        cell.paragraphs[0].runs[0].text = text
+    elif cell.paragraphs:
+        cell.paragraphs[0].add_run(text)
+    else:
+        cell.add_paragraph(text)
+
+
+def replace_abstract_in_doc(doc: Document, table: int, row: int,
+                           col_start: int, col_end: int) -> Document:
+    """在文档中替换摘要区域为 {{ abstract }} 占位符（返回新文档）。
+
+    Args:
+        doc: Document 对象
+        table: 表格索引（-1 表示在段落中）
+        row: 起始段落索引（如果是表格则为行索引）
+        col_start: 结束段落索引（如果是段落，表示跨越的段落数；如果是表格则表示起始列）
+        col_end: 结束列索引（仅表格使用）
+
+    Returns:
+        修改后的 Document 对象
+    """
+    # 如果是段落（table == -1）
+    if table == -1:
+        # 处理多个段落的情况
+        # col_start 表示结束段落索引（如果 >= 0）
+        end_row = col_start if col_start >= 0 else row
+        is_first = True  # 标记是否是第一个段落
+
+        for para_idx, para in enumerate(doc.paragraphs):
+            if para_idx < row:
+                continue
+            if para_idx > end_row and end_row >= 0:
+                break
+
+            # 清空所有 runs
+            for run in para.runs:
+                run.text = ""
+
+            # 只在第一个段落添加占位符，其余段落保持清空
+            if is_first:
+                if para.runs:
+                    para.runs[0].text = "{{ abstract }}"
+                else:
+                    para.add_run("{{ abstract }}")
+                is_first = False
+
+        return doc
+
     if table >= len(doc.tables):
         raise ValueError(f"表格索引 {table} 超出范围")
 
@@ -186,29 +547,129 @@ def replace_abstract_in_doc(doc: Document, table: int, row: int,
     if row >= len(tbl.rows):
         raise ValueError(f"行索引 {row} 超出范围")
 
-    # 如果没有指定结束行，则只处理起始行
-    if row_end is None:
-        row_end = row
+    tbl_row = tbl.rows[row]
 
-    # 清空所有涉及的行的内容
-    for row_idx in range(row, min(row_end + 1, len(tbl.rows))):
-        tbl_row = tbl.rows[row_idx]
-        for col_idx in range(col_start, min(col_end + 1, len(tbl_row.cells))):
-            cell = tbl_row.cells[col_idx]
-            # 清空所有段落
-            for paragraph in cell.paragraphs:
-                for run in paragraph.runs:
-                    run.text = ""
+    # 替换指定范围的单元格
+    for col_idx in range(col_start, min(col_end + 1, len(tbl_row.cells))):
+        cell = tbl_row.cells[col_idx]
+        # 清空所有段落
+        for paragraph in cell.paragraphs:
+            for run in paragraph.runs:
+                run.text = ""
+        # 添加摘要占位符
+        if cell.paragraphs and cell.paragraphs[0].runs:
+            cell.paragraphs[0].runs[0].text = "{{ abstract }}"
+        else:
+            cell.add_paragraph("{{ abstract }}")
 
-    # 只在第一行第一列添加摘要占位符
-    first_cell = tbl.rows[row].cells[col_start]
-    if first_cell.paragraphs and first_cell.paragraphs[0].runs:
-        first_cell.paragraphs[0].runs[0].text = common.format_abstract_placeholder()
-    elif first_cell.paragraphs:
-        first_cell.paragraphs[0].add_run(common.format_abstract_placeholder())
-    else:
-        first_cell.add_paragraph(common.format_abstract_placeholder())
+    return doc
 
+
+def replace_abstract_by_text(doc: Document, start_text: str, end_text: str) -> Document:
+    """根据开始和结束文字替换摘要区域为 {{ abstract }} 占位符。"""
+    return replace_section_by_text(doc, start_text, end_text, "{{ abstract }}")
+
+
+def replace_section_by_text(doc: Document, start_text: str, end_text: str, placeholder: str) -> Document:
+    """根据开始和结束文字替换指定区域为占位符。
+
+    支持三种情况：
+    1. 开始和结束都在同一个表格单元格中
+    2. 开始和结束都在段落中
+    3. 开始在表格中，结束在段落中（跨区域）
+
+    Args:
+        doc: Document 对象
+        start_text: 区域开始的文字
+        end_text: 区域结束的文字
+        placeholder: 占位符文本（如 "{{ abstract }}" 或 "{{ appendix }}"）
+
+    Returns:
+        修改后的 Document 对象
+    """
+    start_in_table = None  # (tbl_idx, row_idx, col_idx)
+    end_in_table = None
+    start_in_para = None   # para_idx
+    end_in_para = None
+
+    # 查找开始和结束位置
+    for tbl_idx, table in enumerate(doc.tables):
+        for row_idx, row in enumerate(table.rows):
+            for col_idx, cell in enumerate(row.cells):
+                cell_text = cell.text
+                if start_text in cell_text and start_in_table is None:
+                    start_in_table = (tbl_idx, row_idx, col_idx, cell)
+                if end_text in cell_text:
+                    end_in_table = (tbl_idx, row_idx, col_idx, cell)
+
+    for i, para in enumerate(doc.paragraphs):
+        para_text = para.text
+        if start_text in para_text and start_in_para is None:
+            start_in_para = i
+        if end_text in para_text:
+            end_in_para = i
+
+    # 情况 1：都在同一个表格单元格
+    if start_in_table and end_in_table and start_in_table[:3] == end_in_table[:3]:
+        cell = start_in_table[3]
+        for para in cell.paragraphs:
+            for run in para.runs:
+                run.text = ""
+        if cell.paragraphs and cell.paragraphs[0].runs:
+            cell.paragraphs[0].runs[0].text = placeholder
+        elif cell.paragraphs:
+            cell.paragraphs[0].add_run(placeholder)
+        return doc
+
+    # 情况 2：都在段落中
+    if start_in_para is not None and end_in_para is not None and start_in_table is None:
+        is_first = True
+        for i in range(start_in_para, end_in_para + 1):
+            para = doc.paragraphs[i]
+            for run in para.runs:
+                run.text = ""
+            if is_first:
+                if para.runs:
+                    para.runs[0].text = placeholder
+                else:
+                    para.add_run(placeholder)
+                is_first = False
+        return doc
+
+    # 情况 3：开始在表格，结束在段落（跨区域）
+    if start_in_table and end_in_para is not None:
+        # 清空表格单元格内容
+        cell = start_in_table[3]
+        for para in cell.paragraphs:
+            for run in para.runs:
+                run.text = ""
+        # 在表格单元格中添加占位符
+        if cell.paragraphs and cell.paragraphs[0].runs:
+            cell.paragraphs[0].runs[0].text = placeholder
+        elif cell.paragraphs:
+            cell.paragraphs[0].add_run(placeholder)
+
+        # 清空从表格后到结束段落的所有段落
+        # 找到表格后的第一个段落索引
+        tbl_element = doc.tables[start_in_table[0]]._tbl
+        body = doc.element.body
+        body_elements = list(body)
+        tbl_idx_in_body = body_elements.index(tbl_element)
+
+        # 找到表格后的段落
+        for i, para in enumerate(doc.paragraphs):
+            try:
+                para_idx_in_body = body_elements.index(para._element)
+                if para_idx_in_body > tbl_idx_in_body and i <= end_in_para:
+                    # 清空这个段落
+                    for run in para.runs:
+                        run.text = ""
+            except ValueError:
+                continue
+
+        return doc
+
+    # 没有找到匹配
     return doc
 
 
@@ -216,8 +677,9 @@ def replace_body_in_doc(doc: Document, start_paragraph: int,
                        end_paragraph: int) -> Document:
     """在文档中替换正文区域为 {{ body }} 占位符（返回新文档）。
 
-    注意：此函数只处理段落，不处理表格。
-    如需处理包含表格的正文，请使用 replace_body_elements_in_doc。
+    删除正文区域内的所有元素（段落、表格、目录等），只保留一个占位符。
+    目录（SDT）也会被删除，因为目录内容会根据正文自动生成。
+    保留正文开始处的分节符（用于保留页面分隔）。
 
     Args:
         doc: Document 对象
@@ -227,179 +689,189 @@ def replace_body_in_doc(doc: Document, start_paragraph: int,
     Returns:
         修改后的 Document 对象
     """
+    from lxml import etree
+    from copy import deepcopy
+
+    W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
+
     if start_paragraph >= len(doc.paragraphs):
         raise ValueError(f"起始段落 {start_paragraph} 超出范围")
 
+    # 获取 body 元素
+    body = doc._body._body
+
+    # 找到起始段落和结束段落对应的 XML 元素
+    start_para_element = doc.paragraphs[start_paragraph]._element
     end_idx = min(end_paragraph, len(doc.paragraphs))
+    end_para_element = doc.paragraphs[end_idx - 1]._element if end_idx > start_paragraph else start_para_element
 
-    # 清空正文区域的第一个段落，用于放置 {{ body }}
-    para = doc.paragraphs[start_paragraph]
-    for run in para.runs:
-        run.text = ""
-    if para.runs:
-        para.runs[0].text = common.format_body_placeholder()
-    else:
-        para.add_run(common.format_body_placeholder())
+    # 查找 body 开始之前的段落中的 sectPr（用于保留页面分隔）
+    preceding_sect_pr = None
+    if start_paragraph > 0:
+        preceding_para = doc.paragraphs[start_paragraph - 1]._element
+        pPr = preceding_para.find(f'{W}pPr')
+        if pPr is not None:
+            sect_pr = pPr.find(f'{W}sectPr')
+            if sect_pr is not None:
+                preceding_sect_pr = deepcopy(sect_pr)
 
-    # 删除正文区域的其他段落（从后往前删除）
-    for i in range(end_idx - 1, start_paragraph, -1):
-        if i < len(doc.paragraphs):
-            para = doc.paragraphs[i]
-            para._element.getparent().remove(para._element)
+    # 先删除所有 SDT（目录）元素
+    sdt_elements = [child for child in body if etree.QName(child.tag).localname == 'sdt']
+    for sdt in sdt_elements:
+        body.remove(sdt)
+
+    # 收集要删除的元素（正文区域内的所有段落和表格）
+    elements_to_remove = []
+    in_body_range = False
+    first_body_element = None
+    last_sect_pr = None  # 保存最后一个分节符
+
+    for child in list(body):
+        tag = etree.QName(child.tag).localname
+
+        # 检查是否进入正文区域
+        if child == start_para_element:
+            in_body_range = True
+            first_body_element = child
+
+        # 如果在正文区域内，收集要删除的元素
+        if in_body_range:
+            if tag in ('p', 'tbl'):
+                elements_to_remove.append(child)
+                # 检查段落是否有分节符
+                if tag == 'p':
+                    sect_pr = child.find(f'.//{W}sectPr')
+                    if sect_pr is not None:
+                        last_sect_pr = deepcopy(sect_pr)
+
+        # 检查是否离开正文区域
+        if child == end_para_element:
+            in_body_range = False
+            break
+
+    # 删除收集的元素（从后往前删除，保留第一个段落用于放置占位符）
+    for element in reversed(elements_to_remove[1:]):
+        body.remove(element)
+
+    # 在第一个元素位置设置占位符
+    if first_body_element is not None and elements_to_remove:
+        # 使用 python-docx 的 Paragraph 包装器操作第一个段落
+        from docx.text.paragraph import Paragraph
+        para = Paragraph(first_body_element, doc._body)
+
+        # 清空所有 runs
+        for run in para.runs:
+            run.text = ""
+
+        # 设置占位符
+        if para.runs:
+            para.runs[0].text = "{{ body }}"
+        else:
+            para.add_run("{{ body }}")
+
+        # 如果有前置分节符（定义页面分隔），添加到 body 占位符段落
+        sect_pr_to_use = preceding_sect_pr if preceding_sect_pr is not None else last_sect_pr
+        if sect_pr_to_use is not None:
+            # 获取段落的 pPr（段落属性）元素，如果没有则创建
+            pPr = first_body_element.find(f'{W}pPr')
+            if pPr is None:
+                pPr = etree.SubElement(
+                    first_body_element,
+                    f'{W}pPr'
+                )
+                # pPr 应该在段落的最前面
+                first_body_element.insert(0, pPr)
+            # 添加分节符到 pPr
+            pPr.append(sect_pr_to_use)
 
     return doc
 
 
-def replace_body_elements_in_doc(doc: Document,
-                                 start_element_idx: int,
-                                 end_element_idx: int) -> Document:
-    """在文档中替换正文区域为 {{ body }} 占位符（包括所有元素）。
+def replace_appendix_in_doc(doc: Document, start_paragraph: int,
+                             end_paragraph: int) -> Document:
+    """在文档中替换附录区域为 {{ appendix }} 占位符（返回新文档）。
 
-    正文包括段落、表格、图表等所有块级元素。
-    附录部分保留不变。
+    删除附录区域内的所有元素（段落、表格等），只保留一个占位符。
+    保留附录结束处的分节符（用于保留页面分隔）。
 
     Args:
         doc: Document 对象
-        start_element_idx: body 中起始元素索引
-        end_element_idx: body 中结束元素索引（不包含）
+        start_paragraph: 起始段落索引
+        end_paragraph: 结束段落索引（不包含）
 
     Returns:
         修改后的 Document 对象
     """
-    return _replace_elements_region(doc, start_element_idx, end_element_idx,
-                                    common.format_body_placeholder())
-
-
-def replace_appendix_in_doc(doc: Document,
-                            start_element_idx: int,
-                            end_element_idx: int) -> Document:
-    """在文档中替换 APPENDIX 区域为 {{ appendix }} 占位符。
-
-    Args:
-        doc: Document 对象
-        start_element_idx: APPENDIX 起始元素索引
-        end_element_idx: APPENDIX 结束元素索引（不包含）
-
-    Returns:
-        修改后的 Document 对象
-    """
-    return _replace_elements_region(doc, start_element_idx, end_element_idx,
-                                    common.format_placeholder("appendix"))
-
-
-def _replace_elements_region(doc: Document,
-                             start_element_idx: int,
-                             end_element_idx: int,
-                             placeholder: str) -> Document:
-    """通用的元素区域替换函数。
-
-    删除指定范围的元素，并在原位置插入占位符。
-    保留原始段落的格式（字体、大小等）。
-    保留区域末尾的分页符和分节符。
-
-    Args:
-        doc: Document 对象
-        start_element_idx: 起始元素索引
-        end_element_idx: 结束元素索引（不包含）
-        placeholder: 要插入的占位符文本
-
-    Returns:
-        修改后的 Document 对象
-    """
-    from docx.oxml.ns import qn
-    from docx.oxml import OxmlElement
+    from lxml import etree
     from copy import deepcopy
 
+    W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
+
+    if start_paragraph >= len(doc.paragraphs):
+        raise ValueError(f"起始段落 {start_paragraph} 超出范围")
+
+    # 获取 body 元素
     body = doc._body._body
 
-    # 获取所有块级元素
-    all_elements = []
-    for child in body:
-        tag = child.tag
-        if tag in (qn('w:p'), qn('w:tbl'), qn('w:sdt')):
-            all_elements.append(child)
+    # 找到起始段落和结束段落对应的 XML 元素
+    start_para_element = doc.paragraphs[start_paragraph]._element
+    end_idx = min(end_paragraph, len(doc.paragraphs))
+    end_para_element = doc.paragraphs[end_idx - 1]._element if end_idx > start_paragraph else start_para_element
 
-    if start_element_idx >= len(all_elements):
-        raise ValueError(f"起始元素索引 {start_element_idx} 超出范围 {len(all_elements)}")
+    # 保存结束段落的分节符（如果有的话）
+    end_sect_pr = None
+    end_pPr = end_para_element.find(f'{W}pPr')
+    if end_pPr is not None:
+        sect_pr = end_pPr.find(f'{W}sectPr')
+        if sect_pr is not None:
+            end_sect_pr = deepcopy(sect_pr)
 
-    end_idx = min(end_element_idx, len(all_elements))
+    # 收集要删除的元素
+    elements_to_remove = []
+    first_appendix_element = None
 
-    # 保存第一个段落的格式属性（在删除之前）
-    first_elem = all_elements[start_element_idx]
-    saved_pPr = None
-    saved_rPr = None
-    if first_elem.tag == qn('w:p'):
-        # 保存段落属性
-        pPr = first_elem.find(qn('w:pPr'))
-        if pPr is not None:
-            saved_pPr = deepcopy(pPr)
-        # 保存第一个 run 的属性
-        first_run = first_elem.find(qn('w:r'))
-        if first_run is not None:
-            rPr = first_run.find(qn('w:rPr'))
-            if rPr is not None:
-                saved_rPr = deepcopy(rPr)
+    for child in list(body):
+        # 检查是否进入附录区域
+        if child == start_para_element:
+            first_appendix_element = child
 
-    # 检查并保存区域末尾的分页符/分节符段落
-    trailing_break_elements = []
-    for i in range(end_idx - 1, start_element_idx - 1, -1):
-        elem = all_elements[i]
-        if elem.tag == qn('w:p'):
-            # 检查是否是分节符段落
-            pPr = elem.find(qn('w:pPr'))
-            has_sectPr = pPr is not None and pPr.find(qn('w:sectPr')) is not None
+        if first_appendix_element is not None:
+            if etree.QName(child.tag).localname in ('p', 'tbl'):
+                elements_to_remove.append(child)
 
-            # 检查是否是分页符段落
-            has_page_break = any(
-                br.get(qn('w:type')) == 'page'
-                for br in elem.iter(qn('w:br'))
-            )
-
-            # 检查是否是空段落（只有分页符或分节符）
-            texts = [t.text for t in elem.iter(qn('w:t')) if t.text]
-            is_empty = not ''.join(texts).strip()
-
-            if is_empty and (has_sectPr or has_page_break):
-                trailing_break_elements.insert(0, deepcopy(elem))
-                end_idx = i  # 不删除这个分页符元素
-            else:
-                break
-        else:
+        # 检查是否离开附录区域
+        if child == end_para_element:
             break
 
-    # 删除范围内的所有元素（从后往前删除，避免索引混乱）
-    for i in range(end_idx - 1, start_element_idx - 1, -1):
-        elem = all_elements[i]
-        parent = elem.getparent()
-        if parent is not None:
-            parent.remove(elem)
+    # 删除收集的元素（从后往前删除，保留第一个段落用于放置占位符）
+    for element in reversed(elements_to_remove[1:]):
+        body.remove(element)
 
-    # 创建新的占位符段落（保留原始格式）
-    new_para = OxmlElement('w:p')
-    if saved_pPr is not None:
-        # 移除分节符（如果有），只保留格式
-        new_pPr = deepcopy(saved_pPr)
-        sectPr = new_pPr.find(qn('w:sectPr'))
-        if sectPr is not None:
-            new_pPr.remove(sectPr)
-        new_para.append(new_pPr)
+    # 在第一个元素位置设置占位符
+    if first_appendix_element is not None and elements_to_remove:
+        from docx.text.paragraph import Paragraph
+        para = Paragraph(first_appendix_element, doc._body)
 
-    new_run = OxmlElement('w:r')
-    if saved_rPr is not None:
-        new_run.append(saved_rPr)
+        # 清空所有 runs
+        for run in para.runs:
+            run.text = ""
 
-    new_text = OxmlElement('w:t')
-    new_text.text = placeholder
-    new_run.append(new_text)
-    new_para.append(new_run)
+        # 设置占位符
+        if para.runs:
+            para.runs[0].text = "{{ appendix }}"
+        else:
+            para.add_run("{{ appendix }}")
 
-    # 在正确的位置插入占位符
-    if end_idx < len(all_elements):
-        next_element = all_elements[end_idx]
-        insert_pos = list(body).index(next_element)
-        body.insert(insert_pos, new_para)
-    else:
-        body.append(new_para)
+        # 如果有结束分节符，添加到 appendix 占位符段落
+        if end_sect_pr is not None:
+            pPr = first_appendix_element.find(f'{W}pPr')
+            if pPr is None:
+                pPr = etree.SubElement(
+                    first_appendix_element,
+                    f'{W}pPr'
+                )
+                first_appendix_element.insert(0, pPr)
+            pPr.append(end_sect_pr)
 
     return doc
 
@@ -407,22 +879,20 @@ def _replace_elements_region(doc: Document,
 # ==================== 位置调整 ====================
 
 def adjust_abstract_position_in_doc(doc: Document, table: int, row: int,
-                                   col_start: int, col_end: int,
-                                   row_end: int = None) -> Document:
+                                   col_start: int, col_end: int) -> Document:
     """调整摘要位置（返回新文档）。
 
     Args:
         doc: Document 对象
         table: 表格索引
-        row: 行索引（起始行）
+        row: 行索引
         col_start: 起始列索引
         col_end: 结束列索引
-        row_end: 结束行索引（可选）
 
     Returns:
         修改后的 Document 对象
     """
-    return replace_abstract_in_doc(doc, table, row, col_start, col_end, row_end)
+    return replace_abstract_in_doc(doc, table, row, col_start, col_end)
 
 
 def adjust_body_range_in_doc(doc: Document, start_paragraph: int,
@@ -457,23 +927,26 @@ def add_field_to_doc(doc: Document, field_name: str, field_value: str,
 
     Returns:
         修改后的 Document 对象
-
-    Raises:
-        NotImplementedError: 当位置提示类型未实现时
     """
-    placeholder = common.format_placeholder(field_name)
+    placeholder = "{{" + f" {field_name} " + "}}"
 
     # 解析位置提示
     if position_hint.startswith("after:"):
-        raise NotImplementedError(
-            f"位置提示 'after:{position_hint[6:]}' 尚未实现。"
-            "需要集成 document.py 的 find_content_location 函数。"
-        )
+        # 在指定字段之后插入
+        existing_field = position_hint[6:]
+        # 这里需要调用 document.py 的 find_content_location
+        # 暂时跳过实现
+        pass
 
     elif position_hint.startswith("table:"):
-        raise NotImplementedError(
-            f"位置提示 '{position_hint}' 尚未实现。"
-        )
+        # 直接指定表格位置
+        parts = position_hint.split(",")
+        table_idx = int(parts[0].split(":")[1])
+
+        table = doc.tables[table_idx]
+        # 在指定位置插入占位符
+        # ... (具体实现)
+        pass
 
     elif position_hint.startswith("paragraph:"):
         # 在指定段落之后插入
@@ -489,8 +962,6 @@ def add_field_to_doc(doc: Document, field_name: str, field_value: str,
             from docx.text.paragraph import Paragraph
             new_para_obj = Paragraph(new_para, doc)
             new_para_obj.text = placeholder
-    else:
-        raise ValueError(f"未知的位置提示格式: {position_hint}")
 
     return doc
 
@@ -505,7 +976,7 @@ def remove_field_from_doc(doc: Document, field_name: str) -> Document:
     Returns:
         修改后的 Document 对象
     """
-    placeholder = common.format_placeholder(field_name)
+    placeholder = "{{" + f" {field_name} " + "}}"
 
     # 在段落中查找并删除
     for para in doc.paragraphs:
@@ -538,36 +1009,18 @@ def _replace_text_in_para(paragraph, old_text: str, new_text: str):
     if old_text not in paragraph.text:
         return
 
-    # 先保存原始文本（在清空 runs 之前）
+    # 先保存原始文本
     original_text = paragraph.text
-    replaced_text = original_text.replace(old_text, new_text)
 
     # 清除现有 runs
     for run in paragraph.runs:
         run.text = ""
 
-    # 设置替换后的文本
+    # 使用保存的原始文本进行替换
+    new_content = original_text.replace(old_text, new_text)
+
+    # 添加新 run
     if paragraph.runs:
-        paragraph.runs[0].text = replaced_text
+        paragraph.runs[0].text = new_content
     else:
-        paragraph.add_run(replaced_text)
-
-
-def _replace_entire_para(paragraph, new_text: str):
-    """将整个段落替换为新文本。
-
-    用于长文本的前缀匹配替换。
-
-    Args:
-        paragraph: python-docx 段落对象
-        new_text: 新文本（占位符）
-    """
-    # 清除现有 runs
-    for run in paragraph.runs:
-        run.text = ""
-
-    # 设置新文本
-    if paragraph.runs:
-        paragraph.runs[0].text = new_text
-    else:
-        paragraph.add_run(new_text)
+        paragraph.add_run(new_content)

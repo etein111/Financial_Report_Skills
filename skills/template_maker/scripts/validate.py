@@ -13,7 +13,7 @@ import re
 from docx import Document
 from docx.shared import Pt, RGBColor
 
-from . import common
+import common
 
 
 # ==================== 数据结构 ====================
