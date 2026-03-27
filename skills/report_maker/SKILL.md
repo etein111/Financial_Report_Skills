@@ -190,15 +190,86 @@ reports/<report_name>/    # 项目根目录下的 reports/
 
 加载 `elements.yaml`，应用用户修正，保存更新后的 `elements.yaml`
 
-### 2. 渲染短字段
+### 2. 渲染报告
 
-使用 python-docx-template（Jinja2）加载 `templates/{template_name}/template.docx`，用 elements.yaml 中的值替换占位符
+使用 `renderer.render_report()` 函数完成以下操作：
+- 渲染短字段到模板（使用 Jinja2 替换占位符）
+- 插入摘要和正文片段（使用 docxcompose 合并文档）
+- 保存最终输出文件
 
-### 3. 插入长文本片段
+**完整代码示例**：
 
-用 python-docx 插入 `abstract.docx` 和 `body.docx` 内容
+```python
+from skills.report_maker.scripts import common, renderer
+from pathlib import Path
+import os
 
-### 4. 保存并转换
+# ⚠️ 重要：必须从项目根目录执行
+os.chdir('/mnt/c/_code/neoskills')
+
+# 报告路径
+report_dir = Path('reports/cirrus(2507)_20251021')
+elements_path = report_dir / 'elements.yaml'
+abstract_path = report_dir / 'abstract.docx'
+body_path = report_dir / 'body.docx'
+output_path = report_dir / 'output.docx'
+
+# 1. 路由到模板并构建完整路径
+template_name = common.get_template_name('company')  # 返回 'company'
+template_path = f'templates/{template_name}/template.docx'
+
+# 2. 加载 elements.yaml
+elements = common.load_yaml(elements_path)
+
+# 3. 渲染报告
+renderer.render_report(
+    template_path=template_path,    # 模板文件完整路径
+    elements=elements,               # 要素字典（从 elements.yaml 加载）
+    abstract_path=str(abstract_path), # 摘要文件路径
+    body_path=str(body_path),        # 正文文件路径
+    output_path=str(output_path)     # 输出文件路径
+)
+
+print(f'✓ 报告已生成: {output_path}')
+```
+
+**函数签名**：
+
+```python
+def render_report(
+    template_path: str,      # 模板文件完整路径（相对于项目根目录）
+    elements: Dict[str, Any], # 要素字典（从 elements.yaml 加载）
+    abstract_path: str,      # 摘要文件路径
+    body_path: str,          # 正文文件路径
+    output_path: str         # 输出文件路径
+) -> bool:
+    """渲染报告，正确处理分析师字段、abstract 和 body。
+
+    Returns:
+        bool: 是否成功
+    """
+```
+
+**参数说明**：
+
+| 参数 | 类型 | 说明 | 示例 |
+|------|------|------|------|
+| `template_path` | `str` | 模板文件的完整相对路径 | `templates/company/template.docx` |
+| `elements` | `Dict` | 从 `elements.yaml` 加载的要素字典 | `{'report_date': '21 Oct 2025', ...}` |
+| `abstract_path` | `str` | 摘要片段文件路径 | `reports/cirrus(2507)_20251021/abstract.docx` |
+| `body_path` | `str` | 正文片段文件路径 | `reports/cirrus(2507)_20251021/body.docx` |
+| `output_path` | `str` | 输出文件路径 | `reports/cirrus(2507)_20251021/output.docx` |
+
+### 3. 转换为 PDF（可选）
+
+使用 LibreOffice 将 Word 文档转换为 PDF：
+
+```bash
+# 使用绝对路径指定输出目录（避免路径混淆）
+libreoffice --headless --convert-to pdf \
+    --outdir "/mnt/c/_code/neoskills/reports/cirrus(2507)_20251021" \
+    "/mnt/c/_code/neoskills/reports/cirrus(2507)_20251021/output.docx"
+```
 
 ⚠️ **重要**：最终输出必须保存在项目根目录的 `reports/` 下。
 
@@ -208,9 +279,19 @@ reports/<report_name>/    # 项目根目录下的 reports/
 └── output.pdf           # 最终 PDF（通过 LibreOffice 转换）
 ```
 
-**LibreOffice 转换注意事项**：
-- 使用绝对路径指定输出目录，避免路径混淆
-- 示例：`libreoffice --headless --convert-to pdf --outdir "/absolute/path/to/reports/name" "input.docx"`
+### 4. 输出文件结构
+
+渲染完成后的报告目录结构：
+
+```
+reports/<report_name>/
+├── draft.docx           # 原始草稿
+├── elements.yaml        # 提取的要素
+├── abstract.docx        # 摘要片段
+├── body.docx            # 正文片段
+├── output.docx          # ✅ 最终 Word 文档
+└── output.pdf           # ✅ 最终 PDF 文档（可选）
+```
 
 ---
 
