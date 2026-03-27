@@ -639,6 +639,8 @@ def prepare_context_with_analysts(elements: Dict[str, Any]) -> Dict[str, Any]:
     将 a1_cn, a1_en, a1_sfc, a1_email 等展平为：
     analyst_chinese_name, analyst_english_name, analyst_sfc_code, analyst_email
 
+    对于没有值的分析师字段（a2-a8），将占位符替换为空字符串。
+
     Args:
         elements: 原始要素字典
 
@@ -662,6 +664,23 @@ def prepare_context_with_analysts(elements: Dict[str, Any]) -> Dict[str, Any]:
     context['analyst_sfc_code'] = elements.get('a1_sfc', '')
     context['analyst_email'] = elements.get('a1_email', '')
 
+    # 确保所有分析师字段都有值（空字符串），避免模板中的占位符未被替换
+    # 分析师字段：a1_cn, a1_en, a1_sfc, a1_email ... a8_cn, a8_en, a8_sfc, a8_email
+    analyst_suffixes = ['cn', 'en', 'sfc', 'email']
+    for i in range(1, 9):
+        for suffix in analyst_suffixes:
+            field_name = f'a{i}_{suffix}'
+            # 如果 elements 中没有该字段或值为 None，设置为空字符串
+            context[field_name] = elements.get(field_name) or ''
+
+    # 记录哪些分析师有数据（用于后续清理空分析师单元格）
+    context['_analysts_with_data'] = set()
+    for i in range(1, 9):
+        cn = elements.get(f'a{i}_cn', '')
+        en = elements.get(f'a{i}_en', '')
+        if cn or en:  # 如果有中文名或英文名，认为该分析师有数据
+            context['_analysts_with_data'].add(i)
+
     # 收集所有分析师（用于循环渲染，如果模板支持）
     analysts = []
     for i in range(1, 9):
@@ -676,6 +695,63 @@ def prepare_context_with_analysts(elements: Dict[str, Any]) -> Dict[str, Any]:
     context['analysts'] = analysts
 
     return context
+
+
+def clean_empty_analyst_cells(doc: Document, analysts_with_data: set) -> int:
+    """清理没有数据的分析师单元格。
+
+    当分析师没有数据时，清空整个单元格（包括固定标签如 SFC:、Email: 等）。
+    支持嵌套表格。
+
+    Args:
+        doc: Word 文档对象
+        analysts_with_data: 有数据的分析师编号集合（如 {1, 2}）
+
+    Returns:
+        清理的单元格数量
+    """
+    cleaned_count = 0
+
+    def clean_table(table):
+        """递归清理表格（包括嵌套表格）"""
+        nonlocal cleaned_count
+
+        for row in table.rows:
+            for cell in row.cells:
+                # 先处理嵌套表格
+                for nested_table in cell.tables:
+                    clean_table(nested_table)
+
+                cell_text = cell.text.strip()
+
+                # 跳过空单元格
+                if not cell_text:
+                    continue
+
+                # 检查是否是空分析师单元格的特征：
+                # 模板格式: "{{ a1_cn }} {{ a1_en }}], SFC:{{ a1_sfc }}"
+                # 空分析师渲染后: " ], SFC:" 或 "], SFC:"
+
+                # 检测模式：包含 "], SFC:" 但没有实际名字
+                if '], SFC:' in cell_text or '],SFC:' in cell_text:
+                    # 移除已知的标签和标点
+                    text_check = cell_text
+                    for pattern in ['], SFC:', '],SFC:', 'SFC:', ', SFC:', '@']:
+                        text_check = text_check.replace(pattern, '')
+
+                    # 移除空白字符
+                    text_check = text_check.strip()
+
+                    # 如果移除标签后没有实际内容（或只有很短的残留），清空单元格
+                    if len(text_check) < 3:
+                        cell.text = ''
+                        cleaned_count += 1
+
+    # 处理所有顶级表格
+    for table in doc.tables:
+        clean_table(table)
+
+    return cleaned_count
 
 
 def insert_abstract_to_cell(doc: Document, abstract_doc: Document, marker: str) -> bool:
@@ -946,6 +1022,200 @@ def copy_headers_footers(source_doc: Document, target_doc: Document, target_sect
             pass
 
 
+def replace_analyst_placeholders_in_xml(docx_path: str, elements: Dict[str, Any]) -> str:
+    """在 XML 级别替换嵌套表格中的分析师占位符。
+
+    docxtpl 不能正确处理嵌套表格，会导致嵌套表格结构丢失。
+    这个函数在 docxtpl 渲染后直接操作 XML，正确替换占位符。
+
+    Args:
+        docx_path: docx 文件路径
+        elements: 包含分析师数据的字典
+
+    Returns:
+        修改后的文件路径（可能与输入相同）
+    """
+    import zipfile
+    import re
+    import os
+
+    # 准备替换映射
+    # 格式: {{ a1_cn }} -> "杨斌"
+    replacements = {}
+    analyst_suffixes = ['cn', 'en', 'sfc', 'email']
+
+    for i in range(1, 9):
+        for suffix in analyst_suffixes:
+            key = f'a{i}_{suffix}'
+            value = elements.get(key, '') or ''
+            placeholder = f'{{{{ {key} }}}}'
+            replacements[placeholder] = value
+
+    # 也处理没有花括号的格式（docxtpl 可能简化了）
+    for i in range(1, 9):
+        for suffix in analyst_suffixes:
+            key = f'a{i}_{suffix}'
+            value = elements.get(key, '') or ''
+            placeholder = f'{{{{{key}}}}}'
+            replacements[placeholder] = value
+
+    # 读取 docx（zip 格式）
+    docx_dir = os.path.dirname(docx_path)
+    docx_name = os.path.basename(docx_path)
+    temp_dir = os.path.join(docx_dir, '_temp_docx')
+
+    try:
+        # 解压
+        with zipfile.ZipFile(docx_path, 'r') as z:
+            z.extractall(temp_dir)
+
+        # 读取 document.xml
+        doc_xml_path = os.path.join(temp_dir, 'word', 'document.xml')
+        with open(doc_xml_path, 'r', encoding='utf-8') as f:
+            xml_content = f.read()
+
+        # 执行替换
+        for placeholder, value in replacements.items():
+            if placeholder in xml_content:
+                xml_content = xml_content.replace(placeholder, str(value))
+
+        # 写回 document.xml
+        with open(doc_xml_path, 'w', encoding='utf-8') as f:
+            f.write(xml_content)
+
+        # 重新打包为 docx
+        # 删除原文件
+        os.remove(docx_path)
+
+        # 创建新的 docx（zip）
+        with zipfile.ZipFile(docx_path, 'w', zipfile.ZIP_DEFLATED) as z:
+            for root, dirs, files in os.walk(temp_dir):
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    arcname = os.path.relpath(file_path, temp_dir)
+                    z.write(file_path, arcname)
+
+    finally:
+        # 清理临时目录
+        import shutil
+        if os.path.exists(temp_dir):
+            shutil.rmtree(temp_dir)
+
+    return docx_path
+
+
+def _copy_docx(src: str, dst: str) -> None:
+    """复制 docx 文件。
+
+    Args:
+        src: 源文件路径
+        dst: 目标文件路径
+    """
+    import shutil
+    shutil.copy2(src, dst)
+
+
+def replace_all_placeholders_in_xml(
+    docx_path: str,
+    context: Dict[str, Any],
+    elements: Dict[str, Any]
+) -> str:
+    """通过 XML 级别替换所有占位符。
+
+    docxtpl 会破坏嵌套表格结构，所以使用直接的 XML 替换来代替。
+    这确保嵌套表格（分析师表格）不会被破坏。
+
+    Args:
+        docx_path: docx 文件路径
+        context: 渲染上下文（来自 prepare_context_with_analysts）
+        elements: 原始要素字典
+
+    Returns:
+        修改后的文件路径
+    """
+    import zipfile
+    import os
+
+    # 收集所有要替换的占位符
+    replacements = {}
+
+    # 1. 添加分析师占位符（a1_cn, a1_en, a1_sfc, a1_email, ... a8_cn, ...）
+    analyst_suffixes = ['cn', 'en', 'sfc', 'email']
+    for i in range(1, 9):
+        for suffix in analyst_suffixes:
+            key = f'a{i}_{suffix}'
+            value = context.get(key, '') or ''
+            # 替换格式 {{ a1_cn }} -> "杨斌"
+            replacements[f'{{{{ {key} }}}}'] = value
+            # 也处理无空格格式 {{{key}}}
+            replacements[f'{{{{{key}}}}}]'] = value.rstrip(']') if value else ''
+
+    # 2. 添加简单字段占位符（company, ticker, rating, 等）
+    simple_fields = [
+        'report_date', 'company', 'ticker', 'title', 'rating',
+        'current_price', 'target_price', 'market_cap', 'shares_in_issue',
+        'one_year_high', 'one_year_low', 'current_price_date',
+        'analyst_chinese_name', 'analyst_english_name', 'analyst_sfc_code', 'analyst_email',
+        'a1_cn', 'a1_en', 'a1_sfc', 'a1_email'
+    ]
+    for field in simple_fields:
+        if field in context:
+            value = context[field]
+            if field in ['abstract', 'body']:
+                # 这些用标记替代
+                replacements[f'{{{{{field}}}}}]'] = ''
+            else:
+                replacements[f'{{{{{field}}}}}]'] = str(value) if value else ''
+
+    # 3. 添加抽象占位符 {{ abstract }} 和 {{ body }}
+    # 替换为标记，以便后续插入 abstract 和 body 内容
+    replacements['{{ abstract }}'] = ABSTRACT_MARKER
+    replacements['{{abstract}}'] = ABSTRACT_MARKER
+    replacements['{{ body }}'] = BODY_MARKER
+    replacements['{{body}}'] = BODY_MARKER
+
+    # 读取并修改 docx
+    docx_dir = os.path.dirname(docx_path)
+    temp_dir = os.path.join(docx_dir, '_temp_docx_replace')
+
+    try:
+        # 解压
+        with zipfile.ZipFile(docx_path, 'r') as z:
+            z.extractall(temp_dir)
+
+        # 读取 document.xml
+        doc_xml_path = os.path.join(temp_dir, 'word', 'document.xml')
+        with open(doc_xml_path, 'r', encoding='utf-8') as f:
+            xml_content = f.read()
+
+        # 执行替换（按长度降序排列，避免部分匹配问题）
+        sorted_placeholders = sorted(replacements.keys(), key=len, reverse=True)
+        for placeholder in sorted_placeholders:
+            value = replacements[placeholder]
+            if placeholder in xml_content:
+                xml_content = xml_content.replace(placeholder, value)
+
+        # 写回 document.xml
+        with open(doc_xml_path, 'w', encoding='utf-8') as f:
+            f.write(xml_content)
+
+        # 重新打包为 docx
+        os.remove(docx_path)
+        with zipfile.ZipFile(docx_path, 'w', zipfile.ZIP_DEFLATED) as z:
+            for root, dirs, files in os.walk(temp_dir):
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    arcname = os.path.relpath(file_path, temp_dir)
+                    z.write(file_path, arcname)
+
+    finally:
+        import shutil
+        if os.path.exists(temp_dir):
+            shutil.rmtree(temp_dir)
+
+    return docx_path
+
+
 def render_report(
     template_path: str,
     elements: Dict[str, Any],
@@ -977,21 +1247,26 @@ def render_report(
         # 1. 准备渲染上下文（展平分析师字段）
         context = prepare_context_with_analysts(elements)
 
-        # 使用标记替代 abstract 和 body（避免破坏文档结构）
-        context['abstract'] = ABSTRACT_MARKER
-        context['body'] = BODY_MARKER
-
-        # 2. 使用 docxtpl 渲染短字段
-        tpl = DocxTemplate(template_path)
-        tpl.render(context)
-
-        # 保存临时文件
+        # 2. 复制模板并通过 XML 替换所有占位符
+        # 注意：docxtpl 会破坏嵌套表格，所以不能使用它进行渲染
         temp_path = Path(output_path).parent / "temp_rendered.docx"
-        tpl.save(str(temp_path))
+        _copy_docx(template_path, str(temp_path))
 
-        # 3. 加载渲染后的文档
+        # 2.5 通过 XML 级别替换所有占位符
+        replace_all_placeholders_in_xml(str(temp_path), context, elements)
+
+        # 3. 继续后续处理（插入 abstract、body 等）
+
+        # 3.5 加载渲染后的文档
         doc = Document(str(temp_path))
         template_section_count = len(doc.sections)
+
+        # 3.5 清理空分析师单元格（移除只有标签没有数据的单元格内容）
+        # 注意：此时占位符已经被替换为实际值，空单元格只包含标签如 "], SFC:"
+        analysts_with_data = context.get('_analysts_with_data', set())
+        cleaned_cells = clean_empty_analyst_cells(doc, analysts_with_data)
+        if cleaned_cells > 0:
+            print(f"  已清理 {cleaned_cells} 个空分析师单元格")
 
         # 4. 加载并处理 abstract
         abstract_inserted = False
@@ -1180,34 +1455,48 @@ def render_report(
             final_doc = Document(output_path)
             body_doc_fresh = Document(body_path)
 
-            # 使用 body Section 1 的页眉（蓝色 23558C），Section 0 的页眉是红色
             # Body Section 结构：
-            # - Section 0: header=红色(A7242B), first_page_header=蓝色(23558C), left_margin=6.35cm
-            # - Section 1: header=蓝色(23558C), left_margin=6.35cm
+            # - 可能只有 1 个 section，或者有多个 section
+            # - 第一个 section 通常包含正文的页边距设置（如 6.35cm）
             #
             # Output Section 结构：
             # - Section 0: 封面（保持原样）
-            # - Section 1: 正文（复制 body 的页边距和页眉）
-            # - Section 2: 附录（保持 template 原样，不修改）
-            if len(body_doc_fresh.sections) > 1 and len(final_doc.sections) > 2:
-                # 使用 Section 1 的 header（蓝色），Section 0 的页边距
-                header_source = body_doc_fresh.sections[1]  # 蓝色页眉
-                margin_source = body_doc_fresh.sections[0]  # 页边距 6.35cm
+            # - Section 1 到倒数第二个: 正文（复制 body 的页边距和页眉）
+            # - 最后一个 Section: 附录（保持 template 原样，不修改）
+            if len(body_doc_fresh.sections) >= 1 and len(final_doc.sections) >= 2:
+                # 使用 body 的第一个 section 作为页边距来源
+                margin_source = body_doc_fresh.sections[0]  # 页边距（如 6.35cm）
                 footer_source = body_doc_fresh.sections[0]  # 页脚
 
-                # 只复制到正文 section（Section 1），不影响附录（最后一个 section）
-                # 附录应该保持 template 原始的页边距
-                for target_idx in range(1, len(final_doc.sections) - 1):
+                # 如果 body 有多个 section，使用 Section 1 的 header（通常是蓝色）
+                # 否则使用 Section 0 的 header
+                if len(body_doc_fresh.sections) > 1:
+                    header_source = body_doc_fresh.sections[1]
+                else:
+                    header_source = body_doc_fresh.sections[0]
+
+                # 确定要更新的 section 范围
+                # 如果有 3+ sections：Section 0=封面，Section 1~n-2=正文，Section n-1=附录
+                # 如果只有 2 sections：Section 0=封面，Section 1=正文（也是最后一个）
+                if len(final_doc.sections) > 2:
+                    # 有附录，排除最后一个 section
+                    sections_to_update = len(final_doc.sections) - 1
+                else:
+                    # 没有附录，更新所有非封面 section
+                    sections_to_update = len(final_doc.sections)
+                for target_idx in range(1, sections_to_update):
                     target_section = final_doc.sections[target_idx]
 
-                    # 复制页边距
+                    # 复制页边距（关键：保留 body.docx 的页边距）
                     target_section.left_margin = margin_source.left_margin
                     target_section.right_margin = margin_source.right_margin
+                    target_section.top_margin = margin_source.top_margin
+                    target_section.bottom_margin = margin_source.bottom_margin
 
                     # 复制设置
                     target_section.different_first_page_header_footer = header_source.different_first_page_header_footer
 
-                    # 复制默认页眉（使用蓝色 Section 1 的 header）
+                    # 复制默认页眉
                     target_section.header.is_linked_to_previous = False
                     for child in list(target_section.header._element):
                         target_section.header._element.remove(child)
@@ -1221,7 +1510,7 @@ def render_report(
                     for child in footer_source.footer._element:
                         target_section.footer._element.append(deepcopy(child))
 
-                    # 复制首页页眉（也使用蓝色页眉）
+                    # 复制首页页眉
                     try:
                         target_section.first_page_header.is_linked_to_previous = False
                         for child in list(target_section.first_page_header._element):
@@ -1242,7 +1531,7 @@ def render_report(
                         pass
 
                 final_doc.save(output_path)
-                print(f"  已复制 body 页眉页脚和页边距到 {len(final_doc.sections) - 1} 个 sections")
+                print(f"  已复制 body 页边距（左={margin_source.left_margin.cm:.2f}cm）和页眉页脚到 {sections_to_update - 1} 个正文 sections")
 
         # 12.5 清理 body 带来的 section breaks 和多余空段落（防止空白页）
         final_doc = Document(output_path)
@@ -1349,6 +1638,33 @@ def render_report(
                 print(f"  已清理 {len(paragraphs_to_remove)} 个多余空段落")
             if sectPrs_removed > 0:
                 print(f"  已移除 {sectPrs_removed} 个 body 带来的 section breaks")
+
+        # 12.6 重新设置正文 sections 的页边距（因为步骤 12.5 可能修改了 section 结构）
+        if body_doc:
+            final_doc = Document(output_path)
+            body_doc_fresh = Document(body_path)
+
+            if len(body_doc_fresh.sections) >= 1 and len(final_doc.sections) >= 2:
+                margin_source = body_doc_fresh.sections[0]
+
+                # 确定正文 sections 的范围
+                if len(final_doc.sections) > 2:
+                    sections_to_update = len(final_doc.sections) - 1
+                else:
+                    sections_to_update = len(final_doc.sections)
+
+                margins_updated = 0
+                for target_idx in range(1, sections_to_update):
+                    target_section = final_doc.sections[target_idx]
+                    target_section.left_margin = margin_source.left_margin
+                    target_section.right_margin = margin_source.right_margin
+                    target_section.top_margin = margin_source.top_margin
+                    target_section.bottom_margin = margin_source.bottom_margin
+                    margins_updated += 1
+
+                if margins_updated > 0:
+                    final_doc.save(output_path)
+                    print(f"  已重新设置 {margins_updated} 个正文 sections 的页边距（左={margin_source.left_margin.cm:.2f}cm）")
 
         # 13. 清理临时文件
         temp_path.unlink(missing_ok=True)
