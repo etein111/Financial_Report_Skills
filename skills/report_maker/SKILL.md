@@ -9,6 +9,11 @@ description: 当用户上传报告草稿或要求生成/解析研究报告时使
 
 **工作流程**：抽取确认 → 渲染输出
 
+**重要配置**：
+- **工作目录**：所有操作必须从**项目根目录**执行（`/mnt/c/_code/neoskills/`）
+- **输出位置**：报告生成在项目根目录的 `reports/` 下
+- **依赖检查**：确保已安装 `docxtpl` 和 `docxcompose`
+
 ---
 
 ## 使用条件
@@ -23,6 +28,37 @@ description: 当用户上传报告草稿或要求生成/解析研究报告时使
 **语言要求**：必须使用中文与用户沟通
 
 **报告类型**：company, sector, macro, strategy, quantitative, bond
+
+---
+
+## 依赖检查
+
+**必需的 Python 包**：
+- `python-docx` - Word 文档操作
+- `docxtpl` - Jinja2 模板渲染
+- `docxcompose` - 文档合并
+- `PyYAML` - YAML 配置文件
+
+**检查命令**：
+```bash
+python3 -c "import docx, docxtpl, docxcompose, yaml; print('✓ 所有依赖已安装')"
+```
+
+**安装命令**（如需安装）：
+```bash
+# 优先使用 uv（项目规范）
+uv pip install "docxtpl>=0.20.0" docxcompose
+
+# 如果 uv 不可用，先安装 uv
+# Linux/Mac:
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# 或使用 pip:
+pip install uv
+
+# 回退方案：使用 pip3（不推荐）
+pip3 install --break-system-packages "docxtpl>=0.20.0" docxcompose
+```
 
 ---
 
@@ -58,6 +94,8 @@ description: 当用户上传报告草稿或要求生成/解析研究报告时使
 从 `templates/router.yaml` 获取模板名，加载对应的模板文件：
 - `templates/{template_name}/schema.yaml` - **定义要提取哪些字段**
 - `templates/{template_name}/template.docx` - **定义字段在文档中的位置**
+
+⚠️ **重要**：确保从项目根目录执行，否则找不到模板文件。
 
 ### 3. 提取字段
 
@@ -130,8 +168,10 @@ elements = common.ensure_all_fields(elements, schema)
 
 ### 7. 保存结果
 
+⚠️ **重要**：报告必须保存在项目根目录的 `reports/` 下，而不是 skill 目录内。
+
 ```
-reports/<report_name>/
+reports/<report_name>/    # 项目根目录下的 reports/
 ├── draft.docx           # 原始草稿
 ├── elements.yaml        # 提取的要素
 ├── abstract.docx        # 摘要片段
@@ -160,11 +200,17 @@ reports/<report_name>/
 
 ### 4. 保存并转换
 
+⚠️ **重要**：最终输出必须保存在项目根目录的 `reports/` 下。
+
 ```
-reports/<report_name>/
+reports/<report_name>/    # 项目根目录下的 reports/
 ├── output.docx          # 最终 Word
 └── output.pdf           # 最终 PDF（通过 LibreOffice 转换）
 ```
+
+**LibreOffice 转换注意事项**：
+- 使用绝对路径指定输出目录，避免路径混淆
+- 示例：`libreoffice --headless --convert-to pdf --outdir "/absolute/path/to/reports/name" "input.docx"`
 
 ---
 
@@ -199,31 +245,35 @@ body: "body.docx"
 ## 权限边界
 
 ### ✅ 可写
-- `reports/{report_name}/*`（所有文件）
+- **项目根目录的** `reports/{report_name}/*`（所有文件）
 
 ### ❌ 不可写
 - `templates/*`（任何模板文件）
 - schema.yaml
 - router.yaml
+- `.claude/skills/report_maker/reports/`（skill 内的临时目录，非最终输出位置）
 
 ---
 
 ## 注意事项
 
 1. **交互式确认是必须的** - 不能跳过第一阶段直接生成
-2. **空字段处理** - 必须保留空字段，值为 `""`
-3. **字段严格一致性** - elements.yaml 必须与 schema.yaml 完全一致
+2. **工作目录要求** - 所有操作必须从项目根目录执行，否则找不到模板文件
+3. **输出位置要求** - 报告必须保存在项目根目录的 `reports/` 下
+4. **依赖检查** - 确保已安装 docxtpl 和 docxcompose
+5. **空字段处理** - 必须保留空字段，值为 `""`
+6. **字段严格一致性** - elements.yaml 必须与 schema.yaml 完全一致
    - 字段名称相同
    - 字段顺序相同
    - 字段数量相同
    - 空字段也必须存在（值为 `""`）
-4. **模板依赖关系**：
+7. **模板依赖关系**：
    - **schema.yaml** 是"字段清单"（提取什么）
    - **template.docx** 是"位置地图"（在哪里提取）
    - **elements.yaml** 是"提取结果"（必须严格按照 schema）
-5. **模板切换限制** - 只能在第一阶段切换模板，第二阶段不支持切换
-6. **只读 templates/** - report_maker 永远不修改模板资产
-7. **自动化提取能力** - 现已支持一次性正确提取所有字段，包括嵌套表格、组合字段拆分、注释提取、特殊格式化等
+8. **模板切换限制** - 只能在第一阶段切换模板，第二阶段不支持切换
+9. **只读 templates/** - report_maker 永远不修改模板资产
+10. **自动化提取能力** - 现已支持一次性正确提取所有字段，包括嵌套表格、组合字段拆分、注释提取、特殊格式化等
 
 ---
 
