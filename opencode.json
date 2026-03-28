@@ -1,13 +1,4 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugin": ["superpowers@git+https://github.com/obra/superpowers.git"],
-  "skillsDir": ".claude/skills",
-  "workingDirectory": "/data/{username}",
-  "allowedDirectories": [
-    "/data/{username}/input",
-    "/data/{username}/output",
-    "skills",
-    "templates",
-    "samples"
-  ]
+  "plugin": ["superpowers@git+https://github.com/obra/superpowers.git"]
 }
