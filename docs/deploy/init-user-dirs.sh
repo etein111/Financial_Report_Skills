@@ -10,8 +10,8 @@ if [ -z "$USERNAME" ]; then
     echo "Usage: $0 <username>"
     echo ""
     echo "Example:"
-    echo "  $0 alice    # 创建 alice 用户的目录"
-    echo "  $0 bob      # 创建 bob 用户的目录"
+    echo "  $0 test    # 创建 alice 用户的目录"
+    echo "  $0 yang      # 创建 bob 用户的目录"
     exit 1
 fi
 

@@ -8,7 +8,7 @@ set -e
 
 # 配置变量
 DATA_BASE_DIR="/data"
-FILEBROWSER_PORT=8080
+FILEBROWSER_PORT=8081
 FILEBROWSER_DATA_DIR="/data/filebrowser"
 
 # 颜色输出
@@ -94,7 +94,7 @@ echo "                      部署完成！                      "
 echo "============================================================================="
 echo ""
 echo "访问地址："
-echo "  FileBrowser: http://${SERVER_IP}:${FILEBROWSER_PORT}"
+echo "  FileBrowser: http://${SERVER_IP}:${FILEBROWSER_PORT} (文件上传/下载)"
 echo ""
 echo "默认管理员账号："
 echo "  用户名: admin"
