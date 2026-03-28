@@ -1,6 +1,6 @@
 ---
 name: template_maker
-description: Use when creating or modifying Word report templates. Extracts schema from sample documents, creates template.docx with Jinja2 placeholders, and validates template structure. Supports interactive template editing and field management.
+description: "当用户说「制作模板」、「创建模板」、「分析模板结构」或上传 Word 文档要求提取模板时使用此技能。支持创建新模板、维护现有模板、验证模板结构。"
 ---
 
 # template_maker
