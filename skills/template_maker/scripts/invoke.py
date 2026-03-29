@@ -23,7 +23,7 @@ from template import (
     replace_analyst_fields_in_doc
 )
 from document import find_abstract_by_elements, find_body_range_by_sections
-from router import load_router, update_mapping, save_router
+from router import load_router, update_mapping, save_router, get_all_router_mappings
 import yaml
 
 
@@ -178,6 +178,53 @@ def _confirm_appendix_location() -> str | None:
         print("请输入 y 或 n")
 
 
+def _confirm_report_type_mapping(name: str, router_path: Path, auto_confirm: bool) -> str | None:
+    """交互确认报告类型映射。
+
+    Args:
+        name: 模板名称
+        router_path: router.yaml 文件路径
+        auto_confirm: 是否自动确认
+
+    Returns:
+        要映射的报告类型，None 表示不添加到 router
+    """
+    print("\n" + "=" * 60)
+    print("【步骤 4/4】配置报告类型映射")
+    print("=" * 60)
+
+    # 显示现有映射
+    router_data = load_router(router_path)
+    existing_mappings = get_all_router_mappings(router_data)
+
+    if existing_mappings:
+        print("\n现有映射：")
+        for rt, tmpl in existing_mappings.items():
+            print(f"  {rt} → {tmpl}")
+    else:
+        print("\n当前没有映射配置")
+
+    print(f"\n此模板 '{name}' 将用于哪种报告类型？")
+    print("  - 输入报告类型名称（如：company、sector、macro）")
+    print("  - 直接回车：使用模板名称作为报告类型")
+    print("  - 输入 'n' 或 'no'：不添加到路由")
+
+    if auto_confirm:
+        # 自动化模式：使用模板名称作为报告类型
+        print(f"\n[自动化模式] 使用 '{name}' 作为报告类型")
+        return name
+
+    while True:
+        user_input = input("\n报告类型: ").strip().lower()
+
+        if user_input in ['n', 'no', '']:
+            return name  # 默认使用模板名称
+        elif user_input:
+            return user_input
+
+        print("请输入报告类型名称")
+
+
 def create_template(
     name: str,
     word_path: str,
@@ -240,11 +287,18 @@ def create_template(
         body_scope = _confirm_body_location(detected_locations.get("body"))
         appendix_scope = _confirm_appendix_location()
 
+    # 准备 router.yaml 路径（用于显示现有映射）
+    router_path = output_dir / "router.yaml"
+
+    # 报告类型映射确认
+    report_type = _confirm_report_type_mapping(name, router_path, auto_confirm)
+
     # 显示最终配置
     print("\n" + "=" * 60)
     print("【最终配置确认】")
     print("=" * 60)
     print(f"模板名称: {name}")
+    print(f"报告类型映射: {report_type} → {name}")
     print(f"摘要位置: {abstract_scope}")
     print(f"正文位置: {body_scope or '无（快讯报告）'}")
     print(f"法律披露附录: {appendix_scope or '无'}")
@@ -329,11 +383,12 @@ def create_template(
     template_docx_path = template_dir / "template.docx"
     save_document(doc, str(template_docx_path))
 
-    # 5. 更新 router.yaml
+    # 5. 更新 router.yaml（使用用户确认的报告类型映射）
     router_path = output_dir / "router.yaml"
     router_data = load_router(router_path)
-    router_data = update_mapping(router_data, name, name)
+    router_data = update_mapping(router_data, report_type, name)
     save_router(router_path, router_data)
+    print(f"\n路由配置已更新: {report_type} → {name}")
 
     return {
         "success": True,
