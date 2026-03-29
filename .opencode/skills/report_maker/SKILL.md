@@ -5,8 +5,6 @@ description: "当用户说「做研报」、「生成报告」、「写研报」
 
 # Report Maker - 研究报告生成
 
-**核心原则**：只写 `reports/`，不写 `templates/`
-
 **用户隔离**：
 - **目录结构**：`/data/users/{用户名}/` 下可以有任意文件和目录结构，不固定 input/output
 - **首次使用**：必须先询问用户"请告诉我您的用户名"
@@ -14,15 +12,15 @@ description: "当用户说「做研报」、「生成报告」、「写研报」
   1. 获得用户名后，探索 `/data/users/{用户名}/` 下的文件和目录
   2. 找出所有 .docx 文件供用户选择
   3. 询问用户：输入文件是哪个？（用户可以通过 `@/data/users/用户名/路径/文件名.docx` 选择）
-  4. 询问用户：输出文件放在哪里？（可以选已有目录，或新建目录）
+  4. 询问用户：报告输出放在哪里？（可以选已有目录，或新建目录）
 - **禁止跨用户访问**：不允许访问 `/data/users/` 下其他用户的目录
 
-**工作流程**：抽取确认 → 渲染输出
+**工作流程**：抽取确认 → 渲染输出 → 用户指定位置保存
 
-**重要配置**：
-- **工作目录**：所有操作必须从**项目根目录**执行（`/mnt/c/_code/neoskills/`）
-- **输出位置**：报告生成在项目根目录的 `reports/` 下
-- **依赖检查**：确保已安装 `docxtpl` 和 `docxcompose`
+**输出位置**：
+- 报告必须输出到用户指定的目录：`/data/users/{用户名}/<用户选择的目录>/`
+- 询问用户输出目录（可以选已有目录，或新建目录）
+- 最终输出文件：`/data/users/{用户名}/<用户选择目录>/output.docx`
 
 ---
 
@@ -272,22 +270,14 @@ def render_report(
 
 ### 3. 转换为 PDF（可选）
 
-使用 LibreOffice 将 Word 文档转换为 PDF：
+使用 `word2pdf` 将 Word 文档转换为 PDF：
 
 ```bash
-# 使用绝对路径指定输出目录（避免路径混淆）
-libreoffice --headless --convert-to pdf \
-    --outdir "/mnt/c/_code/neoskills/reports/cirrus(2507)_20251021" \
-    "/mnt/c/_code/neoskills/reports/cirrus(2507)_20251021/output.docx"
+# 语法：word2pdf convert "<输入文件>" -o "<输出目录>"
+word2pdf convert "/data/users/test/report1.docx" -o "/data/users/test"
 ```
 
-⚠️ **重要**：最终输出必须保存在项目根目录的 `reports/` 下。
-
-```
-reports/<report_name>/    # 项目根目录下的 reports/
-├── output.docx          # 最终 Word
-└── output.pdf           # 最终 PDF（通过 LibreOffice 转换）
-```
+⚠️ **重要**：最终输出必须保存在 `/data/users/{用户名}/` 下。
 
 ### 4. 输出文件结构
 
