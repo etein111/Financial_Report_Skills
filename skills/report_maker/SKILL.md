@@ -268,7 +268,37 @@ def render_report(
 | `body_path` | `str` | 正文片段文件路径 | `reports/cirrus(2507)_20251021/body.docx` |
 | `output_path` | `str` | 输出文件路径 | `reports/cirrus(2507)_20251021/output.docx` |
 
-### 3. 转换为 PDF（可选）
+### 3. 验证占位符填充
+
+**必须验证**：渲染后的 output.docx 中不存在任何 `{{}}` 占位符。
+
+```python
+import re
+
+def verify_no_placeholders(docx_path):
+    """验证 Word 文档中没有遗留的占位符"""
+    from docx import Document
+    doc = Document(docx_path)
+    placeholders = []
+    for para in doc.paragraphs:
+        if re.search(r'\{\{.*?\}\}', para.text):
+            placeholders.append(para.text)
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                if re.search(r'\{\{.*?\}\}', cell.text):
+                    placeholders.append(cell.text)
+    if placeholders:
+        raise ValueError(f"发现未填充的占位符: {placeholders[:5]}")
+    return True
+```
+
+**如果验证失败**：
+- 报告中有未替换的占位符
+- 必须排查 `elements.yaml` 中是否缺少对应字段
+- 或检查模板中是否有额外占位符未在 schema 中定义
+
+### 4. 转换为 PDF（可选）
 
 使用 `word2pdf` 将 Word 文档转换为 PDF：
 
