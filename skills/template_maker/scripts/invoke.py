@@ -29,6 +29,7 @@ import yaml
 
 DEFAULT_ABSTRACT_SCOPE = "首页右侧"
 DEFAULT_BODY_SCOPE = "从首页之后到报告结尾"
+DEFAULT_APPENDIX_SCOPE = "正文之后，报告末尾"
 
 
 def create_template(
@@ -37,6 +38,7 @@ def create_template(
     elements_path: str,
     abstract_scope: str = DEFAULT_ABSTRACT_SCOPE,
     body_scope: str | None = DEFAULT_BODY_SCOPE,
+    appendix_scope: str | None = DEFAULT_APPENDIX_SCOPE,
     output_dir: str = "templates",
     auto_confirm: bool = False
 ) -> dict:
@@ -48,6 +50,7 @@ def create_template(
         elements_path: elements.yaml 配置文件路径
         abstract_scope: 摘要位置描述
         body_scope: 正文位置描述（None 表示没有正文）
+        appendix_scope: 法律披露附录位置描述（None 表示没有附录）
         output_dir: 输出目录
         auto_confirm: 跳过确认，直接创建
 
@@ -74,6 +77,7 @@ def create_template(
         print(f"elements.yaml: {elements_path}")
         print(f"摘要位置: {abstract_scope}")
         print(f"正文位置: {body_scope or '无（快讯报告）'}")
+        print(f"法律披露附录: {appendix_scope or '无'}")
         confirm = input("\n确认创建吗？(y/n): ")
         if confirm.lower() != 'y':
             return {"success": False, "message": "用户取消"}
@@ -89,7 +93,12 @@ def create_template(
     else:
         # 快讯报告，禁用 body
         body_config = {"enabled": False}
-    schema = generate_schema(elements, abstract_config, body_config)
+    if appendix_scope:
+        appendix_config = {"scope": appendix_scope}
+    else:
+        # 没有法律披露附录
+        appendix_config = {"enabled": False}
+    schema = generate_schema(elements, abstract_config, body_config, appendix_config)
     schema_path = template_dir / "schema.yaml"
     save_schema(schema_path, schema)
 
@@ -178,8 +187,8 @@ def main():
   # 自动化模式（跳过确认）
   python invoke.py --name company --word samples/company.docx --elements samples/company_elements.yaml --auto-confirm
 
-  # 快讯报告（无正文）
-  python invoke.py --name flash --word samples/flash.docx --elements samples/flash_elements.yaml --no-body --auto-confirm
+  # 快讯报告（无正文，无附录）
+  python invoke.py --name flash --word samples/flash.docx --elements samples/flash_elements.yaml --no-body --no-appendix --auto-confirm
         """
     )
 
@@ -189,13 +198,16 @@ def main():
     parser.add_argument("--abstract-scope", default=DEFAULT_ABSTRACT_SCOPE, help="摘要位置描述")
     parser.add_argument("--body-scope", default=DEFAULT_BODY_SCOPE, help="正文位置描述")
     parser.add_argument("--no-body", action="store_true", help="快讯报告，没有正文部分")
+    parser.add_argument("--appendix-scope", default=DEFAULT_APPENDIX_SCOPE, help="法律披露附录位置描述")
+    parser.add_argument("--no-appendix", action="store_true", help="没有法律披露附录")
     parser.add_argument("--output-dir", default="templates", help="输出目录（默认: templates）")
     parser.add_argument("--auto-confirm", "-y", action="store_true", help="跳过确认，直接创建")
 
     args = parser.parse_args()
 
-    # 处理 --no-body 参数
+    # 处理 --no-body 和 --no-appendix 参数
     body_scope = None if args.no_body else args.body_scope
+    appendix_scope = None if args.no_appendix else args.appendix_scope
 
     result = create_template(
         name=args.name,
@@ -203,6 +215,7 @@ def main():
         elements_path=args.elements,
         abstract_scope=args.abstract_scope,
         body_scope=body_scope,
+        appendix_scope=appendix_scope,
         output_dir=args.output_dir,
         auto_confirm=args.auto_confirm
     )

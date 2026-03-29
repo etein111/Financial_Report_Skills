@@ -27,6 +27,7 @@ FILE_META = "meta.yaml"
 FILE_DRAFT = "draft.docx"
 FILE_ABSTRACT = "abstract.docx"
 FILE_BODY = "body.docx"
+FILE_APPENDIX = "appendix.docx"
 FILE_OUTPUT_DOCX = "output.docx"
 FILE_OUTPUT_PDF = "output.pdf"
 
@@ -184,7 +185,7 @@ def filter_fragment_fields(fields: List[str]) -> List[str]:
     Returns:
         非 fragment 类型的字段名列表
     """
-    fragment_fields = {'abstract', 'body'}
+    fragment_fields = {'abstract', 'body', 'appendix'}
     return [f for f in fields if f not in fragment_fields]
 
 

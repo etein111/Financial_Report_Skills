@@ -8,8 +8,7 @@
 """
 
 from typing import Dict, Any, Optional
-
-import common
+import yaml
 
 
 # 片段默认值
@@ -36,37 +35,54 @@ DEFAULT_BODY = {
     ],
 }
 
+DEFAULT_APPENDIX = {
+    "type": "fragment",
+    "description": "法律披露附录（IMPORTANT DISCLOSURES）",
+    "scope": "正文之后，报告末尾",
+    "hints": [
+        "一定从新的一页开始（通过分节符隔离）",
+        "包含重要信息披露内容",
+        "通常有"附录APPENDIX"标题",
+    ],
+}
+
 
 # ==================== 生成 ====================
 
 def generate_schema(elements: Dict[str, Any],
                    abstract_config: Optional[Dict[str, Any]] = None,
-                   body_config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+                   body_config: Optional[Dict[str, Any]] = None,
+                   appendix_config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """从 elements.yaml 生成扁平化的 schema 字典。
 
     Args:
         elements: elements.yaml 的内容
         abstract_config: abstract 配置（可选），覆盖默认值
         body_config: body 配置（可选），{"enabled": false} 可禁用
+        appendix_config: appendix 配置（可选），{"enabled": false} 可禁用
 
     Returns:
         schema 字典
     """
     schema = {}
 
-    # 普通字段（扁平化结构，支持 a1_* 到 a8_* 等多个分析师）
+    # 普通字段
     for name, value in elements.items():
-        schema[name] = {"description": name}
-        if value and value != "null":
-            schema[name]["format"] = str(value)
+        if name not in ["analysts"]:
+            schema[name] = {"description": name}
+            if value and value != "null":
+                schema[name]["format"] = str(value)
 
-    # abstract（可选，默认启用）
-    if abstract_config is None or abstract_config.get("enabled", True):
-        schema["abstract"] = _apply_fragment_config(DEFAULT_ABSTRACT, abstract_config)
+    # abstract（必须）
+    schema["abstract"] = _apply_fragment_config(DEFAULT_ABSTRACT, abstract_config)
 
-    # body（可选，默认启用）
+    # body（可选）
     if body_config is None or body_config.get("enabled", True):
         schema["body"] = _apply_fragment_config(DEFAULT_BODY, body_config)
+
+    # appendix（可选，法律披露）
+    if appendix_config is None or appendix_config.get("enabled", True):
+        schema["appendix"] = _apply_fragment_config(DEFAULT_APPENDIX, appendix_config)
 
     return schema
 
@@ -82,7 +98,8 @@ def load_schema(path: str) -> Dict[str, Any]:
     Returns:
         schema 字典
     """
-    return common.load_yaml(path)
+    with open(path, 'r', encoding='utf-8') as f:
+        return yaml.safe_load(f)
 
 
 def save_schema(path: str, schema: Dict[str, Any]) -> None:
@@ -92,7 +109,8 @@ def save_schema(path: str, schema: Dict[str, Any]) -> None:
         path: schema.yaml 文件路径
         schema: schema 字典
     """
-    common.save_yaml(path, schema)
+    with open(path, 'w', encoding='utf-8') as f:
+        yaml.dump(schema, f, allow_unicode=True, default_flow_style=False)
 
 
 # ==================== 修改（纯函数）====================

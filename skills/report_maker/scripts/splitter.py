@@ -753,4 +753,193 @@ def get_split_instructions(schema: Dict[str, Any]) -> str:
         if hints:
             instructions.append(f"正文特征：{' '.join(hints)}")
 
+    appendix_def = schema.get('appendix', {})
+    if appendix_def.get('type') == 'fragment':
+        scope = appendix_def.get('scope', '')
+        hints = appendix_def.get('hints', [])
+        instructions.append(f"法律披露附录位置：{scope}")
+        if hints:
+            instructions.append(f"法律披露附录特征：{' '.join(hints)}")
+
     return '\n'.join(instructions)
+
+
+def extract_appendix(draft_path: str, scope: str, output_path: Optional[str] = None) -> Path:
+    """提取法律披露附录片段。
+
+    法律披露附录包含：
+    - 附录APPENDIX标题
+    - 重要信息披露（IMPORTANT DISCLOSURES）
+    - 一定从新的一页开始（通过分节符隔离）
+
+    Args:
+        draft_path: 草稿文件路径
+        scope: 位置描述（如"正文之后，报告末尾"）
+        output_path: 输出路径（可选）
+
+    Returns:
+        appendix.docx 文件路径
+    """
+    if Document is None:
+        return Path(output_path or common.FILE_APPENDIX)
+
+    out_path = Path(output_path or common.FILE_APPENDIX)
+
+    try:
+        doc = Document(draft_path)
+        body = doc.element.body
+        elements = list(body)
+
+        # 法律披露附录的起始标记
+        appendix_markers = [
+            'APPENDIX',
+            '附录',
+            '重要信息披露',
+            'IMPORTANT DISCLOSURES',
+            'Disclaimer',
+            '免责声明',
+            '[Table_disclaimer]'
+        ]
+
+        # 查找附录起始位置
+        start_idx = None
+        for i, elem in enumerate(elements):
+            text = ''.join(elem.itertext()).strip()
+
+            for marker in appendix_markers:
+                if marker in text:
+                    start_idx = i
+                    print(f"找到法律披露附录起始位置: 元素 {i} - '{text[:50]}'")
+                    break
+
+            if start_idx is not None:
+                break
+
+        if start_idx is None:
+            print("警告：未找到法律披露附录")
+            # 返回空文档
+            empty_doc = Document()
+            empty_doc.save(str(out_path))
+            return out_path
+
+        # 创建新文档
+        appendix_doc = Document()
+
+        # 删除新文档的默认空段落
+        for para in appendix_doc.paragraphs:
+            p = para._element
+            p.getparent().remove(p)
+
+        # 复制附录内容
+        for i in range(start_idx, len(elements)):
+            elem = elements[i]
+            tag = elem.tag.split('}')[-1]
+
+            if tag == 'p':
+                # 复制段落
+                new_para = deepcopy(elem)
+                appendix_doc.element.body.append(new_para)
+            elif tag == 'tbl':
+                # 复制表格
+                new_table = deepcopy(elem)
+                appendix_doc.element.body.append(new_table)
+
+        appendix_doc.save(str(out_path))
+        return out_path
+
+    except Exception as e:
+        print(f"提取法律披露附录失败: {e}")
+        import traceback
+        traceback.print_exc()
+        return out_path
+
+
+def validate_appendix(draft_path: str, schema: Dict[str, Any]) -> Dict[str, Any]:
+    """验证法律披露附录是否存在。
+
+    Args:
+        draft_path: 草稿文件路径
+        schema: schema.yaml 内容
+
+    Returns:
+        验证结果：
+        {
+            "has_appendix": bool,
+            "has_important_disclosures": bool,
+            "has_appendix_title": bool,
+            "location": str,
+            "suggestion": str
+        }
+    """
+    if Document is None:
+        return {"has_appendix": False, "error": "python-docx not installed"}
+
+    result = {
+        "has_appendix": False,
+        "has_important_disclosures": False,
+        "has_appendix_title": False,
+        "location": "",
+        "suggestion": ""
+    }
+
+    try:
+        doc = Document(draft_path)
+        body = doc.element.body
+        elements = list(body)
+
+        # 法律披露附录的关键词
+        appendix_keywords = [
+            'APPENDIX',
+            '附录',
+            '重要信息披露',
+            'IMPORTANT DISCLOSURES',
+            'Disclaimer',
+            '免责声明',
+            '[Table_disclaimer]'
+        ]
+
+        # 重要信息披露的关键词（必须包含）
+        important_keywords = [
+            'DISCLOSURES',
+            '披露',
+            '利益冲突',
+            'Conflict of Interest',
+            '评级',
+            'Rating'
+        ]
+
+        found_keywords = []
+        important_found = []
+
+        for i, elem in enumerate(elements):
+            text = ''.join(elem.itertext()).strip()
+
+            for kw in appendix_keywords:
+                if kw in text and kw not in found_keywords:
+                    found_keywords.append(kw)
+                    result["has_appendix"] = True
+                    result["location"] = f"元素 {i}: {text[:50]}"
+
+            for kw in important_keywords:
+                if kw in text and kw not in important_found:
+                    important_found.append(kw)
+                    result["has_important_disclosures"] = True
+
+        # 判断附录标题
+        for kw in ['APPENDIX', '附录']:
+            if kw in found_keywords:
+                result["has_appendix_title"] = True
+                break
+
+        # 生成建议
+        if not result["has_appendix"]:
+            result["suggestion"] = "⚠️ 未找到法律披露附录，请检查报告末尾是否包含 IMPORTANT DISCLOSURES"
+        elif not result["has_important_disclosures"]:
+            result["suggestion"] = "⚠️ 找到附录但未包含重要信息披露内容"
+        else:
+            result["suggestion"] = "✅ 法律披露附录验证通过"
+
+        return result
+
+    except Exception as e:
+        return {"has_appendix": False, "error": str(e)}
