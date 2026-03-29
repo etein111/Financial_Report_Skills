@@ -32,13 +32,159 @@ DEFAULT_BODY_SCOPE = "从首页之后到报告结尾"
 DEFAULT_APPENDIX_SCOPE = "正文之后，报告末尾"
 
 
+def _auto_detect_locations(word_path: Path, elements: dict) -> dict:
+    """自动检测文档中的摘要、正文、附录位置。
+
+    Args:
+        word_path: Word 文件路径
+        elements: elements.yaml 内容
+
+    Returns:
+        检测结果字典
+    """
+    result = {
+        "abstract": None,
+        "body": None,
+        "appendix": None
+    }
+
+    # 检测摘要位置
+    abstract_location = find_abstract_by_elements(str(word_path), elements)
+    if abstract_location.get("found"):
+        result["abstract"] = {
+            "scope": DEFAULT_ABSTRACT_SCOPE,
+            "location": abstract_location
+        }
+
+    # 检测正文位置
+    body_location = find_body_range_by_sections(str(word_path))
+    if body_location.get("found"):
+        result["body"] = {
+            "scope": DEFAULT_BODY_SCOPE,
+            "location": body_location
+        }
+
+    return result
+
+
+def _confirm_abstract_location(detected: dict) -> str:
+    """交互确认摘要位置。
+
+    Args:
+        detected: 自动检测结果
+
+    Returns:
+        用户确认或修改后的位置描述
+    """
+    print("\n" + "=" * 60)
+    print("【步骤 1/3】确认摘要位置")
+    print("=" * 60)
+
+    if detected and detected.get("found"):
+        print(f"\n自动检测到摘要位置：")
+        print(f"  位置：{detected['scope']}")
+        print(f"  详情：{detected['context']}")
+        if detected.get("preview"):
+            print(f"  预览：{detected['preview'][:80]}...")
+
+        print("\n请确认摘要位置是否正确？")
+        print("  - 直接回车：使用检测到的位置")
+        print("  - 输入描述：手动指定位置（如：首页右侧、第二页表格中）")
+
+        user_input = input("\n您的选择: ").strip()
+        if user_input:
+            return user_input
+        return detected['scope']
+    else:
+        print(f"\n⚠️ 自动检测摘要位置失败：{detected.get('reason', '未知原因')}")
+        print("请手动指定摘要位置：")
+        print("  示例：首页右侧、第二页表格中、首页左侧表格")
+
+        user_input = input("\n请输入摘要位置: ").strip()
+        return user_input or DEFAULT_ABSTRACT_SCOPE
+
+
+def _confirm_body_location(detected: dict) -> str | None:
+    """交互确认正文位置。
+
+    Args:
+        detected: 自动检测结果
+
+    Returns:
+        正文位置描述，None 表示没有正文
+    """
+    print("\n" + "=" * 60)
+    print("【步骤 2/3】确认正文位置")
+    print("=" * 60)
+
+    print("\n这份报告是否有正文部分？")
+    print("  - 快讯报告（flash）通常没有正文")
+    print("  - 公司报告、行业报告通常有正文")
+
+    while True:
+        user_input = input("\n是否有正文？(y/n，直接回车表示有): ").strip().lower()
+        if user_input == 'n':
+            print("→ 将跳过正文部分（快讯报告模式）")
+            return None
+        elif user_input in ['', 'y']:
+            break
+        print("请输入 y 或 n")
+
+    if detected and detected.get("found"):
+        print(f"\n自动检测到正文位置：")
+        print(f"  位置：{detected['scope']}")
+        print(f"  详情：{detected['context']}")
+
+        print("\n请确认正文位置是否正确？")
+        print("  - 直接回车：使用检测到的位置")
+        print("  - 输入描述：手动指定位置（如：从第二页开始、从目录之后开始）")
+
+        user_input = input("\n您的选择: ").strip()
+        if user_input:
+            return user_input
+        return detected['scope']
+    else:
+        reason = detected.get('reason', '未知原因') if detected else '未知原因'
+        print(f"\n⚠️ 自动检测正文位置失败：{reason}")
+        print("请手动指定正文位置：")
+        print("  示例：从第二页开始、从目录之后开始、从第一章开始")
+
+        user_input = input("\n请输入正文位置: ").strip()
+        return user_input or DEFAULT_BODY_SCOPE
+
+
+def _confirm_appendix_location() -> str | None:
+    """交互确认法律披露附录位置。
+
+    Returns:
+        附录位置描述，None 表示没有附录
+    """
+    print("\n" + "=" * 60)
+    print("【步骤 3/3】确认法律披露附录")
+    print("=" * 60)
+
+    print("\n这份报告是否有法律披露附录（IMPORTANT DISCLOSURES）？")
+    print("  - 通常位于报告末尾")
+    print("  - 包含附录APPENDIX标题和重要信息披露")
+
+    while True:
+        user_input = input("\n是否有法律披露附录？(y/n，直接回车表示有): ").strip().lower()
+        if user_input == 'n':
+            print("→ 将跳过法律披露附录")
+            return None
+        elif user_input in ['', 'y']:
+            print(f"→ 法律披露附录位置：{DEFAULT_APPENDIX_SCOPE}")
+            return DEFAULT_APPENDIX_SCOPE
+        print("请输入 y 或 n")
+
+
 def create_template(
     name: str,
     word_path: str,
     elements_path: str,
-    abstract_scope: str = DEFAULT_ABSTRACT_SCOPE,
-    body_scope: str | None = DEFAULT_BODY_SCOPE,
-    appendix_scope: str | None = DEFAULT_APPENDIX_SCOPE,
+    abstract_scope: str | None = None,
+    body_scope: str | None = None,
+    appendix_scope: str | None = None,
     output_dir: str = "templates",
     auto_confirm: bool = False
 ) -> dict:
@@ -48,11 +194,11 @@ def create_template(
         name: 模板名称
         word_path: Word 样本文件路径
         elements_path: elements.yaml 配置文件路径
-        abstract_scope: 摘要位置描述
-        body_scope: 正文位置描述（None 表示没有正文）
-        appendix_scope: 法律披露附录位置描述（None 表示没有附录）
+        abstract_scope: 摘要位置描述（None 表示交互询问）
+        body_scope: 正文位置描述（None 表示交互询问，"" 表示没有正文）
+        appendix_scope: 法律披露附录位置描述（None 表示交互询问，"" 表示没有附录）
         output_dir: 输出目录
-        auto_confirm: 跳过确认，直接创建
+        auto_confirm: 跳过确认，直接使用默认值
 
     Returns:
         {"success": bool, "message": str, "files": list}
@@ -70,15 +216,41 @@ def create_template(
     # 加载 elements.yaml
     elements = yaml.safe_load(elements_path.read_text())
 
+    print(f"\n{'=' * 60}")
+    print("模板创建向导")
+    print(f"{'=' * 60}")
+    print(f"模板名称: {name}")
+    print(f"Word 文件: {word_path}")
+    print(f"elements.yaml: {elements_path}")
+
+    # 自动检测位置
+    print("\n正在自动检测文档结构...")
+    detected_locations = _auto_detect_locations(word_path, elements)
+
+    # 交互确认位置
+    if auto_confirm:
+        # 自动化模式：使用默认值
+        abstract_scope = abstract_scope or DEFAULT_ABSTRACT_SCOPE
+        body_scope = body_scope if body_scope is not None else DEFAULT_BODY_SCOPE
+        appendix_scope = appendix_scope if appendix_scope is not None else DEFAULT_APPENDIX_SCOPE
+        print("\n[自动化模式] 使用默认位置配置")
+    else:
+        # 交互模式：逐个确认
+        abstract_scope = _confirm_abstract_location(detected_locations.get("abstract"))
+        body_scope = _confirm_body_location(detected_locations.get("body"))
+        appendix_scope = _confirm_appendix_location()
+
+    # 显示最终配置
+    print("\n" + "=" * 60)
+    print("【最终配置确认】")
+    print("=" * 60)
+    print(f"模板名称: {name}")
+    print(f"摘要位置: {abstract_scope}")
+    print(f"正文位置: {body_scope or '无（快讯报告）'}")
+    print(f"法律披露附录: {appendix_scope or '无'}")
+
     if not auto_confirm:
-        print(f"\n=== 模板创建配置 ===")
-        print(f"模板名称: {name}")
-        print(f"Word 文件: {word_path}")
-        print(f"elements.yaml: {elements_path}")
-        print(f"摘要位置: {abstract_scope}")
-        print(f"正文位置: {body_scope or '无（快讯报告）'}")
-        print(f"法律披露附录: {appendix_scope or '无'}")
-        confirm = input("\n确认创建吗？(y/n): ")
+        confirm = input("\n确认创建模板？(y/n): ").strip()
         if confirm.lower() != 'y':
             return {"success": False, "message": "用户取消"}
 
