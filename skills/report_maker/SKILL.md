@@ -5,22 +5,12 @@ description: "当用户说「做研报」、「生成报告」、「写研报」
 
 # Report Maker - 研究报告生成
 
-**用户隔离**：
-- **目录结构**：`/data/users/{用户名}/` 下可以有任意文件和目录结构，不固定 input/output
-- **首次使用**：必须先询问用户"请告诉我您的用户名"
-- **动态探索**（不向用户显示 shell 命令，只展示关键信息）：
-  1. 获得用户名后，探索 `/data/users/{用户名}/` 下的文件和目录
-  2. 找出所有 .docx 文件供用户选择
-  3. 询问用户：输入文件是哪个？（用户可以通过 `@/data/users/用户名/路径/文件名.docx` 选择）
-  4. 询问用户：报告输出放在哪里？（可以选已有目录，或新建目录）
-- **禁止跨用户访问**：不允许访问 `/data/users/` 下其他用户的目录
-
 **工作流程**：抽取确认 → 渲染输出 → 用户指定位置保存
 
-**输出位置**：
-- 报告必须输出到用户指定的目录：`/data/users/{用户名}/<用户选择的目录>/`
-- 询问用户输出目录（可以选已有目录，或新建目录）
-- 最终输出文件：`/data/users/{用户名}/<用户选择目录>/output.docx`
+**文件交互**：
+- 询问用户输入文件（草稿 .docx）的路径
+- 询问用户输出目录位置（可以选择已有目录，或新建目录）
+- 最终输出文件保存在用户指定的输出目录下的 `output.docx`
 
 ---
 
@@ -176,11 +166,11 @@ elements = common.ensure_all_fields(elements, schema)
 
 ### 7. 保存结果
 
-⚠️ **重要**：报告必须保存在项目根目录的 `reports/` 下，而不是 skill 目录内。
+将提取结果保存到用户指定的输出目录：
 
 ```
-reports/<report_name>/    # 项目根目录下的 reports/
-├── draft.docx           # 原始草稿
+<用户指定目录>/
+├── draft.docx           # 原始草稿（可选）
 ├── elements.yaml        # 提取的要素
 ├── abstract.docx        # 摘要片段
 └── body.docx            # 正文片段
@@ -210,12 +200,8 @@ reports/<report_name>/    # 项目根目录下的 reports/
 ```python
 from skills.report_maker.scripts import common, renderer
 from pathlib import Path
-import os
 
-# ⚠️ 重要：必须从项目根目录执行
-os.chdir('/mnt/c/_code/neoskills')
-
-# 报告路径
+# 报告路径（根据实际情况调整）
 report_dir = Path('reports/cirrus(2507)_20251021')
 elements_path = report_dir / 'elements.yaml'
 abstract_path = report_dir / 'abstract.docx'
@@ -304,12 +290,10 @@ def verify_no_placeholders(docx_path):
 
 ```bash
 # 语法：word2pdf convert "<输入文件>" -o "<输出目录>"
-word2pdf convert "/data/users/test/report1.docx" -o "/data/users/test"
+word2pdf convert "C:\reports\report1.docx" -o "C:\reports"
 ```
 
-⚠️ **重要**：最终输出必须保存在 `/data/users/{用户名}/` 下。
-
-### 4. 输出文件结构
+### 5. 输出文件结构
 
 渲染完成后的报告目录结构：
 
@@ -353,24 +337,11 @@ body: "body.docx"
 
 ---
 
-## 权限边界
-
-### ✅ 可写
-- **项目根目录的** `reports/{report_name}/*`（所有文件）
-
-### ❌ 不可写
-- `templates/*`（任何模板文件）
-- schema.yaml
-- router.yaml
-- `.claude/skills/report_maker/reports/`（skill 内的临时目录，非最终输出位置）
-
----
-
 ## 注意事项
 
 1. **交互式确认是必须的** - 不能跳过第一阶段直接生成
 2. **工作目录要求** - 所有操作必须从项目根目录执行，否则找不到模板文件
-3. **输出位置要求** - 报告必须保存在项目根目录的 `reports/` 下
+3. **输出位置** - 报告保存在用户指定的输出目录下的 `output.docx`
 4. **依赖检查** - 确保已安装 docxtpl 和 docxcompose
 5. **空字段处理** - 必须保留空字段，值为 `""`
 6. **字段严格一致性** - elements.yaml 必须与 schema.yaml 完全一致
