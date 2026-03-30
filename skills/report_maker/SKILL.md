@@ -239,7 +239,21 @@ elements = common.ensure_all_fields(elements, schema)
 
 加载 `elements.yaml`，应用用户修正，保存更新后的 `elements.yaml`
 
-### 2. 渲染报告
+### 2. 确认 abstract 和 body 位置
+
+**显式询问 abstract.docx 和 body.docx 的位置**：
+
+```
+问题：abstract.docx 在哪里？
+- 等待用户提供文件路径
+- 默认值：<输出目录>/abstract.docx
+
+问题：body.docx 在哪里？
+- 等待用户提供文件路径
+- 默认值：<输出目录>/body.docx
+```
+
+### 3. 渲染报告
 
 使用 `renderer.render_report()` 函数完成以下操作：
 - 渲染短字段到模板（使用 Jinja2 替换占位符）
@@ -305,7 +319,7 @@ def render_report(
 | `body_path` | `str` | 正文片段文件路径 | `reports/cirrus(2507)_20251021/body.docx` |
 | `output_path` | `str` | 输出文件路径 | `reports/cirrus(2507)_20251021/output.docx` |
 
-### 3. 验证占位符填充
+### 4. 验证占位符填充
 
 **必须验证**：渲染后的 output.docx 中不存在任何 `{{}}` 占位符。
 
@@ -335,7 +349,7 @@ def verify_no_placeholders(docx_path):
 - 必须排查 `elements.yaml` 中是否缺少对应字段
 - 或检查模板中是否有额外占位符未在 schema 中定义
 
-### 4. 转换为 PDF（可选）
+### 5. 转换为 PDF（可选）
 
 使用 `word2pdf` 将 Word 文档转换为 PDF：
 
@@ -344,7 +358,7 @@ def verify_no_placeholders(docx_path):
 word2pdf convert "C:\reports\report1.docx" -o "C:\reports"
 ```
 
-### 5. 输出文件结构
+### 6. 输出文件结构
 
 渲染完成后的报告目录结构：
 
