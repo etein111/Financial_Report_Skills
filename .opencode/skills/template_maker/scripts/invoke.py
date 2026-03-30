@@ -30,6 +30,69 @@ import yaml
 DEFAULT_APPENDIX_SCOPE = "正文之后，报告末尾"
 
 
+def scan_docx_files(base_dir: Path = Path(".")) -> list[tuple[int, Path]]:
+    """扫描目录下的所有 .docx 文件。
+
+    Args:
+        base_dir: 基础目录，默认为当前目录
+
+    Returns:
+        [(编号, 文件路径), ...] 列表
+    """
+    docx_files = []
+    for path in base_dir.rglob("*.docx"):
+        # 排除临时文件和以 ~ 开头的文件
+        if path.name.startswith("~"):
+            continue
+        docx_files.append(path)
+
+    # 按路径排序
+    docx_files.sort()
+    return list(enumerate(docx_files, start=1))
+
+
+def prompt_select_docx(base_dir: Path = Path(".")) -> Path | None:
+    """让用户从扫描到的 docx 文件中选择。
+
+    Args:
+        base_dir: 基础目录
+
+    Returns:
+        选择的文件路径，None 表示放弃
+    """
+    print("\n" + "=" * 60)
+    print("【扫描样本文档】")
+    print("=" * 60)
+    print(f"\n正在扫描 {base_dir.absolute()} 的子目录...")
+
+    docx_files = scan_docx_files(base_dir)
+
+    if not docx_files:
+        print("\n未找到任何 .docx 文件")
+        return None
+
+    print(f"\n找到 {len(docx_files)} 个 Word 文档：")
+    for idx, path in docx_files:
+        print(f"  {idx}. {path}")
+
+    print("\n请选择要使用的样本文档（输入编号，或 q 退出）:")
+
+    while True:
+        user_input = input("\n您的选择: ").strip().lower()
+        if user_input == 'q':
+            return None
+        try:
+            choice = int(user_input)
+            if 1 <= choice <= len(docx_files):
+                selected_path = docx_files[choice - 1][1]
+                print(f"\n→ 已选择: {selected_path}")
+                return selected_path
+            else:
+                print(f"请输入 1-{len(docx_files)} 之间的数字")
+        except ValueError:
+            print("请输入数字编号")
+
+
 def _llm_analyze_document(word_path: Path) -> dict:
     """通过 LLM 分析文档，判断是否有摘要、正文及其位置。
 
@@ -77,7 +140,10 @@ def _llm_analyze_document(word_path: Path) -> dict:
 {doc_content}
 
 请回答以下问题：
-1. 是否有摘要部分？（摘要通常是首页的投资亮点、核心观点区域）
+1. 是否有摘要部分？
+   - 注意：摘要是连贯的段落文本，包含投资观点、核心分析结论
+   - 摘要不包含评级(RATING)、目标价(TARGET PRICE)等单独字段
+   - 摘要是自然段落，不是表格中的键值对
 2. 摘要的位置在哪里？（请描述具体位置，如"首页右侧"、"首页表格"）
 3. 是否有正文部分？（正文是报告的主要分析内容）
 4. 正文从哪里开始？（请描述具体位置，如"第二页开始"、"目录之后"）
