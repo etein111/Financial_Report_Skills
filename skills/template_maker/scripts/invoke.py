@@ -27,9 +27,78 @@ from router import load_router, update_mapping, save_router, get_all_router_mapp
 import yaml
 
 
-DEFAULT_ABSTRACT_SCOPE = "首页右侧"
-DEFAULT_BODY_SCOPE = "从首页之后到报告结尾"
 DEFAULT_APPENDIX_SCOPE = "正文之后，报告末尾"
+
+
+def _llm_analyze_document(word_path: Path) -> dict:
+    """通过 LLM 分析文档，判断是否有摘要、正文及其位置。
+
+    Args:
+        word_path: Word 文件路径
+
+    Returns:
+        LLM 分析结果，包含 has_abstract, abstract_scope, has_body, body_scope
+    """
+    print("\n" + "=" * 60)
+    print("【LLM 分析】正在分析文档结构...")
+    print("=" * 60)
+
+    # 读取文档内容（前几页，用于 LLM 分析）
+    from docx import Document
+    doc = Document(str(word_path))
+
+    # 收集文档摘要信息
+    doc_preview = []
+    doc_preview.append(f"文档总段落数: {len(doc.paragraphs)}")
+    doc_preview.append(f"文档总表格数: {len(doc.tables)}")
+
+    # 收集前 30 个段落（通常是首页）
+    doc_preview.append("\n=== 前 30 个段落 ===")
+    for i, para in enumerate(doc.paragraphs[:30]):
+        text = para.text.strip()
+        if text:
+            doc_preview.append(f"{i}: {text[:100]}")
+
+    # 收集前 5 个表格的摘要
+    doc_preview.append("\n=== 前 5 个表格内容摘要 ===")
+    for t_idx, table in enumerate(doc.tables[:5]):
+        rows_summary = []
+        for r_idx, row in enumerate(table.rows[:5]):
+            row_text = " | ".join([c.text.strip()[:30] for c in row.cells])
+            rows_summary.append(f"  行{r_idx}: {row_text}")
+        if rows_summary:
+            doc_preview.append(f"表格{t_idx}:\n" + "\n".join(rows_summary))
+
+    doc_content = "\n".join(doc_preview)
+
+    # 构建 LLM 询问
+    llm_prompt = f"""请分析这篇研究报告的结构：
+
+{doc_content}
+
+请回答以下问题：
+1. 是否有摘要部分？（摘要通常是首页的投资亮点、核心观点区域）
+2. 摘要的位置在哪里？（请描述具体位置，如"首页右侧"、"首页表格"）
+3. 是否有正文部分？（正文是报告的主要分析内容）
+4. 正文从哪里开始？（请描述具体位置，如"第二页开始"、"目录之后"）
+
+请以 JSON 格式返回：
+{{
+  "has_abstract": true/false,
+  "abstract_scope": "位置描述",
+  "has_body": true/false,
+  "body_scope": "位置描述"
+}}
+"""
+
+    print("\n[LLM 询问内容]")
+    print(llm_prompt[:500] + "..." if len(llm_prompt) > 500 else llm_prompt)
+    print("\n请提供 LLM 分析结果...")
+
+    # 注意：这里需要实际调用 LLM，用户会提供分析结果
+    # 在自动化场景下，可以跳过此步骤
+
+    return None  # 返回 None 表示需要交互确认
 
 
 def _auto_detect_locations(word_path: Path, elements: dict) -> dict:
@@ -48,42 +117,63 @@ def _auto_detect_locations(word_path: Path, elements: dict) -> dict:
         "appendix": None
     }
 
-    # 检测摘要位置
-    abstract_location = find_abstract_by_elements(str(word_path), elements)
-    if abstract_location.get("found"):
-        result["abstract"] = {
-            "scope": DEFAULT_ABSTRACT_SCOPE,
-            "location": abstract_location
-        }
+    # 先通过 LLM 分析文档结构
+    llm_result = _llm_analyze_document(word_path)
 
-    # 检测正文位置
-    body_location = find_body_range_by_sections(str(word_path))
-    if body_location.get("found"):
-        result["body"] = {
-            "scope": DEFAULT_BODY_SCOPE,
-            "location": body_location
-        }
+    # 检测摘要位置（如果 LLM 认为有摘要）
+    if llm_result is None or llm_result.get("has_abstract"):
+        abstract_location = find_abstract_by_elements(str(word_path), elements)
+        if abstract_location.get("found"):
+            scope = llm_result.get("abstract_scope") if llm_result else None
+            result["abstract"] = {
+                "scope": scope,
+                "location": abstract_location
+            }
+
+    # 检测正文位置（如果 LLM 认为有正文）
+    if llm_result is None or llm_result.get("has_body"):
+        body_location = find_body_range_by_sections(str(word_path))
+        if body_location.get("found"):
+            scope = llm_result.get("body_scope") if llm_result else None
+            result["body"] = {
+                "scope": scope,
+                "location": body_location
+            }
 
     return result
 
 
-def _confirm_abstract_location(detected: dict) -> str:
+def _confirm_abstract_location(detected: dict) -> str | None:
     """交互确认摘要位置。
 
     Args:
         detected: 自动检测结果
 
     Returns:
-        用户确认或修改后的位置描述
+        摘要位置描述，None 表示没有摘要
     """
     print("\n" + "=" * 60)
     print("【步骤 1/3】确认摘要位置")
     print("=" * 60)
 
+    # 询问是否有摘要
+    print("\n这份报告是否有摘要部分？")
+    print("  - 公司报告通常有摘要（首页投资亮点）")
+    print("  - 快讯报告可能没有摘要")
+
+    while True:
+        user_input = input("\n是否有摘要？(y/n，直接回车表示有): ").strip().lower()
+        if user_input == 'n':
+            print("→ 将跳过摘要部分")
+            return None
+        elif user_input in ['', 'y']:
+            break
+        print("请输入 y 或 n")
+
     if detected and detected.get("found"):
-        print(f"\n自动检测到摘要位置：")
-        print(f"  位置：{detected['scope']}")
-        print(f"  详情：{detected['context']}")
+        detected_scope = detected.get('scope') or detected.get('context', '未知')
+        print(f"\n检测到的摘要位置：")
+        print(f"  位置：{detected_scope}")
         if detected.get("preview"):
             print(f"  预览：{detected['preview'][:80]}...")
 
@@ -94,14 +184,17 @@ def _confirm_abstract_location(detected: dict) -> str:
         user_input = input("\n您的选择: ").strip()
         if user_input:
             return user_input
-        return detected['scope']
+        return detected_scope
     else:
         print(f"\n⚠️ 自动检测摘要位置失败：{detected.get('reason', '未知原因')}")
         print("请手动指定摘要位置：")
         print("  示例：首页右侧、第二页表格中、首页左侧表格")
 
         user_input = input("\n请输入摘要位置: ").strip()
-        return user_input or DEFAULT_ABSTRACT_SCOPE
+        if not user_input:
+            print("→ 无法确定摘要位置，将跳过摘要")
+            return None
+        return user_input
 
 
 def _confirm_body_location(detected: dict) -> str | None:
@@ -131,9 +224,9 @@ def _confirm_body_location(detected: dict) -> str | None:
         print("请输入 y 或 n")
 
     if detected and detected.get("found"):
-        print(f"\n自动检测到正文位置：")
-        print(f"  位置：{detected['scope']}")
-        print(f"  详情：{detected['context']}")
+        detected_scope = detected.get('scope') or detected.get('context', '未知')
+        print(f"\n检测到的正文位置：")
+        print(f"  位置：{detected_scope}")
 
         print("\n请确认正文位置是否正确？")
         print("  - 直接回车：使用检测到的位置")
@@ -142,7 +235,7 @@ def _confirm_body_location(detected: dict) -> str | None:
         user_input = input("\n您的选择: ").strip()
         if user_input:
             return user_input
-        return detected['scope']
+        return detected_scope
     else:
         reason = detected.get('reason', '未知原因') if detected else '未知原因'
         print(f"\n⚠️ 自动检测正文位置失败：{reason}")
@@ -150,7 +243,10 @@ def _confirm_body_location(detected: dict) -> str | None:
         print("  示例：从第二页开始、从目录之后开始、从第一章开始")
 
         user_input = input("\n请输入正文位置: ").strip()
-        return user_input or DEFAULT_BODY_SCOPE
+        if not user_input:
+            print("→ 无法确定正文位置，将跳过正文")
+            return None
+        return user_input
 
 
 def _confirm_appendix_location() -> str | None:
@@ -276,11 +372,14 @@ def create_template(
 
     # 交互确认位置
     if auto_confirm:
-        # 自动化模式：使用默认值
-        abstract_scope = abstract_scope or DEFAULT_ABSTRACT_SCOPE
-        body_scope = body_scope if body_scope is not None else DEFAULT_BODY_SCOPE
-        appendix_scope = appendix_scope if appendix_scope is not None else DEFAULT_APPENDIX_SCOPE
-        print("\n[自动化模式] 使用默认位置配置")
+        # 自动化模式：如果命令行指定了值就使用，否则必须询问
+        if abstract_scope is None:
+            abstract_scope = _confirm_abstract_location(detected_locations.get("abstract"))
+        if body_scope is None:
+            body_scope = _confirm_body_location(detected_locations.get("body"))
+        if appendix_scope is None:
+            appendix_scope = _confirm_appendix_location()
+        print("\n[自动化模式] 位置配置完成")
     else:
         # 交互模式：逐个确认
         abstract_scope = _confirm_abstract_location(detected_locations.get("abstract"))
@@ -422,8 +521,8 @@ def main():
     parser.add_argument("--name", required=True, help="模板名称")
     parser.add_argument("--word", required=True, help="Word 样本文件路径")
     parser.add_argument("--elements", required=True, help="elements.yaml 配置文件路径")
-    parser.add_argument("--abstract-scope", default=DEFAULT_ABSTRACT_SCOPE, help="摘要位置描述")
-    parser.add_argument("--body-scope", default=DEFAULT_BODY_SCOPE, help="正文位置描述")
+    parser.add_argument("--abstract-scope", default=None, help="摘要位置描述（默认: 询问用户）")
+    parser.add_argument("--body-scope", default=None, help="正文位置描述（默认: 询问用户）")
     parser.add_argument("--no-body", action="store_true", help="快讯报告，没有正文部分")
     parser.add_argument("--appendix-scope", default=DEFAULT_APPENDIX_SCOPE, help="法律披露附录位置描述")
     parser.add_argument("--no-appendix", action="store_true", help="没有法律披露附录")
