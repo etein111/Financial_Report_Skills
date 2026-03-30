@@ -65,14 +65,14 @@ pip3 install --break-system-packages "docxtpl>=0.20.0" docxcompose
 ### 1. 询问基本信息（逐个询问）
 
 ```
-问题 1/3：这是什么类型的报告？
-- 等待用户回答（company/sector/macro/strategy/quantitative/bond）
-
-问题 2/3：草稿文件在哪里？
+问题 1/4：草稿文件在哪里？
 - 等待用户提供 .docx 文件路径
 
-问题 3/3：报告名称是什么？（用于创建 reports/<名称>/ 目录）
+问题 2/4：报告名称是什么？（用于命名输出目录）
 - 等待用户回答，提供单一的缺省建议值
+
+问题 3/4：请确认输出目录位置
+- 等待用户选择（可以选已有目录，或新建目录）
 ```
 
 **命名规则**（日期统一放在最后）：
@@ -87,15 +87,69 @@ pip3 install --break-system-packages "docxtpl>=0.20.0" docxcompose
 - ✅ 主题词：新能源汽车、AI芯片、美联储、利率政策
 - ❌ 描述性词汇：深度分析、研究、报告、解读、提交版
 
-### 2. 路由到模板
+### 2. 自动查找可用模板
 
-从 `templates/router.yaml` 获取模板名，加载对应的模板文件：
-- `templates/{template_name}/schema.yaml` - **定义要提取哪些字段**
-- `templates/{template_name}/template.docx` - **定义字段在文档中的位置**
+在**当前工作目录**下的 `templates/` 目录中查找所有可用的模板。
 
-⚠️ **重要**：确保从项目根目录执行，否则找不到模板文件。
+**查找方法**：
+```bash
+# 列出 templates/ 下的所有子目录（每个子目录是一个模板）
+ls -d templates/*/
+```
 
-### 3. 提取字段
+**模板目录结构**：
+```
+templates/
+├── company/          # 公司完整报告模板
+├── sector/           # 行业报告模板
+├── macro/            # 宏观报告模板
+├── flash/            # 快讯模板
+└── ...               # 其他模板
+```
+
+每个模板目录必须包含：
+- `schema.yaml` - **定义要提取哪些字段**
+- `template.docx` - **Word 模板文件**
+
+### 3. 展示可用模板并让用户确认
+
+**问题 4/4：请选择使用的模板**
+
+展示找到的所有可用模板供用户选择：
+
+```
+可用模板列表：
+1. company      - 公司完整报告
+2. sector       - 行业报告
+3. macro        - 宏观报告
+4. flash        - 快讯
+
+请选择模板编号或直接输入模板名称：
+```
+
+- 等待用户选择
+- 用户可以直接输入模板名称（如 `company`）
+- 如果只有一个模板，可以直接询问"是否使用 {模板名} 模板？"
+
+### 4. 加载选定的模板
+
+根据用户选择的模板名称，加载对应的模板文件：
+
+```python
+# 模板路径（在当前工作目录下）
+template_name = "company"  # 用户选择的模板
+template_path = f"templates/{template_name}/template.docx"
+schema_path = f"templates/{template_name}/schema.yaml"
+
+# 加载 schema
+import yaml
+with open(schema_path, 'r', encoding='utf-8') as f:
+    schema = yaml.safe_load(f)
+```
+
+⚠️ **重要**：模板路径基于当前工作目录，确保 `templates/` 目录存在且包含用户选择的模板。
+
+### 5. 提取字段
 
 **⚠️ 核心原则**：
 - **schema.yaml** 明确要提取哪些字段
@@ -108,16 +162,13 @@ pip3 install --break-system-packages "docxtpl>=0.20.0" docxcompose
 python3 -c "
 from skills.report_maker.scripts import extractor, common
 
-# 1. 根据报告类型路由到模板
-template_name = common.get_template_name(report_type)
-
-# 2. 加载 schema.yaml（定义要提取哪些字段）
+# 加载 schema
 schema = common.load_yaml(f'templates/{template_name}/schema.yaml')
 
-# 3. 执行提取（从草稿中提取 schema 中定义的字段）
+# 执行提取（从草稿中提取 schema 中定义的字段）
 elements = extractor.extract_elements(draft_path, schema)
 
-# 4. 确保所有字段存在（与 schema 严格一致）
+# 确保所有字段存在（与 schema 严格一致）
 elements = common.ensure_all_fields(elements, schema)
 "
 ```
@@ -139,7 +190,7 @@ elements = common.ensure_all_fields(elements, schema)
 - 许多关键字段（如 current_price, market_cap 等）在首页表格的**嵌套表格**中
 - 本 skill 已在 `docx_reader.py` 和 `field_extractor.py` 中实现自动化递归读取
 
-### 4. 一次性确认所有字段
+### 6. 一次性确认所有字段
 
 **展示所有提取的字段（表格形式）**：
 
@@ -155,16 +206,16 @@ elements = common.ensure_all_fields(elements, schema)
 
 用户可以一次性确认或修正多个字段。
 
-### 5. 确保所有字段存在
+### 7. 确保所有字段存在
 
 - elements.yaml 必须与 schema.yaml 严格对应
 - 空字段使用空字符串 `""`，不要省略
 
-### 6. 拆分摘要和正文
+### 8. 拆分摘要和正文
 
 根据 schema 中 `abstract.scope` 和 `body.scope` 提取内容，保存为 `abstract.docx` 和 `body.docx`
 
-### 7. 保存结果
+### 9. 保存结果
 
 将提取结果保存到用户指定的输出目录：
 
@@ -176,7 +227,7 @@ elements = common.ensure_all_fields(elements, schema)
 └── body.docx            # 正文片段
 ```
 
-### 8. 展示摘要并暂停
+### 10. 展示摘要并暂停
 
 展示提取结果摘要，等待用户确认或修正
 
@@ -208,14 +259,14 @@ abstract_path = report_dir / 'abstract.docx'
 body_path = report_dir / 'body.docx'
 output_path = report_dir / 'output.docx'
 
-# 1. 路由到模板并构建完整路径
-template_name = common.get_template_name('company')  # 返回 'company'
+# 模板路径（用户已确认选择的模板）
+template_name = "company"  # 用户选择的模板
 template_path = f'templates/{template_name}/template.docx'
 
-# 2. 加载 elements.yaml
+# 加载 elements.yaml
 elements = common.load_yaml(elements_path)
 
-# 3. 渲染报告
+# 渲染报告
 renderer.render_report(
     template_path=template_path,    # 模板文件完整路径
     elements=elements,               # 要素字典（从 elements.yaml 加载）
@@ -340,7 +391,7 @@ body: "body.docx"
 ## 注意事项
 
 1. **交互式确认是必须的** - 不能跳过第一阶段直接生成
-2. **工作目录要求** - 所有操作必须从项目根目录执行，否则找不到模板文件
+2. **模板目录** - 模板在当前工作目录的 `templates/` 下
 3. **输出位置** - 报告保存在用户指定的输出目录下的 `output.docx`
 4. **依赖检查** - 确保已安装 docxtpl 和 docxcompose
 5. **空字段处理** - 必须保留空字段，值为 `""`
@@ -363,41 +414,37 @@ body: "body.docx"
 
 > 本部分详细说明了渲染实现的技术细节，用于问题排查和功能扩展。
 
+### 法律附录识别规则
+
+**识别条件**（满足任一即可）：
+1. 开头必定是：`附录APPENDIX`
+2. 前面有分页符（单独一页）
+
+**附录范围**：从"附录APPENDIX"开始到整个文档末尾的所有内容
+
 ### 文档合并流程
 
 渲染使用 **docxcompose** 合并 body.docx，流程如下：
 
-1. **提取附录**：从 template 中提取 `{{body}}` 之后的内容（法律附录等）和末尾 sectPr
-2. **预清理 body.docx**：
-   - 删除所有段落内的 sectPr（防止强制换页导致空白页）
-   - 删除独立的 sectPr 元素
-   - 删除开头的空段落（保留目录控件 sdt）
-3. **合并**：使用 docxcompose.append() 插入 body
-4. **创建分节符**：在附录前添加 sectPr，隔离正文和附录
-5. **恢复附录**：将提取的附录追加回文档末尾
-6. **修正末尾 sectPr**：恢复 template 原始的 sectPr
+1. **查找附录**：在 template 中搜索包含"附录APPENDIX"的段落，确定附录起始位置
+2. **提取附录**：从附录起始位置到文档末尾的所有元素（包括 sectPr）
+3. **删除附录**：从 template 中移除附录部分
+4. **替换占位符**：通过 XML 替换所有字段占位符
+5. **插入 abstract**：将 abstract 内容插入到表格单元格
+6. **合并 body**：使用 docxcompose.append() 插入 body
+7. **追加附录**：将提取的附录直接追加到文档末尾
+8. **恢复 sectPr**：确保文档末尾有正确的 sectPr
 
-### 附录隔离机制
+### 附录处理原则
 
 **关键原则**：附录完全来自 template，不做任何修改
 
 ```
-Output Section 结构：
-- Section 0: 封面（保持 template 原样，left=1.00cm）
-- Section 1: 正文（使用 body.docx 的页边距 left=6.35cm）
-- Section 2: 附录（保持 template 原样，left=1.00cm）
+Output 结构：
+- 封面（保持 template 原样）
+- 正文（使用 body.docx 的页边距）
+- 法律附录（直接追加，保持 template 原样）
 ```
-
-**分节符 sectPr 必须包含完整属性**：
-
-| 属性 | 说明 | 示例值 |
-|------|------|--------|
-| `pgSz` | 页面尺寸 | A4: w=11910, h=16840 twips |
-| `pgMar` | 页边距 | 包括 header 和 footer 距离 |
-| `cols` | 列设置 | - |
-| `docGrid` | 文档网格 | - |
-
-⚠️ 缺少这些属性会导致页面尺寸为 0，页眉页脚显示不全。
 
 ### 空白页问题处理
 
@@ -407,9 +454,8 @@ Output Section 结构：
 3. 文档开头空段落：body.docx 开头可能有多个空段落
 
 **解决方案**：
-1. 追加前删除 body.docx 所有 sectPr
-2. 追加后清理连续空段落（保留最多 1 个）
-3. 删除 body.docx 开头的空段落
+1. 追加前删除 body.docx 所有 sectPr（除了末尾的）
+2. 删除 body.docx 开头的空段落（保留目录控件 sdt）
 
 ### Abstract 插入
 
