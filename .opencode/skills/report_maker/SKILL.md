@@ -62,7 +62,7 @@ pip3 install --break-system-packages "docxtpl>=0.20.0" docxcompose
 
 ## 第一阶段：抽取与确认
 
-### 1. 询问基本信息（逐个询问）
+### 1. 询问基本信息
 
 ```
 问题 1/4：草稿文件在哪里？
@@ -87,7 +87,33 @@ pip3 install --break-system-packages "docxtpl>=0.20.0" docxcompose
 - ✅ 主题词：新能源汽车、AI芯片、美联储、利率政策
 - ❌ 描述性词汇：深度分析、研究、报告、解读、提交版
 
-### 2. 自动查找可用模板
+### 2. LLM 询问：是否有摘要和正文
+
+**必须通过 LLM 询问判断**，因为有些报告可能没有摘要或正文。
+
+**LLM 询问内容**：
+
+将草稿内容发送给 LLM，询问以下问题：
+
+```
+请分析这篇研究报告：
+1. 是否有摘要部分？（摘要通常是首页右侧的投资亮点、核心观点区域）
+2. 摘要的位置在哪里？（请描述具体位置，如"首页右侧表格"）
+3. 是否有正文部分？（正文是报告的主要分析内容）
+4. 正文从哪里开始？（请描述具体位置，如"第二页开始"或"目录之后"）
+```
+
+**根据 LLM 回答，设置标志**：
+- `has_abstract: bool` - 是否有摘要
+- `has_body: bool` - 是否有正文
+- `abstract_scope: str` - 摘要位置描述（如"首页右侧"）
+- `body_scope: str` - 正文位置描述（如"第二页开始"）
+
+**重要**：
+- 如果 `has_abstract=False`，则不需要提取摘要，跳过 abstract.docx 生成
+- 如果 `has_body=False`，则不需要提取正文，跳过 body.docx 生成
+
+### 3. 自动查找可用模板
 
 在**当前工作目录**下的 `templates/` 目录中查找所有可用的模板。
 
@@ -111,9 +137,9 @@ templates/
 - `schema.yaml` - **定义要提取哪些字段**
 - `template.docx` - **Word 模板文件**
 
-### 3. 展示可用模板并让用户确认
+### 4. 展示可用模板并让用户确认
 
-**问题 4/4：请选择使用的模板**
+**问题 5/5：请选择使用的模板**
 
 展示找到的所有可用模板供用户选择：
 
@@ -131,7 +157,7 @@ templates/
 - 用户可以直接输入模板名称（如 `company`）
 - 如果只有一个模板，可以直接询问"是否使用 {模板名} 模板？"
 
-### 4. 加载选定的模板
+### 5. 加载选定的模板
 
 根据用户选择的模板名称，加载对应的模板文件：
 
@@ -149,7 +175,7 @@ with open(schema_path, 'r', encoding='utf-8') as f:
 
 ⚠️ **重要**：模板路径基于当前工作目录，确保 `templates/` 目录存在且包含用户选择的模板。
 
-### 5. 提取字段
+### 6. 提取字段
 
 **⚠️ 核心原则**：
 - **schema.yaml** 明确要提取哪些字段
@@ -190,7 +216,7 @@ elements = common.ensure_all_fields(elements, schema)
 - 许多关键字段（如 current_price, market_cap 等）在首页表格的**嵌套表格**中
 - 本 skill 已在 `docx_reader.py` 和 `field_extractor.py` 中实现自动化递归读取
 
-### 6. 一次性确认所有字段
+### 7. 一次性确认所有字段
 
 **展示所有提取的字段（表格形式）**：
 
@@ -206,28 +232,52 @@ elements = common.ensure_all_fields(elements, schema)
 
 用户可以一次性确认或修正多个字段。
 
-### 7. 确保所有字段存在
+### 8. 确保所有字段存在
 
 - elements.yaml 必须与 schema.yaml 严格对应
 - 空字段使用空字符串 `""`，不要省略
 
-### 8. 拆分摘要和正文
+### 9. 拆分摘要和正文
 
-根据 schema 中 `abstract.scope` 和 `body.scope` 提取内容，保存为 `abstract.docx` 和 `body.docx`
+**根据 LLM 询问结果判断**：
 
-### 9. 保存结果
+```
+LLM 分析结果：
+- has_abstract: True
+- abstract_scope: "首页右侧"
+- has_body: True
+- body_scope: "第二页开始"
+```
+
+**处理逻辑**：
+- 如果 `has_abstract=True` 且 `abstract_scope` 有值：使用 `splitter.extract_abstract(draft_path, abstract_scope)` 提取摘要
+- 如果 `has_abstract=False`：跳过摘要提取，不生成 `abstract.docx`
+- 如果 `has_body=True` 且 `body_scope` 有值：使用 `splitter.extract_body(draft_path, body_scope)` 提取正文
+- 如果 `has_body=False`：跳过正文提取，不生成 `body.docx`
+
+**保存结果**：
+
+```
+<输出目录>/
+├── draft.docx           # 原始草稿
+├── elements.yaml        # 提取的要素
+├── abstract.docx        # 摘要片段（仅当 has_abstract=True 时）
+└── body.docx            # 正文片段（仅当 has_body=True 时）
+```
+
+### 10. 保存结果
 
 将提取结果保存到用户指定的输出目录：
 
 ```
-<用户指定目录>/
-├── draft.docx           # 原始草稿（可选）
+<输出目录>/
+├── draft.docx           # 原始草稿
 ├── elements.yaml        # 提取的要素
-├── abstract.docx        # 摘要片段
-└── body.docx            # 正文片段
+├── abstract.docx        # 摘要片段（仅当 has_abstract=True 时）
+└── body.docx            # 正文片段（仅当 has_body=True 时）
 ```
 
-### 10. 展示摘要并暂停
+### 11. 展示摘要并暂停
 
 展示提取结果摘要，等待用户确认或修正
 
@@ -239,9 +289,16 @@ elements = common.ensure_all_fields(elements, schema)
 
 加载 `elements.yaml`，应用用户修正，保存更新后的 `elements.yaml`
 
-### 2. 确认 abstract 和 body 位置
+### 2. 确认 abstract 和 body 是否存在
 
-**显式询问 abstract.docx 和 body.docx 的位置**：
+**根据第一阶段的 LLM 询问结果**：
+
+- 如果 `has_abstract=True` 且 `abstract.docx` 存在：询问用户确认位置
+- 如果 `has_abstract=False`：跳过摘要步骤
+- 如果 `has_body=True` 且 `body.docx` 存在：询问用户确认位置
+- 如果 `has_body=False`：跳过正文步骤
+
+**显式询问**（仅当文件存在时）：
 
 ```
 问题：abstract.docx 在哪里？
@@ -255,9 +312,17 @@ elements = common.ensure_all_fields(elements, schema)
 
 ### 3. 渲染报告
 
+**根据 has_abstract 和 has_body 标志决定渲染行为**：
+
+- 如果 `has_abstract=True`：插入摘要到模板
+- 如果 `has_abstract=False`：不插入摘要（模板中可能有空的摘要区域，跳过即可）
+- 如果 `has_body=True`：合并正文到模板
+- 如果 `has_body=False`：不合并正文（模板中可能有空的正文区域，跳过即可）
+
 使用 `renderer.render_report()` 函数完成以下操作：
-- 渲染短字段到模板（使用 Jinja2 替换占位符）
-- 插入摘要和正文片段（使用 docxcompose 合并文档）
+- 渲染短字段到模板（使用 XML 替换占位符）
+- 插入摘要片段（如果 has_abstract=True）
+- 合并正文片段（如果 has_body=True）
 - 保存最终输出文件
 
 **完整代码示例**：
@@ -405,7 +470,7 @@ body: "body.docx"
 ## 注意事项
 
 1. **交互式确认是必须的** - 不能跳过第一阶段直接生成
-2. **模板目录** - 模板在当前工作目录的 `templates/` 下
+2. **工作目录要求** - 所有操作必须从项目根目录执行，否则找不到模板文件
 3. **输出位置** - 报告保存在用户指定的输出目录下的 `output.docx`
 4. **依赖检查** - 确保已安装 docxtpl 和 docxcompose
 5. **空字段处理** - 必须保留空字段，值为 `""`
