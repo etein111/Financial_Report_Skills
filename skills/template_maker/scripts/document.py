@@ -270,6 +270,90 @@ def find_body_range_by_sections(doc_path: str) -> Dict[str, Any]:
     }
 
 
+def find_appendix_by_markers(doc_path: str) -> Dict[str, Any]:
+    """根据标记词定位法律披露附录。
+
+    法律附录识别规则：
+    - 前面有分页符（单独一页）
+    - 开头必定是："附录APPENDIX"
+    - 结尾是整个文档的结尾
+
+    策略：
+    1. 搜索包含"附录APPENDIX"的段落
+    2. 检查该段落是否前面有分页符（sectPr type=nextPage）
+    3. 返回附录的起始位置和内容预览
+
+    Args:
+        doc_path: Word 文档路径
+
+    Returns:
+        附录位置信息
+    """
+    doc = Document(doc_path)
+    body_element = doc.element.body
+    ns = {'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'}
+
+    # 搜索包含"附录APPENDIX"的段落
+    appendix_para_idx = None
+    appendix_text = None
+
+    for i, para in enumerate(doc.paragraphs):
+        text = para.text.strip()
+        if '附录APPENDIX' in text or ('附录' in text.upper() and 'APPENDIX' in text.upper()):
+            appendix_para_idx = i
+            appendix_text = text[:100] if text else None
+            break
+
+    if appendix_para_idx is None:
+        return {
+            "found": False,
+            "reason": "未找到包含'附录APPENDIX'的段落"
+        }
+
+    # 检查前面是否有分页符（sectPr）
+    # 分页符可能在当前段落或前一个段落的 pPr 中
+    has_page_break_before = False
+
+    # 检查当前段落之前的所有元素，找到最近的分节符
+    elements_before = list(body_element)[appendix_para_idx:] if appendix_para_idx > 0 else []
+
+    for i, elem in enumerate(elements_before):
+        tag = elem.tag.split('}')[-1]
+        if tag == 'p':
+            pPr = elem.find('w:pPr', ns)
+            if pPr is not None:
+                sectPr = pPr.find('w:sectPr', ns)
+                if sectPr is not None:
+                    sect_type = sectPr.find('w:type', ns)
+                    if sect_type is not None:
+                        type_val = sect_type.get('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}val')
+                        if type_val == 'nextPage':
+                            has_page_break_before = True
+                    break
+
+    # 计算附录内容范围（从附录开始到文档末尾）
+    total_paragraphs = len(doc.paragraphs)
+    appendix_paragraphs_count = total_paragraphs - appendix_para_idx
+
+    # 收集附录内容预览（前3个段落）
+    preview = []
+    for i, para in enumerate(doc.paragraphs[appendix_para_idx:appendix_para_idx + 3]):
+        text = para.text.strip()
+        if text:
+            preview.append(text[:80])
+
+    return {
+        "found": True,
+        "start_paragraph": appendix_para_idx,
+        "paragraphs_count": appendix_paragraphs_count,
+        "total_paragraphs": total_paragraphs,
+        "has_page_break_before": has_page_break_before,
+        "text": appendix_text,
+        "preview": preview,
+        "context": f"段落 {appendix_para_idx} 开始，共 {appendix_paragraphs_count} 个段落"
+    }
+
+
 def find_elements_yaml(word_path: Path | str) -> Path | None:
     """查找与 Word 文件配对的 elements.yaml。
 

@@ -22,7 +22,7 @@ from template import (
     replace_body_in_doc,
     replace_analyst_fields_in_doc
 )
-from document import find_abstract_by_elements, find_body_range_by_sections
+from document import find_abstract_by_elements, find_body_range_by_sections, find_appendix_by_markers
 from router import load_router, update_mapping, save_router, get_all_router_mappings
 import yaml
 
@@ -140,6 +140,13 @@ def _auto_detect_locations(word_path: Path, elements: dict) -> dict:
                 "location": body_location
             }
 
+    # 检测法律附录位置
+    appendix_location = find_appendix_by_markers(str(word_path))
+    if appendix_location.get("found"):
+        result["appendix"] = {
+            "location": appendix_location
+        }
+
     return result
 
 
@@ -249,8 +256,11 @@ def _confirm_body_location(detected: dict) -> str | None:
         return user_input
 
 
-def _confirm_appendix_location() -> str | None:
+def _confirm_appendix_location(detected: dict) -> str | None:
     """交互确认法律披露附录位置。
+
+    Args:
+        detected: 自动检测结果
 
     Returns:
         附录位置描述，None 表示没有附录
@@ -269,9 +279,41 @@ def _confirm_appendix_location() -> str | None:
             print("→ 将跳过法律披露附录")
             return None
         elif user_input in ['', 'y']:
-            print(f"→ 法律披露附录位置：{DEFAULT_APPENDIX_SCOPE}")
-            return DEFAULT_APPENDIX_SCOPE
+            break
         print("请输入 y 或 n")
+
+    # 用户选择"有"，显示自动检测结果
+    if detected and detected.get("found"):
+        location = detected.get('location', {})
+        print(f"\n自动检测到法律披露附录：")
+        print(f"  位置：段落 {location.get('start_paragraph')} 开始")
+        print(f"  内容预览：")
+        for i, line in enumerate(location.get('preview', [])[:3]):
+            print(f"    {i+1}. {line}")
+
+        if location.get('has_page_break_before'):
+            print(f"  ✓ 前面有分页符（单独一页）")
+
+        print("\n请确认法律披露附录位置是否正确？")
+        print("  - 直接回车：使用检测到的位置")
+        print("  - 输入描述：手动指定位置")
+
+        user_input = input("\n您的选择: ").strip()
+        if user_input:
+            return user_input
+
+        return location.get('context', DEFAULT_APPENDIX_SCOPE)
+    else:
+        reason = detected.get('reason', '未知原因') if detected else '未知原因'
+        print(f"\n⚠️ 自动检测法律披露附录失败：{reason}")
+        print("请手动指定法律披露附录位置：")
+        print("  示例：正文之后，报告末尾")
+
+        user_input = input("\n请输入法律披露附录位置: ").strip()
+        if not user_input:
+            print("→ 无法确定法律披露附录位置，将跳过")
+            return None
+        return user_input
 
 
 def _confirm_report_type_mapping(name: str, router_path: Path, auto_confirm: bool) -> str | None:
