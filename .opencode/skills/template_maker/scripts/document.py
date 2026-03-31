@@ -17,6 +17,7 @@ def find_abstract_by_elements(doc_path: str, elements: dict) -> Dict[str, Any]:
     1. 摘要是一段连贯的文本，包含投资观点、核心分析结论
     2. 摘要不包含评级(RATING)、目标价(TARGET PRICE)等单独字段
     3. 摘要通常是自然段落，不是表格中的键值对
+    4. 跳过标题字段（title, title_ch, title_en），避免将标题误判为摘要
 
     Args:
         doc_path: 文档路径
@@ -47,6 +48,10 @@ def find_abstract_by_elements(doc_path: str, elements: dict) -> Dict[str, Any]:
     for field_name, field_value in field_values:
         # 跳过分析师相关字段（不适合作为摘要内容）
         if field_name.startswith('a') and any(s in field_name for s in ['_cn', '_en', '_sfc', '_email']):
+            continue
+
+        # 跳过标题相关字段（标题不是摘要）
+        if field_name in ('title', 'title_ch', 'title_en'):
             continue
 
         # 在段落中搜索
