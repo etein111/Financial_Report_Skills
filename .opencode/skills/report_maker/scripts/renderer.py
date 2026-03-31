@@ -1296,6 +1296,15 @@ def render_report(
         if marker_elem is not None and Path(body_path).exists() and Path(body_path).stat().st_size > 0:
             body_doc = Document(body_path)
 
+            # 收集 body 末尾的 sectPr（body 自己的页边距设置）
+            body_sectPr = None
+            body_elements = list(body_doc.element.body)
+            for elem in reversed(body_elements):
+                tag = elem.tag.split('}')[-1]
+                if tag == 'sectPr':
+                    body_sectPr = deepcopy(elem)
+                    break
+
             # 只清理 body 开头的空段落，保留 sectPr（页边距信息）
             _clean_body_empty_paragraphs(body_doc)
 
@@ -1303,7 +1312,7 @@ def render_report(
             insert_idx = marker_idx
             for body_elem in body_doc.element.body:
                 tag = body_elem.tag.split('}')[-1]
-                # 复制段落、表格和目录控件，跳过 sectPr
+                # 复制段落、表格和目录控件，跳过 sectPr（稍后单独处理）
                 if tag in ['p', 'tbl', 'sdt']:
                     new_elem = deepcopy(body_elem)
                     body_element.insert(insert_idx, new_elem)
@@ -1318,47 +1327,32 @@ def render_report(
                         body_element.remove(elem)
                         break
 
-            print(f"  已在占位符位置插入 body")
+            # 在 body 内容末尾添加 body 的 sectPr（保留 body 的页边距）
+            if body_sectPr is not None:
+                body_element.append(body_sectPr)
+
+            print(f"  已在占位符位置插入 body（保留 body 的页边距）")
 
         elif marker_elem is None:
             print(f"  警告: 未找到 body 占位符 (BODY_MARKER)")
 
-        # 7. 保存临时文档
-        temp_before_path = Path(output_path).parent / "temp_before.docx"
-        doc.save(str(temp_before_path))
+        # 7. 保存最终文档
+        doc.save(output_path)
 
-        # 8. 使用 docxcompose 修复图片引用
-        # docxcompose 会正确处理图片资源的复制
-        master = Document(str(temp_before_path))
-        composer = Composer(master)
-
-        if Path(body_path).exists() and Path(body_path).stat().st_size > 0:
-            # 用 composer 追加一个空操作来触发资源整理
-            # 实际上我们需要复制 body 的图片资源
-            body_doc = Document(body_path)
-            _copy_images_from_body(master, body_doc)
-
-        # 9. 保存最终文档
-        composer.save(output_path)
-
-        # 10. 清理临时文件
+        # 8. 清理临时文件
         temp_path.unlink(missing_ok=True)
-        temp_before_path.unlink(missing_ok=True)
 
         # 11. 验证输出
         final_doc = Document(output_path)
         image_count = sum(1 for rel in final_doc.part.rels.values() if 'image' in rel.reltype)
 
-        # 验证附录是否完整保留
-        appendix_found = False
-        for para in final_doc.paragraphs:
-            if '附录APPENDIX' in para.text or ('附录' in para.text.upper() and 'APPENDIX' in para.text.upper()):
-                appendix_found = True
-                break
+        # 验证附录是否完整保留（使用 lxml 检测，避免 python-docx 漏读）
+        appendix_result = _verify_appendix_with_lxml(output_path)
+        appendix_found = appendix_result.get('found', False)
 
         print(f"  输出: 段落={len(final_doc.paragraphs)}, 表格={len(final_doc.tables)}, 图片={image_count}")
         if appendix_found:
-            print(f"  ✅ 法律附录已完整保留")
+            print(f"  ✅ 法律附录已完整保留 ({appendix_result.get('location', '')})")
         else:
             print(f"  ⚠️ 法律附录未找到")
 
@@ -1369,6 +1363,62 @@ def render_report(
         import traceback
         traceback.print_exc()
         return False
+
+
+def _verify_appendix_with_lxml(doc_path: str) -> Dict[str, Any]:
+    """使用 lxml 验证文档中是否存在法律附录。
+
+    python-docx 的 doc.paragraphs 会漏读嵌套在复杂结构中的段落，
+    所以需要直接用 lxml 解析 XML 来检测。
+
+    Args:
+        doc_path: 文档路径
+
+    Returns:
+        {"found": bool, "location": str, "text": str}
+    """
+    import zipfile
+    from lxml import etree
+
+    W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
+    appendix_keywords = ['附录APPENDIX', 'IMPORTANT DISCLOSURE']
+
+    try:
+        with zipfile.ZipFile(doc_path, 'r') as z:
+            with z.open('word/document.xml') as f:
+                tree = etree.parse(f)
+
+        # 搜索段落中的附录标记
+        for idx, p in enumerate(tree.iter(f'{W}p')):
+            text = ''.join(t.text or '' for t in p.iter(f'{W}t'))
+            text_upper = text.upper()
+            for kw in appendix_keywords:
+                if kw.upper() in text_upper:
+                    return {
+                        "found": True,
+                        "location": f"段落 {idx}",
+                        "text": text[:50]
+                    }
+
+        # 搜索表格中的附录标记
+        for tbl_idx, tbl in enumerate(tree.iter(f'{W}tbl')):
+            for row_idx, tr in enumerate(tbl.findall(f'{W}tr')):
+                for col_idx, tc in enumerate(tr.findall(f'{W}tc')):
+                    cell_text = ''.join(t.text or '' for t in tc.iter(f'{W}t'))
+                    text_upper = cell_text.upper()
+                    for kw in appendix_keywords:
+                        if kw.upper() in text_upper:
+                            return {
+                                "found": True,
+                                "location": f"表格 {tbl_idx} [{row_idx},{col_idx}]",
+                                "text": cell_text[:50]
+                            }
+
+        return {"found": False}
+
+    except Exception as e:
+        print(f"  验证附录时出错: {e}")
+        return {"found": False, "error": str(e)}
 
 
 def _clean_body_sectPr(body_doc: Document) -> None:
