@@ -184,8 +184,25 @@ def replace_analyst_fields_in_doc(doc: Document, elements: dict) -> Document:
         # 只处理第一个表格（其他都是合并单元格的视图）
         author_table = author_tables[0]
 
-        # 计算实际有值的分析师数量
-        analyst_count = _count_analysts_with_data(elements)
+        # 根据表格列数计算能容纳的分析师数量，而不是根据实际有值的数量
+        # 用户说 "2x5" 意思是 2行 x 5列，即5列横向排列
+        # 用户说 "2x3，就是三个分析师一行"
+        rows = len(author_table.rows)
+        cols = len(author_table.columns)
+        data_rows = rows - 1  # 减去标记行
+
+        # 计算起始行
+        if data_rows % 2 == 0:
+            # 偶数数据行：从第1行开始
+            start_row = 1
+        else:
+            # 奇数数据行：跳过第1行（作为表头），从第2行开始
+            start_row = 2
+
+        # 计算能填充的分析师数量（按列数填充，空值也填占位符）
+        cols_available = cols  # 每列一个分析师
+        groups = (rows - start_row) // 2  # 每2行一组（信息行+邮箱行）
+        analyst_count = cols_available * groups
 
         # 动态计算填充位置
         analyst_positions = _calculate_analyst_positions(author_table, analyst_count)
