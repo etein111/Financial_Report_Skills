@@ -17,16 +17,17 @@ description: "当用户说「制作模板」、「创建模板」、「分析模
 
 ## 支持的报告类型
 
-| 报告类型 | 说明 |
-|---------|------|
-| `company` | 公司覆盖报告 |
-| `sector` | 行业研究报告 |
-| `company_flash` | 公司快讯 |
-| `sector_flash` | 行业快讯 |
-| `macro` | 宏观报告（使用 common 模板） |
-| `strategy` | 策略报告（使用 common 模板） |
-| `quantitative` | 量化报告（使用 common 模板） |
-| `bond` | 债券报告（使用 common 模板） |
+| 报告类型            | 说明                 |
+|-----------------|--------------------|
+| `company`       | 公司覆盖报告             |
+| `sector`        | 行业研究报告             |
+| `flash`         | 快讯                 |
+| `company_flash` | 公司快讯               |
+| `sector_flash`  | 行业快讯               |
+| `macro`         | 宏观报告（使用 common 模板） |
+| `strategy`      | 策略报告（使用 common 模板） |
+| `quantitative`  | 量化报告（使用 common 模板） |
+| `bond`          | 债券报告（使用 common 模板） |
 
 **注意**：
 - 报告类型通过 `router.yaml` 映射到模板名
@@ -47,9 +48,10 @@ description: "当用户说「制作模板」、「创建模板」、「分析模
 请选择要使用的模板类型：
   1. company - 公司覆盖报告
   2. sector - 行业研究报告
-  3. company_flash - 公司快讯
-  4. sector_flash - 行业快讯
-  5. macro - 宏观报告
+  3.flash - 快讯  
+  4. company_flash - 公司快讯
+  5. sector_flash - 行业快讯
+  6. macro - 宏观报告
   ...
 
 您的选择: flash
