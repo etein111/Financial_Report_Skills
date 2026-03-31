@@ -1145,27 +1145,30 @@ def replace_all_placeholders_in_xml(
         for suffix in analyst_suffixes:
             key = f'a{i}_{suffix}'
             value = context.get(key, '') or ''
-            # 替换格式 {{ a1_cn }} -> "杨斌"
+            # 替换格式 {{ a1_cn }} 和 {{a1_cn}}
             replacements[f'{{{{ {key} }}}}'] = value
-            # 也处理无空格格式 {{{key}}}
-            replacements[f'{{{{{key}}}}}]'] = value.rstrip(']') if value else ''
+            replacements[f'{{{{{key}}}}}'] = value
 
-    # 2. 添加简单字段占位符（company, ticker, rating, 等）
-    simple_fields = [
-        'report_date', 'company', 'ticker', 'title', 'rating',
-        'current_price', 'target_price', 'market_cap', 'shares_in_issue',
-        'one_year_high', 'one_year_low', 'current_price_date',
-        'analyst_chinese_name', 'analyst_english_name', 'analyst_sfc_code', 'analyst_email',
-        'a1_cn', 'a1_en', 'a1_sfc', 'a1_email'
-    ]
-    for field in simple_fields:
-        if field in context:
-            value = context[field]
-            if field in ['abstract', 'body']:
-                # 这些用标记替代
-                replacements[f'{{{{{field}}}}}]'] = ''
-            else:
-                replacements[f'{{{{{field}}}}}]'] = str(value) if value else ''
+    # 2. 添加所有普通字段占位符（从 context 中获取）
+    # 跳过特殊字段和分析师字段（已在上面处理）
+    skip_fields = {'abstract', 'body', 'analysts', '_analysts_with_data', '_abstract_file', '_body_file'}
+    analyst_prefixes = tuple(f'a{i}_' for i in range(1, 9))
+
+    for field, value in context.items():
+        # 跳过特殊字段
+        if field in skip_fields:
+            continue
+        # 跳过分析师字段（已在上面处理）
+        if field.startswith(analyst_prefixes):
+            continue
+        # 跳过内部字段（以 _ 开头）
+        if field.startswith('_'):
+            continue
+
+        # 替换格式 {{ field }} 和 {{field}}
+        str_value = str(value) if value else ''
+        replacements[f'{{{{ {field} }}}}'] = str_value
+        replacements[f'{{{{{field}}}}}'] = str_value
 
     # 3. 添加抽象占位符 {{ abstract }} 和 {{ body }}
     # 替换为标记，以便后续插入 abstract 和 body 内容
@@ -1333,31 +1336,37 @@ def render_report(
         if Path(body_path).exists() and Path(body_path).stat().st_size > 0:
             body_doc = Document(body_path)
 
-            # 清理 body_doc 中的 sectPr（防止空白页）
-            _clean_body_sectPr(body_doc)
+            # 只清理 body 开头的空段落，保留 sectPr（页边距信息）
+            _clean_body_empty_paragraphs(body_doc)
 
             composer.append(body_doc)
             print(f"  已插入 body")
 
-        # 10. 在正文后追加法律附录（简单直接）
+        # 10. 先保存 composer 的结果到临时文件
+        temp_with_body_path = Path(output_path).parent / "temp_with_body.docx"
+        composer.save(str(temp_with_body_path))
+
+        # 11. 重新打开文档，追加法律附录
+        final_doc = Document(str(temp_with_body_path))
         if appendix_elements:
-            master_body = master.element.body
+            final_body = final_doc.element.body
 
             # 直接追加附录元素
             for elem in appendix_elements:
-                master_body.append(elem)
+                final_body.append(elem)
 
             # 确保文档末尾有 sectPr
-            _ensure_final_sectPr(master_body, final_sectPr)
+            _ensure_final_sectPr(final_body, final_sectPr)
 
-        # 11. 保存最终文档
-        composer.save(output_path)
+        # 12. 保存最终文档
+        final_doc.save(output_path)
 
-        # 12. 清理临时文件
+        # 13. 清理临时文件
         temp_path.unlink(missing_ok=True)
         temp_before_path.unlink(missing_ok=True)
+        temp_with_body_path.unlink(missing_ok=True)
 
-        # 13. 验证输出
+        # 14. 验证输出
         final_doc = Document(output_path)
         image_count = sum(1 for rel in final_doc.part.rels.values() if 'image' in rel.reltype)
 
@@ -1418,6 +1427,30 @@ def _clean_body_sectPr(body_doc: Document) -> None:
             else:
                 break
         elif tag != 'sdt':
+            break
+
+
+def _clean_body_empty_paragraphs(body_doc: Document) -> None:
+    """只清理 body 文档开头的空段落，保留 sectPr（页边距信息）。
+
+    Args:
+        body_doc: body 文档
+    """
+    ns = {'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'}
+    body_body = body_doc.element.body
+
+    # 只删除开头的空段落（保留目录控件 sdt 和 sectPr）
+    body_elements = list(body_body)
+    for elem in body_elements:
+        tag = elem.tag.split('}')[-1]
+        if tag == 'p':
+            texts = elem.findall('.//w:t', ns)
+            text = ''.join([t.text or '' for t in texts]).strip()
+            if not text:
+                body_body.remove(elem)
+            else:
+                break
+        elif tag not in ['sdt', 'sectPr']:
             break
 
 
