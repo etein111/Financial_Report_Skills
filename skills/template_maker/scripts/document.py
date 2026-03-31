@@ -206,76 +206,61 @@ def find_appendix_by_markers(doc_path: str) -> Dict[str, Any]:
             "context": str
         }
     """
-    doc = Document(doc_path)
+    import zipfile
+    from lxml import etree
 
-    # 附录标记模式
-    appendix_patterns = [
-        r'^附录\s*APPENDIX',
-        r'^APPENDIX\s+\d+',  # APPENDIX 1, APPENDIX 2 等
-        r'^IMPORTANT\s+DISCLOSURES',
-        r'^重要信息披露',
-        r'^附录$',  # 单独的"附录"
-    ]
+    W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
 
-    in_appendix = False
-    start_idx = None
-    preview_lines = []
+    # 直接解析 document.xml 以获取所有内容（包括 python-docx 漏读的表格）
+    with zipfile.ZipFile(doc_path, 'r') as z:
+        with z.open('word/document.xml') as f:
+            tree = etree.parse(f)
 
-    for idx, para in enumerate(doc.paragraphs):
-        text = para.text.strip()
+    # 附录关键词（用于搜索 w:t 元素）
+    appendix_keywords = ['附录APPENDIX', 'IMPORTANT DISCLOSURE']
 
-        # 检查是否是附录标题
-        is_appendix_title = False
-        for pattern in appendix_patterns:
-            if re.match(pattern, text, re.IGNORECASE):
-                is_appendix_title = True
-                break
-
-        if is_appendix_title:
-            if not in_appendix:
-                in_appendix = True
-                start_idx = idx
-
+    # 先搜索段落中的附录标记
+    for idx, p in enumerate(tree.iter(f'{W}p')):
+        text = ''.join(t.text or '' for t in p.iter(f'{W}t'))
+        for kw in appendix_keywords:
+            if kw in text.upper():
                 # 检查前面是否有分页符
                 has_page_break = False
-                if idx > 0:
-                    prev_para = doc.paragraphs[idx - 1]
-                    prev_pPr = prev_para._element.find(
-                        '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}pPr'
-                    )
-                    if prev_pPr is not None:
-                        last_pPr = list(prev_pPr.iter())[-1] if len(list(prev_pPr)) > 0 else None
-                        if last_pPr is not None and etree.QName(last_pPr.tag).localname == 'lastRenderedPageBreak':
-                            has_page_break = True
+                pPr = p.find(f'{W}pPr')
+                if pPr is not None:
+                    last_pPr = list(pPr.iter())[-1] if len(list(pPr)) > 0 else None
+                    if last_pPr is not None and etree.QName(last_pPr.tag).localname == 'lastRenderedPageBreak':
+                        has_page_break = True
 
                 return {
                     "found": True,
                     "start_paragraph": idx,
-                    "preview": [text],
+                    "preview": [text[:100] if text else ''],
                     "has_page_break_before": has_page_break,
                     "context": f"段落 {idx}: {text[:50]}"
                 }
 
-        # 如果已进入附录区域，收集预览
-        if in_appendix and len(preview_lines) < 5:
-            preview_lines.append(text)
+    # 搜索表格中的附录标记（使用 lxml 直接解析，避免 python-docx 漏读问题）
+    for tbl in tree.iter(f'{W}tbl'):
+        # 获取表格标题
+        caption = tbl.find(f'{W}tblPr/{W}tblCaption')
+        caption_val = caption.get(f'{W}val') if caption is not None else ''
 
-    # 检查是否有 IMPORTANT DISCLOSURES 在表格中
-    for tbl_idx, table in enumerate(doc.tables):
-        for row_idx, row in enumerate(table.rows):
-            for col_idx, cell in enumerate(row.cells):
-                cell_text = cell.text.strip()
-                for pattern in appendix_patterns:
-                    if re.match(pattern, cell_text, re.IGNORECASE):
+        # 遍历表格所有单元格
+        for row_idx, tr in enumerate(tbl.findall(f'{W}tr')):
+            for col_idx, tc in enumerate(tr.findall(f'{W}tc')):
+                cell_text = ''.join(t.text or '' for t in tc.iter(f'{W}t'))
+                for kw in appendix_keywords:
+                    if kw in cell_text.upper():
                         return {
                             "found": True,
                             "start_paragraph": None,
-                            "table": tbl_idx,
+                            "table_caption": caption_val,
                             "row": row_idx,
                             "col": col_idx,
-                            "preview": [cell_text],
+                            "preview": [cell_text[:100] if cell_text else ''],
                             "has_page_break_before": False,
-                            "context": f"表格 {tbl_idx} 行 {row_idx} 列 {col_idx}: {cell_text[:50]}"
+                            "context": f"表格 {caption_val} 行 {row_idx} 列 {col_idx}: {cell_text[:50]}"
                         }
 
     return {"found": False, "reason": "未找到附录标记"}

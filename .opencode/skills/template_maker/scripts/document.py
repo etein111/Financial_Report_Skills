@@ -1,225 +1,269 @@
 """文档分析函数。
 
-用于分析 Word 文档结构、定位内容、获取段落和表格信息。
+用于查找摘要位置、正文范围、附录标记等。
 """
 
-from __future__ import annotations
-
-from pathlib import Path
-from typing import Dict, List, Any
+import re
+from typing import Dict, Any
 from docx import Document
 
 
-def find_content_location(doc_path: str, search_text: str) -> Dict[str, Any]:
-    """在文档中查找指定文本的位置。
+# ==================== 摘要查找 ====================
+
+def find_abstract_by_elements(doc_path: str, elements: dict) -> Dict[str, Any]:
+    """根据 elements.yaml 中定义的字段，智能查找摘要位置。
+
+    摘要判断逻辑：
+    1. 摘要是一段连贯的文本，包含投资观点、核心分析结论
+    2. 摘要不包含评级(RATING)、目标价(TARGET PRICE)等单独字段
+    3. 摘要通常是自然段落，不是表格中的键值对
 
     Args:
-        doc_path: Word 文档路径
-        search_text: 要搜索的文本
+        doc_path: 文档路径
+        elements: elements.yaml 内容
 
     Returns:
-        位置信息：
         {
             "found": bool,
-            "type": str,             # "table" 或 "paragraph"
-            "table": int,
-            "row": int,
-            "col": int,
-            "index": int,
+            "table": int,       # 表格索引（如果有的话）
+            "row": int,         # 行索引
+            "col_start": int,   # 起始列
+            "col_end": int,     # 结束列
+            "context": str      # 上下文描述
+        }
+    """
+    doc = Document(doc_path)
+
+    # 收集所有字段值用于匹配
+    field_values = []
+    for field_name, field_value in elements.items():
+        if field_value and isinstance(field_value, str) and len(field_value) > 5:
+            field_values.append((field_name, field_value.strip()))
+
+    # 按长度降序排列（优先匹配更长的文本）
+    field_values.sort(key=lambda x: len(x[1]), reverse=True)
+
+    # 在文档中搜索字段值对应的位置
+    for field_name, field_value in field_values:
+        # 跳过分析师相关字段（不适合作为摘要内容）
+        if field_name.startswith('a') and any(s in field_name for s in ['_cn', '_en', '_sfc', '_email']):
+            continue
+
+        # 在段落中搜索
+        for para_idx, para in enumerate(doc.paragraphs):
+            if field_value in para.text:
+                # 检查这个段落是否像摘要（长文本，没有明显的键值对格式）
+                if _is_likely_abstract_paragraph(para.text, field_value):
+                    return {
+                        "found": True,
+                        "table": None,
+                        "row": None,
+                        "col_start": None,
+                        "col_end": None,
+                        "start_paragraph": para_idx,
+                        "context": f"段落 {para_idx}: {para.text[:50]}..."
+                    }
+
+        # 在表格中搜索
+        for tbl_idx, table in enumerate(doc.tables):
+            for row_idx, row in enumerate(table.rows):
+                for col_idx, cell in enumerate(row.cells):
+                    if field_value in cell.text:
+                        # 检查这个单元格是否像摘要
+                        if _is_likely_abstract_cell(cell, field_value):
+                            return {
+                                "found": True,
+                                "table": tbl_idx,
+                                "row": row_idx,
+                                "col_start": col_idx,
+                                "col_end": col_idx,
+                                "context": f"表格 {tbl_idx} 行 {row_idx} 列 {col_idx}: {cell.text[:50]}..."
+                            }
+
+    return {"found": False, "reason": "未找到匹配的摘要内容"}
+
+
+def _is_likely_abstract_paragraph(text: str, field_value: str) -> bool:
+    """判断段落是否像摘要。
+
+    Args:
+        text: 段落完整文本
+        field_value: 字段值
+
+    Returns:
+        True 如果像摘要
+    """
+    # 检查是否有键值对格式的标记（如冒号后是短文本）
+    lines = text.split('\n')
+    for line in lines:
+        if ':' in line:
+            parts = line.split(':', 1)
+            if len(parts) == 2 and len(parts[1].strip()) < 50:
+                # 这更像是键值对，不是摘要
+                return False
+
+    # 摘要通常是较长的文本
+    if len(field_value) < 100:
+        return False
+
+    return True
+
+
+def _is_likely_abstract_cell(cell, field_value: str) -> bool:
+    """判断单元格是否像摘要。
+
+    Args:
+        cell: 单元格对象
+        field_value: 字段值
+
+    Returns:
+        True 如果像摘要
+    """
+    cell_text = cell.text
+
+    # 如果单元格只有一个段落，且包含字段值，可能是摘要
+    if len(cell.paragraphs) == 1:
+        return True
+
+    # 如果单元格文本较短，可能不是摘要
+    if len(cell_text) < 100:
+        return False
+
+    return True
+
+
+# ==================== 正文范围查找 ====================
+
+def find_body_range_by_sections(doc_path: str) -> Dict[str, Any]:
+    """根据分节符位置确定正文范围。
+
+    Args:
+        doc_path: 文档路径
+
+    Returns:
+        {
+            "found": bool,
+            "start_paragraph": int,
+            "end_paragraph": int,
             "context": str
         }
     """
+    from lxml import etree
+
     doc = Document(doc_path)
+    body = doc._body._body
 
-    # 在表格中搜索
-    for table_idx, table in enumerate(doc.tables):
-        for row_idx, row in enumerate(table.rows):
-            for col_idx, cell in enumerate(row.cells):
-                if search_text in cell.text:
-                    return {
-                        "found": True,
-                        "type": "table",
-                        "table": table_idx,
-                        "row": row_idx,
-                        "col": col_idx,
-                        "context": f"在表格 {table_idx} 的第 {row_idx} 行第 {col_idx} 列"
-                    }
+    # 收集所有段落的 pPr（段落属性）及其索引
+    paragraphs = list(doc.paragraphs)
+    sect_pr_indices = []  # [(paragraph_index, sect_pr_element), ...]
 
-    # 在段落中搜索
-    for para_idx, para in enumerate(doc.paragraphs):
-        if search_text in para.text:
-            return {
-                "found": True,
-                "type": "paragraph",
-                "index": para_idx,
-                "context": f"在段落 {para_idx}"
-            }
+    for para_idx, para in enumerate(paragraphs):
+        # 检查段落是否有分节符
+        pPr = para._element.find('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}pPr')
+        if pPr is not None:
+            sect_pr = pPr.find('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}sectPr')
+            if sect_pr is not None:
+                sect_pr_indices.append((para_idx, sect_pr))
 
-    return {"found": False, "context": "未找到"}
-
-
-def get_document_structure(doc_path: str) -> Dict[str, Any]:
-    """获取文档结构信息。
-
-    Args:
-        doc_path: Word 文档路径
-
-    Returns:
-        文档结构：
-        {
-            "paragraphs_count": int,
-            "tables_count": int,
-            "sections": List[int],
-            "tables": List[Dict],
+    # 如果有分节符，以最后一个分节符之后作为正文结束
+    if sect_pr_indices:
+        last_sect_idx = sect_pr_indices[-1][0]
+        return {
+            "found": True,
+            "start_paragraph": 0,  # 正文从第一段开始
+            "end_paragraph": last_sect_idx + 1,
+            "context": f"正文范围: 段落 0 到 {last_sect_idx}（分节符之前）"
         }
-    """
-    doc = Document(doc_path)
 
-    # 检测分节边界
-    section_boundaries = _detect_section_boundaries(doc)
-
-    # 获取表格信息
-    tables_info = []
-    for table_idx, table in enumerate(doc.tables):
-        tables_info.append({
-            "index": table_idx,
-            "rows": len(table.rows),
-            "cols": len(table.columns)
-        })
-
+    # 如果没有分节符，返回整个文档
     return {
-        "paragraphs_count": len(doc.paragraphs),
-        "tables_count": len(doc.tables),
-        "sections": section_boundaries,
-        "tables": tables_info
+        "found": True,
+        "start_paragraph": 0,
+        "end_paragraph": len(doc.paragraphs),
+        "context": f"正文范围: 段落 0 到 {len(doc.paragraphs) - 1}（整个文档）"
     }
 
 
-def get_table_content(doc_path: str, table_idx: int, max_rows: int = 5) -> Dict[str, Any]:
-    """获取指定表格的内容。
+# ==================== 附录查找 ====================
+
+def find_appendix_by_markers(doc_path: str) -> Dict[str, Any]:
+    """根据标记词查找附录（法律披露）位置。
+
+    支持的附录标记：
+    1. 中文标记："附录APPENDIX"、"附录 APPENDIX"
+    2. 英文标记：APPENDIX 开头的大写标题
+    3. 重要披露："IMPORTANT DISCLOSURES"、"重要信息披露"
 
     Args:
-        doc_path: Word 文档路径
-        table_idx: 表格索引
-        max_rows: 最多返回几行内容
+        doc_path: 文档路径
 
     Returns:
-        表格内容：
         {
-            "index": int,
-            "rows": int,
-            "cols": int,
-            "content": List[List[str]]
+            "found": bool,
+            "start_paragraph": int,
+            "preview": list[str],
+            "has_page_break_before": bool,
+            "context": str
         }
     """
-    doc = Document(doc_path)
-    table = doc.tables[table_idx]
+    import zipfile
+    from lxml import etree
 
-    content = []
-    for row_idx, row in enumerate(table.rows[:max_rows]):
-        row_content = []
-        for cell in row.cells:
-            row_content.append(cell.text.strip()[:50])
-        content.append(row_content)
+    W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
 
-    return {
-        "index": table_idx,
-        "rows": len(table.rows),
-        "cols": len(table.columns),
-        "content": content
-    }
+    # 直接解析 document.xml 以获取所有内容（包括 python-docx 漏读的表格）
+    with zipfile.ZipFile(doc_path, 'r') as z:
+        with z.open('word/document.xml') as f:
+            tree = etree.parse(f)
 
+    # 附录关键词（用于搜索 w:t 元素）
+    appendix_keywords = ['附录APPENDIX', 'IMPORTANT DISCLOSURE']
 
-def get_paragraphs_content(doc_path: str, start: int, end: int) -> List[str]:
-    """获取指定段落范围的内容。
-
-    Args:
-        doc_path: Word 文档路径
-        start: 起始段落索引
-        end: 结束段落索引（不包含）
-
-    Returns:
-        段落文本列表
-    """
-    doc = Document(doc_path)
-    contents = []
-
-    for i in range(start, min(end, len(doc.paragraphs))):
-        text = doc.paragraphs[i].text.strip()
-        contents.append(f"段落 {i}: {text[:100]}")
-
-    return contents
-
-
-def find_abstract_by_elements(doc_path: str, elements: Dict[str, Any]) -> Dict[str, Any]:
-    """根据 elements.yaml 的字段值定位摘要位置。
-
-    策略：
-    1. 优先使用 company 字段定位
-    2. 找到字段值所在的表格
-    3. 在该表格中查找长文本（摘要）
-
-    Args:
-        doc_path: Word 文档路径
-        elements: elements.yaml 的内容
-
-    Returns:
-        摘要位置信息
-    """
-    doc = Document(doc_path)
-
-    # 优先使用 company 字段，其次 title，最后用第一个非分析师字段
-    search_value = None
-    for field_name in ['company', 'title', 'ticker']:
-        if field_name in elements and elements[field_name]:
-            search_value = str(elements[field_name])
-            break
-
-    if not search_value:
-        # 回退到第一个非 analysts 字段
-        for k, v in elements.items():
-            if v and not k.startswith('a') and not k.startswith('analyst'):
-                search_value = str(v)
-                break
-
-    if not search_value:
-        return {"found": False, "reason": "未找到可用的定位字段"}
-
-    # 找到字段值所在位置
-    location = find_content_location(doc_path, search_value)
-    if not location["found"]:
-        return {"found": False, "reason": "未找到字段值"}
-
-    if location["type"] != "table":
-        return {"found": False, "reason": "字段值不在表格中"}
-
-    # 在该表格中查找长文本（摘要）
-    table_idx = location["table"]
-    table = doc.tables[table_idx]
-
-    for row_idx, row in enumerate(table.rows):
-        for col_idx, cell in enumerate(row.cells):
-            text = cell.text.strip()
-            # 摘要通常是长文本（> 50 字符）
-            if len(text) > 50:
-                col_end = col_idx
-                for c in range(col_idx + 1, len(row.cells)):
-                    if row.cells[c].text.strip():
-                        col_end = c
-                    else:
-                        break
+    # 先搜索段落中的附录标记
+    for idx, p in enumerate(tree.iter(f'{W}p')):
+        text = ''.join(t.text or '' for t in p.iter(f'{W}t'))
+        for kw in appendix_keywords:
+            if kw in text.upper():
+                # 检查前面是否有分页符
+                has_page_break = False
+                pPr = p.find(f'{W}pPr')
+                if pPr is not None:
+                    last_pPr = list(pPr.iter())[-1] if len(list(pPr)) > 0 else None
+                    if last_pPr is not None and etree.QName(last_pPr.tag).localname == 'lastRenderedPageBreak':
+                        has_page_break = True
 
                 return {
                     "found": True,
-                    "table": table_idx,
-                    "row": row_idx,
-                    "col_start": col_idx,
-                    "col_end": col_end,
-                    "preview": text[:100],
-                    "context": f"在表格 {table_idx} 第 {row_idx} 行，列 {col_idx}-{col_end}"
+                    "start_paragraph": idx,
+                    "preview": [text[:100] if text else ''],
+                    "has_page_break_before": has_page_break,
+                    "context": f"段落 {idx}: {text[:50]}"
                 }
 
-    return {"found": False, "reason": "表格中未找到长文本"}
+    # 搜索表格中的附录标记（使用 lxml 直接解析，避免 python-docx 漏读问题）
+    for tbl in tree.iter(f'{W}tbl'):
+        # 获取表格标题
+        caption = tbl.find(f'{W}tblPr/{W}tblCaption')
+        caption_val = caption.get(f'{W}val') if caption is not None else ''
+
+        # 遍历表格所有单元格
+        for row_idx, tr in enumerate(tbl.findall(f'{W}tr')):
+            for col_idx, tc in enumerate(tr.findall(f'{W}tc')):
+                cell_text = ''.join(t.text or '' for t in tc.iter(f'{W}t'))
+                for kw in appendix_keywords:
+                    if kw in cell_text.upper():
+                        return {
+                            "found": True,
+                            "start_paragraph": None,
+                            "table_caption": caption_val,
+                            "row": row_idx,
+                            "col": col_idx,
+                            "preview": [cell_text[:100] if cell_text else ''],
+                            "has_page_break_before": False,
+                            "context": f"表格 {caption_val} 行 {row_idx} 列 {col_idx}: {cell_text[:50]}"
+                        }
+
+    return {"found": False, "reason": "未找到附录标记"}
 
 
 def find_first_appendix_position(doc_path: str) -> Dict[str, Any]:
@@ -230,10 +274,15 @@ def find_first_appendix_position(doc_path: str) -> Dict[str, Any]:
     （如 "附录APPENDIX 重要信息披露"）。
 
     Args:
-        doc_path: Word 文档路径
+        doc_path: 文档路径
 
     Returns:
-        位置信息：{"found": bool, "start_paragraph": int, "text": str}
+        {
+            "found": bool,
+            "start_paragraph": int,
+            "text": str,
+            "context": str
+        }
     """
     doc = Document(doc_path)
 
@@ -244,22 +293,18 @@ def find_first_appendix_position(doc_path: str) -> Dict[str, Any]:
         if not text:
             continue
 
-        # 检查是否是 APPENDIX 相关标题
         is_appendix_title = False
 
-        # 1. 中英混合格式
+        # 1. 中英混合格式（如 "附录APPENDIX 重要信息披露"）
         if '附录' in text and 'APPENDIX' in text_upper:
             is_appendix_title = True
-
-        # 2. 纯英文 APPENDIX 开头
+        # 2. 纯英文 APPENDIX 开头（如 "APPENDIX 1 Summary"）
         elif text_upper.startswith('APPENDIX'):
             is_appendix_title = True
-
         # 3. IMPORTANT DISCLOSURES
         elif 'IMPORTANT DISCLOSURE' in text_upper:
             is_appendix_title = True
-
-        # 4. 独立的中文"附录"
+        # 4. 独立的中文"附录"（后面没有其他内容）
         elif text.startswith('附录') and len(text) < 50:
             is_appendix_title = True
 
@@ -274,246 +319,69 @@ def find_first_appendix_position(doc_path: str) -> Dict[str, Any]:
     return {"found": False, "reason": "未找到 APPENDIX 相关标题"}
 
 
-def find_body_range_by_sections(doc_path: str) -> Dict[str, Any]:
-    """根据分节结构定位正文范围（包含目录）。
+# ==================== 辅助函数 ====================
 
-    策略：
-    - 分节 0: 封面/标题
-    - 分节 1: 目录页（包含在 body 中）
-    - 分节 2: 正文内容
-    - 分节 3: 附录
-
-    Body 从分节 1 开始（首页之后），包含目录和正文内容。
+def find_content_location(doc_path: str, field_name: str, field_value: str) -> Dict[str, Any]:
+    """查找特定字段内容在文档中的位置。
 
     Args:
-        doc_path: Word 文档路径
+        doc_path: 文档路径
+        field_name: 字段名
+        field_value: 字段值
 
     Returns:
-        正文范围信息
+        {
+            "found": bool,
+            "type": "paragraph" | "table" | "header" | "footer",
+            "index": int,  # 段落索引或表格索引
+            "row": int,    # 如果是表格，则为行索引
+            "col": int,    # 如果是表格，则为列索引
+            "context": str
+        }
     """
     doc = Document(doc_path)
-    section_paragraphs = _get_section_paragraphs(doc)
 
-    if len(section_paragraphs) < 2:
-        return {
-            "found": False,
-            "reason": f"分节数量不足（{len(section_paragraphs)} 个），需要至少 2 个分节"
-        }
+    # 在段落中搜索
+    for idx, para in enumerate(doc.paragraphs):
+        if field_value in para.text:
+            return {
+                "found": True,
+                "type": "paragraph",
+                "index": idx,
+                "context": f"段落 {idx}: {para.text[:50]}..."
+            }
 
-    # Body 从分节 1 开始（包含目录）
-    if 1 not in section_paragraphs or not section_paragraphs[1]:
-        return {"found": False, "reason": "未找到分节 1"}
+    # 在表格中搜索
+    for tbl_idx, table in enumerate(doc.tables):
+        for row_idx, row in enumerate(table.rows):
+            for col_idx, cell in enumerate(row.cells):
+                if field_value in cell.text:
+                    return {
+                        "found": True,
+                        "type": "table",
+                        "index": tbl_idx,
+                        "row": row_idx,
+                        "col": col_idx,
+                        "context": f"表格 {tbl_idx} 行 {row_idx} 列 {col_idx}: {cell.text[:50]}..."
+                    }
 
-    start_idx = section_paragraphs[1][0]
+    # 在页眉页脚中搜索
+    for section_idx, section in enumerate(doc.sections):
+        for para_idx, para in enumerate(section.header.paragraphs):
+            if field_value in para.text:
+                return {
+                    "found": True,
+                    "type": "header",
+                    "index": section_idx,
+                    "context": f"节 {section_idx} 页眉: {para.text[:50]}..."
+                }
+        for para_idx, para in enumerate(section.footer.paragraphs):
+            if field_value in para.text:
+                return {
+                    "found": True,
+                    "type": "footer",
+                    "index": section_idx,
+                    "context": f"节 {section_idx} 页脚: {para.text[:50]}..."
+                }
 
-    # 正文结束位置
-    end_idx = len(doc.paragraphs)
-
-    # 如果有分节 3，正文在分节 3 开始之前结束
-    if 3 in section_paragraphs and section_paragraphs[3]:
-        end_idx = section_paragraphs[3][0]
-
-    return {
-        "found": True,
-        "start_paragraph": start_idx,
-        "end_paragraph": end_idx,
-        "paragraphs_count": end_idx - start_idx,
-        "context": f"段落 {start_idx} 到 {end_idx}，共 {end_idx - start_idx} 个段落"
-    }
-
-
-def find_appendix_by_markers(doc_path: str) -> Dict[str, Any]:
-    """根据标记词定位法律披露附录。
-
-    法律附录识别规则：
-    - 前面有分页符（单独一页）
-    - 开头可以是多种格式：
-      - "附录APPENDIX"（中英混合）
-      - "APPENDIX"（纯英文）
-      - "APPENDIX 1"、"APPENDIX I"（带编号）
-      - "Appendix"（首字母大写）
-      - "IMPORTANT DISCLOSURES"（重要披露）
-    - 结尾是整个文档的结尾
-
-    策略：
-    1. 搜索包含附录标记的段落
-    2. 检查该段落是否前面有分页符（sectPr type=nextPage）
-    3. 返回附录的起始位置和内容预览
-
-    Args:
-        doc_path: Word 文档路径
-
-    Returns:
-        附录位置信息
-    """
-    doc = Document(doc_path)
-    body_element = doc.element.body
-    ns = {'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'}
-
-    # 附录标记模式（按优先级排序）
-    # 注意：要排除 "APPENDIX 1 Summary" 这种情况（Summary 不是附录标题）
-    appendix_para_idx = None
-    appendix_text = None
-
-    for i, para in enumerate(doc.paragraphs):
-        text = para.text.strip()
-        text_upper = text.upper()
-
-        # 跳过空段落
-        if not text:
-            continue
-
-        # 检查是否是附录标题（而不是内容中提到附录）
-        is_appendix_title = False
-
-        # 1. 中英混合格式：附录APPENDIX
-        if '附录APPENDIX' in text or ('附录' in text and 'APPENDIX' in text_upper):
-            is_appendix_title = True
-
-        # 2. 纯英文 APPENDIX（必须是段落开头或独立段落）
-        # 排除 "APPENDIX 1 Summary" 这种情况
-        elif text_upper.startswith('APPENDIX'):
-            # 检查是否后面跟着 Summary/Content 等内容词
-            remaining = text_upper[8:].strip()  # 去掉 "APPENDIX"
-            # 如果是 "APPENDIX" 后跟数字/罗马数字，再检查后面是否有内容词
-            import re
-            # 匹配 APPENDIX 后的数字或罗马数字
-            num_match = re.match(r'^[\s]*([0-9]+|[IVX]+)[\s:：\-]*(.*)$', remaining, re.IGNORECASE)
-            if num_match:
-                after_num = num_match.group(2).strip().upper()
-                # 如果数字后面是 Summary/Content 等，不是附录标题
-                if after_num.startswith(('SUMMARY', 'CONTENT', 'TABLE', 'FIGURE')):
-                    continue
-            is_appendix_title = True
-
-        # 3. IMPORTANT DISCLOSURES（重要披露）
-        elif 'IMPORTANT DISCLOSURE' in text_upper:
-            is_appendix_title = True
-
-        # 4. 独立的中文"附录"
-        elif text.startswith('附录') and len(text) < 30:
-            is_appendix_title = True
-
-        if is_appendix_title:
-            appendix_para_idx = i
-            appendix_text = text[:100] if text else None
-            break
-
-    if appendix_para_idx is None:
-        return {
-            "found": False,
-            "reason": "未找到附录标记（支持格式：附录APPENDIX、APPENDIX、IMPORTANT DISCLOSURES）"
-        }
-
-    # 检查前面是否有分页符（sectPr）
-    # 分页符可能在当前段落或前一个段落的 pPr 中
-    has_page_break_before = False
-
-    # 检查当前段落之前的所有元素，找到最近的分节符
-    elements_before = list(body_element)[appendix_para_idx:] if appendix_para_idx > 0 else []
-
-    for i, elem in enumerate(elements_before):
-        tag = elem.tag.split('}')[-1]
-        if tag == 'p':
-            pPr = elem.find('w:pPr', ns)
-            if pPr is not None:
-                sectPr = pPr.find('w:sectPr', ns)
-                if sectPr is not None:
-                    sect_type = sectPr.find('w:type', ns)
-                    if sect_type is not None:
-                        type_val = sect_type.get('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}val')
-                        if type_val == 'nextPage':
-                            has_page_break_before = True
-                    break
-
-    # 计算附录内容范围（从附录开始到文档末尾）
-    total_paragraphs = len(doc.paragraphs)
-    appendix_paragraphs_count = total_paragraphs - appendix_para_idx
-
-    # 收集附录内容预览（前3个段落）
-    preview = []
-    for i, para in enumerate(doc.paragraphs[appendix_para_idx:appendix_para_idx + 3]):
-        text = para.text.strip()
-        if text:
-            preview.append(text[:80])
-
-    return {
-        "found": True,
-        "start_paragraph": appendix_para_idx,
-        "paragraphs_count": appendix_paragraphs_count,
-        "total_paragraphs": total_paragraphs,
-        "has_page_break_before": has_page_break_before,
-        "text": appendix_text,
-        "preview": preview,
-        "context": f"段落 {appendix_para_idx} 开始，共 {appendix_paragraphs_count} 个段落"
-    }
-
-
-def find_elements_yaml(word_path: Path | str) -> Path | None:
-    """查找与 Word 文件配对的 elements.yaml。
-
-    Args:
-        word_path: Word 文件路径（Path 或 str）
-
-    Returns:
-        找到的 elements.yaml 路径，未找到返回 None
-    """
-    word_path = Path(word_path) if isinstance(word_path, str) else word_path
-    word_dir = word_path.parent
-    word_name = word_path.stem
-
-    candidates = [
-        word_dir / f"{word_name} elements.yaml",
-        word_dir / f"{word_name}_elements.yaml",
-        word_dir / "elements.yaml",
-    ]
-
-    for candidate in candidates:
-        if candidate.exists():
-            return candidate
-
-    return None
-
-
-# 辅助函数
-
-def _detect_section_boundaries(doc: Document) -> List[int]:
-    """检测所有分节边界的段落索引。
-
-    分节边界是段落属性中包含 sectPr 的段落。
-    """
-    section_boundaries = []
-
-    for i, paragraph in enumerate(doc.paragraphs):
-        pPr = paragraph._element.pPr
-        if pPr is not None:
-            sectPr = pPr.find('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}sectPr')
-            if sectPr is not None:
-                section_boundaries.append(i)
-
-    return section_boundaries
-
-
-def _get_section_paragraphs(doc: Document) -> Dict[int, List[int]]:
-    """获取每个分节包含的段落索引范围。
-
-    Returns:
-        字典，键为分节索引，值为段落索引列表
-    """
-    section_boundaries = _detect_section_boundaries(doc)
-
-    section_paragraphs = {}
-    current_section = 0
-
-    for i in range(len(doc.paragraphs)):
-        if i in section_boundaries:
-            if current_section not in section_paragraphs:
-                section_paragraphs[current_section] = []
-            section_paragraphs[current_section].append(i)
-            current_section += 1
-        else:
-            if current_section not in section_paragraphs:
-                section_paragraphs[current_section] = []
-            section_paragraphs[current_section].append(i)
-
-    return section_paragraphs
+    return {"found": False, "reason": f"未找到字段 {field_name} 的内容"}
