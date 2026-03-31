@@ -173,29 +173,24 @@ def replace_analyst_fields_in_doc(doc: Document, elements: dict) -> Document:
             email_placeholder = f"{{{{ a{i}_email }}}}"
             _replace_text_in_nested_tables(doc, data['email'], email_placeholder)
 
-    # 为分析师表格中的所有 8 个位置创建占位符
-    # 分析师表格布局（5行 x 4列）：
-    # 行0: [Table_Author] 标记
-    # 行1 列0-3: 分析师 1-4 的姓名+SFC
-    # 行2 列0-3: 分析师 1-4 的邮箱
-    # 行3 列0-3: 分析师 5-8 的姓名+SFC
-    # 行4 列0-3: 分析师 5-8 的邮箱
+    # 为分析师表格中的所有位置创建占位符（动态计算位置）
+    # 算法：
+    # 1. 数据行数 = rows - 1（减去标记行）
+    # 2. 如果数据行是偶数：从第1行开始
+    # 3. 如果数据行是奇数：跳过第1行（作为表头），从第2行开始
+    # 4. 每2行一组，横向填充
 
     if author_tables:
         # 只处理第一个表格（其他都是合并单元格的视图）
         author_table = author_tables[0]
 
-        # 分析师位置映射：(行, 列) -> 分析师编号
-        analyst_positions = [
-            # 分析师 1-4：行1(姓名)、行2(邮箱)
-            (1, 0, 1), (1, 1, 2), (1, 2, 3), (1, 3, 4),  # 行1列0-3 -> a1-a4
-            # 分析师 5-8：行3(姓名)、行4(邮箱)
-            (3, 0, 5), (3, 1, 6), (3, 2, 7), (3, 3, 8),  # 行3列0-3 -> a5-a8
-        ]
+        # 计算实际有值的分析师数量
+        analyst_count = _count_analysts_with_data(elements)
 
-        for info_row, col, analyst_idx in analyst_positions:
-            email_row = info_row + 1
+        # 动态计算填充位置
+        analyst_positions = _calculate_analyst_positions(author_table, analyst_count)
 
+        for info_row, col, email_row, _, analyst_idx in analyst_positions:
             # 检查行和列是否在范围内
             if info_row >= len(author_table.rows) or col >= len(author_table.columns):
                 continue
@@ -218,6 +213,74 @@ def replace_analyst_fields_in_doc(doc: Document, elements: dict) -> Document:
                     _set_cell_text(email_cell, email_placeholder)
 
     return doc
+
+
+def _count_analysts_with_data(elements: dict) -> int:
+    """计算 elements 中实际有值的分析师数量。
+
+    Args:
+        elements: 包含分析师字段的字典
+
+    Returns:
+        有数据的分析师数量
+    """
+    count = 0
+    for i in range(1, 9):
+        if elements.get(f'a{i}_cn') or elements.get(f'a{i}_en'):
+            count += 1
+    return count
+
+
+def _calculate_analyst_positions(author_table, analyst_count: int) -> list:
+    """根据表格维数和分析师数量计算填充位置。
+
+    算法：
+    1. 数据行数 = rows - 1（减去标记行）
+    2. 如果数据行是偶数：从第1行开始
+    3. 如果数据行是奇数：跳过第1行（作为表头），从第2行开始
+    4. 每2行一组，横向填充
+
+    Args:
+        author_table: 分析师表格对象
+        analyst_count: 实际有值的分析师数量
+
+    Returns:
+        list of (info_row, col, email_row, col, analyst_idx)
+    """
+    rows = len(author_table.rows)
+    cols = len(author_table.columns)
+    data_rows = rows - 1  # 减去标记行
+
+    positions = []
+
+    # 计算起始行
+    if data_rows % 2 == 0:
+        # 偶数数据行：从第1行开始
+        start_row = 1
+    else:
+        # 奇数数据行：跳过第1行（表头），从第2行开始
+        start_row = 2
+
+    # 计算能填充的分析师数量（取表格能容纳的数量和实际分析师数量的较小值）
+    cols_available = cols  # 每组横向填满
+    groups = (rows - start_row) // 2  # 能放几组
+    max_analysts = cols_available * groups
+    actual_count = min(analyst_count, max_analysts)
+
+    # 生成位置
+    analyst_idx = 1
+    for group in range(groups):
+        for col in range(cols_available):
+            if analyst_idx > actual_count:
+                break
+            info_row = start_row + group * 2
+            email_row = info_row + 1
+            positions.append((info_row, col, email_row, col, analyst_idx))
+            analyst_idx += 1
+        if analyst_idx > actual_count:
+            break
+
+    return positions
 
 
 def _find_author_tables(table, result_list):
