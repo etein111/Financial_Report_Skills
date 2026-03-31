@@ -67,6 +67,7 @@ description: "当用户说「制作模板」、「创建模板」、「分析模
 |---------|---------|
 | company | samples/ |
 | sector | samples/ |
+| flash | samples/flash/ |
 | company_flash | samples/flash/ |
 | sector_flash | samples/flash/ |
 | macro | samples/macro/ |
