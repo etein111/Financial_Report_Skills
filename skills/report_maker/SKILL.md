@@ -84,37 +84,44 @@ pip3 install --break-system-packages "docxtpl>=0.20.0" docxcompose
 
 **步骤 2/4：自动扫描草稿文件**
 
-根据用户选择的报告类型，自动扫描对应目录的草稿文件：
-
-| 报告类型 | 扫描目录 | 使用模板 |
-|---------|---------|---------|
-| company | `samples/` | company |
-| sector | `samples/` | sector |
-| flash | `samples/flash/` | flash |
-| company_flash | `samples/flash/` | company_flash |
-| sector_flash | `samples/flash/` | sector_flash |
-| macro | `samples/macro/` | macro |
-| strategy | `samples/macro/` | common |
-| quantitative | `samples/macro/` | common |
-| bond | `samples/macro/` | common |
+**在当前工作目录下**扫描草稿文件和对应的 elements.yaml：
 
 ```
 您的选择: company
 
-正在扫描 samples/ 目录...
+正在扫描当前目录...
 找到以下草稿文档：
   1. 西锐飞机首次覆盖报告（中文）提交版.docx
   2. Bloom Energy Corporation 1231.docx
   3. EN-Vistra Corp20260104.docx
-  4. VRT 20260221.docx
 
 请选择要处理的草稿文档（输入编号）:
 ```
 
 **扫描规则**：
-- 只扫描 `.docx` 文件
+- 扫描**当前工作目录**下的 `.docx` 文件
 - 排除以 `~$` 开头的临时文件
 - 排除 `_AutoRefresh` 后缀的文件（这些是生成的 PDF 预览）
+
+**自动查找 elements.yaml**：
+选择草稿文档后，系统自动在同目录下查找匹配的 elements.yaml：
+- `{文件名} elements.yaml`（如 `西锐飞机 elements.yaml`）
+- `{文件名}_elements.yaml`
+- `elements.yaml`（通用配置）
+
+**报告类型与模板映射**：
+
+| 报告类型 | 使用模板 |
+|---------|---------|
+| company | company |
+| sector | sector |
+| flash | flash |
+| company_flash | company_flash |
+| sector_flash | sector_flash |
+| macro | macro |
+| strategy | common |
+| quantitative | common |
+| bond | common |
 
 ### 2. 确认输出目录
 
