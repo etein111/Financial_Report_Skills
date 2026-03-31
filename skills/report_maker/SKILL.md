@@ -62,17 +62,75 @@ pip3 install --break-system-packages "docxtpl>=0.20.0" docxcompose
 
 ## 第一阶段：抽取与确认
 
-### 1. 询问基本信息
+### 1. 选择报告类型并自动扫描草稿
+
+**步骤 1/4：选择报告类型**
 
 ```
-问题 1/4：草稿文件在哪里？
-- 等待用户提供 .docx 文件路径
+【选择报告类型】
+请选择要制作的研报类型：
+  1. company       - 公司覆盖报告
+  2. sector        - 行业研究报告
+  3. flash         - 快讯
+  4. company_flash - 公司快讯
+  5. sector_flash  - 行业快讯
+  6. macro         - 宏观报告
+  7. strategy      - 策略报告
+  8. quantitative  - 量化报告
+  9. bond          - 债券报告
 
-问题 2/4：报告名称是什么？（用于命名输出目录）
-- 等待用户回答，提供单一的缺省建议值
+您的选择:
+```
 
-问题 3/4：请确认输出目录位置
-- 等待用户选择（可以选已有目录，或新建目录）
+**步骤 2/4：自动扫描草稿文件**
+
+根据用户选择的报告类型，自动扫描对应目录的草稿文件：
+
+| 报告类型 | 扫描目录 | 使用模板 |
+|---------|---------|---------|
+| company | `samples/` | company |
+| sector | `samples/` | sector |
+| flash | `samples/flash/` | flash |
+| company_flash | `samples/flash/` | company_flash |
+| sector_flash | `samples/flash/` | sector_flash |
+| macro | `samples/macro/` | macro |
+| strategy | `samples/macro/` | common |
+| quantitative | `samples/macro/` | common |
+| bond | `samples/macro/` | common |
+
+```
+您的选择: company
+
+正在扫描 samples/ 目录...
+找到以下草稿文档：
+  1. 西锐飞机首次覆盖报告（中文）提交版.docx
+  2. Bloom Energy Corporation 1231.docx
+  3. EN-Vistra Corp20260104.docx
+  4. VRT 20260221.docx
+
+请选择要处理的草稿文档（输入编号）:
+```
+
+**扫描规则**：
+- 只扫描 `.docx` 文件
+- 排除以 `~$` 开头的临时文件
+- 排除 `_AutoRefresh` 后缀的文件（这些是生成的 PDF 预览）
+
+### 2. 确认输出目录
+
+**步骤 3/4：确认报告名称和输出目录**
+
+根据选择的草稿文件，自动生成建议的报告名称：
+
+```
+【确认输出目录】
+草稿文件: 西锐飞机首次覆盖报告（中文）提交版.docx
+建议报告名称: cirrus(2507)_20260331
+
+请确认报告名称（直接回车使用建议值，或输入新名称）:
+
+输出目录将创建在: reports/cirrus(2507)_20260331/
+确认？(y/n)
 ```
 
 **命名规则**（日期统一放在最后）：
@@ -87,14 +145,18 @@ pip3 install --break-system-packages "docxtpl>=0.20.0" docxcompose
 - ✅ 主题词：新能源汽车、AI芯片、美联储、利率政策
 - ❌ 描述性词汇：深度分析、研究、报告、解读、提交版
 
-### 2. 自动查找可用模板
+### 3. 自动加载对应模板
 
-在**当前工作目录**下的 `templates/` 目录中查找所有可用的模板。
+**步骤 4/4：自动加载模板**
 
-**查找方法**：
-```bash
-# 列出 templates/ 下的所有子目录（每个子目录是一个模板）
-ls -d templates/*/
+根据步骤 1 选择的报告类型，自动确定并加载对应的模板：
+
+```
+【加载模板】
+报告类型: company
+使用模板: templates/company/
+✓ 已加载 schema.yaml（25 个字段）
+✓ 已加载 template.docx
 ```
 
 **模板目录结构**：
@@ -104,6 +166,7 @@ templates/
 ├── sector/           # 行业报告模板
 ├── macro/            # 宏观报告模板
 ├── flash/            # 快讯模板
+├── common/           # 通用模板（strategy/quantitative/bond 共用）
 └── ...               # 其他模板
 ```
 
@@ -111,45 +174,7 @@ templates/
 - `schema.yaml` - **定义要提取哪些字段**
 - `template.docx` - **Word 模板文件**
 
-### 3. 展示可用模板并让用户确认
-
-**问题 4/4：请选择使用的模板**
-
-展示找到的所有可用模板供用户选择：
-
-```
-可用模板列表：
-1. company      - 公司完整报告
-2. sector       - 行业报告
-3. macro        - 宏观报告
-4. flash        - 快讯
-
-请选择模板编号或直接输入模板名称：
-```
-
-- 等待用户选择
-- 用户可以直接输入模板名称（如 `company`）
-- 如果只有一个模板，可以直接询问"是否使用 {模板名} 模板？"
-
-### 4. 加载选定的模板
-
-根据用户选择的模板名称，加载对应的模板文件：
-
-```python
-# 模板路径（在当前工作目录下）
-template_name = "company"  # 用户选择的模板
-template_path = f"templates/{template_name}/template.docx"
-schema_path = f"templates/{template_name}/schema.yaml"
-
-# 加载 schema
-import yaml
-with open(schema_path, 'r', encoding='utf-8') as f:
-    schema = yaml.safe_load(f)
-```
-
-⚠️ **重要**：模板路径基于当前工作目录，确保 `templates/` 目录存在且包含用户选择的模板。
-
-### 5. 🔑 一次性提取 elements + 摘要 + 正文（核心步骤）
+### 4. 🔑 一次性提取 elements + 摘要 + 正文（核心步骤）
 
 **⚠️ 核心原则：LLM 一次性完成所有提取工作**
 
@@ -166,6 +191,12 @@ with open(schema_path, 'r', encoding='utf-8') as f:
 ## 第一部分：字段提取
 根据 schema.yaml 中定义的字段，从草稿中提取数据：
 {schema_yaml_内容}
+
+⚠️ 注意：很多字段嵌套在表格单元格中，请仔细检查所有表格内容。
+常见位置：
+- 封面表格：公司名、股票代码、评级、目标价、当前价格
+- 侧边栏表格：市值、流通股、52周高低点
+- 分析师信息表格：分析师姓名、SFC代码、邮箱
 
 ## 第二部分：摘要提取
 1. 是否有摘要部分？（摘要通常是首页右侧的投资亮点、核心观点区域）
@@ -227,7 +258,7 @@ elements = {k: v for k, v in llm_result.items()
 - ✅ LLM 对整体报告结构有更完整的理解
 - ✅ 避免字段提取和位置判断的信息不一致
 
-### 6. 使用脚本提取摘要和正文（保留原始格式）
+### 5. 使用脚本提取摘要和正文（保留原始格式）
 
 **⚠️ 重要：摘要和正文的实际提取必须使用 Python 脚本，不是 LLM**
 
@@ -258,7 +289,7 @@ if llm_result['has_body']:
 - 摘要：复制单元格内的完整段落（字体、颜色、加粗等）
 - 正文：复制整个文档片段（包括图片、表格、目录控件）
 
-### 7. 一次性确认所有字段
+### 6. 一次性确认所有字段
 
 **展示所有提取的字段（表格形式）**：
 
@@ -278,7 +309,7 @@ if llm_result['has_body']:
 
 用户可以一次性确认或修正多个字段。
 
-### 8. 保存结果
+### 7. 保存结果
 
 将提取结果保存到用户指定的输出目录：
 
@@ -290,7 +321,7 @@ if llm_result['has_body']:
 └── body.docx            # 正文片段（仅当 has_body=True 时，完整保留格式）
 ```
 
-### 9. 展示摘要并暂停
+### 8. 展示摘要并暂停
 
 展示提取结果摘要，等待用户确认或修正
 
