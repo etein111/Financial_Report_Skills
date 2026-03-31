@@ -265,28 +265,19 @@ def _auto_detect_locations(word_path: Path, elements: dict) -> dict:
         "first_appendix": None  # 第一个 APPENDIX 标题位置（用于确定正文结束位置）
     }
 
-    # 先通过 LLM 分析文档结构
-    llm_result = _llm_analyze_document(word_path)
+    # 检测摘要位置
+    abstract_location = find_abstract_by_elements(str(word_path), elements)
+    if abstract_location.get("found"):
+        result["abstract"] = {
+            "location": abstract_location
+        }
 
-    # 检测摘要位置（如果 LLM 认为有摘要）
-    if llm_result is None or llm_result.get("has_abstract"):
-        abstract_location = find_abstract_by_elements(str(word_path), elements)
-        if abstract_location.get("found"):
-            scope = llm_result.get("abstract_scope") if llm_result else None
-            result["abstract"] = {
-                "scope": scope,
-                "location": abstract_location
-            }
-
-    # 检测正文位置（如果 LLM 认为有正文）
-    if llm_result is None or llm_result.get("has_body"):
-        body_location = find_body_range_by_sections(str(word_path))
-        if body_location.get("found"):
-            scope = llm_result.get("body_scope") if llm_result else None
-            result["body"] = {
-                "scope": scope,
-                "location": body_location
-            }
+    # 检测正文位置
+    body_location = find_body_range_by_sections(str(word_path))
+    if body_location.get("found"):
+        result["body"] = {
+            "location": body_location
+        }
 
     # 检测第一个 APPENDIX 标题位置（用于确定正文结束位置）
     first_appendix = find_first_appendix_position(str(word_path))
