@@ -1275,98 +1275,77 @@ def render_report(
             else:
                 print(f"  警告: 未找到 abstract 占位符")
 
-        # 5. 找到法律附录的位置
-        # 法律附录开头必定是 "附录APPENDIX"
+        # 5. 找到 BODY_MARKER 位置
         body_element = doc.element.body
         all_elements = list(body_element)
-
-        appendix_start_idx = None
         ns = {'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'}
 
-        for i, elem in enumerate(all_elements):
-            if elem.tag.endswith('}p'):
-                texts = elem.findall('.//w:t', ns)
-                text = ''.join([t.text or '' for t in texts])
-                # 查找包含 "附录APPENDIX" 的段落（忽略空格和大小写）
-                if '附录APPENDIX' in text or '附录' in text.upper() and 'APPENDIX' in text.upper():
-                    appendix_start_idx = i
-                    print(f"  找到法律附录起始位置: 第 {i} 个元素")
-                    break
-
-        # 6. 提取法律附录（从附录开始到文档末尾的所有内容）
-        appendix_elements = []
-        final_sectPr = None
-
-        if appendix_start_idx is not None:
-            for elem in all_elements[appendix_start_idx:]:
-                tag = elem.tag.split('}')[-1]
-                if tag == 'sectPr':
-                    final_sectPr = deepcopy(elem)
-                else:
-                    appendix_elements.append(deepcopy(elem))
-
-            # 从文档中删除附录（稍后再追加回去）
-            for i in range(len(all_elements) - 1, appendix_start_idx - 1, -1):
-                body_element.remove(all_elements[i])
-
-        # 7. 找到 BODY_MARKER 位置，删除 marker 段落
         marker_idx = None
         marker_elem = None
 
-        all_elements = list(body_element)  # 重新获取（因为删除了附录）
         for i, elem in enumerate(all_elements):
             if elem.tag.endswith('}p'):
                 text = ''.join(t.text for t in elem.iter() if t.text)
                 if BODY_MARKER in text:
                     marker_idx = i
                     marker_elem = elem
+                    print(f"  找到 body 占位符位置: 第 {i} 个元素")
                     break
 
-        if marker_elem is not None:
-            body_element.remove(marker_elem)
-
-        # 8. 保存临时文档（模板前半部分，不含附录）
-        temp_before_path = Path(output_path).parent / "temp_before.docx"
-        doc.save(str(temp_before_path))
-
-        # 9. 使用 docxcompose 合并 body
-        master = Document(str(temp_before_path))
-        composer = Composer(master)
-
-        if Path(body_path).exists() and Path(body_path).stat().st_size > 0:
+        # 6. 在 BODY_MARKER 位置插入 body 内容
+        if marker_elem is not None and Path(body_path).exists() and Path(body_path).stat().st_size > 0:
             body_doc = Document(body_path)
 
             # 只清理 body 开头的空段落，保留 sectPr（页边距信息）
             _clean_body_empty_paragraphs(body_doc)
 
-            composer.append(body_doc)
-            print(f"  已插入 body")
+            # 在 marker 位置插入 body 的所有元素
+            insert_idx = marker_idx
+            for body_elem in body_doc.element.body:
+                tag = body_elem.tag.split('}')[-1]
+                # 复制段落、表格和目录控件，跳过 sectPr
+                if tag in ['p', 'tbl', 'sdt']:
+                    new_elem = deepcopy(body_elem)
+                    body_element.insert(insert_idx, new_elem)
+                    insert_idx += 1
 
-        # 10. 先保存 composer 的结果到临时文件
-        temp_with_body_path = Path(output_path).parent / "temp_with_body.docx"
-        composer.save(str(temp_with_body_path))
+            # 删除 marker 段落（现在位置变了，需要重新找）
+            all_elements = list(body_element)
+            for elem in all_elements:
+                if elem.tag.endswith('}p'):
+                    text = ''.join(t.text for t in elem.iter() if t.text)
+                    if BODY_MARKER in text:
+                        body_element.remove(elem)
+                        break
 
-        # 11. 重新打开文档，追加法律附录
-        final_doc = Document(str(temp_with_body_path))
-        if appendix_elements:
-            final_body = final_doc.element.body
+            print(f"  已在占位符位置插入 body")
 
-            # 直接追加附录元素
-            for elem in appendix_elements:
-                final_body.append(elem)
+        elif marker_elem is None:
+            print(f"  警告: 未找到 body 占位符 (BODY_MARKER)")
 
-            # 确保文档末尾有 sectPr
-            _ensure_final_sectPr(final_body, final_sectPr)
+        # 7. 保存临时文档
+        temp_before_path = Path(output_path).parent / "temp_before.docx"
+        doc.save(str(temp_before_path))
 
-        # 12. 保存最终文档
-        final_doc.save(output_path)
+        # 8. 使用 docxcompose 修复图片引用
+        # docxcompose 会正确处理图片资源的复制
+        master = Document(str(temp_before_path))
+        composer = Composer(master)
 
-        # 13. 清理临时文件
+        if Path(body_path).exists() and Path(body_path).stat().st_size > 0:
+            # 用 composer 追加一个空操作来触发资源整理
+            # 实际上我们需要复制 body 的图片资源
+            body_doc = Document(body_path)
+            _copy_images_from_body(master, body_doc)
+
+        # 9. 保存最终文档
+        composer.save(output_path)
+
+        # 10. 清理临时文件
         temp_path.unlink(missing_ok=True)
         temp_before_path.unlink(missing_ok=True)
-        temp_with_body_path.unlink(missing_ok=True)
 
-        # 14. 验证输出
+        # 11. 验证输出
         final_doc = Document(output_path)
         image_count = sum(1 for rel in final_doc.part.rels.values() if 'image' in rel.reltype)
 
@@ -1452,6 +1431,56 @@ def _clean_body_empty_paragraphs(body_doc: Document) -> None:
                 break
         elif tag not in ['sdt', 'sectPr']:
             break
+
+
+def _copy_images_from_body(master_doc: Document, body_doc: Document) -> int:
+    """从 body 文档复制图片资源到主文档。
+
+    Args:
+        master_doc: 主文档
+        body_doc: body 文档
+
+    Returns:
+        复制的图片数量
+    """
+    copied_count = 0
+
+    try:
+        # 获取 body 文档中的所有图片关系
+        for rel_id, rel in body_doc.part.rels.items():
+            if 'image' in rel.reltype:
+                # 获取图片数据
+                image_part = rel.target_part
+                image_blob = image_part.blob
+                content_type = image_part.content_type
+
+                # 添加到主文档
+                # 注意：这里的 rel_id 可能会改变，需要更新引用
+                # 但由于我们用 deepcopy 复制了 XML，引用已经存在
+                # 只需要确保图片资源存在即可
+
+                # 检查主文档是否已有该图片
+                image_exists = False
+                for master_rel in master_doc.part.rels.values():
+                    if 'image' in master_rel.reltype:
+                        if master_rel.target_part.blob == image_blob:
+                            image_exists = True
+                            break
+
+                if not image_exists:
+                    # 添加新图片到主文档
+                    # 使用相同的 rel_id 以保持引用一致
+                    from docx.opc.constants import RELATIONSHIP_TYPE as RT
+                    master_doc.part.relate_to(image_part, RT.IMAGE, rel_id)
+                    copied_count += 1
+
+    except Exception as e:
+        print(f"  复制图片时出错: {e}")
+
+    if copied_count > 0:
+        print(f"  已复制 {copied_count} 张图片")
+
+    return copied_count
 
 
 def _ensure_final_sectPr(body_element, final_sectPr) -> None:
