@@ -29,6 +29,90 @@ import yaml
 
 DEFAULT_APPENDIX_SCOPE = "正文之后，报告末尾"
 
+
+def validate_template_placeholders(doc, elements: dict, abstract_scope: str, body_scope: str) -> dict:
+    """验证模板中的占位符是否完整提取。
+
+    检查所有 elements.yaml 中定义的字段以及 abstract、body 是否都正确提取为占位符。
+
+    Args:
+        doc: Document 对象
+        elements: elements.yaml 内容
+        abstract_scope: 摘要位置描述
+        body_scope: 正文位置描述
+
+    Returns:
+        {
+            "valid": bool,
+            "found_placeholders": list[str],  # 找到的占位符
+            "missing_placeholders": list[str],  # 缺失的占位符
+            "warnings": list[str]  # 警告信息
+        }
+    """
+    import re
+
+    # 收集模板中所有的占位符
+    found_placeholders = set()
+
+    # 从段落中提取占位符
+    for para in doc.paragraphs:
+        text = para.text
+        matches = re.findall(r'\{\{\s*(\w+)\s*\}\}', text)
+        found_placeholders.update(matches)
+
+    # 从表格中提取占位符
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                for para in cell.paragraphs:
+                    text = para.text
+                    matches = re.findall(r'\{\{\s*(\w+)\s*\}\}', text)
+                    found_placeholders.update(matches)
+
+    # 期望的占位符列表
+    expected_placeholders = []
+
+    # 1. 添加 elements.yaml 中的所有字段（除分析师和结构化字段外）
+    analyst_fields = {f'a{i}_{f}' for i in range(1, 9) for f in ['cn', 'en', 'sfc', 'email']}
+    skip_fields = {'sections', 'analysts'}
+
+    for field_name, field_value in elements.items():
+        if not field_value or field_name in analyst_fields or field_name in skip_fields:
+            continue
+        if isinstance(field_value, dict) or isinstance(field_value, list):
+            continue
+        expected_placeholders.append(field_name)
+
+    # 2. 如果有 abstract_scope，添加 abstract 占位符
+    if abstract_scope:
+        expected_placeholders.append('abstract')
+
+    # 3. 如果有 body_scope，添加 body 占位符
+    if body_scope:
+        expected_placeholders.append('body')
+
+    # 4. 添加分析师占位符（即使为空也需要占位符）
+    for i in range(1, 9):
+        expected_placeholders.extend([f'a{i}_cn', f'a{i}_en', f'a{i}_sfc', f'a{i}_email'])
+
+    # 检查缺失的占位符
+    missing_placeholders = []
+    for placeholder in expected_placeholders:
+        if placeholder not in found_placeholders:
+            missing_placeholders.append(placeholder)
+
+    # 生成警告信息
+    warnings = []
+    if missing_placeholders:
+        warnings.append(f"缺失占位符: {', '.join(missing_placeholders)}")
+
+    return {
+        "valid": len(missing_placeholders) == 0,
+        "found_placeholders": sorted(found_placeholders),
+        "missing_placeholders": sorted(missing_placeholders),
+        "warnings": warnings
+    }
+
 # 模板类型到扫描目录的映射
 TEMPLATE_SCAN_DIRS = {
     'company': 'samples',
@@ -325,8 +409,8 @@ def _confirm_body_location(detected: dict) -> str | None:
         return user_input
 
 
-def _confirm_appendix_location(detected: dict) -> str:
-    """确认法律披露附录位置（法律附录是必有的，不询问是否有）。
+def _get_appendix_location(detected: dict) -> str:
+    """获取法律披露附录位置（法律附录是必有的，直接返回检测结果或默认值）。
 
     Args:
         detected: 自动检测结果
@@ -334,32 +418,11 @@ def _confirm_appendix_location(detected: dict) -> str:
     Returns:
         附录位置描述
     """
-    print("\n" + "=" * 60)
-    print("【步骤 3/3】确认法律披露附录位置")
-    print("=" * 60)
-
-    print("\n法律披露附录（附录APPENDIX / IMPORTANT DISCLOSURES）")
-    print("  - 每个研报必有，位于报告末尾")
-    print("  - 将保留原样，不替换为占位符")
-
-    # 显示自动检测结果
     if detected and detected.get("found"):
         location = detected.get('location', {})
-        print(f"\n✓ 自动检测到法律披露附录：")
-        print(f"  位置：段落 {location.get('start_paragraph')} 开始")
-        if location.get('preview'):
-            print(f"  内容预览：")
-            for i, line in enumerate(location.get('preview', [])[:3]):
-                print(f"    {i+1}. {line}")
-
-        if location.get('has_page_break_before'):
-            print(f"  ✓ 前面有分页符（单独一页）")
-
         return location.get('context', DEFAULT_APPENDIX_SCOPE)
     else:
-        reason = detected.get('reason', '未知原因') if detected else '未知原因'
-        print(f"\n⚠️ 自动检测法律披露附录位置失败：{reason}")
-        print("  将使用默认位置：正文之后，报告末尾")
+        # 法律附录一定有，使用默认位置
         return DEFAULT_APPENDIX_SCOPE
 
 
@@ -467,13 +530,13 @@ def create_template(
         if body_scope is None:
             body_scope = _confirm_body_location(detected_locations.get("body"))
         if appendix_scope is None:
-            appendix_scope = _confirm_appendix_location(detected_locations.get("appendix"))
+            appendix_scope = _get_appendix_location(detected_locations.get("appendix"))
         print("\n[自动化模式] 位置配置完成")
     else:
         # 交互模式：逐个确认
         abstract_scope = _confirm_abstract_location(detected_locations.get("abstract"))
         body_scope = _confirm_body_location(detected_locations.get("body"))
-        appendix_scope = _confirm_appendix_location(detected_locations.get("appendix"))
+        appendix_scope = _get_appendix_location(detected_locations.get("appendix"))
 
     # 准备 router.yaml 路径（用于显示现有映射）
     router_path = output_dir / "router.yaml"
@@ -628,6 +691,25 @@ def create_template(
     else:
         print("正文: 用户确认无正文（快讯报告模式），跳过")
 
+    # ========== 验证占位符 ==========
+    print("\n正在验证模板占位符...")
+    validation = validate_template_placeholders(doc, elements, abstract_scope, body_scope)
+
+    if validation["found_placeholders"]:
+        print(f"已提取占位符: {', '.join(validation['found_placeholders'])}")
+
+    if validation["missing_placeholders"]:
+        print(f"\n⚠️ 警告: 以下占位符未能提取:")
+        for placeholder in validation["missing_placeholders"]:
+            print(f"  - {{{{ {placeholder} }}}}")
+        print("\n这些字段可能需要手动调整模板")
+
+    if validation["valid"]:
+        print("✓ 占位符验证通过")
+    else:
+        print("⚠️ 占位符验证未完全通过，请检查模板")
+    # ========== 验证完成 ==========
+
     # 保存模板
     template_docx_path = template_dir / "template.docx"
     save_document(doc, str(template_docx_path))
@@ -642,6 +724,7 @@ def create_template(
     return {
         "success": True,
         "message": f"模板 '{name}' 创建成功",
+        "validation": validation,
         "files": [
             str(schema_path),
             str(meta_path),
