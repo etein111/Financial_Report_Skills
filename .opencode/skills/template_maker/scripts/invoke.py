@@ -22,75 +22,12 @@ from template import (
     replace_body_in_doc,
     replace_analyst_fields_in_doc
 )
-from document import find_abstract_by_elements, find_body_range_by_sections, find_appendix_by_markers
+from document import find_abstract_by_elements, find_body_range_by_sections, find_appendix_by_markers, find_first_appendix_position
 from router import load_router, update_mapping, save_router, get_all_router_mappings
 import yaml
 
 
 DEFAULT_APPENDIX_SCOPE = "正文之后，报告末尾"
-
-
-def scan_docx_files(base_dir: Path = Path(".")) -> list[tuple[int, Path]]:
-    """扫描目录下的所有 .docx 文件。
-
-    Args:
-        base_dir: 基础目录，默认为当前目录
-
-    Returns:
-        [(编号, 文件路径), ...] 列表
-    """
-    docx_files = []
-    for path in base_dir.rglob("*.docx"):
-        # 排除临时文件和以 ~ 开头的文件
-        if path.name.startswith("~"):
-            continue
-        docx_files.append(path)
-
-    # 按路径排序
-    docx_files.sort()
-    return list(enumerate(docx_files, start=1))
-
-
-def prompt_select_docx(base_dir: Path = Path(".")) -> Path | None:
-    """让用户从扫描到的 docx 文件中选择。
-
-    Args:
-        base_dir: 基础目录
-
-    Returns:
-        选择的文件路径，None 表示放弃
-    """
-    print("\n" + "=" * 60)
-    print("【扫描样本文档】")
-    print("=" * 60)
-    print(f"\n正在扫描 {base_dir.absolute()} 的子目录...")
-
-    docx_files = scan_docx_files(base_dir)
-
-    if not docx_files:
-        print("\n未找到任何 .docx 文件")
-        return None
-
-    print(f"\n找到 {len(docx_files)} 个 Word 文档：")
-    for idx, path in docx_files:
-        print(f"  {idx}. {path}")
-
-    print("\n请选择要使用的样本文档（输入编号，或 q 退出）:")
-
-    while True:
-        user_input = input("\n您的选择: ").strip().lower()
-        if user_input == 'q':
-            return None
-        try:
-            choice = int(user_input)
-            if 1 <= choice <= len(docx_files):
-                selected_path = docx_files[choice - 1][1]
-                print(f"\n→ 已选择: {selected_path}")
-                return selected_path
-            else:
-                print(f"请输入 1-{len(docx_files)} 之间的数字")
-        except ValueError:
-            print("请输入数字编号")
 
 
 def _llm_analyze_document(word_path: Path) -> dict:
@@ -140,10 +77,7 @@ def _llm_analyze_document(word_path: Path) -> dict:
 {doc_content}
 
 请回答以下问题：
-1. 是否有摘要部分？
-   - 注意：摘要是连贯的段落文本，包含投资观点、核心分析结论
-   - 摘要不包含评级(RATING)、目标价(TARGET PRICE)等单独字段
-   - 摘要是自然段落，不是表格中的键值对
+1. 是否有摘要部分？（摘要通常是首页的投资亮点、核心观点区域）
 2. 摘要的位置在哪里？（请描述具体位置，如"首页右侧"、"首页表格"）
 3. 是否有正文部分？（正文是报告的主要分析内容）
 4. 正文从哪里开始？（请描述具体位置，如"第二页开始"、"目录之后"）
@@ -180,7 +114,8 @@ def _auto_detect_locations(word_path: Path, elements: dict) -> dict:
     result = {
         "abstract": None,
         "body": None,
-        "appendix": None
+        "appendix": None,
+        "first_appendix": None  # 第一个 APPENDIX 标题位置（用于确定正文结束位置）
     }
 
     # 先通过 LLM 分析文档结构
@@ -205,6 +140,11 @@ def _auto_detect_locations(word_path: Path, elements: dict) -> dict:
                 "scope": scope,
                 "location": body_location
             }
+
+    # 检测第一个 APPENDIX 标题位置（用于确定正文结束位置）
+    first_appendix = find_first_appendix_position(str(word_path))
+    if first_appendix.get("found"):
+        result["first_appendix"] = first_appendix
 
     # 检测法律附录位置
     appendix_location = find_appendix_by_markers(str(word_path))
@@ -322,64 +262,42 @@ def _confirm_body_location(detected: dict) -> str | None:
         return user_input
 
 
-def _confirm_appendix_location(detected: dict) -> str | None:
-    """交互确认法律披露附录位置。
+def _confirm_appendix_location(detected: dict) -> str:
+    """确认法律披露附录位置（法律附录是必有的，不询问是否有）。
 
     Args:
         detected: 自动检测结果
 
     Returns:
-        附录位置描述，None 表示没有附录
+        附录位置描述
     """
     print("\n" + "=" * 60)
-    print("【步骤 3/3】确认法律披露附录")
+    print("【步骤 3/3】确认法律披露附录位置")
     print("=" * 60)
 
-    print("\n这份报告是否有法律披露附录（IMPORTANT DISCLOSURES）？")
-    print("  - 通常位于报告末尾")
-    print("  - 包含附录APPENDIX标题和重要信息披露")
+    print("\n法律披露附录（附录APPENDIX / IMPORTANT DISCLOSURES）")
+    print("  - 每个研报必有，位于报告末尾")
+    print("  - 将保留原样，不替换为占位符")
 
-    while True:
-        user_input = input("\n是否有法律披露附录？(y/n，直接回车表示有): ").strip().lower()
-        if user_input == 'n':
-            print("→ 将跳过法律披露附录")
-            return None
-        elif user_input in ['', 'y']:
-            break
-        print("请输入 y 或 n")
-
-    # 用户选择"有"，显示自动检测结果
+    # 显示自动检测结果
     if detected and detected.get("found"):
         location = detected.get('location', {})
-        print(f"\n自动检测到法律披露附录：")
+        print(f"\n✓ 自动检测到法律披露附录：")
         print(f"  位置：段落 {location.get('start_paragraph')} 开始")
-        print(f"  内容预览：")
-        for i, line in enumerate(location.get('preview', [])[:3]):
-            print(f"    {i+1}. {line}")
+        if location.get('preview'):
+            print(f"  内容预览：")
+            for i, line in enumerate(location.get('preview', [])[:3]):
+                print(f"    {i+1}. {line}")
 
         if location.get('has_page_break_before'):
             print(f"  ✓ 前面有分页符（单独一页）")
 
-        print("\n请确认法律披露附录位置是否正确？")
-        print("  - 直接回车：使用检测到的位置")
-        print("  - 输入描述：手动指定位置")
-
-        user_input = input("\n您的选择: ").strip()
-        if user_input:
-            return user_input
-
         return location.get('context', DEFAULT_APPENDIX_SCOPE)
     else:
         reason = detected.get('reason', '未知原因') if detected else '未知原因'
-        print(f"\n⚠️ 自动检测法律披露附录失败：{reason}")
-        print("请手动指定法律披露附录位置：")
-        print("  示例：正文之后，报告末尾")
-
-        user_input = input("\n请输入法律披露附录位置: ").strip()
-        if not user_input:
-            print("→ 无法确定法律披露附录位置，将跳过")
-            return None
-        return user_input
+        print(f"\n⚠️ 自动检测法律披露附录位置失败：{reason}")
+        print("  将使用默认位置：正文之后，报告末尾")
+        return DEFAULT_APPENDIX_SCOPE
 
 
 def _confirm_report_type_mapping(name: str, router_path: Path, auto_confirm: bool) -> str | None:
@@ -486,13 +404,13 @@ def create_template(
         if body_scope is None:
             body_scope = _confirm_body_location(detected_locations.get("body"))
         if appendix_scope is None:
-            appendix_scope = _confirm_appendix_location()
+            appendix_scope = _confirm_appendix_location(detected_locations.get("appendix"))
         print("\n[自动化模式] 位置配置完成")
     else:
         # 交互模式：逐个确认
         abstract_scope = _confirm_abstract_location(detected_locations.get("abstract"))
         body_scope = _confirm_body_location(detected_locations.get("body"))
-        appendix_scope = _confirm_appendix_location()
+        appendix_scope = _confirm_appendix_location(detected_locations.get("appendix"))
 
     # 准备 router.yaml 路径（用于显示现有映射）
     router_path = output_dir / "router.yaml"
@@ -508,7 +426,7 @@ def create_template(
     print(f"报告类型映射: {report_type} → {name}")
     print(f"摘要位置: {abstract_scope}")
     print(f"正文位置: {body_scope or '无（快讯报告）'}")
-    print(f"法律披露附录: {appendix_scope or '无'}")
+    print(f"法律披露附录: {appendix_scope}（保留原样）")
 
     if not auto_confirm:
         confirm = input("\n确认创建模板？(y/n): ").strip()
@@ -553,15 +471,38 @@ def create_template(
     doc = replace_analyst_fields_in_doc(doc, elements)
     print("分析师字段: 已处理")
 
-    # 替换普通字段值为占位符（跳过分析师字段）
+    # 替换普通字段值为占位符（跳过分析师字段和结构化字段）
     analyst_fields = {f'a{i}_{f}' for i in range(1, 9) for f in ['cn', 'en', 'sfc', 'email']}
+    # 只跳过结构化字段（字典类型），保留 summary 等文本字段
+    skip_fields = {'sections', 'analysts'}
+    replaced_fields = []
+
     for field_name, field_value in elements.items():
-        if field_value and field_name not in analyst_fields:
-            doc = replace_field_value_in_doc(doc, field_name, str(field_value))
+        if not field_value or field_name in analyst_fields or field_name in skip_fields:
+            continue
+
+        # 如果是字典类型（如 sections），跳过
+        if isinstance(field_value, dict):
+            continue
+
+        # 如果是列表类型，跳过
+        if isinstance(field_value, list):
+            continue
+
+        field_str = str(field_value)
+        # 尝试替换
+        doc = replace_field_value_in_doc(doc, field_name, field_str)
+        replaced_fields.append(field_name)
+
+    if replaced_fields:
+        print(f"字段替换: {', '.join(replaced_fields)}")
 
     # 替换摘要区域为 {{ abstract }} 占位符
-    abstract_location = find_abstract_by_elements(str(word_path), elements)
-    if abstract_location.get("found"):
+    # 使用之前检测的位置信息，而不是重新检测
+    abstract_detected = detected_locations.get("abstract")
+    abstract_location = abstract_detected.get("location") if abstract_detected else None
+
+    if abstract_scope and abstract_location and abstract_location.get("found"):
         doc = replace_abstract_in_doc(
             doc,
             table=abstract_location["table"],
@@ -570,21 +511,59 @@ def create_template(
             col_end=abstract_location["col_end"]
         )
         print(f"摘要位置: {abstract_location['context']}")
+    elif abstract_scope:
+        # 用户确认有摘要，但自动检测失败，尝试重新检测
+        abstract_location = find_abstract_by_elements(str(word_path), elements)
+        if abstract_location.get("found"):
+            doc = replace_abstract_in_doc(
+                doc,
+                table=abstract_location["table"],
+                row=abstract_location["row"],
+                col_start=abstract_location["col_start"],
+                col_end=abstract_location["col_end"]
+            )
+            print(f"摘要位置: {abstract_location['context']}")
+        else:
+            print(f"警告: 用户确认有摘要，但未能自动定位摘要位置 - {abstract_location.get('reason', '未知原因')}")
+            print("提示: 摘要区域需要手动调整模板")
     else:
-        print(f"警告: 未能自动定位摘要位置 - {abstract_location.get('reason', '未知原因')}")
+        print("摘要: 用户确认无摘要，跳过")
 
     # 替换正文区域为 {{ body }} 占位符（如果有正文）
     if body_scope:
-        body_location = find_body_range_by_sections(str(word_path))
-        if body_location.get("found"):
+        # 使用之前检测的位置信息
+        body_detected = detected_locations.get("body")
+        body_location = body_detected.get("location") if body_detected else None
+
+        if not body_location or not body_location.get("found"):
+            # 尝试重新检测
+            body_location = find_body_range_by_sections(str(word_path))
+
+        if body_location and body_location.get("found"):
+            start_para = body_location["start_paragraph"]
+            end_para = body_location["end_paragraph"]
+
+            # 使用第一个 APPENDIX 标题位置来确定正文结束位置
+            # 这样可以保留所有 APPENDIX 内容（包括 "APPENDIX 1 Summary" 和法律附录）
+            first_appendix = detected_locations.get("first_appendix")
+            if first_appendix and first_appendix.get("found"):
+                appendix_start = first_appendix.get("start_paragraph")
+                if appendix_start and appendix_start < end_para:
+                    end_para = appendix_start
+                    print(f"正文结束位置调整为第一个 APPENDIX 起始位置: 段落 {appendix_start}")
+                    print(f"  APPENDIX 标题: {first_appendix.get('text', '')[:50]}")
+
             doc = replace_body_in_doc(
                 doc,
-                start_paragraph=body_location["start_paragraph"],
-                end_paragraph=body_location["end_paragraph"]
+                start_paragraph=start_para,
+                end_paragraph=end_para
             )
-            print(f"正文位置: {body_location['context']}")
+            print(f"正文位置: 段落 {start_para} 到 {end_para}")
         else:
-            print(f"警告: 未能自动定位正文位置 - {body_location.get('reason', '未知原因')}")
+            reason = body_location.get('reason', '未知原因') if body_location else '未知原因'
+            print(f"警告: 未能自动定位正文位置 - {reason}")
+    else:
+        print("正文: 用户确认无正文（快讯报告模式），跳过")
 
     # 保存模板
     template_docx_path = template_dir / "template.docx"

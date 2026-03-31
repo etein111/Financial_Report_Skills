@@ -222,6 +222,58 @@ def find_abstract_by_elements(doc_path: str, elements: Dict[str, Any]) -> Dict[s
     return {"found": False, "reason": "表格中未找到长文本"}
 
 
+def find_first_appendix_position(doc_path: str) -> Dict[str, Any]:
+    """找到文档中第一个 APPENDIX 标题的位置。
+
+    这个函数用于确定正文的结束位置。正文应该在第一个 APPENDIX 标题之前结束，
+    无论这个 APPENDIX 是内容附录（如 "APPENDIX 1 Summary"）还是法律附录
+    （如 "附录APPENDIX 重要信息披露"）。
+
+    Args:
+        doc_path: Word 文档路径
+
+    Returns:
+        位置信息：{"found": bool, "start_paragraph": int, "text": str}
+    """
+    doc = Document(doc_path)
+
+    for i, para in enumerate(doc.paragraphs):
+        text = para.text.strip()
+        text_upper = text.upper()
+
+        if not text:
+            continue
+
+        # 检查是否是 APPENDIX 相关标题
+        is_appendix_title = False
+
+        # 1. 中英混合格式
+        if '附录' in text and 'APPENDIX' in text_upper:
+            is_appendix_title = True
+
+        # 2. 纯英文 APPENDIX 开头
+        elif text_upper.startswith('APPENDIX'):
+            is_appendix_title = True
+
+        # 3. IMPORTANT DISCLOSURES
+        elif 'IMPORTANT DISCLOSURE' in text_upper:
+            is_appendix_title = True
+
+        # 4. 独立的中文"附录"
+        elif text.startswith('附录') and len(text) < 50:
+            is_appendix_title = True
+
+        if is_appendix_title:
+            return {
+                "found": True,
+                "start_paragraph": i,
+                "text": text[:100],
+                "context": f"段落 {i}: {text[:50]}"
+            }
+
+    return {"found": False, "reason": "未找到 APPENDIX 相关标题"}
+
+
 def find_body_range_by_sections(doc_path: str) -> Dict[str, Any]:
     """根据分节结构定位正文范围（包含目录）。
 
@@ -275,14 +327,18 @@ def find_appendix_by_markers(doc_path: str) -> Dict[str, Any]:
 
     法律附录识别规则：
     - 前面有分页符（单独一页）
-    - 开头必定是："附录APPENDIX"
+    - 开头可以是多种格式：
+      - "附录APPENDIX"（中英混合）
+      - "APPENDIX"（纯英文）
+      - "APPENDIX 1"、"APPENDIX I"（带编号）
+      - "Appendix"（首字母大写）
+      - "IMPORTANT DISCLOSURES"（重要披露）
     - 结尾是整个文档的结尾
 
     策略：
-    1. 使用 lxml 直接解析 document.xml 搜索"附录APPENDIX"
-    2. 可能在段落或表格单元格中
-    3. 检查该位置是否前面有分页符（sectPr type=nextPage）
-    4. 返回附录的起始位置和内容预览
+    1. 搜索包含附录标记的段落
+    2. 检查该段落是否前面有分页符（sectPr type=nextPage）
+    3. 返回附录的起始位置和内容预览
 
     Args:
         doc_path: Word 文档路径
@@ -290,123 +346,106 @@ def find_appendix_by_markers(doc_path: str) -> Dict[str, Any]:
     Returns:
         附录位置信息
     """
-    import zipfile
-    from lxml import etree
-
+    doc = Document(doc_path)
+    body_element = doc.element.body
     ns = {'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'}
 
-    # 直接解析 document.xml 搜索
-    with zipfile.ZipFile(doc_path, 'r') as z:
-        with z.open('word/document.xml') as f:
-            tree = etree.parse(f)
+    # 附录标记模式（按优先级排序）
+    # 注意：要排除 "APPENDIX 1 Summary" 这种情况（Summary 不是附录标题）
+    appendix_para_idx = None
+    appendix_text = None
 
-    # 搜索包含"附录APPENDIX"的段落或单元格
-    target_text = '附录APPENDIX'
-    appendix_elem = None
-    appendix_location_type = None  # "paragraph" 或 "table_cell"
+    for i, para in enumerate(doc.paragraphs):
+        text = para.text.strip()
+        text_upper = text.upper()
 
-    # 先搜索段落
-    for i, para in enumerate(tree.iter('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}p')):
-        text = ''.join(para.itertext())
-        if target_text in text or ('附录' in text.upper() and 'APPENDIX' in text.upper()):
-            appendix_elem = para
-            appendix_location_type = "paragraph"
+        # 跳过空段落
+        if not text:
+            continue
+
+        # 检查是否是附录标题（而不是内容中提到附录）
+        is_appendix_title = False
+
+        # 1. 中英混合格式：附录APPENDIX
+        if '附录APPENDIX' in text or ('附录' in text and 'APPENDIX' in text_upper):
+            is_appendix_title = True
+
+        # 2. 纯英文 APPENDIX（必须是段落开头或独立段落）
+        # 排除 "APPENDIX 1 Summary" 这种情况
+        elif text_upper.startswith('APPENDIX'):
+            # 检查是否后面跟着 Summary/Content 等内容词
+            remaining = text_upper[8:].strip()  # 去掉 "APPENDIX"
+            # 如果是 "APPENDIX" 后跟数字/罗马数字，再检查后面是否有内容词
+            import re
+            # 匹配 APPENDIX 后的数字或罗马数字
+            num_match = re.match(r'^[\s]*([0-9]+|[IVX]+)[\s:：\-]*(.*)$', remaining, re.IGNORECASE)
+            if num_match:
+                after_num = num_match.group(2).strip().upper()
+                # 如果数字后面是 Summary/Content 等，不是附录标题
+                if after_num.startswith(('SUMMARY', 'CONTENT', 'TABLE', 'FIGURE')):
+                    continue
+            is_appendix_title = True
+
+        # 3. IMPORTANT DISCLOSURES（重要披露）
+        elif 'IMPORTANT DISCLOSURE' in text_upper:
+            is_appendix_title = True
+
+        # 4. 独立的中文"附录"
+        elif text.startswith('附录') and len(text) < 30:
+            is_appendix_title = True
+
+        if is_appendix_title:
+            appendix_para_idx = i
+            appendix_text = text[:100] if text else None
             break
 
-    # 如果段落里没找到，搜索表格单元格
-    if appendix_elem is None:
-        for tc in tree.iter('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}tc'):
-            text = ''.join(tc.itertext())
-            if target_text in text or ('附录' in text.upper() and 'APPENDIX' in text.upper()):
-                appendix_elem = tc
-                appendix_location_type = "table_cell"
-                break
-
-    if appendix_elem is None:
+    if appendix_para_idx is None:
         return {
             "found": False,
-            "reason": "未找到包含'附录APPENDIX'的段落或单元格"
+            "reason": "未找到附录标记（支持格式：附录APPENDIX、APPENDIX、IMPORTANT DISCLOSURES）"
         }
 
-    # 找到 appendix_elem 在 body 中的位置索引
-    body = tree.getroot()
-    all_paragraphs = list(body.iter('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}p'))
-    all_tables = list(body.iter('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}tbl'))
-
-    if appendix_location_type == "paragraph":
-        try:
-            appendix_idx = all_paragraphs.index(appendix_elem)
-        except ValueError:
-            appendix_idx = -1
-    else:
-        # 表格单元格：在所有表格中找位置
-        appendix_idx = -1
-        for t_idx, tbl in enumerate(all_tables):
-            for r_idx, tr in enumerate(tbl.findall('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}tr')):
-                for c_idx, tc in enumerate(tr.findall('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}tc')):
-                    if tc is appendix_elem:
-                        appendix_idx = t_idx * 1000 + r_idx * 100 + c_idx  # 用编码表示位置
-
-    # 检查前面是否有分页符
+    # 检查前面是否有分页符（sectPr）
+    # 分页符可能在当前段落或前一个段落的 pPr 中
     has_page_break_before = False
-    prev_sectPr = None
 
-    if appendix_location_type == "paragraph":
-        # 找前一个段落的 sectPr
-        if appendix_idx > 0:
-            prev_para = all_paragraphs[appendix_idx - 1]
-            pPr = prev_para.find('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}pPr')
+    # 检查当前段落之前的所有元素，找到最近的分节符
+    elements_before = list(body_element)[appendix_para_idx:] if appendix_para_idx > 0 else []
+
+    for i, elem in enumerate(elements_before):
+        tag = elem.tag.split('}')[-1]
+        if tag == 'p':
+            pPr = elem.find('w:pPr', ns)
             if pPr is not None:
-                sectPr = pPr.find('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}sectPr')
+                sectPr = pPr.find('w:sectPr', ns)
                 if sectPr is not None:
-                    sect_type = sectPr.find('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}type')
-                    if sect_type is not None and sect_type.get('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}val') == 'nextPage':
-                        has_page_break_before = True
-    else:
-        # 表格单元格：找前一个段落
-        tbl = appendix_elem.getparent().getparent()  # tc -> tr -> tbl
-        tbl_idx = list(body.iter('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}tbl')).index(tbl)
-
-        # 如果表格前面有段落，检查是否有分页符
-        if tbl_idx > 0:
-            prev_para = all_paragraphs[tbl_idx - 1] if tbl_idx <= len(all_paragraphs) else None
-            if prev_para is not None:
-                pPr = prev_para.find('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}pPr')
-                if pPr is not None:
-                    sectPr = pPr.find('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}sectPr')
-                    if sectPr is not None:
-                        sect_type = sectPr.find('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}type')
-                        if sect_type is not None and sect_type.get('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}val') == 'nextPage':
+                    sect_type = sectPr.find('w:type', ns)
+                    if sect_type is not None:
+                        type_val = sect_type.get('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}val')
+                        if type_val == 'nextPage':
                             has_page_break_before = True
+                    break
 
-    # 获取附录文本内容
-    appendix_text = ''.join(appendix_elem.itertext())
-    if len(appendix_text) > 100:
-        appendix_text_preview = appendix_text[:100]
-    else:
-        appendix_text_preview = appendix_text
+    # 计算附录内容范围（从附录开始到文档末尾）
+    total_paragraphs = len(doc.paragraphs)
+    appendix_paragraphs_count = total_paragraphs - appendix_para_idx
 
-    # 构建预览（从附录元素后的内容）
+    # 收集附录内容预览（前3个段落）
     preview = []
-    if appendix_location_type == "paragraph":
-        # 从当前段落开始，收集后续段落的文本
-        for i in range(appendix_idx, min(appendix_idx + 3, len(all_paragraphs))):
-            text = ''.join(all_paragraphs[i].itertext()).strip()
-            if text:
-                preview.append(text[:80])
-    else:
-        # 表格单元格，收集单元格内容
-        full_text = ''.join(appendix_elem.itertext())
-        preview.append(full_text[:80])
+    for i, para in enumerate(doc.paragraphs[appendix_para_idx:appendix_para_idx + 3]):
+        text = para.text.strip()
+        if text:
+            preview.append(text[:80])
 
     return {
         "found": True,
-        "location_type": appendix_location_type,
-        "element_index": appendix_idx,
+        "start_paragraph": appendix_para_idx,
+        "paragraphs_count": appendix_paragraphs_count,
+        "total_paragraphs": total_paragraphs,
         "has_page_break_before": has_page_break_before,
-        "text": appendix_text_preview,
+        "text": appendix_text,
         "preview": preview,
-        "context": f"{appendix_location_type} 中找到'附录APPENDIX'"
+        "context": f"段落 {appendix_para_idx} 开始，共 {appendix_paragraphs_count} 个段落"
     }
 
 
