@@ -29,76 +29,139 @@ import yaml
 
 DEFAULT_APPENDIX_SCOPE = "正文之后，报告末尾"
 
+# 模板类型到扫描目录的映射
+TEMPLATE_SCAN_DIRS = {
+    'company': 'samples',
+    'sector': 'samples',
+    'flash': 'samples/flash',  # 通用 flash
+    'company_flash': 'samples/flash',
+    'sector_flash': 'samples/flash',
+    'macro': 'samples/macro',
+    'strategy': 'samples/macro',
+    'quantitative': 'samples/macro',
+    'bond': 'samples/macro',
+    'common': 'samples/macro',
+}
 
-def _llm_analyze_document(word_path: Path) -> dict:
-    """通过 LLM 分析文档，判断是否有摘要、正文及其位置。
+
+def scan_docx_files_by_template(base_dir: Path, template_type: str) -> list[tuple[int, Path]]:
+    """根据模板类型扫描对应目录下的 .docx 文件。
+
+    Args:
+        base_dir: 基础目录（通常是项目根目录）
+        template_type: 模板类型（如 'flash', 'company', 'macro'）
+
+    Returns:
+        [(编号, 文件路径), ...] 列表
+    """
+    # 确保 base_dir 是 Path 对象
+    base_dir = Path(base_dir)
+    scan_dir_name = TEMPLATE_SCAN_DIRS.get(template_type.lower(), 'samples')
+    scan_dir = base_dir / scan_dir_name
+
+    if not scan_dir.exists():
+        scan_dir = base_dir / 'samples'  # 回退到 samples 目录
+
+    docx_files = []
+    # 只扫描指定目录，不递归
+    for path in scan_dir.glob("*.docx"):
+        # 排除临时文件、以 ~ 开头的文件
+        if path.name.startswith("~"):
+            continue
+        docx_files.append(path)
+
+    # 按路径排序
+    docx_files.sort()
+    return list(enumerate(docx_files, start=1))
+
+
+def find_elements_yaml(word_path: Path) -> Path | None:
+    """查找与 Word 文件配对的 elements.yaml。
+
+    在同目录下查找：
+    1. {文件名} elements.yaml
+    2. {文件名}_elements.yaml
+    3. elements.yaml
 
     Args:
         word_path: Word 文件路径
 
     Returns:
-        LLM 分析结果，包含 has_abstract, abstract_scope, has_body, body_scope
+        找到的 elements.yaml 路径，未找到返回 None
+    """
+    word_path = Path(word_path)
+    word_dir = word_path.parent
+    word_name = word_path.stem
+
+    candidates = [
+        word_dir / f"{word_name} elements.yaml",
+        word_dir / f"{word_name}_elements.yaml",
+        word_dir / "elements.yaml",
+    ]
+
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+
+    return None
+
+
+def prompt_select_docx(base_dir: Path, template_type: str = None) -> Path | None:
+    """让用户从扫描到的 docx 文件中选择。
+
+    根据模板类型自动扫描对应目录。
+
+    Args:
+        base_dir: 基础目录
+        template_type: 模板类型（如 'flash', 'company', 'macro'）
+
+    Returns:
+        选择的文件路径，None 表示放弃
     """
     print("\n" + "=" * 60)
-    print("【LLM 分析】正在分析文档结构...")
+    print("【扫描样本文档】")
     print("=" * 60)
 
-    # 读取文档内容（前几页，用于 LLM 分析）
-    from docx import Document
-    doc = Document(str(word_path))
+    if template_type:
+        print(f"\n正在扫描 {template_type} 类型对应的目录...")
+        docx_files = scan_docx_files_by_template(base_dir, template_type)
+    else:
+        # 如果没有指定模板类型，扫描 samples 目录
+        scan_dir = base_dir / "samples"
+        if not scan_dir.exists():
+            scan_dir = base_dir
+        docx_files = []
+        for path in scan_dir.rglob("*.docx"):
+            if path.name.startswith("~"):
+                continue
+            docx_files.append(path)
+        docx_files.sort()
+        docx_files = list(enumerate(docx_files, start=1))
 
-    # 收集文档摘要信息
-    doc_preview = []
-    doc_preview.append(f"文档总段落数: {len(doc.paragraphs)}")
-    doc_preview.append(f"文档总表格数: {len(doc.tables)}")
+    if not docx_files:
+        print("\n未找到任何 .docx 文件")
+        return None
 
-    # 收集前 30 个段落（通常是首页）
-    doc_preview.append("\n=== 前 30 个段落 ===")
-    for i, para in enumerate(doc.paragraphs[:30]):
-        text = para.text.strip()
-        if text:
-            doc_preview.append(f"{i}: {text[:100]}")
+    print(f"\n找到 {len(docx_files)} 个 Word 文档：")
+    for idx, path in docx_files:
+        print(f"  {idx}. {path}")
 
-    # 收集前 5 个表格的摘要
-    doc_preview.append("\n=== 前 5 个表格内容摘要 ===")
-    for t_idx, table in enumerate(doc.tables[:5]):
-        rows_summary = []
-        for r_idx, row in enumerate(table.rows[:5]):
-            row_text = " | ".join([c.text.strip()[:30] for c in row.cells])
-            rows_summary.append(f"  行{r_idx}: {row_text}")
-        if rows_summary:
-            doc_preview.append(f"表格{t_idx}:\n" + "\n".join(rows_summary))
+    print("\n请选择要使用的样本文档（输入编号，或 q 退出）:")
 
-    doc_content = "\n".join(doc_preview)
-
-    # 构建 LLM 询问
-    llm_prompt = f"""请分析这篇研究报告的结构：
-
-{doc_content}
-
-请回答以下问题：
-1. 是否有摘要部分？（摘要通常是首页的投资亮点、核心观点区域）
-2. 摘要的位置在哪里？（请描述具体位置，如"首页右侧"、"首页表格"）
-3. 是否有正文部分？（正文是报告的主要分析内容）
-4. 正文从哪里开始？（请描述具体位置，如"第二页开始"、"目录之后"）
-
-请以 JSON 格式返回：
-{{
-  "has_abstract": true/false,
-  "abstract_scope": "位置描述",
-  "has_body": true/false,
-  "body_scope": "位置描述"
-}}
-"""
-
-    print("\n[LLM 询问内容]")
-    print(llm_prompt[:500] + "..." if len(llm_prompt) > 500 else llm_prompt)
-    print("\n请提供 LLM 分析结果...")
-
-    # 注意：这里需要实际调用 LLM，用户会提供分析结果
-    # 在自动化场景下，可以跳过此步骤
-
-    return None  # 返回 None 表示需要交互确认
+    while True:
+        user_input = input("\n您的选择: ").strip().lower()
+        if user_input == 'q':
+            return None
+        try:
+            choice = int(user_input)
+            if 1 <= choice <= len(docx_files):
+                selected_path = docx_files[choice - 1][1]
+                print(f"\n→ 已选择: {selected_path}")
+                return selected_path
+            else:
+                print(f"请输入 1-{len(docx_files)} 之间的数字")
+        except ValueError:
+            print("请输入数字编号")
 
 
 def _auto_detect_locations(word_path: Path, elements: dict) -> dict:

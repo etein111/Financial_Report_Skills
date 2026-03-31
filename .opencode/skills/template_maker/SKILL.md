@@ -38,20 +38,61 @@ description: "当用户说「制作模板」、「创建模板」、「分析模
 
 ### 创建新模板
 
-#### 步骤 1：提供基本信息
+#### 步骤 1：选择模板类型并自动扫描素材
+
+**系统自动扫描对应目录的样本文档**：
 
 ```
-问题 1/3：样本文档（Word）在哪里？
-- 等待用户提供 .docx 文件路径
+【扫描样本文档】
+请选择要使用的模板类型：
+  1. company - 公司覆盖报告
+  2. sector - 行业研究报告
+  3. company_flash - 公司快讯
+  4. sector_flash - 行业快讯
+  5. macro - 宏观报告
+  ...
 
-问题 2/3：elements.yaml 在哪里？
-- 等待用户提供配置文件路径
+您的选择: flash
 
-问题 3/3：模板名称是什么？
-- 等待用户回答
+正在扫描 samples/flash/ 目录...
+找到以下样本文档：
+  1. 全球消费及互联网周报_3_16-3_19_AutoRefresh.docx
+  2. 全球消费及互联网周报_3_16-3_19-草稿.docx
+
+请选择要使用的样本文档（输入编号）:
 ```
 
-#### 步骤 2：LLM 分析文档结构
+**自动扫描规则**：
+| 模板类型 | 扫描目录 |
+|---------|---------|
+| company | samples/ |
+| sector | samples/ |
+| company_flash | samples/flash/ |
+| sector_flash | samples/flash/ |
+| macro | samples/macro/ |
+| strategy | samples/macro/ |
+| quantitative | samples/macro/ |
+| bond | samples/macro/ |
+
+**自动查找 elements.yaml**：
+选择样本文档后，系统自动在同目录下查找匹配的 elements.yaml：
+- `{文件名} elements.yaml`
+- `{文件名}_elements.yaml`
+- `elements.yaml`（通用配置）
+
+#### 步骤 2：自动查找 elements.yaml
+
+**系统自动在样本文档同目录下查找 elements.yaml**：
+
+```
+【查找 elements.yaml】
+在 samples/flash/ 目录下查找...
+✓ 找到: samples/flash/全球消费及互联网周报_3_16-3_19_AutoRefresh elements.yaml
+```
+
+如果找到多个 elements.yaml，显示列表供用户选择。
+
+#### 步骤 3：LLM 分析文档结构
 
 **必须通过 LLM 询问判断摘要和正文**：
 
@@ -72,7 +113,7 @@ description: "当用户说「制作模板」、「创建模板」、「分析模
 }
 ```
 
-#### 步骤 3：交互确认位置
+#### 步骤 4：交互确认位置
 
 **确认摘要位置**：
 ```
@@ -110,19 +151,19 @@ description: "当用户说「制作模板」、「创建模板」、「分析模
   位置：段落 xxx 开始
 ```
 
-#### 步骤 4：系统自动构建与验证
+#### 步骤 5：系统自动构建与验证
 
 - 解析 Word 模板，将动态内容替换为占位符
 - 基于原要素执行一次闭环验证
 - 验证通过后，提示模板创建成功
 
-#### 步骤 5：修改字段定义（可选）
+#### 步骤 6：修改字段定义（可选）
 
 - 告诉系统："以后提取宏观报告时，增加一个'风险提示'字段"
 - 系统会展示变更计划
 - 确认后自动更新 schema.yaml 和模板
 
-#### 步骤 6：模板验证
+#### 步骤 7：模板验证
 
 - 系统自动验证模板结构
 - 测试占位符替换
