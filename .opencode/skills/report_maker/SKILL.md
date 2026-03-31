@@ -87,33 +87,7 @@ pip3 install --break-system-packages "docxtpl>=0.20.0" docxcompose
 - ✅ 主题词：新能源汽车、AI芯片、美联储、利率政策
 - ❌ 描述性词汇：深度分析、研究、报告、解读、提交版
 
-### 2. LLM 询问：是否有摘要和正文
-
-**必须通过 LLM 询问判断**，因为有些报告可能没有摘要或正文。
-
-**LLM 询问内容**：
-
-将草稿内容发送给 LLM，询问以下问题：
-
-```
-请分析这篇研究报告：
-1. 是否有摘要部分？（摘要通常是首页右侧的投资亮点、核心观点区域）
-2. 摘要的位置在哪里？（请描述具体位置，如"首页右侧表格"）
-3. 是否有正文部分？（正文是报告的主要分析内容）
-4. 正文从哪里开始？（请描述具体位置，如"第二页开始"或"目录之后"）
-```
-
-**根据 LLM 回答，设置标志**：
-- `has_abstract: bool` - 是否有摘要
-- `has_body: bool` - 是否有正文
-- `abstract_scope: str` - 摘要位置描述（如"首页右侧"）
-- `body_scope: str` - 正文位置描述（如"第二页开始"）
-
-**重要**：
-- 如果 `has_abstract=False`，则不需要提取摘要，跳过 abstract.docx 生成
-- 如果 `has_body=False`，则不需要提取正文，跳过 body.docx 生成
-
-### 3. 自动查找可用模板
+### 2. 自动查找可用模板
 
 在**当前工作目录**下的 `templates/` 目录中查找所有可用的模板。
 
@@ -137,9 +111,9 @@ templates/
 - `schema.yaml` - **定义要提取哪些字段**
 - `template.docx` - **Word 模板文件**
 
-### 4. 展示可用模板并让用户确认
+### 3. 展示可用模板并让用户确认
 
-**问题 5/5：请选择使用的模板**
+**问题 4/4：请选择使用的模板**
 
 展示找到的所有可用模板供用户选择：
 
@@ -157,7 +131,7 @@ templates/
 - 用户可以直接输入模板名称（如 `company`）
 - 如果只有一个模板，可以直接询问"是否使用 {模板名} 模板？"
 
-### 5. 加载选定的模板
+### 4. 加载选定的模板
 
 根据用户选择的模板名称，加载对应的模板文件：
 
@@ -175,46 +149,114 @@ with open(schema_path, 'r', encoding='utf-8') as f:
 
 ⚠️ **重要**：模板路径基于当前工作目录，确保 `templates/` 目录存在且包含用户选择的模板。
 
-### 6. 提取字段
+### 5. 🔑 一次性提取 elements + 摘要 + 正文（核心步骤）
 
-**⚠️ 核心原则**：
-- **schema.yaml** 明确要提取哪些字段
-- **template.docx** 明确字段在文档中的位置（占位符位置）
-- **elements.yaml** 必须严格按照 schema.yaml 的字段（顺序、名称、类型）
+**⚠️ 核心原则：LLM 一次性完成所有提取工作**
 
-**使用自动化提取**（默认，推荐）：
+将草稿内容和 schema.yaml 发送给 LLM，在**一次调用中**完成：
+1. 提取所有 elements 字段
+2. 判断并提取摘要内容
+3. 判断并提取正文内容
 
-```bash
-python3 -c "
-from skills.report_maker.scripts import extractor, common
+**LLM 提取提示词**：
 
-# 加载 schema
-schema = common.load_yaml(f'templates/{template_name}/schema.yaml')
+```
+请分析这份研究报告草稿，一次性提取以下所有内容：
 
-# 执行提取（从草稿中提取 schema 中定义的字段）
-elements = extractor.extract_elements(draft_path, schema)
+## 第一部分：字段提取
+根据 schema.yaml 中定义的字段，从草稿中提取数据：
+{schema_yaml_内容}
 
-# 确保所有字段存在（与 schema 严格一致）
-elements = common.ensure_all_fields(elements, schema)
-"
+## 第二部分：摘要提取
+1. 是否有摘要部分？（摘要通常是首页右侧的投资亮点、核心观点区域）
+2. 如果有摘要，请指出摘要的精确位置（如"首页右侧表格的第X行第Y列单元格"）
+3. has_abstract: true/false
+4. abstract_scope: "位置描述"
+
+## 第三部分：正文提取
+1. 是否有正文部分？（正文是报告的主要分析内容，从目录或第一章开始）
+2. 如果有正文，请指出正文的起始位置（如"从目录开始"或"从第N页开始"）
+3. has_body: true/false
+4. body_scope: "位置描述"
+
+## 输出格式
+请返回 YAML 格式：
+```yaml
+# 字段数据
+report_date: "..."
+company: "..."
+ticker: "..."
+# ... 其他 schema 中定义的字段 ...
+
+# 摘要信息
+has_abstract: true/false
+abstract_scope: "位置描述"
+
+# 正文信息
+has_body: true/false
+body_scope: "位置描述"
+```
 ```
 
-自动化提取功能现已完善，可以正确处理：
-- ✅ 嵌套表格中的财务数据（current_price, target_price, market_cap 等）
-- ✅ 组合字段的拆分（one_year_high/low 从 "73.40-20.50" 拆分）
-- ✅ 从注释中提取的数据（current_price_date）
-- ✅ 特殊格式化字段（analysts）
-- ✅ 保留单位（22.11bn, 365.99mn）
+**LLM 返回结果解析**：
 
-**或使用 LLM 辅助提取**（仅在自动化提取完全失败时）：
+```python
+# LLM 返回的数据
+llm_result = {
+    # elements 字段
+    "report_date": "21 Oct 2025",
+    "company": "西锐飞机",
+    "ticker": "2507.HK",
+    "current_price": "60.40",
+    # ... 其他字段 ...
 
-将草稿内容和 schema.yaml 发送给 LLM，LLM 根据 schema 中的字段定义提取数据。
+    # 摘要/正文信息
+    "has_abstract": True,
+    "abstract_scope": "首页右侧表格",
+    "has_body": True,
+    "body_scope": "从目录开始，到附录之前"
+}
 
-**⚠️ 关键技术提示：嵌套表格处理**
+# 分离 elements 和位置信息
+elements = {k: v for k, v in llm_result.items()
+            if k not in ['has_abstract', 'abstract_scope', 'has_body', 'body_scope']}
+```
 
-- python-docx 的 `cell.text` 只返回直接段落文本，**不包括嵌套表格**
-- 许多关键字段（如 current_price, market_cap 等）在首页表格的**嵌套表格**中
-- 本 skill 已在 `docx_reader.py` 和 `field_extractor.py` 中实现自动化递归读取
+**关键优势**：
+- ✅ 减少 LLM 调用次数（从多次降为一次）
+- ✅ LLM 对整体报告结构有更完整的理解
+- ✅ 避免字段提取和位置判断的信息不一致
+
+### 6. 使用脚本提取摘要和正文（保留原始格式）
+
+**⚠️ 重要：摘要和正文的实际提取必须使用 Python 脚本，不是 LLM**
+
+LLM 只负责**判断位置**，实际的内容提取使用 `splitter.py` 中的函数，
+确保**完整保留原始格式**（字体、加粗、图片、表格等）。
+
+```python
+from skills.report_maker.scripts import splitter
+
+# 根据 LLM 返回的位置信息，使用脚本提取
+if llm_result['has_abstract']:
+    splitter.extract_abstract(
+        draft_path,
+        llm_result['abstract_scope'],
+        output_path=f"{output_dir}/abstract.docx"
+    )
+
+if llm_result['has_body']:
+    splitter.extract_body(
+        draft_path,
+        llm_result['body_scope'],
+        output_path=f"{output_dir}/body.docx"
+    )
+```
+
+**格式保留机制**：
+- 使用 `deepcopy` 复制 XML 元素，保留所有格式信息
+- 摘要：复制单元格内的完整段落（字体、颜色、加粗等）
+- 正文：复制整个文档片段（包括图片、表格、目录控件）
 
 ### 7. 一次性确认所有字段
 
@@ -228,56 +270,27 @@ elements = common.ensure_all_fields(elements, schema)
 | ticker | `2507.HK` | ✅ |
 | current_price | `60.40` | ✅ |
 | ... | ... | ... |
+| has_abstract | `True` | ✅ |
+| abstract_scope | `首页右侧表格` | ✅ |
+| has_body | `True` | ✅ |
+| body_scope | `从目录开始` | ✅ |
 ```
 
 用户可以一次性确认或修正多个字段。
 
-### 8. 确保所有字段存在
-
-- elements.yaml 必须与 schema.yaml 严格对应
-- 空字段使用空字符串 `""`，不要省略
-
-### 9. 拆分摘要和正文
-
-**根据 LLM 询问结果判断**：
-
-```
-LLM 分析结果：
-- has_abstract: True
-- abstract_scope: "首页右侧"
-- has_body: True
-- body_scope: "第二页开始"
-```
-
-**处理逻辑**：
-- 如果 `has_abstract=True` 且 `abstract_scope` 有值：使用 `splitter.extract_abstract(draft_path, abstract_scope)` 提取摘要
-- 如果 `has_abstract=False`：跳过摘要提取，不生成 `abstract.docx`
-- 如果 `has_body=True` 且 `body_scope` 有值：使用 `splitter.extract_body(draft_path, body_scope)` 提取正文
-- 如果 `has_body=False`：跳过正文提取，不生成 `body.docx`
-
-**保存结果**：
-
-```
-<输出目录>/
-├── draft.docx           # 原始草稿
-├── elements.yaml        # 提取的要素
-├── abstract.docx        # 摘要片段（仅当 has_abstract=True 时）
-└── body.docx            # 正文片段（仅当 has_body=True 时）
-```
-
-### 10. 保存结果
+### 8. 保存结果
 
 将提取结果保存到用户指定的输出目录：
 
 ```
 <输出目录>/
-├── draft.docx           # 原始草稿
-├── elements.yaml        # 提取的要素
-├── abstract.docx        # 摘要片段（仅当 has_abstract=True 时）
-└── body.docx            # 正文片段（仅当 has_body=True 时）
+├── draft.docx           # 原始草稿（复制）
+├── elements.yaml        # 提取的要素（含位置信息）
+├── abstract.docx        # 摘要片段（仅当 has_abstract=True 时，完整保留格式）
+└── body.docx            # 正文片段（仅当 has_body=True 时，完整保留格式）
 ```
 
-### 11. 展示摘要并暂停
+### 9. 展示摘要并暂停
 
 展示提取结果摘要，等待用户确认或修正
 
@@ -285,45 +298,54 @@ LLM 分析结果：
 
 ## 第二阶段：渲染与输出
 
+**⚠️ 核心原则：渲染阶段完全不需要 LLM 介入**
+
+第二阶段使用纯 Python 脚本（`renderer.py`）直接合成报告：
+- ✅ 通过 XML 替换占位符填充字段
+- ✅ 使用 `deepcopy` 插入摘要（完整保留格式）
+- ✅ 使用 `docxcompose` 合并正文（完整保留格式、图片、表格）
+- ✅ 自动处理法律附录
+
 ### 1. 更新修正数据
 
 加载 `elements.yaml`，应用用户修正，保存更新后的 `elements.yaml`
 
-### 2. 确认 abstract 和 body 是否存在
+### 2. 确认 abstract 和 body 文件位置
 
-**根据第一阶段的 LLM 询问结果**：
-
-- 如果 `has_abstract=True` 且 `abstract.docx` 存在：询问用户确认位置
+- 如果 `has_abstract=True` 且 `abstract.docx` 存在：确认文件位置
 - 如果 `has_abstract=False`：跳过摘要步骤
-- 如果 `has_body=True` 且 `body.docx` 存在：询问用户确认位置
+- 如果 `has_body=True` 且 `body.docx` 存在：确认文件位置
 - 如果 `has_body=False`：跳过正文步骤
 
-**显式询问**（仅当文件存在时）：
-
+**默认文件位置**：
 ```
-问题：abstract.docx 在哪里？
-- 等待用户提供文件路径
-- 默认值：<输出目录>/abstract.docx
-
-问题：body.docx 在哪里？
-- 等待用户提供文件路径
-- 默认值：<输出目录>/body.docx
+abstract: <输出目录>/abstract.docx
+body: <输出目录>/body.docx
 ```
 
-### 3. 渲染报告
+### 3. 渲染报告（纯脚本，无 LLM）
 
-**根据 has_abstract 和 has_body 标志决定渲染行为**：
+**渲染行为由 elements.yaml 中的 has_abstract 和 has_body 决定**：
 
-- 如果 `has_abstract=True`：插入摘要到模板
-- 如果 `has_abstract=False`：不插入摘要（模板中可能有空的摘要区域，跳过即可）
-- 如果 `has_body=True`：合并正文到模板
-- 如果 `has_body=False`：不合并正文（模板中可能有空的正文区域，跳过即可）
+- 如果 `has_abstract=True`：插入摘要到模板（完整保留原始格式）
+- 如果 `has_abstract=False`：跳过摘要插入
+- 如果 `has_body=True`：合并正文到模板（完整保留原始格式、图片、表格）
+- 如果 `has_body=False`：跳过正文合并
+
+**⚠️ 格式保留机制（关键）**：
+
+| 内容类型 | 保留机制 | 说明 |
+|---------|---------|------|
+| 摘要 | `deepcopy` XML 元素 | 完整复制段落、字体、颜色、加粗等 |
+| 正文 | `docxcompose.append()` | 完整保留图片、表格、目录、页眉页脚 |
+| 法律附录 | 从模板直接复制 | 保持模板原样，不做任何修改 |
 
 使用 `renderer.render_report()` 函数完成以下操作：
-- 渲染短字段到模板（使用 XML 替换占位符）
-- 插入摘要片段（如果 has_abstract=True）
-- 合并正文片段（如果 has_body=True）
-- 保存最终输出文件
+1. 通过 XML 级别替换所有占位符（不破坏嵌套表格结构）
+2. 插入摘要到表格单元格（使用 deepcopy 保留格式）
+3. 使用 docxcompose 合并正文（保留图片和表格）
+4. 追加法律附录
+5. 保存最终输出文件
 
 **完整代码示例**：
 
@@ -470,22 +492,24 @@ body: "body.docx"
 ## 注意事项
 
 1. **交互式确认是必须的** - 不能跳过第一阶段直接生成
-2. **工作目录要求** - 所有操作必须从项目根目录执行，否则找不到模板文件
-3. **输出位置** - 报告保存在用户指定的输出目录下的 `output.docx`
-4. **依赖检查** - 确保已安装 docxtpl 和 docxcompose
-5. **空字段处理** - 必须保留空字段，值为 `""`
-6. **字段严格一致性** - elements.yaml 必须与 schema.yaml 完全一致
+2. **LLM 只用于第一阶段** - 一次性提取 elements + 摘要位置 + 正文位置
+3. **第二阶段无 LLM** - 渲染完全使用 Python 脚本，不需要 LLM 介入
+4. **格式保留是关键** - 摘要和正文必须保留原始格式（字体、图片、表格等）
+5. **工作目录要求** - 所有操作必须从项目根目录执行，否则找不到模板文件
+6. **输出位置** - 报告保存在用户指定的输出目录下的 `output.docx`
+7. **依赖检查** - 确保已安装 docxtpl 和 docxcompose
+8. **空字段处理** - 必须保留空字段，值为 `""`
+9. **字段严格一致性** - elements.yaml 必须与 schema.yaml 完全一致
    - 字段名称相同
    - 字段顺序相同
    - 字段数量相同
    - 空字段也必须存在（值为 `""`）
-7. **模板依赖关系**：
-   - **schema.yaml** 是"字段清单"（提取什么）
-   - **template.docx** 是"位置地图"（在哪里提取）
-   - **elements.yaml** 是"提取结果"（必须严格按照 schema）
-8. **模板切换限制** - 只能在第一阶段切换模板，第二阶段不支持切换
-9. **只读 templates/** - report_maker 永远不修改模板资产
-10. **自动化提取能力** - 现已支持一次性正确提取所有字段，包括嵌套表格、组合字段拆分、注释提取、特殊格式化等
+10. **模板依赖关系**：
+    - **schema.yaml** 是"字段清单"（提取什么）
+    - **template.docx** 是"位置地图"（在哪里提取）
+    - **elements.yaml** 是"提取结果"（必须严格按照 schema）
+11. **模板切换限制** - 只能在第一阶段切换模板，第二阶段不支持切换
+12. **只读 templates/** - report_maker 永远不修改模板资产
 
 ---
 
