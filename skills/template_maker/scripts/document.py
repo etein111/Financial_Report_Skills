@@ -361,9 +361,10 @@ def find_summary_by_markers(doc_path: str) -> Dict[str, Any]:
     """根据标记词查找英文 Summary 位置。
 
     Summary 结构特征：
-    1. 固定开始标记：如 "APPENDIX 1 Summary"、"Summary"、 "Executive Summary"
-    2. 后面紧跟换行 + Summary 内容
-    3. 处于独立页面（前后有换页符）
+    1. 固定开始标记：如 "APPENDIX 1 Summary"、"APPENDIX 1"（后面紧跟 Summary 内容）
+    2. 标题段落通常较短（< 100 字符）
+    3. 不是引导语（排除包含 "see"、"Please" 等的段落）
+    4. 通常位于文档后半部分
 
     使用 lxml 直接解析 document.xml，确保嵌套表格不漏读。
 
@@ -380,52 +381,71 @@ def find_summary_by_markers(doc_path: str) -> Dict[str, Any]:
     """
     tree = _parse_docx_xml(doc_path)
 
-    # Summary 关键词
-    summary_keywords = [
-        'APPENDIX 1 SUMMARY',
-        'APPENDIX 1 Summary',
-        'EXECUTIVE SUMMARY',
-        'Executive Summary',
-        'Summary',
-    ]
-
     paragraphs = list(tree.iter(f'{W}p'))
-    page_breaks = {}  # 记录哪些段落之前有换页符
+    total_paragraphs = len(paragraphs)
 
-    # 先记录所有段落之前是否有换页符
-    for idx, p in enumerate(paragraphs):
-        pPr = p.find(f'{W}pPr')
-        if pPr is not None:
-            for child in pPr:
-                if etree.QName(child.tag).localname == 'lastRenderedPageBreak':
-                    page_breaks[idx] = True
-                    break
+    # 只在文档后半部分搜索（Summary 通常在 APPENDIX 中）
+    start_search_idx = total_paragraphs // 2
 
     # 搜索 Summary 起始标记
-    for idx, p in enumerate(paragraphs):
-        text = _get_para_text(p)
+    for idx in range(start_search_idx, total_paragraphs):
+        p = paragraphs[idx]
+        text = _get_para_text(p).strip()
+        text_upper = text.upper()
 
-        for kw in summary_keywords:
-            if kw.upper() in text.upper():
-                # 找到了 Summary 起始标记
-                # 确认前面有换页符（独立页面）
-                if idx not in page_breaks:
-                    # 如果前面没有换页符，可能不是 Summary，继续搜索
+        # 跳过空段落
+        if not text:
+            continue
+
+        # 跳过太长的段落（标题通常较短）
+        if len(text) > 100:
+            continue
+
+        # 跳过引导语（包含 "see"、"please" 等）
+        if any(word in text_upper for word in ['SEE ', 'PLEASE', 'REFER TO', '请参阅', '详见']):
+            continue
+
+        is_summary_title = False
+
+        # 检查是否是 Summary 标题
+        # 1. "APPENDIX 1 Summary" 或 "APPENDIX 1" 开头
+        if text_upper.startswith('APPENDIX 1'):
+            # 检查是否包含 Summary
+            if 'SUMMARY' in text_upper:
+                is_summary_title = True
+            # 或者就是 "APPENDIX 1"，后面紧跟内容
+            elif text_upper.strip() == 'APPENDIX 1':
+                is_summary_title = True
+
+        # 2. "Executive Summary" 开头
+        if text_upper.startswith('EXECUTIVE SUMMARY'):
+            is_summary_title = True
+
+        # 3. 独立的 "Summary" 标题（但要排除太短的）
+        if text_upper == 'SUMMARY' or text_upper.startswith('SUMMARY:'):
+            is_summary_title = True
+
+        if is_summary_title:
+            # 找到结束位置：下一个 APPENDIX 标题或法律披露标题
+            end_idx = total_paragraphs
+            for next_idx in range(idx + 1, total_paragraphs):
+                next_text = _get_para_text(paragraphs[next_idx]).strip().upper()
+                if not next_text:
                     continue
+                # 遇到下一个 APPENDIX 或法律披露标题就结束
+                if (next_text.startswith('APPENDIX') and next_idx != idx) or \
+                   '附录' in next_text or \
+                   'IMPORTANT DISCLOSURE' in next_text or \
+                   '重要信息披露' in next_text:
+                    end_idx = next_idx
+                    break
 
-                # 找到结束位置（下一个换页符之前，或文档末尾）
-                end_idx = len(paragraphs)
-                for next_idx in range(idx + 1, len(paragraphs)):
-                    if next_idx in page_breaks:
-                        end_idx = next_idx
-                        break
-
-                return {
-                    "found": True,
-                    "start_paragraph": idx,
-                    "end_paragraph": end_idx,
-                    "context": f"段落 {idx} 到 {end_idx}: {text[:50]}..."
-                }
+            return {
+                "found": True,
+                "start_paragraph": idx,
+                "end_paragraph": end_idx,
+                "context": f"段落 {idx} 到 {end_idx}: {text[:50]}..."
+            }
 
     return {"found": False, "reason": "未找到 Summary 标记"}
 
