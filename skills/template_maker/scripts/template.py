@@ -460,7 +460,7 @@ def replace_summary_in_doc(doc: Document, start_paragraph: int,
 
     Args:
         doc: Document 对象
-        start_paragraph: 起始段落索引
+        start_paragraph: 起始段落索引（python-docx paragraphs索引）
         end_paragraph: 结束段落索引（不包含）
 
     Returns:
@@ -476,70 +476,54 @@ def replace_summary_in_doc(doc: Document, start_paragraph: int,
     # 获取 body 元素
     body = doc._body._body
 
-    # 建立段落索引到 XML 元素的映射
-    para_to_element = {}
-    para_idx = 0
-    for child in body:
-        tag = etree.QName(child.tag).localname
-        if tag == 'p':
-            para_to_element[para_idx] = child
-            para_idx += 1
-        elif tag == 'tbl':
-            for p in child.iter(f'{W}p'):
-                para_to_element[para_idx] = p
-                para_idx += 1
-        elif tag == 'sdt':
-            for p in child.iter(f'{W}p'):
-                para_to_element[para_idx] = p
-                para_idx += 1
-
-    # 找到起始和结束位置对应的 body 直接子元素
-    start_element = para_to_element.get(start_paragraph)
-    end_idx = min(end_paragraph - 1, len(doc.paragraphs) - 1)
-    end_element = para_to_element.get(end_idx)
-
-    if start_element is None:
-        raise ValueError(f"无法找到段落 {start_paragraph} 对应的元素")
-
-    # 找到起始元素在 body 中的直接父元素
-    def find_body_child(element):
-        current = element
-        while current is not None:
-            parent = current.getparent()
-            if parent is not None and parent.tag == f'{W}body':
-                return current
-            current = parent
-        return None
-
-    start_body_child = find_body_child(start_element)
-    end_body_child = find_body_child(end_element) if end_element else start_body_child
-
-    # 收集 body 直接子元素列表
+    # 建立 doc.paragraphs 索引到 body 直接子元素的映射
     body_children = list(body)
 
-    # 找到起始和结束在 body 子元素中的索引
-    try:
-        start_child_idx = body_children.index(start_body_child)
-    except ValueError:
-        start_child_idx = 0
+    # 创建段落索引到 body_children 索引的映射
+    para_to_body_idx = {}
 
-    try:
-        end_child_idx = body_children.index(end_body_child)
-    except ValueError:
-        end_child_idx = len(body_children) - 1
+    for body_idx, child in enumerate(body_children):
+        tag = etree.QName(child.tag).localname
+        if tag == 'p':
+            # body直接子元素就是段落元素
+            # 找到这个段落在 doc.paragraphs 中的位置
+            for para_idx, para in enumerate(doc.paragraphs):
+                if para._element is child:
+                    para_to_body_idx[para_idx] = body_idx
+                    break
+        elif tag == 'tbl':
+            # 表格元素：检查表格内的每个段落在 doc.paragraphs 中的位置
+            for p_elem in child.iter(f'{W}p'):
+                for para_idx, para in enumerate(doc.paragraphs):
+                    if para._element is p_elem:
+                        para_to_body_idx[para_idx] = body_idx
+                        break
+        elif tag == 'sdt':
+            # SDT 元素：检查 SDT 内的每个段落
+            for p_elem in child.iter(f'{W}p'):
+                for para_idx, para in enumerate(doc.paragraphs):
+                    if para._element is p_elem:
+                        para_to_body_idx[para_idx] = body_idx
+                        break
 
-    # 收集要删除的元素
+    # 找到起始和结束位置对应的 body_children 索引
+    start_body_idx = para_to_body_idx.get(start_paragraph, 0)
+    end_body_idx = para_to_body_idx.get(end_paragraph - 1, len(body_children) - 1)
+
+    # 确保 start_body_idx < end_body_idx
+    if start_body_idx > end_body_idx:
+        start_body_idx, end_body_idx = end_body_idx, start_body_idx
+
+    # 收集要删除的元素（Summary 区域内的所有 body_children 元素）
     elements_to_remove = []
-    first_element = None
+    first_body_element = None
 
-    for i, child in enumerate(body_children):
-        if i < start_child_idx:
-            continue
-        if i > end_child_idx:
-            break
+    for body_idx in range(start_body_idx, end_body_idx + 1):
+        child = body_children[body_idx]
+        tag = etree.QName(child.tag).localname
 
-        if first_element is None:
-            first_element = child
+        if first_body_element is None:
+            first_body_element = child
 
         elements_to_remove.append(child)
 
@@ -548,24 +532,24 @@ def replace_summary_in_doc(doc: Document, start_paragraph: int,
         body.remove(element)
 
     # 在第一个元素位置设置占位符
-    if first_element is not None and elements_to_remove:
-        tag = etree.QName(first_element.tag).localname
+    if first_body_element is not None and elements_to_remove:
+        tag = etree.QName(first_body_element.tag).localname
 
         if tag == 'p':
             # 如果第一个是段落，清空内容设置占位符
-            for child in list(first_element):
+            for child in list(first_body_element):
                 child_tag = etree.QName(child.tag).localname
                 if child_tag not in ('pPr',):
-                    first_element.remove(child)
+                    first_body_element.remove(child)
 
             # 添加新的 run 包含占位符
-            r = etree.SubElement(first_element, f'{W}r')
+            r = etree.SubElement(first_body_element, f'{W}r')
             t = etree.SubElement(r, f'{W}t')
             t.text = "{{ summary }}"
         else:
             # 如果第一个不是段落，需要替换为段落
-            idx = list(body).index(first_element)
-            body.remove(first_element)
+            idx = list(body).index(first_body_element)
+            body.remove(first_body_element)
 
             # 创建新段落
             new_p = etree.Element(f'{W}p')
@@ -574,6 +558,7 @@ def replace_summary_in_doc(doc: Document, start_paragraph: int,
             t.text = "{{ summary }}"
 
             body.insert(idx, new_p)
+            first_body_element = new_p
 
     return doc
 
