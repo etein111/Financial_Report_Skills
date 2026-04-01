@@ -1,7 +1,9 @@
 """splitter.py - 摘要/正文拆分模块。
 
-使用 python-docx 从草稿中拆分摘要和正文片段。
+使用 lxml 直接解析 document.xml，从草稿中拆分摘要和正文片段。
 支持保留完整格式（字体、加粗、样式等）和图片。
+
+注意：python-docx 的 doc.tables 会漏读嵌套表格，因此使用 lxml 直接解析。
 """
 
 from typing import Dict, Any, List, Tuple, Optional
@@ -9,6 +11,7 @@ from pathlib import Path
 from copy import deepcopy
 import shutil
 import sys
+import zipfile
 
 SCRIPTS_DIR = Path(__file__).parent
 sys.path.insert(0, str(SCRIPTS_DIR))
@@ -25,7 +28,57 @@ except ImportError:
     OxmlElement = None
     qn = None
 
+from lxml import etree
+
 import common
+
+
+W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
+
+
+def _get_para_text(para_elem) -> str:
+    """获取段落的所有文本。
+
+    Args:
+        para_elem: 段落元素
+
+    Returns:
+        段落文本
+    """
+    return ''.join(t.text or '' for t in para_elem.iter(f'{W}t'))
+
+
+def _get_all_tables_lxml(doc_path: str) -> List[etree._Element]:
+    """使用 lxml 获取文档中所有表格（包括嵌套表格）。
+
+    解决 python-docx 漏读嵌套表格的问题。
+
+    Args:
+        doc_path: docx 文件路径
+
+    Returns:
+        表格元素列表
+    """
+    with zipfile.ZipFile(doc_path, 'r') as z:
+        with z.open('word/document.xml') as f:
+            tree = etree.parse(f).getroot()
+    return list(tree.iter(f'{W}tbl'))
+
+
+def _get_cell_text_lxml(tc_elem) -> str:
+    """获取单元格的文本（包括嵌套内容）。
+
+    Args:
+        tc_elem: 单元格元素
+
+    Returns:
+        单元格文本
+    """
+    texts = []
+    for t in tc_elem.iter(f'{W}t'):
+        if t.text:
+            texts.append(t.text)
+    return ''.join(texts)
 
 
 def extract_abstract(draft_path: str, scope: str, output_path: Optional[str] = None) -> Path:
@@ -33,6 +86,8 @@ def extract_abstract(draft_path: str, scope: str, output_path: Optional[str] = N
 
     根据位置描述从草稿中提取摘要区域。
     使用 deepcopy 保留原始格式（字体、加粗、样式等）。
+
+    注意：使用 lxml 解析 document.xml，确保嵌套表格不漏读。
 
     Args:
         draft_path: 草稿文件路径
@@ -59,23 +114,26 @@ def extract_abstract(draft_path: str, scope: str, output_path: Optional[str] = N
             p.getparent().remove(p)
 
         # 策略1：从首页表格中查找摘要（常见于公司报告模板）
+        # 使用 lxml 确保所有表格都能读取（包括嵌套表格）
         abstract_found = False
-        if len(doc.tables) > 0:
-            first_table = doc.tables[0]
+        all_tables = _get_all_tables_lxml(draft_path)
+
+        if all_tables:
+            first_table = all_tables[0]
 
             # 搜索包含摘要内容特征的单元格
-            for row in first_table.rows:
-                for cell in row.cells:
-                    cell_text = cell.text.strip()
-                    # 摘要通常以公司名或关键词开头
+            for row in first_table.findall(f'{W}tr'):
+                for tc in row.findall(f'{W}tc'):
+                    cell_text = _get_cell_text_lxml(tc).strip()
+                    # 摘要通常以公司名或关键词开头，且较长
                     if any(marker in cell_text for marker in [
                         '是私人航空业', '是全球', '公司是', '本报告',
                         '投资亮点', '核心观点', '摘要'
-                    ]) and len(cell_text) > 200:  # 摘要通常较长
+                    ]) and len(cell_text) > 200:
                         # 使用 deepcopy 复制段落，保留所有格式
-                        for para in cell.paragraphs:
-                            if para.text.strip():
-                                new_para = deepcopy(para._element)
+                        for para_elem in tc.findall(f'{W}p'):
+                            if _get_para_text(para_elem).strip():
+                                new_para = deepcopy(para_elem)
                                 abstract_doc.element.body.append(new_para)
                         abstract_found = True
                         break
@@ -85,8 +143,9 @@ def extract_abstract(draft_path: str, scope: str, output_path: Optional[str] = N
         # 策略2：如果表格中没找到，从段落中查找
         if not abstract_found:
             in_abstract = False
-            for para in doc.paragraphs:
-                text = para.text.strip()
+            body = doc.element.body
+            for para in body.iter(f'{W}p'):
+                text = _get_para_text(para).strip()
 
                 # 开始标记
                 if any(marker in text for marker in ['摘要', '投资亮点', '核心观点']):
@@ -98,7 +157,7 @@ def extract_abstract(draft_path: str, scope: str, output_path: Optional[str] = N
                     break
 
                 if in_abstract and text:
-                    new_para = deepcopy(para._element)
+                    new_para = deepcopy(para)
                     abstract_doc.element.body.append(new_para)
 
         abstract_doc.save(str(out_path))

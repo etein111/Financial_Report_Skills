@@ -19,7 +19,8 @@ class TestExtractElements:
             "rating": {"description": "评级"}
         }
 
-        result = extract_elements("draft.docx", schema)
+        # 禁用 LLM fallback 以便测试纯函数提取
+        result = extract_elements("draft.docx", schema, use_llm_fallback=False)
 
         assert "ticker" in result
         assert "company" in result
@@ -36,7 +37,7 @@ class TestExtractElements:
             "body": {"type": "fragment", "scope": "首页之后"}
         }
 
-        result = extract_elements("draft.docx", schema)
+        result = extract_elements("draft.docx", schema, use_llm_fallback=False)
 
         assert result["abstract"] == "abstract.docx"
         assert result["body"] == "body.docx"

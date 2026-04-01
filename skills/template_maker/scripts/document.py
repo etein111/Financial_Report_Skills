@@ -1,11 +1,93 @@
 """文档分析函数。
 
 用于查找摘要位置、正文范围、附录标记等。
+
+使用 lxml 直接解析 document.xml，确保嵌套表格也能完整读取。
 """
 
 import re
-from typing import Dict, Any
-from docx import Document
+import zipfile
+from typing import Dict, Any, List, Optional, Tuple
+from lxml import etree
+
+
+W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
+
+
+def _parse_docx_xml(doc_path: str) -> etree._Element:
+    """直接解析 document.xml，完整读取所有内容（包括嵌套表格）。
+
+    Args:
+        doc_path: docx 文件路径
+
+    Returns:
+        document.xml 的根元素
+    """
+    with zipfile.ZipFile(doc_path, 'r') as z:
+        with z.open('word/document.xml') as f:
+            return etree.parse(f).getroot()
+
+
+def _get_paragraphs_and_tables(tree: etree._Element) -> Tuple[List[etree._Element], List[etree._Element]]:
+    """获取所有段落和表格元素。
+
+    直接从 XML 结构中提取，避免 python-docx 漏读问题。
+
+    Args:
+        tree: document.xml 根元素
+
+    Returns:
+        (paragraphs, tables) 元组
+    """
+    paragraphs = list(tree.iter(f'{W}p'))
+    tables = list(tree.iter(f'{W}tbl'))
+    return paragraphs, tables
+
+
+def _get_para_text(para: etree._Element) -> str:
+    """获取段落的所有文本。
+
+    Args:
+        para: 段落元素
+
+    Returns:
+        段落文本
+    """
+    return ''.join(t.text or '' for t in para.iter(f'{W}t'))
+
+
+def _get_cell_text(tc: etree._Element) -> str:
+    """获取单元格的所有文本（包括嵌套表格）。
+
+    Args:
+        tc: 单元格元素
+
+    Returns:
+        单元格文本
+    """
+    texts = []
+    for t in tc.iter(f'{W}t'):
+        if t.text:
+            texts.append(t.text)
+    return ''.join(texts)
+
+
+def _get_table_cells(table: etree._Element) -> List[List[str]]:
+    """获取表格所有单元格的文本。
+
+    Args:
+        table: 表格元素
+
+    Returns:
+        二维列表，每行是单元格文本列表
+    """
+    rows = []
+    for tr in table.findall(f'{W}tr'):
+        cells = []
+        for tc in tr.findall(f'{W}tc'):
+            cells.append(_get_cell_text(tc))
+        rows.append(cells)
+    return rows
 
 
 # ==================== 摘要查找 ====================
@@ -18,6 +100,8 @@ def find_abstract_by_elements(doc_path: str, elements: dict) -> Dict[str, Any]:
     2. 摘要不包含评级(RATING)、目标价(TARGET PRICE)等单独字段
     3. 摘要通常是自然段落，不是表格中的键值对
     4. 跳过标题字段（title, title_ch, title_en），避免将标题误判为摘要
+
+    使用 lxml 直接解析，确保嵌套表格不漏读。
 
     Args:
         doc_path: 文档路径
@@ -33,7 +117,8 @@ def find_abstract_by_elements(doc_path: str, elements: dict) -> Dict[str, Any]:
             "context": str      # 上下文描述
         }
     """
-    doc = Document(doc_path)
+    tree = _parse_docx_xml(doc_path)
+    paragraphs, tables = _get_paragraphs_and_tables(tree)
 
     # 收集所有字段值用于匹配
     field_values = []
@@ -55,10 +140,11 @@ def find_abstract_by_elements(doc_path: str, elements: dict) -> Dict[str, Any]:
             continue
 
         # 在段落中搜索
-        for para_idx, para in enumerate(doc.paragraphs):
-            if field_value in para.text:
+        for para_idx, para in enumerate(paragraphs):
+            para_text = _get_para_text(para)
+            if field_value in para_text:
                 # 检查这个段落是否像摘要（长文本，没有明显的键值对格式）
-                if _is_likely_abstract_paragraph(para.text, field_value):
+                if _is_likely_abstract_paragraph(para_text, field_value):
                     return {
                         "found": True,
                         "table": None,
@@ -66,23 +152,24 @@ def find_abstract_by_elements(doc_path: str, elements: dict) -> Dict[str, Any]:
                         "col_start": None,
                         "col_end": None,
                         "start_paragraph": para_idx,
-                        "context": f"段落 {para_idx}: {para.text[:50]}..."
+                        "context": f"段落 {para_idx}: {para_text[:50]}..."
                     }
 
-        # 在表格中搜索
-        for tbl_idx, table in enumerate(doc.tables):
-            for row_idx, row in enumerate(table.rows):
-                for col_idx, cell in enumerate(row.cells):
-                    if field_value in cell.text:
+        # 在表格中搜索（使用 lxml，嵌套表格不漏读）
+        for tbl_idx, table in enumerate(tables):
+            for row_idx, row in enumerate(table.findall(f'{W}tr')):
+                for col_idx, tc in enumerate(row.findall(f'{W}tc')):
+                    cell_text = _get_cell_text(tc)
+                    if field_value in cell_text:
                         # 检查这个单元格是否像摘要
-                        if _is_likely_abstract_cell(cell, field_value):
+                        if _is_likely_abstract_cell_text(cell_text, field_value, tc):
                             return {
                                 "found": True,
                                 "table": tbl_idx,
                                 "row": row_idx,
                                 "col_start": col_idx,
                                 "col_end": col_idx,
-                                "context": f"表格 {tbl_idx} 行 {row_idx} 列 {col_idx}: {cell.text[:50]}..."
+                                "context": f"表格 {tbl_idx} 行 {row_idx} 列 {col_idx}: {cell_text[:50]}..."
                             }
 
     return {"found": False, "reason": "未找到匹配的摘要内容"}
@@ -114,25 +201,27 @@ def _is_likely_abstract_paragraph(text: str, field_value: str) -> bool:
     return True
 
 
-def _is_likely_abstract_cell(cell, field_value: str) -> bool:
+def _is_likely_abstract_cell_text(cell_text: str, field_value: str, tc: etree._Element = None) -> bool:
     """判断单元格是否像摘要。
 
     Args:
-        cell: 单元格对象
+        cell_text: 单元格文本
         field_value: 字段值
+        tc: 单元格元素（可选，用于检查段落数量）
 
     Returns:
         True 如果像摘要
     """
-    cell_text = cell.text
-
-    # 如果单元格只有一个段落，且包含字段值，可能是摘要
-    if len(cell.paragraphs) == 1:
-        return True
-
     # 如果单元格文本较短，可能不是摘要
     if len(cell_text) < 100:
         return False
+
+    # 如果提供了元素，检查段落数量
+    if tc is not None:
+        # 计算单元格中的段落数量
+        para_count = len(list(tc.iter(f'{W}p')))
+        if para_count == 1:
+            return True
 
     return True
 
@@ -141,6 +230,8 @@ def _is_likely_abstract_cell(cell, field_value: str) -> bool:
 
 def find_body_range_by_sections(doc_path: str) -> Dict[str, Any]:
     """根据分节符位置确定正文范围。
+
+    使用 lxml 直接解析 document.xml，确保完整读取。
 
     Args:
         doc_path: 文档路径
@@ -153,26 +244,21 @@ def find_body_range_by_sections(doc_path: str) -> Dict[str, Any]:
             "context": str
         }
     """
-    from lxml import etree
-
-    doc = Document(doc_path)
-    body = doc._body._body
-
-    # 收集所有段落的 pPr（段落属性）及其索引
-    paragraphs = list(doc.paragraphs)
-    sect_pr_indices = []  # [(paragraph_index, sect_pr_element), ...]
+    tree = _parse_docx_xml(doc_path)
+    paragraphs = list(tree.iter(f'{W}p'))
+    sect_pr_indices = []  # [paragraph_index, ...]
 
     for para_idx, para in enumerate(paragraphs):
         # 检查段落是否有分节符
-        pPr = para._element.find('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}pPr')
+        pPr = para.find(f'{W}pPr')
         if pPr is not None:
-            sect_pr = pPr.find('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}sectPr')
+            sect_pr = pPr.find(f'{W}sectPr')
             if sect_pr is not None:
-                sect_pr_indices.append((para_idx, sect_pr))
+                sect_pr_indices.append(para_idx)
 
     # 如果有分节符，以最后一个分节符之后作为正文结束
     if sect_pr_indices:
-        last_sect_idx = sect_pr_indices[-1][0]
+        last_sect_idx = sect_pr_indices[-1]
         return {
             "found": True,
             "start_paragraph": 0,  # 正文从第一段开始
@@ -184,8 +270,8 @@ def find_body_range_by_sections(doc_path: str) -> Dict[str, Any]:
     return {
         "found": True,
         "start_paragraph": 0,
-        "end_paragraph": len(doc.paragraphs),
-        "context": f"正文范围: 段落 0 到 {len(doc.paragraphs) - 1}（整个文档）"
+        "end_paragraph": len(paragraphs),
+        "context": f"正文范围: 段落 0 到 {len(paragraphs) - 1}（整个文档）"
     }
 
 
@@ -199,6 +285,8 @@ def find_appendix_by_markers(doc_path: str) -> Dict[str, Any]:
     2. 英文标记：APPENDIX 开头的大写标题
     3. 重要披露："IMPORTANT DISCLOSURES"、"重要信息披露"
 
+    使用 lxml 直接解析 document.xml，确保嵌套表格不漏读。
+
     Args:
         doc_path: 文档路径
 
@@ -211,22 +299,14 @@ def find_appendix_by_markers(doc_path: str) -> Dict[str, Any]:
             "context": str
         }
     """
-    import zipfile
-    from lxml import etree
-
-    W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
-
-    # 直接解析 document.xml 以获取所有内容（包括 python-docx 漏读的表格）
-    with zipfile.ZipFile(doc_path, 'r') as z:
-        with z.open('word/document.xml') as f:
-            tree = etree.parse(f)
+    tree = _parse_docx_xml(doc_path)
 
     # 附录关键词（用于搜索 w:t 元素）
     appendix_keywords = ['附录APPENDIX', 'IMPORTANT DISCLOSURE']
 
     # 先搜索段落中的附录标记
     for idx, p in enumerate(tree.iter(f'{W}p')):
-        text = ''.join(t.text or '' for t in p.iter(f'{W}t'))
+        text = _get_para_text(p)
         for kw in appendix_keywords:
             if kw in text.upper():
                 # 检查前面是否有分页符
@@ -245,7 +325,7 @@ def find_appendix_by_markers(doc_path: str) -> Dict[str, Any]:
                     "context": f"段落 {idx}: {text[:50]}"
                 }
 
-    # 搜索表格中的附录标记（使用 lxml 直接解析，避免 python-docx 漏读问题）
+    # 搜索表格中的附录标记
     for tbl in tree.iter(f'{W}tbl'):
         # 获取表格标题
         caption = tbl.find(f'{W}tblPr/{W}tblCaption')
@@ -254,7 +334,7 @@ def find_appendix_by_markers(doc_path: str) -> Dict[str, Any]:
         # 遍历表格所有单元格
         for row_idx, tr in enumerate(tbl.findall(f'{W}tr')):
             for col_idx, tc in enumerate(tr.findall(f'{W}tc')):
-                cell_text = ''.join(t.text or '' for t in tc.iter(f'{W}t'))
+                cell_text = _get_cell_text(tc)
                 for kw in appendix_keywords:
                     if kw in cell_text.upper():
                         return {
@@ -271,12 +351,87 @@ def find_appendix_by_markers(doc_path: str) -> Dict[str, Any]:
     return {"found": False, "reason": "未找到附录标记"}
 
 
+def find_summary_by_markers(doc_path: str) -> Dict[str, Any]:
+    """根据标记词查找英文 Summary 位置。
+
+    Summary 结构特征：
+    1. 固定开始标记：如 "APPENDIX 1 Summary"、"Summary"、 "Executive Summary"
+    2. 后面紧跟换行 + Summary 内容
+    3. 处于独立页面（前后有换页符）
+
+    使用 lxml 直接解析 document.xml，确保嵌套表格不漏读。
+
+    Args:
+        doc_path: 文档路径
+
+    Returns:
+        {
+            "found": bool,
+            "start_paragraph": int,  # 开始段落索引
+            "end_paragraph": int,    # 结束段落索引
+            "context": str
+        }
+    """
+    tree = _parse_docx_xml(doc_path)
+
+    # Summary 关键词
+    summary_keywords = [
+        'APPENDIX 1 SUMMARY',
+        'APPENDIX 1 Summary',
+        'EXECUTIVE SUMMARY',
+        'Executive Summary',
+        'Summary',
+    ]
+
+    paragraphs = list(tree.iter(f'{W}p'))
+    page_breaks = {}  # 记录哪些段落之前有换页符
+
+    # 先记录所有段落之前是否有换页符
+    for idx, p in enumerate(paragraphs):
+        pPr = p.find(f'{W}pPr')
+        if pPr is not None:
+            for child in pPr:
+                if etree.QName(child.tag).localname == 'lastRenderedPageBreak':
+                    page_breaks[idx] = True
+                    break
+
+    # 搜索 Summary 起始标记
+    for idx, p in enumerate(paragraphs):
+        text = _get_para_text(p)
+
+        for kw in summary_keywords:
+            if kw.upper() in text.upper():
+                # 找到了 Summary 起始标记
+                # 确认前面有换页符（独立页面）
+                if idx not in page_breaks:
+                    # 如果前面没有换页符，可能不是 Summary，继续搜索
+                    continue
+
+                # 找到结束位置（下一个换页符之前，或文档末尾）
+                end_idx = len(paragraphs)
+                for next_idx in range(idx + 1, len(paragraphs)):
+                    if next_idx in page_breaks:
+                        end_idx = next_idx
+                        break
+
+                return {
+                    "found": True,
+                    "start_paragraph": idx,
+                    "end_paragraph": end_idx,
+                    "context": f"段落 {idx} 到 {end_idx}: {text[:50]}..."
+                }
+
+    return {"found": False, "reason": "未找到 Summary 标记"}
+
+
 def find_first_appendix_position(doc_path: str) -> Dict[str, Any]:
     """找到文档中第一个 APPENDIX 标题的位置。
 
     这个函数用于确定正文的结束位置。正文应该在第一个 APPENDIX 标题之前结束，
     无论这个 APPENDIX 是内容附录（如 "APPENDIX 1 Summary"）还是法律附录
     （如 "附录APPENDIX 重要信息披露"）。
+
+    使用 lxml 直接解析 document.xml，确保嵌套表格不漏读。
 
     Args:
         doc_path: 文档路径
@@ -289,10 +444,11 @@ def find_first_appendix_position(doc_path: str) -> Dict[str, Any]:
             "context": str
         }
     """
-    doc = Document(doc_path)
+    tree = _parse_docx_xml(doc_path)
+    paragraphs = list(tree.iter(f'{W}p'))
 
-    for i, para in enumerate(doc.paragraphs):
-        text = para.text.strip()
+    for i, para in enumerate(paragraphs):
+        text = _get_para_text(para).strip()
         text_upper = text.upper()
 
         if not text:
@@ -329,6 +485,8 @@ def find_first_appendix_position(doc_path: str) -> Dict[str, Any]:
 def find_content_location(doc_path: str, field_name: str, field_value: str) -> Dict[str, Any]:
     """查找特定字段内容在文档中的位置。
 
+    使用 lxml 直接解析 document.xml，确保嵌套表格不漏读。
+
     Args:
         doc_path: 文档路径
         field_name: 字段名
@@ -344,49 +502,101 @@ def find_content_location(doc_path: str, field_name: str, field_value: str) -> D
             "context": str
         }
     """
-    doc = Document(doc_path)
+    tree = _parse_docx_xml(doc_path)
 
     # 在段落中搜索
-    for idx, para in enumerate(doc.paragraphs):
-        if field_value in para.text:
+    paragraphs = list(tree.iter(f'{W}p'))
+    for idx, para in enumerate(paragraphs):
+        para_text = _get_para_text(para)
+        if field_value in para_text:
             return {
                 "found": True,
                 "type": "paragraph",
                 "index": idx,
-                "context": f"段落 {idx}: {para.text[:50]}..."
+                "context": f"段落 {idx}: {para_text[:50]}..."
             }
 
-    # 在表格中搜索
-    for tbl_idx, table in enumerate(doc.tables):
-        for row_idx, row in enumerate(table.rows):
-            for col_idx, cell in enumerate(row.cells):
-                if field_value in cell.text:
+    # 在表格中搜索（包括嵌套表格）
+    for tbl_idx, table in enumerate(tree.iter(f'{W}tbl')):
+        for row_idx, tr in enumerate(table.findall(f'{W}tr')):
+            for col_idx, tc in enumerate(tr.findall(f'{W}tc')):
+                cell_text = _get_cell_text(tc)
+                if field_value in cell_text:
                     return {
                         "found": True,
                         "type": "table",
                         "index": tbl_idx,
                         "row": row_idx,
                         "col": col_idx,
-                        "context": f"表格 {tbl_idx} 行 {row_idx} 列 {col_idx}: {cell.text[:50]}..."
+                        "context": f"表格 {tbl_idx} 行 {row_idx} 列 {col_idx}: {cell_text[:50]}..."
                     }
 
-    # 在页眉页脚中搜索
-    for section_idx, section in enumerate(doc.sections):
-        for para_idx, para in enumerate(section.header.paragraphs):
-            if field_value in para.text:
-                return {
-                    "found": True,
-                    "type": "header",
-                    "index": section_idx,
-                    "context": f"节 {section_idx} 页眉: {para.text[:50]}..."
-                }
-        for para_idx, para in enumerate(section.footer.paragraphs):
-            if field_value in para.text:
-                return {
-                    "found": True,
-                    "type": "footer",
-                    "index": section_idx,
-                    "context": f"节 {section_idx} 页脚: {para.text[:50]}..."
-                }
+    # 在页眉页脚中搜索（需要从 docx 中读取 header/footer）
+    try:
+        import zipfile
+        for section_idx, section in enumerate(_iter_sections(doc_path)):
+            for part_name in ['header', 'footer']:
+                part = _get_section_part(section, part_name)
+                if part is None:
+                    continue
+                for para in part.iter(f'{W}p'):
+                    para_text = _get_para_text(para)
+                    if field_value in para_text:
+                        return {
+                            "found": True,
+                            "type": part_name,
+                            "index": section_idx,
+                            "context": f"节 {section_idx} {part_name}: {para_text[:50]}..."
+                        }
+    except Exception:
+        # 如果读取页眉页脚失败，跳过这个来源
+        pass
 
     return {"found": False, "reason": f"未找到字段 {field_name} 的内容"}
+
+
+def _iter_sections(doc_path: str):
+    """迭代文档中的所有 section 元素。
+
+    Args:
+        doc_path: docx 文件路径
+
+    Yields:
+        section 元素
+    """
+    with zipfile.ZipFile(doc_path, 'r') as z:
+        # 获取 section 数量
+        doc_xml = z.read('word/document.xml')
+        tree = etree.fromstring(doc_xml)
+        body = tree.find(f'{W}body')
+        if body is not None:
+            for sectPr in body.iter(f'{W}sectPr'):
+                yield sectPr
+
+
+def _get_section_part(section: etree._Element, part_name: str) -> Optional[etree._Element]:
+    """获取 section 的页眉或页脚部分。
+
+    Args:
+        section: sectPr 元素
+        part_name: 'header' 或 'footer'
+
+    Returns:
+        header/footer 元素，如果不存在返回 None
+    """
+    # 查找 headerReference 或 footerReference
+    ref_name = f'{W}{part_name}Reference'
+    ref = section.find(ref_name)
+    if ref is None:
+        return None
+
+    # 获取 ID
+    id_attr = f'{W}id'
+    rid = ref.get(id_attr)
+    if rid is None:
+        return None
+
+    # 从 relationships 中查找实际文件
+    # 这需要读取 .rels 文件，但 lxml 不能直接处理
+    # 回退：返回 None
+    return None

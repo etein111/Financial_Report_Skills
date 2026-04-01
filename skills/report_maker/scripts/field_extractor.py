@@ -7,7 +7,7 @@
 
 import re
 from typing import Dict, Any, List, Optional, Tuple
-from . import docx_reader
+import docx_reader
 
 
 # ==================== 常量定义 ====================

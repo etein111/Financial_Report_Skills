@@ -393,6 +393,78 @@ def replace_abstract_in_doc(doc: Document, table: int, row: int,
     return doc
 
 
+def replace_summary_in_doc(doc: Document, start_paragraph: int,
+                          end_paragraph: int) -> Document:
+    """在文档中替换 Summary 区域为 {{ summary }} 占位符（返回新文档）。
+
+    删除 Summary 区域内的所有段落，只保留一个占位符。
+
+    Args:
+        doc: Document 对象
+        start_paragraph: 起始段落索引
+        end_paragraph: 结束段落索引（不包含）
+
+    Returns:
+        修改后的 Document 对象
+    """
+    from lxml import etree
+
+    if start_paragraph >= len(doc.paragraphs):
+        raise ValueError(f"起始段落 {start_paragraph} 超出范围")
+
+    # 获取 body 元素
+    body = doc._body._body
+
+    # 找到起始段落和结束段落对应的 XML 元素
+    start_para_element = doc.paragraphs[start_paragraph]._element
+    end_idx = min(end_paragraph, len(doc.paragraphs))
+    end_para_element = doc.paragraphs[end_idx - 1]._element if end_idx > start_paragraph else start_para_element
+
+    # 收集要删除的元素
+    elements_to_remove = []
+    in_range = False
+    first_element = None
+
+    for child in list(body):
+        tag = etree.QName(child.tag).localname
+
+        # 检查是否进入范围
+        if child == start_para_element:
+            in_range = True
+            first_element = child
+
+        # 如果在范围内，收集要删除的元素
+        if in_range:
+            if tag in ('p', 'tbl'):
+                elements_to_remove.append(child)
+
+        # 检查是否离开范围
+        if child == end_para_element:
+            in_range = False
+            break
+
+    # 删除收集的元素（从后往前删除，保留第一个段落用于放置占位符）
+    for element in reversed(elements_to_remove[1:]):
+        body.remove(element)
+
+    # 在第一个元素位置设置占位符
+    if first_element is not None and elements_to_remove:
+        from docx.text.paragraph import Paragraph
+        para = Paragraph(first_element, doc._body)
+
+        # 清空所有 runs
+        for run in para.runs:
+            run.text = ""
+
+        # 设置占位符
+        if para.runs:
+            para.runs[0].text = "{{ summary }}"
+        else:
+            para.add_run("{{ summary }}")
+
+    return doc
+
+
 def replace_body_in_doc(doc: Document, start_paragraph: int,
                        end_paragraph: int) -> Document:
     """在文档中替换正文区域为 {{ body }} 占位符（返回新文档）。

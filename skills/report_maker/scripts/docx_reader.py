@@ -1,17 +1,24 @@
 """docx_reader.py - Word 文档读取模块。
 
-提供递归读取嵌套表格的功能，解决 python-docx 的 cell.text
-不包含嵌套表格内容的问题。
+使用 lxml 直接解析 document.xml，递归读取嵌套表格，
+解决 python-docx 的 cell.text 不包含嵌套表格内容、以及漏读表格的问题。
 
 遵循函数式编程原则：纯函数、无副作用、I/O 分离。
 """
 
+import zipfile
 from typing import List, Dict, Any, Optional
 from pathlib import Path
+from lxml import etree
+
+
+W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
 
 
 def read_docx_tables(docx_path: str) -> List[Dict[str, Any]]:
     """读取 Word 文档中的所有表格（包括嵌套表格）。
+
+    使用 lxml 直接解析 document.xml，确保所有表格（包括嵌套表格）都能读取。
 
     Args:
         docx_path: Word 文档路径
@@ -23,27 +30,31 @@ def read_docx_tables(docx_path: str) -> List[Dict[str, Any]]:
         FileNotFoundError: 文件不存在
         Exception: 文档读取错误
     """
-    from docx import Document
-
     doc_path = Path(docx_path)
     if not doc_path.exists():
         raise FileNotFoundError(f"文件不存在: {docx_path}")
 
-    doc = Document(docx_path)
+    # 使用 lxml 直接解析 document.xml
+    with zipfile.ZipFile(docx_path, 'r') as z:
+        with z.open('word/document.xml') as f:
+            tree = etree.parse(f).getroot()
+
+    # 提取所有表格（包括嵌套表格）
+    all_tables = list(tree.iter(f'{W}tbl'))
     tables = []
 
-    for table_idx, table in enumerate(doc.tables):
-        table_data = _extract_table_data(table, table_idx)
+    for table_idx, table_elem in enumerate(all_tables):
+        table_data = _extract_table_data(table_elem, table_idx)
         tables.append(table_data)
 
     return tables
 
 
-def _extract_table_data(table, table_idx: int) -> Dict[str, Any]:
+def _extract_table_data(table_elem, table_idx: int) -> Dict[str, Any]:
     """提取单个表格的数据（包括嵌套表格）。
 
     Args:
-        table: python-docx Table 对象
+        table_elem: lxml 表格元素
         table_idx: 表格索引
 
     Returns:
@@ -51,8 +62,8 @@ def _extract_table_data(table, table_idx: int) -> Dict[str, Any]:
     """
     rows_data = []
 
-    for row_idx, row in enumerate(table.rows):
-        row_data = _extract_row_data(row, row_idx)
+    for row_idx, row_elem in enumerate(table_elem.findall(f'{W}tr')):
+        row_data = _extract_row_data(row_elem, row_idx)
         rows_data.append(row_data)
 
     return {
@@ -62,11 +73,11 @@ def _extract_table_data(table, table_idx: int) -> Dict[str, Any]:
     }
 
 
-def _extract_row_data(row, row_idx: int) -> Dict[str, Any]:
+def _extract_row_data(row_elem, row_idx: int) -> Dict[str, Any]:
     """提取行数据（包括嵌套表格）。
 
     Args:
-        row: python-docx Row 对象
+        row_elem: lxml 行元素
         row_idx: 行索引
 
     Returns:
@@ -74,8 +85,8 @@ def _extract_row_data(row, row_idx: int) -> Dict[str, Any]:
     """
     cells_data = []
 
-    for cell_idx, cell in enumerate(row.cells):
-        cell_data = _extract_cell_data(cell, cell_idx)
+    for cell_idx, cell_elem in enumerate(row_elem.findall(f'{W}tc')):
+        cell_data = _extract_cell_data(cell_elem, cell_idx)
         cells_data.append(cell_data)
 
     return {
@@ -85,11 +96,13 @@ def _extract_row_data(row, row_idx: int) -> Dict[str, Any]:
     }
 
 
-def _extract_cell_data(cell, cell_idx: int) -> Dict[str, Any]:
+def _extract_cell_data(cell_elem, cell_idx: int) -> Dict[str, Any]:
     """提取单元格数据（包括嵌套表格）。
 
+    使用 lxml 直接解析单元格，确保嵌套表格内容不遗漏。
+
     Args:
-        cell: python-docx Cell 对象
+        cell_elem: lxml 单元格元素
         cell_idx: 单元格索引
 
     Returns:
@@ -97,14 +110,19 @@ def _extract_cell_data(cell, cell_idx: int) -> Dict[str, Any]:
     """
     # 提取段落文本
     paragraphs_text = []
-    for para in cell.paragraphs:
-        text = para.text.strip()
+    for para_elem in cell_elem.iter(f'{W}p'):
+        # 获取段落中的所有文本
+        texts = []
+        for t_elem in para_elem.iter(f'{W}t'):
+            if t_elem.text:
+                texts.append(t_elem.text)
+        text = ''.join(texts).strip()
         if text:
             paragraphs_text.append(text)
 
     # 提取嵌套表格
     nested_tables = []
-    for nested_idx, nested_table in enumerate(cell.tables):
+    for nested_idx, nested_table in enumerate(cell_elem.findall(f'{W}tbl')):
         nested_data = _extract_table_data(nested_table, nested_idx)
         nested_tables.append(nested_data)
 

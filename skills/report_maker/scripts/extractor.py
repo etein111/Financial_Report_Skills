@@ -5,9 +5,10 @@
 遵循函数式编程原则：纯函数、无副作用、I/O 分离。
 """
 
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List, Tuple, Callable
 from pathlib import Path
 import sys
+import yaml
 
 SCRIPTS_DIR = Path(__file__).parent
 sys.path.insert(0, str(SCRIPTS_DIR))
@@ -15,20 +16,165 @@ sys.path.insert(0, str(SCRIPTS_DIR))
 import common
 from . import field_extractor
 
+import zipfile
+from lxml import etree
+
+W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
+
+
+def _read_full_text_lxml(docx_path: str) -> str:
+    """使用 lxml 读取文档完整文本（包括嵌套表格内容）。
+
+    解决 python-docx 漏读嵌套表格的问题，确保 LLM 能看到完整内容。
+
+    Args:
+        docx_path: docx 文件路径
+
+    Returns:
+        文档所有文本组成的字符串
+    """
+    texts = []
+    with zipfile.ZipFile(docx_path, 'r') as z:
+        with z.open('word/document.xml') as f:
+            tree = etree.parse(f).getroot()
+
+    # 遍历所有 w:t 元素获取所有文本
+    for t in tree.iter(f'{W}t'):
+        if t.text:
+            texts.append(t.text)
+
+    return '\n'.join(texts)
+
+
+# ==================== LLM 调用接口 ====================
+
+def call_llm_extraction(
+    draft_path: str,
+    schema: Dict[str, Any],
+    missing_fields: List[str],
+    llm_provider: Optional[Callable] = None
+) -> Dict[str, Any]:
+    """调用 LLM 提取缺失字段。
+
+    Args:
+        draft_path: 草稿文件路径
+        schema: schema.yaml 内容
+        missing_fields: 缺失字段列表
+        llm_provider: 可选的 LLM 调用函数（默认使用内置实现）
+
+    Returns:
+        LLM 提取的字段字典
+    """
+    if llm_provider is not None:
+        return llm_provider(draft_path, schema, missing_fields)
+
+    # 内置 LLM 调用实现（需要配置 LLM API）
+    try:
+        # 使用 lxml 读取完整文档文本（包括嵌套表格）
+        full_text = _read_full_text_lxml(draft_path)
+
+        # 构建缺失字段的提取 prompt
+        prompt = _build_llm_extraction_prompt(schema, missing_fields, full_text)
+
+        # 调用 LLM（这里需要接入实际的 LLM API）
+        # 示例：使用 anthropic 或 openai API
+        llm_result = _call_llm_api(prompt)
+
+        return llm_result
+    except Exception as e:
+        print(f"警告: LLM fallback 失败: {e}")
+        return {}
+
+
+def _build_llm_extraction_prompt(
+    schema: Dict[str, Any],
+    missing_fields: List[str],
+    document_text: str
+) -> str:
+    """构建 LLM 提取提示词。
+
+    Args:
+        schema: schema.yaml 内容
+        missing_fields: 缺失字段列表
+        document_text: 文档文本内容
+
+    Returns:
+        提示词字符串
+    """
+    prompt = f"""请从以下研究报告中提取这些缺失的字段：
+
+缺失字段：{', '.join(missing_fields)}
+
+文档内容：
+{'-' * 50}
+{document_text[:8000]}  # 限制文本长度
+{'-' * 50}
+
+请以 YAML 格式返回提取的字段，只返回你找到的字段，不要返回空值。
+
+格式：
+field_name: "提取的值"
+another_field: "提取的值"
+"""
+    return prompt
+
+
+def _call_llm_api(prompt: str) -> Dict[str, Any]:
+    """调用 LLM API。
+
+    Args:
+        prompt: 提示词
+
+    Returns:
+        LLM 返回的字段字典
+    """
+    raise NotImplementedError("LLM API 调用未实现")
+
+
+def _parse_yaml_response(response_text: str) -> Dict[str, Any]:
+    """解析 LLM 返回的 YAML 格式响应。
+
+    Args:
+        response_text: LLM 返回的文本
+
+    Returns:
+        解析后的字典
+    """
+    try:
+        # 提取 YAML 部分（去掉 markdown 代码块标记）
+        yaml_text = response_text.strip()
+        if yaml_text.startswith("```yaml"):
+            yaml_text = yaml_text[7:]
+        if yaml_text.startswith("```"):
+            yaml_text = yaml_text[3:]
+        if yaml_text.endswith("```"):
+            yaml_text = yaml_text[:-3]
+
+        return yaml.safe_load(yaml_text.strip()) or {}
+    except yaml.YAMLError as e:
+        print(f"警告: 解析 LLM 响应失败: {e}")
+        return {}
+
+
+# ==================== 主要提取函数 ====================
 
 def extract_elements(
     draft_path: str,
     schema: Dict[str, Any],
     context: str = "",
-    use_auto_extraction: bool = True
+    use_auto_extraction: bool = True,
+    use_llm_fallback: bool = True
 ) -> Dict[str, Any]:
     """从草稿中提取要素。
+
+    优先使用函数提取，缺失字段自动调用 LLM fallback。
 
     Args:
         draft_path: 草稿文件路径
         schema: schema.yaml 内容
         context: 额外上下文
         use_auto_extraction: 是否使用自动化提取（默认 True）
+        use_llm_fallback: 是否使用 LLM 补充缺失字段（默认 True）
 
     Returns:
         提取的字段字典
@@ -44,7 +190,7 @@ def extract_elements(
     if 'body' in schema:
         elements['body'] = common.FILE_BODY
 
-    # 自动化提取（如果有实现）
+    # 第一步：自动化提取
     if use_auto_extraction:
         try:
             auto_extracted = field_extractor.extract_fields_from_docx(
@@ -55,10 +201,73 @@ def extract_elements(
             # 合并自动化提取的结果
             elements.update(auto_extracted)
         except Exception as e:
-            # 自动化提取失败，返回空值（稍后由 LLM 处理）
+            # 自动化提取失败，打印警告
             print(f"自动化提取失败: {e}")
 
+    # 第二步：LLM fallback（补充缺失字段）
+    if use_llm_fallback:
+        # 找出缺失的字段（空值且不是 abstract/body）
+        missing_fields = [
+            k for k, v in elements.items()
+            if not v and k not in ['abstract', 'body']
+        ]
+
+        if missing_fields:
+            print(f"检测到 {len(missing_fields)} 个缺失字段，尝试 LLM fallback...")
+            print(f"缺失字段: {', '.join(missing_fields)}")
+
+            # 调用 LLM 提取
+            llm_results = call_llm_extraction(draft_path, schema, missing_fields)
+
+            if llm_results:
+                # 合并 LLM 结果
+                elements = merge_llm_results(elements, llm_results, schema)
+                print(f"LLM 成功补充 {len(llm_results)} 个字段")
+
+                # 再次检查缺失字段
+                remaining = [k for k, v in elements.items() if not v and k not in ['abstract', 'body']]
+                if remaining:
+                    print(f"警告: 仍有 {len(remaining)} 个字段无法提取: {', '.join(remaining)}")
+            else:
+                print("LLM fallback 未返回结果，缺失字段将留空")
+
     return elements
+
+
+def extract_elements_with_missing(
+    draft_path: str,
+    schema: Dict[str, Any],
+    context: str = "",
+    use_auto_extraction: bool = True,
+    use_llm_fallback: bool = True
+) -> Tuple[Dict[str, Any], List[str]]:
+    """从草稿中提取要素，返回缺失字段列表。
+
+    Args:
+        draft_path: 草稿文件路径
+        schema: schema.yaml 内容
+        context: 额外上下文
+        use_auto_extraction: 是否使用自动化提取
+        use_llm_fallback: 是否使用 LLM 补充缺失字段
+
+    Returns:
+        (elements, missing_fields) 元组
+    """
+    elements = extract_elements(
+        draft_path,
+        schema,
+        context,
+        use_auto_extraction,
+        use_llm_fallback
+    )
+
+    # 收集仍为空的字段
+    missing_fields = [
+        k for k, v in elements.items()
+        if not v and k not in ['abstract', 'body']
+    ]
+
+    return elements, missing_fields
 
 
 def format_extraction_prompt(schema: Dict[str, Any], report_type: str) -> str:
