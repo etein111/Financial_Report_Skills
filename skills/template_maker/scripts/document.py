@@ -145,6 +145,8 @@ def find_abstract_by_elements(doc_path: str, elements: dict) -> Dict[str, Any]:
             if field_value in para_text:
                 # 检查这个段落是否像摘要（长文本，没有明显的键值对格式）
                 if _is_likely_abstract_paragraph(para_text, field_value):
+                    # 提取预览文本（前80个字符）
+                    preview_text = field_value[:80] if len(field_value) > 80 else field_value
                     return {
                         "found": True,
                         "table": None,
@@ -152,6 +154,7 @@ def find_abstract_by_elements(doc_path: str, elements: dict) -> Dict[str, Any]:
                         "col_start": None,
                         "col_end": None,
                         "start_paragraph": para_idx,
+                        "preview": preview_text,
                         "context": f"段落 {para_idx}: {para_text[:50]}..."
                     }
 
@@ -163,12 +166,15 @@ def find_abstract_by_elements(doc_path: str, elements: dict) -> Dict[str, Any]:
                     if field_value in cell_text:
                         # 检查这个单元格是否像摘要
                         if _is_likely_abstract_cell_text(cell_text, field_value, tc):
+                            # 提取预览文本（前80个字符）
+                            preview_text = field_value[:80] if len(field_value) > 80 else field_value
                             return {
                                 "found": True,
                                 "table": tbl_idx,
                                 "row": row_idx,
                                 "col_start": col_idx,
                                 "col_end": col_idx,
+                                "preview": preview_text,
                                 "context": f"表格 {tbl_idx} 行 {row_idx} 列 {col_idx}: {cell_text[:50]}..."
                             }
 

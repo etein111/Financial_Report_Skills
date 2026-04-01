@@ -31,10 +31,30 @@ import yaml
 DEFAULT_APPENDIX_SCOPE = "正文之后，报告末尾"
 
 
+def _extract_placeholders_from_table(table, found_placeholders: set):
+    """递归提取表格中的占位符（包括嵌套表格）。
+
+    Args:
+        table: python-docx 表格对象
+        found_placeholders: 用于收集占位符的集合
+    """
+    import re
+    for row in table.rows:
+        for cell in row.cells:
+            for para in cell.paragraphs:
+                text = para.text
+                matches = re.findall(r'\{\{\s*(\w+)\s*\}\}', text)
+                found_placeholders.update(matches)
+            # 递归处理嵌套表格
+            for nested_table in cell.tables:
+                _extract_placeholders_from_table(nested_table, found_placeholders)
+
+
 def validate_template_placeholders(doc, elements: dict, abstract_scope: str, body_scope: str) -> dict:
     """验证模板中的占位符是否完整提取。
 
     检查所有 elements.yaml 中定义的字段以及 abstract、body 是否都正确提取为占位符。
+    支持递归检查嵌套表格中的占位符。
 
     Args:
         doc: Document 对象
@@ -61,14 +81,20 @@ def validate_template_placeholders(doc, elements: dict, abstract_scope: str, bod
         matches = re.findall(r'\{\{\s*(\w+)\s*\}\}', text)
         found_placeholders.update(matches)
 
-    # 从表格中提取占位符
+    # 从表格中提取占位符（递归处理嵌套表格）
     for table in doc.tables:
-        for row in table.rows:
-            for cell in row.cells:
-                for para in cell.paragraphs:
-                    text = para.text
-                    matches = re.findall(r'\{\{\s*(\w+)\s*\}\}', text)
-                    found_placeholders.update(matches)
+        _extract_placeholders_from_table(table, found_placeholders)
+
+    # 从页眉页脚中提取占位符
+    for section in doc.sections:
+        for para in section.header.paragraphs:
+            text = para.text
+            matches = re.findall(r'\{\{\s*(\w+)\s*\}\}', text)
+            found_placeholders.update(matches)
+        for para in section.footer.paragraphs:
+            text = para.text
+            matches = re.findall(r'\{\{\s*(\w+)\s*\}\}', text)
+            found_placeholders.update(matches)
 
     # 期望的占位符列表
     expected_placeholders = []
@@ -306,6 +332,11 @@ def _auto_detect_locations(word_path: Path, elements: dict) -> dict:
 def _confirm_abstract_location(detected: dict) -> str | None:
     """交互确认摘要位置。
 
+    流程：
+    1. 如果检测到摘要：先展示内容前几个字，问用户是否正确
+    2. 如果用户说不正确：再问有没有摘要、在哪里
+    3. 如果未检测到：直接问有没有摘要、在哪里
+
     Args:
         detected: 自动检测结果
 
@@ -316,41 +347,69 @@ def _confirm_abstract_location(detected: dict) -> str | None:
     print("【步骤 1/3】确认摘要位置")
     print("=" * 60)
 
-    # 询问是否有摘要
-    print("\n这份报告是否有摘要部分？")
-    print("  - 公司报告通常有摘要（首页投资亮点）")
-    print("  - 快讯报告可能没有摘要")
-
-    while True:
-        user_input = input("\n是否有摘要？(y/n，直接回车表示有): ").strip().lower()
-        if user_input == 'n':
-            print("→ 将跳过摘要部分")
-            return None
-        elif user_input in ['', 'y']:
-            break
-        print("请输入 y 或 n")
-
+    # 如果检测到摘要，先展示内容让用户确认
     if detected and detected.get("found"):
-        detected_scope = detected.get('scope') or detected.get('context', '未知')
-        print(f"\n检测到的摘要位置：")
+        location = detected.get("location", detected)
+        detected_scope = location.get('scope') or location.get('context', '未知')
+        preview = location.get('preview') or detected.get('preview', '')
+
+        print(f"\n自动检测到摘要：")
         print(f"  位置：{detected_scope}")
-        if detected.get("preview"):
-            print(f"  预览：{detected['preview'][:80]}...")
+        if preview:
+            preview_text = preview[:80] if isinstance(preview, str) else str(preview)[:80]
+            print(f"  内容预览：{preview_text}...")
 
-        print("\n请确认摘要位置是否正确？")
-        print("  - 直接回车：使用检测到的位置")
-        print("  - 输入描述：手动指定位置（如：首页右侧、第二页表格中）")
+        print("\n请确认检测是否正确：")
+        print("  - 回车或 y：正确，使用此位置")
+        print("  - n：不正确，我来指定")
 
-        user_input = input("\n您的选择: ").strip()
-        if user_input:
-            return user_input
-        return detected_scope
-    else:
-        print(f"\n⚠️ 自动检测摘要位置失败：{detected.get('reason', '未知原因')}")
-        print("请手动指定摘要位置：")
+        while True:
+            user_input = input("\n检测是否正确？(y/n): ").strip().lower()
+            if user_input in ['', 'y']:
+                return detected_scope
+            elif user_input == 'n':
+                break
+            print("请输入 y 或 n")
+
+        # 用户说不正确，询问是否有摘要
+        print("\n这份报告是否有摘要部分？")
+        while True:
+            user_input = input("是否有摘要？(y/n): ").strip().lower()
+            if user_input == 'n':
+                print("→ 将跳过摘要部分")
+                return None
+            elif user_input in ['', 'y']:
+                break
+            print("请输入 y 或 n")
+
+        # 用户确认有摘要，询问位置
+        print("\n请指定摘要位置：")
         print("  示例：首页右侧、第二页表格中、首页左侧表格")
+        user_input = input("摘要位置: ").strip()
+        if not user_input:
+            print("→ 无法确定摘要位置，将跳过摘要")
+            return None
+        return user_input
 
-        user_input = input("\n请输入摘要位置: ").strip()
+    else:
+        # 未检测到摘要，直接询问是否有
+        reason = detected.get('reason', '未知原因') if detected else '未知原因'
+        print(f"\n未自动检测到摘要（{reason}）")
+        print("这份报告是否有摘要部分？")
+
+        while True:
+            user_input = input("\n是否有摘要？(y/n): ").strip().lower()
+            if user_input == 'n':
+                print("→ 将跳过摘要部分")
+                return None
+            elif user_input in ['', 'y']:
+                break
+            print("请输入 y 或 n")
+
+        # 用户确认有摘要，询问位置
+        print("\n请指定摘要位置：")
+        print("  示例：首页右侧、第二页表格中、首页左侧表格")
+        user_input = input("摘要位置: ").strip()
         if not user_input:
             print("→ 无法确定摘要位置，将跳过摘要")
             return None
@@ -359,6 +418,11 @@ def _confirm_abstract_location(detected: dict) -> str | None:
 
 def _confirm_body_location(detected: dict) -> str | None:
     """交互确认正文位置。
+
+    流程：
+    1. 如果检测到正文：先展示范围信息，问用户是否正确
+    2. 如果用户说不正确：再问有没有正文、在哪里
+    3. 如果未检测到：直接问有没有正文、在哪里
 
     Args:
         detected: 自动检测结果
@@ -370,39 +434,65 @@ def _confirm_body_location(detected: dict) -> str | None:
     print("【步骤 2/3】确认正文位置")
     print("=" * 60)
 
-    print("\n这份报告是否有正文部分？")
-    print("  - 快讯报告（flash）通常没有正文")
-    print("  - 公司报告、行业报告通常有正文")
-
-    while True:
-        user_input = input("\n是否有正文？(y/n，直接回车表示有): ").strip().lower()
-        if user_input == 'n':
-            print("→ 将跳过正文部分（快讯报告模式）")
-            return None
-        elif user_input in ['', 'y']:
-            break
-        print("请输入 y 或 n")
-
+    # 如果检测到正文，先展示信息让用户确认
     if detected and detected.get("found"):
-        detected_scope = detected.get('scope') or detected.get('context', '未知')
-        print(f"\n检测到的正文位置：")
-        print(f"  位置：{detected_scope}")
+        location = detected.get("location", detected)
+        detected_scope = location.get('scope') or location.get('context', '未知')
 
-        print("\n请确认正文位置是否正确？")
-        print("  - 直接回车：使用检测到的位置")
-        print("  - 输入描述：手动指定位置（如：从第二页开始、从目录之后开始）")
+        print(f"\n自动检测到正文：")
+        print(f"  范围：{detected_scope}")
 
-        user_input = input("\n您的选择: ").strip()
-        if user_input:
-            return user_input
-        return detected_scope
-    else:
-        reason = detected.get('reason', '未知原因') if detected else '未知原因'
-        print(f"\n⚠️ 自动检测正文位置失败：{reason}")
-        print("请手动指定正文位置：")
+        print("\n请确认检测是否正确：")
+        print("  - 回车或 y：正确，使用此范围")
+        print("  - n：不正确，我来指定")
+
+        while True:
+            user_input = input("\n检测是否正确？(y/n): ").strip().lower()
+            if user_input in ['', 'y']:
+                return detected_scope
+            elif user_input == 'n':
+                break
+            print("请输入 y 或 n")
+
+        # 用户说不正确，询问是否有正文
+        print("\n这份报告是否有正文部分？")
+        while True:
+            user_input = input("是否有正文？(y/n): ").strip().lower()
+            if user_input == 'n':
+                print("→ 将跳过正文部分")
+                return None
+            elif user_input in ['', 'y']:
+                break
+            print("请输入 y 或 n")
+
+        # 用户确认有正文，询问位置
+        print("\n请指定正文位置：")
         print("  示例：从第二页开始、从目录之后开始、从第一章开始")
+        user_input = input("正文位置: ").strip()
+        if not user_input:
+            print("→ 无法确定正文位置，将跳过正文")
+            return None
+        return user_input
 
-        user_input = input("\n请输入正文位置: ").strip()
+    else:
+        # 未检测到正文，直接询问是否有
+        reason = detected.get('reason', '未知原因') if detected else '未知原因'
+        print(f"\n未自动检测到正文（{reason}）")
+        print("这份报告是否有正文部分？")
+
+        while True:
+            user_input = input("\n是否有正文？(y/n): ").strip().lower()
+            if user_input == 'n':
+                print("→ 将跳过正文部分")
+                return None
+            elif user_input in ['', 'y']:
+                break
+            print("请输入 y 或 n")
+
+        # 用户确认有正文，询问位置
+        print("\n请指定正文位置：")
+        print("  示例：从第二页开始、从目录之后开始、从第一章开始")
+        user_input = input("正文位置: ").strip()
         if not user_input:
             print("→ 无法确定正文位置，将跳过正文")
             return None
