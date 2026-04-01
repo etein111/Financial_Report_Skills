@@ -24,11 +24,19 @@ PATTERN_TITLE = re.compile(r'首次覆盖[：:]\s*(.{10,100})')
 PATTERN_EMAIL = re.compile(r'[\w.-]+@[\w.-]+\.\w+')
 PATTERN_CHINESE_NAME = re.compile(r'([\u4e00-\u9fa5]{2,})')
 PATTERN_ENGLISH_NAME = re.compile(r'([A-Z][a-z]+\s+[A-Z][a-z]+)')
-PATTERN_SFC_CODE = re.compile(r'[SFC:]*([A-Z]{4}\d{3})', re.IGNORECASE)
+PATTERN_SFC_CODE = re.compile(r'(?:SFC[:\s]*)?([A-Z]{3}\d{3})', re.IGNORECASE)
 
 # 关键词常量
 KEYWORDS_PRICE_NOTE = ('注', '现价', '收盘价')
-KEYWORDS_ANALYST = ('yang', '杨斌', 'analyst')
+KEYWORDS_ANALYST = ('yang', '杨斌', 'analyst', 'Table_Author')
+
+# 分析师字段别名映射（提取后填充到这些字段）
+ANALYST_FIELD_PATTERNS = {
+    'cn': ['中文名', '中文姓名', 'chinese name'],
+    'en': ['英文名', '英文姓名', 'english name'],
+    'sfc': ['sfc', '执照', 'license'],
+    'email': ['email', '邮箱', '邮件']
+}
 
 
 # ==================== 字段提取规则 ====================
@@ -221,15 +229,16 @@ def _extract_financial_fields_from_nested_tables(
         if date_value:
             extracted['current_price_date'] = date_value
 
-    if 'analysts' in schema:
-        analysts_value = _extract_analysts_from_tables(nested_tables)
-        if analysts_value:
-            extracted['analysts'] = analysts_value
+    # 处理分析师信息（analysts 字段或 a1_cn, a1_email 等独立字段）
+    _extract_analyst_fields(nested_tables, schema, extracted)
 
     # 处理常规字段
     for field_name, field_def in schema.items():
         # 跳过已处理的特殊字段和 fragment 字段
         if field_name in SKIP_FIELDS:
+            continue
+        # 跳过分析师独立字段（已在 _extract_analyst_fields 中处理）
+        if field_name.startswith('a') and '_' in field_name and field_name[1:].split('_')[0].isdigit():
             continue
 
         value = _extract_field_from_nested_tables(
@@ -648,3 +657,109 @@ def _extract_analysts_from_tables(
                 return f"[{{'chinese_name': '{chinese_name}', 'english_name': '{english_name}', 'sfc_code': '{sfc_code}', 'email': '{email}'}}]"
 
     return None
+
+
+def _extract_analyst_fields(
+    nested_tables: List[Dict[str, Any]],
+    schema: Dict[str, Any],
+    extracted: Dict[str, Any]
+) -> None:
+    """从嵌套表格中提取分析师独立字段（a1_cn, a1_en, a1_sfc, a1_email 等）。
+
+    检查 schema 中是否有分析师独立字段定义，如果有则从 Table_Author 表格中提取。
+
+    Args:
+        nested_tables: 嵌套表格列表
+        schema: schema.yaml 内容
+        extracted: 提取结果字典（直接修改）
+    """
+    # 检查 schema 中是否有分析师独立字段
+    has_analyst_fields = any(
+        field_name.startswith('a') and '_' in field_name and
+        field_name[1:].split('_')[0].isdigit()
+        for field_name in schema.keys()
+    )
+
+    if not has_analyst_fields:
+        return
+
+    # 查找 Table_Author 表格
+    author_table = None
+    for table in nested_tables:
+        lines = docx_reader.flatten_table_text([table])
+        text = ' '.join(lines)
+        if 'Table_Author' in text or '杨斌' in text:
+            author_table = table
+            break
+
+    if not author_table:
+        return
+
+    # 从表格中提取所有文本
+    lines = docx_reader.flatten_table_text([author_table])
+    full_text = ' '.join(lines)
+
+    # 解析分析师信息
+    chinese_name = None
+    english_name = None
+    sfc_code = None
+    email = None
+
+    for line in lines:
+        # 提取中文姓名
+        if not chinese_name and PATTERN_CHINESE_NAME.search(line):
+            chinese_match = PATTERN_CHINESE_NAME.search(line)
+            if chinese_match:
+                chinese_name = chinese_match.group(1)
+
+        # 提取英文姓名
+        if not english_name and PATTERN_ENGLISH_NAME.search(line):
+            english_match = PATTERN_ENGLISH_NAME.search(line)
+            if english_match:
+                english_name = english_match.group(1)
+
+        # 提取 SFC 代码
+        if not sfc_code and PATTERN_SFC_CODE.search(line):
+            sfc_match = PATTERN_SFC_CODE.search(line)
+            if sfc_match:
+                sfc_code = sfc_match.group(1)
+
+        # 提取邮箱
+        if not email and PATTERN_EMAIL.search(line):
+            email_match = PATTERN_EMAIL.search(line)
+            if email_match:
+                email = email_match.group(0)
+
+    # 填充到 schema 中定义的分析师字段
+    # 支持 a1_cn, a1_en, a1_sfc, a1_email, a2_cn, a2_en, 等
+    analyst_num = 1
+    while True:
+        prefix = f'a{analyst_num}_'
+        cn_field = f'{prefix}cn'
+        en_field = f'{prefix}en'
+        sfc_field = f'{prefix}sfc'
+        email_field = f'{prefix}email'
+
+        # 检查是否有更多分析师字段定义
+        has_more = any(
+            field_name.startswith(prefix)
+            for field_name in schema.keys()
+        )
+
+        if not has_more:
+            break
+
+        # 只填充第一个分析师的字段
+        if analyst_num == 1:
+            if cn_field in schema.keys() and chinese_name:
+                extracted[cn_field] = chinese_name
+            if en_field in schema.keys() and english_name:
+                extracted[en_field] = english_name
+            if sfc_field in schema.keys() and sfc_code:
+                extracted[sfc_field] = sfc_code.upper()
+            if email_field in schema.keys() and email:
+                extracted[email_field] = email
+
+        analyst_num += 1
+        if analyst_num > 8:  # 最多支持 8 位分析师
+            break
