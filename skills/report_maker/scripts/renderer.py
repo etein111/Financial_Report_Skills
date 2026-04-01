@@ -39,6 +39,88 @@ ABSTRACT_MARKER = '###ABSTRACT_MARKER###'
 BODY_MARKER = '###BODY_MARKER###'
 
 
+def _cleanup_merged_cells(doc: Document) -> Document:
+    """清理嵌套的重复单元格和异常结构。
+
+    OpenCode 生成的模板会在 tc 中嵌套 tbl，导致内容重复。
+    本函数清理这些异常结构。
+
+    Args:
+        doc: Document 对象
+
+    Returns:
+        清理后的 Document 对象
+    """
+    from lxml import etree
+    W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
+
+    def get_direct_text(elem):
+        """获取元素直接子元素的文本，不包括嵌套元素。"""
+        parts = []
+        for child in elem:
+            if child.tag == W + 'p':
+                for r in child:
+                    if r.tag == W + 'r':
+                        t = r.find(W + 't')
+                        if t is not None and t.text:
+                            parts.append(t.text)
+        return ''.join(parts)
+
+    def merge_nested_tbl_to_tc(tc):
+        """将 tc 中嵌套的 tbl 内容合并到 tc 本身。
+
+        OpenCode 生成的模板结构是：tc > tbl > tr > tc
+        需要提取内层 tc 的文本，替换到外层 tc 中。
+        """
+        nested_tbls = tc.findall(W + 'tbl')
+        if not nested_tbls:
+            return
+
+        # 获取外层 tc 自己的文本（通常是标记如 [Table_Author]）
+        outer_text = get_direct_text(tc)
+
+        # 收集所有嵌套 tc 的文本
+        all_nested_texts = []
+        for nested_tbl in nested_tbls:
+            for nested_tr in nested_tbl.findall(W + 'tr'):
+                row_texts = []
+                for nested_tc in nested_tr.findall(W + 'tc'):
+                    text = get_direct_text(nested_tc)
+                    row_texts.append(text)
+                all_nested_texts.append(row_texts)
+
+        # 清理嵌套 tbl（删除所有）
+        for nested_tbl in nested_tbls:
+            tc.remove(nested_tbl)
+
+        # 如果外层文本是标记（如 [Table_Author]），保留标记但添加内容
+        if outer_text and '[' in outer_text:
+            # 保留外层标记，添加内层内容
+            paras = tc.findall(W + 'p')
+            if paras:
+                first_para = paras[0]
+                runs = first_para.findall(W + 'r')
+                if runs:
+                    t = runs[0].find(W + 't')
+                    if t is not None:
+                        # 收集所有内层文本
+                        content = []
+                        for row in all_nested_texts:
+                            for text in row:
+                                if text and not text.startswith('{{'):
+                                    content.append(text)
+                        if content:
+                            t.text = content[0]
+
+    # 遍历文档中的所有顶层表格
+    for tbl in doc.element.body.findall(W + 'tbl'):
+        for tr in tbl.findall(W + 'tr'):
+            for tc in tr.findall(W + 'tc'):
+                merge_nested_tbl_to_tc(tc)
+
+    return doc
+
+
 def render_template(
     template_path: str,
     elements: Dict[str, Any],
@@ -64,15 +146,18 @@ def render_template(
         # 2. 保存到临时文件
         temp_output = str(Path(output_path).parent / "temp_rendered.docx")
         template.save(temp_output)
-        
+
         # 3. 加载并处理
         from docx import Document
         final_doc = Document(temp_output)
-        
-        # 简化处理：直接保存
+
+        # 4. 清理嵌套的重复单元格
+        final_doc = _cleanup_merged_cells(final_doc)
+
+        # 5. 直接保存
         final_doc.save(output_path)
-        
-        # 4. 清理临时文件
+
+        # 6. 清理临时文件
         Path(temp_output).unlink(missing_ok=True)
         
         return True
@@ -1115,6 +1200,26 @@ def _copy_docx(src: str, dst: str) -> None:
     shutil.copy2(src, dst)
 
 
+def _escape_xml_text(text: str) -> str:
+    """转义 XML 特殊字符。
+
+    Args:
+        text: 原始文本
+
+    Returns:
+        转义后的文本，用于插入 XML
+    """
+    if not text:
+        return ''
+    # 替换 XML 特殊字符
+    text = text.replace('&', '&amp;')  # 必须最先处理
+    text = text.replace('<', '&lt;')
+    text = text.replace('>', '&gt;')
+    text = text.replace('"', '&quot;')
+    text = text.replace("'", '&apos;')
+    return text
+
+
 def replace_all_placeholders_in_xml(
     docx_path: str,
     context: Dict[str, Any],
@@ -1144,7 +1249,7 @@ def replace_all_placeholders_in_xml(
     for i in range(1, 9):
         for suffix in analyst_suffixes:
             key = f'a{i}_{suffix}'
-            value = context.get(key, '') or ''
+            value = _escape_xml_text(context.get(key, '') or '')
             # 替换格式 {{ a1_cn }} 和 {{a1_cn}}
             replacements[f'{{{{ {key} }}}}'] = value
             replacements[f'{{{{{key}}}}}'] = value
@@ -1166,7 +1271,7 @@ def replace_all_placeholders_in_xml(
             continue
 
         # 替换格式 {{ field }} 和 {{field}}
-        str_value = str(value) if value else ''
+        str_value = _escape_xml_text(str(value) if value else '')
         replacements[f'{{{{ {field} }}}}'] = str_value
         replacements[f'{{{{{field}}}}}'] = str_value
 
@@ -1268,7 +1373,7 @@ def render_report(
             print(f"  已清理 {cleaned_cells} 个空分析师单元格")
 
         # 4. 插入 abstract
-        if Path(abstract_path).exists() and Path(abstract_path).stat().st_size > 0:
+        if abstract_path and Path(abstract_path).is_file() and Path(abstract_path).stat().st_size > 0:
             abstract_doc = Document(abstract_path)
             if insert_abstract_to_cell(doc, abstract_doc, ABSTRACT_MARKER):
                 print(f"  已插入 abstract")
@@ -1293,7 +1398,7 @@ def render_report(
                     break
 
         # 6. 在 BODY_MARKER 位置插入 body 内容
-        if marker_elem is not None and Path(body_path).exists() and Path(body_path).stat().st_size > 0:
+        if marker_elem is not None and body_path and Path(body_path).is_file() and Path(body_path).stat().st_size > 0:
             body_doc = Document(body_path)
 
             # 收集 body 末尾的 sectPr（body 自己的页边距设置）

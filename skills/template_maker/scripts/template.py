@@ -152,8 +152,13 @@ def replace_analyst_fields_in_doc(doc: Document, elements: dict) -> Document:
     for table in doc.tables:
         _find_author_tables(table, author_tables)
 
-    # 替换有值的分析师信息
+    # 替换有值的分析师信息（使用 Jinja2 if-block 格式）
     for i, data in analysts.items():
+        # 姓名+SFC 占位符（带Jinja2 if条件）
+        # 格式: {% if a1_cn %} {{ a1_cn }} {{ a1_en }}], SFC:{{ a1_sfc }}
+        info_placeholder = '{% if a' + str(i) + '_cn %} {{ a' + str(i) + '_cn }} {{ a' + str(i) + '_en }}], SFC:{{ a' + str(i) + '_sfc }}'
+        email_placeholder = '{{ a' + str(i) + '_email }} {% endif %}'
+
         if data['cn'] and data['en'] and data['sfc']:
             # 构造可能的组合格式（文档中的格式可能有变化）
             info_patterns = [
@@ -162,15 +167,14 @@ def replace_analyst_fields_in_doc(doc: Document, elements: dict) -> Document:
                 f"{data['cn']} {data['en']}],SFC:{data['sfc']}",   # 逗号后无空格
                 f"{data['cn']}·{data['en']}, SFC:{data['sfc']}",
                 f"{data['cn']} {data['en']}, SFC:{data['sfc']}",
+                f"{data['cn']}{data['en']}, SFC:{data['sfc']}",   # 无空格（常见格式）
             ]
-            info_placeholder = f"{{{{ a{i}_cn }}}} {{{{ a{i}_en }}}}], SFC:{{{{ a{i}_sfc }}}}"
 
             # 在文档中查找并替换
             for pattern in info_patterns:
                 _replace_text_in_nested_tables(doc, pattern, info_placeholder)
 
         if data['email']:
-            email_placeholder = f"{{{{ a{i}_email }}}}"
             _replace_text_in_nested_tables(doc, data['email'], email_placeholder)
 
     # 为分析师表格中的所有位置创建占位符（动态计算位置）
@@ -207,27 +211,78 @@ def replace_analyst_fields_in_doc(doc: Document, elements: dict) -> Document:
         # 动态计算填充位置
         analyst_positions = _calculate_analyst_positions(author_table, analyst_count)
 
+        # 直接在 XML 级别操作，避免 python-docx 处理合并单元格的问题
+        from lxml import etree
+        W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
+
+        def _get_cell_text(tc):
+            """获取单元格直接子元素的文本（不包括嵌套 tc 的文本）。"""
+            parts = []
+            for elem in tc:
+                if elem.tag == W + 'p':
+                    for r in elem:
+                        if r.tag == W + 'r':
+                            t = r.find(W + 't')
+                            if t is not None and t.text:
+                                parts.append(t.text)
+            return ''.join(parts)
+
+        # 获取 author_table 的底层 XML 元素
+        author_tbl = author_table._tbl
+
         for info_row, col, email_row, _, analyst_idx in analyst_positions:
-            # 检查行和列是否在范围内
-            if info_row >= len(author_table.rows) or col >= len(author_table.columns):
+            i = analyst_idx
+
+            # 构建 Jinja2 格式的占位符
+            info_placeholder = '{% if a' + str(i) + '_cn %} {{ a' + str(i) + '_cn }} {{ a' + str(i) + '_en }}], SFC:{{ a' + str(i) + '_sfc }}'
+            email_placeholder = '{{ a' + str(i) + '_email }} {% endif %}'
+
+            # 直接在 author_tbl 中查找对应的单元格
+            trs = author_tbl.findall(W + 'tr')
+            if info_row >= len(trs):
                 continue
 
-            info_cell = author_table.rows[info_row].cells[col]
-            email_cell = author_table.rows[email_row].cells[col] if email_row < len(author_table.rows) else None
+            tr = trs[info_row]
+            tcs = tr.findall(W + 'tc')
 
-            # 姓名+SFC 占位符
-            cell_text = info_cell.text.strip()
-            if '{{' not in cell_text:
-                # 不管原来有没有值，都替换为占位符
-                info_placeholder = f"{{{{ a{analyst_idx}_cn }}}} {{{{ a{analyst_idx}_en }}}}], SFC:{{{{ a{analyst_idx}_sfc }}}}"
-                _set_cell_text(info_cell, info_placeholder)
+            # 处理信息单元格（姓名+SFC）
+            if col < len(tcs):
+                tc = tcs[col]
+                tc_text = _get_cell_text(tc)
+                if '{% if a' + str(i) + '_cn %}' not in tc_text:
+                    # 清理所有段落，只保留第一个 paragraph 的第一个 run
+                    paras = tc.findall(W + 'p')
+                    for p in paras[1:]:
+                        tc.remove(p)
+                    # 设置新文本
+                    paras = tc.findall(W + 'p')
+                    if paras:
+                        first_para = paras[0]
+                        runs = first_para.findall(W + 'r')
+                        if runs:
+                            t = runs[0].find(W + 't')
+                            if t is not None:
+                                t.text = info_placeholder
 
-            # 邮箱占位符
-            if email_cell:
-                cell_text = email_cell.text.strip()
-                if '{{' not in cell_text:
-                    email_placeholder = f"{{{{ a{analyst_idx}_email }}}}"
-                    _set_cell_text(email_cell, email_placeholder)
+            # 处理邮箱单元格
+            if email_row < len(trs):
+                tr_email = trs[email_row]
+                tcs_email = tr_email.findall(W + 'tc')
+                if col < len(tcs_email):
+                    tc = tcs_email[col]
+                    tc_text = _get_cell_text(tc)
+                    if '{% endif %}' not in tc_text:
+                        paras = tc.findall(W + 'p')
+                        for p in paras[1:]:
+                            tc.remove(p)
+                        paras = tc.findall(W + 'p')
+                        if paras:
+                            first_para = paras[0]
+                            runs = first_para.findall(W + 'r')
+                            if runs:
+                                t = runs[0].find(W + 't')
+                                if t is not None:
+                                    t.text = email_placeholder
 
     return doc
 
@@ -340,18 +395,81 @@ def _replace_in_all_cells(table, old_text: str, new_text: str):
 
 
 def _set_cell_text(cell, text: str):
-    """设置单元格文本（清空现有内容后设置）。"""
-    # 清空所有段落
-    for para in cell.paragraphs:
-        for run in para.runs:
-            run.text = ""
-    # 设置新文本
-    if cell.paragraphs and cell.paragraphs[0].runs:
-        cell.paragraphs[0].runs[0].text = text
-    elif cell.paragraphs:
-        cell.paragraphs[0].add_run(text)
-    else:
-        cell.add_paragraph(text)
+    """设置单元格文本（清空现有内容后设置）。
+
+    处理合并单元格时可能存在的重复内容问题。
+    """
+    from lxml import etree
+    W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
+
+    # 获取单元格底层 XML 元素
+    tc = cell._tc
+
+    # 删除所有现有段落
+    for p in tc.findall(W + 'p'):
+        tc.remove(p)
+
+    # 创建新段落（使用 rPr 保持格式兼容）
+    new_p = etree.SubElement(tc, W + 'p')
+    new_r = etree.SubElement(new_p, W + 'r')
+    new_t = etree.SubElement(new_r, W + 't')
+    new_t.text = text
+
+
+def _set_cell_text_jinja(cell, placeholder: str):
+    """设置单元格文本，处理可能重复的内容。
+
+    有些模板（OpenCode生成）的单元格内容会重复，
+    这个函数会清理重复内容后设置新文本。
+    """
+    from lxml import etree
+    import re
+    W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
+
+    # 获取单元格底层 XML 元素
+    tc = cell._tc
+
+    # 获取当前所有段落的文本，检测是否有重复
+    all_text = ''.join(tc.itertext())
+
+    # 如果文本看起来有重复（比如 {{ a1_cn }} 出现多次），清理一下
+    # 通过检查段落的 run 数量来判断
+    paragraphs = tc.findall(W + 'p')
+    runs_data = []
+    for p in paragraphs:
+        runs = p.findall(W + 'r')
+        for r in runs:
+            t = r.find(W + 't')
+            if t is not None and t.text:
+                runs_data.append(t.text)
+
+    # 检查是否有连续重复的内容片段
+    if len(runs_data) > 1:
+        combined_text = ''.join(runs_data)
+        # 尝试检测是否是重复模式：把文本对半拆分后比较
+        half_len = len(combined_text) // 2
+        if half_len > 10 and combined_text[:half_len] == combined_text[half_len:]:
+            # 内容确实重复了，使用前半部分作为唯一内容
+            unique_text = combined_text[:half_len]
+            # 从 unique_text 中提取占位符
+            # 格式如：{{ a1_cn }} {{ a1_en }}], SFC:{{ a1_sfc }}
+            match = re.search(r'\{\{[^}]+\}\}', unique_text)
+            if match:
+                # 只保留占位符部分
+                placeholder = match.group(0)
+                # 如果有多行，只取第一行
+                if '\\n' in placeholder:
+                    placeholder = placeholder.split('\\n')[0]
+
+    # 删除所有现有段落
+    for p in tc.findall(W + 'p'):
+        tc.remove(p)
+
+    # 创建新段落
+    new_p = etree.SubElement(tc, W + 'p')
+    new_r = etree.SubElement(new_p, W + 'r')
+    new_t = etree.SubElement(new_r, W + 't')
+    new_t.text = placeholder
 
 
 def replace_abstract_in_doc(doc: Document, table: int, row: int,
