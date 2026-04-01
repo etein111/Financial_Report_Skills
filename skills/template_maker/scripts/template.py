@@ -358,6 +358,9 @@ def replace_abstract_in_doc(doc: Document, table: int, row: int,
                            col_start: int, col_end: int) -> Document:
     """在文档中替换摘要区域为 {{ abstract }} 占位符（返回新文档）。
 
+    只在第一个单元格设置占位符，其他单元格清空内容。
+    清空时会删除所有内容，包括图表、图片等。
+
     Args:
         doc: Document 对象
         table: 表格索引
@@ -368,6 +371,8 @@ def replace_abstract_in_doc(doc: Document, table: int, row: int,
     Returns:
         修改后的 Document 对象
     """
+    from lxml import etree
+
     if table >= len(doc.tables):
         raise ValueError(f"表格索引 {table} 超出范围")
 
@@ -378,17 +383,70 @@ def replace_abstract_in_doc(doc: Document, table: int, row: int,
     tbl_row = tbl.rows[row]
 
     # 替换指定范围的单元格
+    first_cell = True
     for col_idx in range(col_start, min(col_end + 1, len(tbl_row.cells))):
         cell = tbl_row.cells[col_idx]
-        # 清空所有段落
-        for paragraph in cell.paragraphs:
-            for run in paragraph.runs:
-                run.text = ""
-        # 添加摘要占位符
-        if cell.paragraphs:
-            cell.paragraphs[0].runs[0].text = "{{ abstract }}"
+        tc = cell._tc  # 获取底层 XML 元素
+
+        if first_cell:
+            # 第一个单元格：清空所有内容，只保留一个段落设置占位符
+            # 删除单元格内除第一个段落外的所有子元素（段落、表格等）
+            W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
+            children_to_remove = []
+            first_p = None
+            for child in tc:
+                tag = etree.QName(child.tag).localname
+                if tag == 'p':
+                    if first_p is None:
+                        first_p = child
+                    else:
+                        children_to_remove.append(child)
+                elif tag == 'tbl':
+                    children_to_remove.append(child)
+
+            # 删除多余元素
+            for child in children_to_remove:
+                tc.remove(child)
+
+            # 清空第一个段落的所有内容（包括图表 w:drawing）
+            if first_p is not None:
+                # 删除所有 run 和其他内容元素
+                for child in list(first_p):
+                    tag = etree.QName(child.tag).localname
+                    if tag not in ('pPr',):  # 保留段落属性
+                        first_p.remove(child)
+
+                # 添加新的 run 包含占位符
+                r = etree.SubElement(first_p, f'{W}r')
+                t = etree.SubElement(r, f'{W}t')
+                t.text = "{{ abstract }}"
+
+            first_cell = False
         else:
-            cell.add_paragraph("{{ abstract }}")
+            # 其他单元格：完全清空内容
+            W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
+            children_to_remove = []
+            first_p = None
+            for child in tc:
+                tag = etree.QName(child.tag).localname
+                if tag == 'p':
+                    if first_p is None:
+                        first_p = child
+                    else:
+                        children_to_remove.append(child)
+                elif tag == 'tbl':
+                    children_to_remove.append(child)
+
+            # 删除多余元素
+            for child in children_to_remove:
+                tc.remove(child)
+
+            # 清空第一个段落
+            if first_p is not None:
+                for child in list(first_p):
+                    tag = etree.QName(child.tag).localname
+                    if tag not in ('pPr',):
+                        first_p.remove(child)
 
     return doc
 
@@ -397,7 +455,8 @@ def replace_summary_in_doc(doc: Document, start_paragraph: int,
                           end_paragraph: int) -> Document:
     """在文档中替换 Summary 区域为 {{ summary }} 占位符（返回新文档）。
 
-    删除 Summary 区域内的所有段落，只保留一个占位符。
+    删除 Summary 区域内的所有段落和表格，只保留一个占位符。
+    使用段落索引来确定范围，确保正确处理所有内容。
 
     Args:
         doc: Document 对象
@@ -409,58 +468,112 @@ def replace_summary_in_doc(doc: Document, start_paragraph: int,
     """
     from lxml import etree
 
+    W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
+
     if start_paragraph >= len(doc.paragraphs):
         raise ValueError(f"起始段落 {start_paragraph} 超出范围")
 
     # 获取 body 元素
     body = doc._body._body
 
-    # 找到起始段落和结束段落对应的 XML 元素
-    start_para_element = doc.paragraphs[start_paragraph]._element
-    end_idx = min(end_paragraph, len(doc.paragraphs))
-    end_para_element = doc.paragraphs[end_idx - 1]._element if end_idx > start_paragraph else start_para_element
+    # 建立段落索引到 XML 元素的映射
+    para_to_element = {}
+    para_idx = 0
+    for child in body:
+        tag = etree.QName(child.tag).localname
+        if tag == 'p':
+            para_to_element[para_idx] = child
+            para_idx += 1
+        elif tag == 'tbl':
+            for p in child.iter(f'{W}p'):
+                para_to_element[para_idx] = p
+                para_idx += 1
+        elif tag == 'sdt':
+            for p in child.iter(f'{W}p'):
+                para_to_element[para_idx] = p
+                para_idx += 1
+
+    # 找到起始和结束位置对应的 body 直接子元素
+    start_element = para_to_element.get(start_paragraph)
+    end_idx = min(end_paragraph - 1, len(doc.paragraphs) - 1)
+    end_element = para_to_element.get(end_idx)
+
+    if start_element is None:
+        raise ValueError(f"无法找到段落 {start_paragraph} 对应的元素")
+
+    # 找到起始元素在 body 中的直接父元素
+    def find_body_child(element):
+        current = element
+        while current is not None:
+            parent = current.getparent()
+            if parent is not None and parent.tag == f'{W}body':
+                return current
+            current = parent
+        return None
+
+    start_body_child = find_body_child(start_element)
+    end_body_child = find_body_child(end_element) if end_element else start_body_child
+
+    # 收集 body 直接子元素列表
+    body_children = list(body)
+
+    # 找到起始和结束在 body 子元素中的索引
+    try:
+        start_child_idx = body_children.index(start_body_child)
+    except ValueError:
+        start_child_idx = 0
+
+    try:
+        end_child_idx = body_children.index(end_body_child)
+    except ValueError:
+        end_child_idx = len(body_children) - 1
 
     # 收集要删除的元素
     elements_to_remove = []
-    in_range = False
     first_element = None
 
-    for child in list(body):
-        tag = etree.QName(child.tag).localname
-
-        # 检查是否进入范围
-        if child == start_para_element:
-            in_range = True
-            first_element = child
-
-        # 如果在范围内，收集要删除的元素
-        if in_range:
-            if tag in ('p', 'tbl'):
-                elements_to_remove.append(child)
-
-        # 检查是否离开范围
-        if child == end_para_element:
-            in_range = False
+    for i, child in enumerate(body_children):
+        if i < start_child_idx:
+            continue
+        if i > end_child_idx:
             break
 
-    # 删除收集的元素（从后往前删除，保留第一个段落用于放置占位符）
+        if first_element is None:
+            first_element = child
+
+        elements_to_remove.append(child)
+
+    # 删除收集的元素（从后往前删除，保留第一个用于放置占位符）
     for element in reversed(elements_to_remove[1:]):
         body.remove(element)
 
     # 在第一个元素位置设置占位符
     if first_element is not None and elements_to_remove:
-        from docx.text.paragraph import Paragraph
-        para = Paragraph(first_element, doc._body)
+        tag = etree.QName(first_element.tag).localname
 
-        # 清空所有 runs
-        for run in para.runs:
-            run.text = ""
+        if tag == 'p':
+            # 如果第一个是段落，清空内容设置占位符
+            for child in list(first_element):
+                child_tag = etree.QName(child.tag).localname
+                if child_tag not in ('pPr',):
+                    first_element.remove(child)
 
-        # 设置占位符
-        if para.runs:
-            para.runs[0].text = "{{ summary }}"
+            # 添加新的 run 包含占位符
+            r = etree.SubElement(first_element, f'{W}r')
+            t = etree.SubElement(r, f'{W}t')
+            t.text = "{{ summary }}"
         else:
-            para.add_run("{{ summary }}")
+            # 如果第一个不是段落，需要替换为段落
+            idx = list(body).index(first_element)
+            body.remove(first_element)
+
+            # 创建新段落
+            new_p = etree.Element(f'{W}p')
+            r = etree.SubElement(new_p, f'{W}r')
+            t = etree.SubElement(r, f'{W}t')
+            t.text = "{{ summary }}"
+
+            body.insert(idx, new_p)
 
     return doc
 
@@ -469,9 +582,11 @@ def replace_body_in_doc(doc: Document, start_paragraph: int,
                        end_paragraph: int) -> Document:
     """在文档中替换正文区域为 {{ body }} 占位符（返回新文档）。
 
-    删除正文区域内的所有元素（段落、表格、目录等），只保留一个占位符。
+    删除正文区域内的所有元素（段落、表格、图表、目录等），只保留一个占位符。
     目录（SDT）也会被删除，因为目录内容会根据正文自动生成。
     保留正文结束处的分节符。
+
+    使用段落索引来确定范围，确保正确处理所有内容。
 
     Args:
         doc: Document 对象
@@ -484,83 +599,134 @@ def replace_body_in_doc(doc: Document, start_paragraph: int,
     from lxml import etree
     from copy import deepcopy
 
+    W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
+
     if start_paragraph >= len(doc.paragraphs):
         raise ValueError(f"起始段落 {start_paragraph} 超出范围")
 
     # 获取 body 元素
     body = doc._body._body
 
-    # 找到起始段落和结束段落对应的 XML 元素
-    start_para_element = doc.paragraphs[start_paragraph]._element
-    end_idx = min(end_paragraph, len(doc.paragraphs))
-    end_para_element = doc.paragraphs[end_idx - 1]._element if end_idx > start_paragraph else start_para_element
+    # 建立段落索引到 XML 元素的映射
+    # doc.paragraphs 包含所有段落（包括表格内的），但我们需要找到它们在 body 中的位置
+    para_to_element = {}
+    para_idx = 0
+    for child in body:
+        tag = etree.QName(child.tag).localname
+        if tag == 'p':
+            para_to_element[para_idx] = child
+            para_idx += 1
+        elif tag == 'tbl':
+            # 表格内的段落也计入索引
+            for p in child.iter(f'{W}p'):
+                para_to_element[para_idx] = p
+                para_idx += 1
+        elif tag == 'sdt':
+            # SDT（目录）内的段落也计入索引
+            for p in child.iter(f'{W}p'):
+                para_to_element[para_idx] = p
+                para_idx += 1
 
-    # 先删除所有 SDT（目录）元素
-    sdt_elements = [child for child in body if etree.QName(child.tag).localname == 'sdt']
-    for sdt in sdt_elements:
-        body.remove(sdt)
+    # 找到起始和结束位置对应的 body 直接子元素
+    start_element = para_to_element.get(start_paragraph)
+    end_idx = min(end_paragraph - 1, len(doc.paragraphs) - 1)
+    end_element = para_to_element.get(end_idx)
 
-    # 收集要删除的元素（正文区域内的所有段落和表格）
+    if start_element is None:
+        raise ValueError(f"无法找到段落 {start_paragraph} 对应的元素")
+
+    # 找到起始元素在 body 中的直接父元素（可能是段落本身、表格或 SDT）
+    def find_body_child(element):
+        """向上查找元素在 body 中的直接子元素"""
+        current = element
+        while current is not None:
+            parent = current.getparent()
+            if parent is not None and parent.tag == f'{W}body':
+                return current
+            current = parent
+        return None
+
+    start_body_child = find_body_child(start_element)
+    end_body_child = find_body_child(end_element) if end_element else start_body_child
+
+    # 收集 body 直接子元素列表
+    body_children = list(body)
+
+    # 找到起始和结束在 body 子元素中的索引
+    try:
+        start_child_idx = body_children.index(start_body_child)
+    except ValueError:
+        start_child_idx = 0
+
+    try:
+        end_child_idx = body_children.index(end_body_child)
+    except ValueError:
+        end_child_idx = len(body_children) - 1
+
+    # 收集要删除的元素（正文区域内的所有元素）
     elements_to_remove = []
-    in_body_range = False
     first_body_element = None
-    last_sect_pr = None  # 保存最后一个分节符
+    last_sect_pr = None
 
-    for child in list(body):
+    for i, child in enumerate(body_children):
         tag = etree.QName(child.tag).localname
 
-        # 检查是否进入正文区域
-        if child == start_para_element:
-            in_body_range = True
-            first_body_element = child
-
-        # 如果在正文区域内，收集要删除的元素
-        if in_body_range:
-            if tag in ('p', 'tbl'):
-                elements_to_remove.append(child)
-                # 检查段落是否有分节符
-                if tag == 'p':
-                    sect_pr = child.find('.//{http://schemas.openxmlformats.org/wordprocessingml/2006/main}sectPr')
-                    if sect_pr is not None:
-                        last_sect_pr = deepcopy(sect_pr)
-
-        # 检查是否离开正文区域
-        if child == end_para_element:
-            in_body_range = False
+        if i < start_child_idx:
+            continue
+        if i > end_child_idx:
             break
 
-    # 删除收集的元素（从后往前删除，保留第一个段落用于放置占位符）
+        if first_body_element is None:
+            first_body_element = child
+
+        elements_to_remove.append(child)
+
+        # 检查段落是否有分节符
+        if tag == 'p':
+            sect_pr = child.find(f'.//{W}sectPr')
+            if sect_pr is not None:
+                last_sect_pr = deepcopy(sect_pr)
+
+    # 删除收集的元素（从后往前删除，保留第一个用于放置占位符）
     for element in reversed(elements_to_remove[1:]):
         body.remove(element)
 
     # 在第一个元素位置设置占位符
     if first_body_element is not None and elements_to_remove:
-        # 使用 python-docx 的 Paragraph 包装器操作第一个段落
-        from docx.text.paragraph import Paragraph
-        para = Paragraph(first_body_element, doc._body)
+        tag = etree.QName(first_body_element.tag).localname
 
-        # 清空所有 runs
-        for run in para.runs:
-            run.text = ""
+        if tag == 'p':
+            # 如果第一个是段落，清空内容设置占位符
+            # 删除所有子元素（除了 pPr）
+            for child in list(first_body_element):
+                child_tag = etree.QName(child.tag).localname
+                if child_tag not in ('pPr',):
+                    first_body_element.remove(child)
 
-        # 设置占位符
-        if para.runs:
-            para.runs[0].text = "{{ body }}"
+            # 添加新的 run 包含占位符
+            r = etree.SubElement(first_body_element, f'{W}r')
+            t = etree.SubElement(r, f'{W}t')
+            t.text = "{{ body }}"
         else:
-            para.add_run("{{ body }}")
+            # 如果第一个不是段落（如表格），需要替换为段落
+            idx = list(body).index(first_body_element)
+            body.remove(first_body_element)
+
+            # 创建新段落
+            new_p = etree.Element(f'{W}p')
+            r = etree.SubElement(new_p, f'{W}r')
+            t = etree.SubElement(r, f'{W}t')
+            t.text = "{{ body }}"
+
+            body.insert(idx, new_p)
+            first_body_element = new_p
 
         # 如果有分节符，添加到 body 占位符段落
         if last_sect_pr is not None:
-            # 获取段落的 pPr（段落属性）元素，如果没有则创建
-            pPr = first_body_element.find('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}pPr')
+            pPr = first_body_element.find(f'{W}pPr')
             if pPr is None:
-                pPr = etree.SubElement(
-                    first_body_element,
-                    '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}pPr'
-                )
-                # pPr 应该在段落的最前面
+                pPr = etree.Element(f'{W}pPr')
                 first_body_element.insert(0, pPr)
-            # 添加分节符到 pPr
             pPr.append(last_sect_pr)
 
     return doc

@@ -50,10 +50,10 @@ def _extract_placeholders_from_table(table, found_placeholders: set):
                 _extract_placeholders_from_table(nested_table, found_placeholders)
 
 
-def validate_template_placeholders(doc, elements: dict, abstract_scope: str, body_scope: str) -> dict:
+def validate_template_placeholders(doc, elements: dict, abstract_scope: str, body_scope: str, summary_scope: str = None) -> dict:
     """验证模板中的占位符是否完整提取。
 
-    检查所有 elements.yaml 中定义的字段以及 abstract、body 是否都正确提取为占位符。
+    检查所有 elements.yaml 中定义的字段以及 abstract、body、summary 是否都正确提取为占位符。
     支持递归检查嵌套表格中的占位符。
 
     Args:
@@ -61,6 +61,7 @@ def validate_template_placeholders(doc, elements: dict, abstract_scope: str, bod
         elements: elements.yaml 内容
         abstract_scope: 摘要位置描述
         body_scope: 正文位置描述
+        summary_scope: Summary 位置描述
 
     Returns:
         {
@@ -118,7 +119,11 @@ def validate_template_placeholders(doc, elements: dict, abstract_scope: str, bod
     if body_scope:
         expected_placeholders.append('body')
 
-    # 4. 添加分析师占位符（即使为空也需要占位符）
+    # 4. 如果有 summary_scope，添加 summary 占位符
+    if summary_scope:
+        expected_placeholders.append('summary')
+
+    # 5. 添加分析师占位符（即使为空也需要占位符）
     for i in range(1, 9):
         expected_placeholders.extend([f'a{i}_cn', f'a{i}_en', f'a{i}_sfc', f'a{i}_email'])
 
@@ -344,7 +349,7 @@ def _confirm_abstract_location(detected: dict) -> str | None:
         摘要位置描述，None 表示没有摘要
     """
     print("\n" + "=" * 60)
-    print("【步骤 1/3】确认摘要位置")
+    print("【步骤 1/4】确认摘要位置")
     print("=" * 60)
 
     # 如果检测到摘要，先展示内容让用户确认
@@ -431,7 +436,7 @@ def _confirm_body_location(detected: dict) -> str | None:
         正文位置描述，None 表示没有正文
     """
     print("\n" + "=" * 60)
-    print("【步骤 2/3】确认正文位置")
+    print("【步骤 2/4】确认正文位置")
     print("=" * 60)
 
     # 如果检测到正文，先展示信息让用户确认
@@ -495,6 +500,91 @@ def _confirm_body_location(detected: dict) -> str | None:
         user_input = input("正文位置: ").strip()
         if not user_input:
             print("→ 无法确定正文位置，将跳过正文")
+            return None
+        return user_input
+
+
+def _confirm_summary_location(detected: dict) -> str | None:
+    """交互确认英文 Summary 位置。
+
+    流程：
+    1. 如果检测到 Summary：先展示范围信息，问用户是否正确
+    2. 如果用户说不正确：再问有没有 Summary、在哪里
+    3. 如果未检测到：直接问有没有 Summary、在哪里
+
+    Args:
+        detected: 自动检测结果
+
+    Returns:
+        Summary 位置描述，None 表示没有 Summary
+    """
+    print("\n" + "=" * 60)
+    print("【步骤 3/4】确认英文 Summary 位置")
+    print("=" * 60)
+
+    # 如果检测到 Summary，先展示信息让用户确认
+    if detected and detected.get("found"):
+        location = detected.get("location", detected)
+        detected_scope = location.get('scope') or location.get('context', '未知')
+
+        print(f"\n自动检测到英文 Summary：")
+        print(f"  范围：{detected_scope}")
+
+        print("\n请确认检测是否正确：")
+        print("  - 回车或 y：正确，使用此范围")
+        print("  - n：不正确，我来指定")
+
+        while True:
+            user_input = input("\n检测是否正确？(y/n): ").strip().lower()
+            if user_input in ['', 'y']:
+                return detected_scope
+            elif user_input == 'n':
+                break
+            print("请输入 y 或 n")
+
+        # 用户说不正确，询问是否有 Summary
+        print("\n这份报告是否有英文 Summary 部分？")
+        print("  （通常在 APPENDIX 1 中，或 Executive Summary）")
+        while True:
+            user_input = input("是否有 Summary？(y/n): ").strip().lower()
+            if user_input == 'n':
+                print("→ 将跳过 Summary 部分")
+                return None
+            elif user_input in ['', 'y']:
+                break
+            print("请输入 y 或 n")
+
+        # 用户确认有 Summary，询问位置
+        print("\n请指定 Summary 位置：")
+        print("  示例：APPENDIX 1、Executive Summary 之后")
+        user_input = input("Summary 位置: ").strip()
+        if not user_input:
+            print("→ 无法确定 Summary 位置，将跳过 Summary")
+            return None
+        return user_input
+
+    else:
+        # 未检测到 Summary，直接询问是否有
+        reason = detected.get('reason', '未知原因') if detected else '未知原因'
+        print(f"\n未自动检测到英文 Summary（{reason}）")
+        print("这份报告是否有英文 Summary 部分？")
+        print("  （通常在 APPENDIX 1 中，或 Executive Summary）")
+
+        while True:
+            user_input = input("\n是否有 Summary？(y/n): ").strip().lower()
+            if user_input == 'n':
+                print("→ 将跳过 Summary 部分")
+                return None
+            elif user_input in ['', 'y']:
+                break
+            print("请输入 y 或 n")
+
+        # 用户确认有 Summary，询问位置
+        print("\n请指定 Summary 位置：")
+        print("  示例：APPENDIX 1、Executive Summary 之后")
+        user_input = input("Summary 位置: ").strip()
+        if not user_input:
+            print("→ 无法确定 Summary 位置，将跳过 Summary")
             return None
         return user_input
 
@@ -569,6 +659,7 @@ def create_template(
     elements_path: str,
     abstract_scope: str | None = None,
     body_scope: str | None = None,
+    summary_scope: str | None = None,
     appendix_scope: str | None = None,
     output_dir: str = "templates",
     auto_confirm: bool = False
@@ -581,6 +672,7 @@ def create_template(
         elements_path: elements.yaml 配置文件路径
         abstract_scope: 摘要位置描述（None 表示交互询问）
         body_scope: 正文位置描述（None 表示交互询问，"" 表示没有正文）
+        summary_scope: 英文 Summary 位置描述（None 表示交互询问，"" 表示没有 Summary）
         appendix_scope: 法律披露附录位置描述（None 表示交互询问，"" 表示没有附录）
         output_dir: 输出目录
         auto_confirm: 跳过确认，直接使用默认值
@@ -619,6 +711,8 @@ def create_template(
             abstract_scope = _confirm_abstract_location(detected_locations.get("abstract"))
         if body_scope is None:
             body_scope = _confirm_body_location(detected_locations.get("body"))
+        if summary_scope is None:
+            summary_scope = _confirm_summary_location(detected_locations.get("summary"))
         if appendix_scope is None:
             appendix_scope = _get_appendix_location(detected_locations.get("appendix"))
         print("\n[自动化模式] 位置配置完成")
@@ -626,6 +720,7 @@ def create_template(
         # 交互模式：逐个确认
         abstract_scope = _confirm_abstract_location(detected_locations.get("abstract"))
         body_scope = _confirm_body_location(detected_locations.get("body"))
+        summary_scope = _confirm_summary_location(detected_locations.get("summary"))
         appendix_scope = _get_appendix_location(detected_locations.get("appendix"))
 
     # 准备 router.yaml 路径（用于显示现有映射）
@@ -640,8 +735,9 @@ def create_template(
     print("=" * 60)
     print(f"模板名称: {name}")
     print(f"报告类型映射: {report_type} → {name}")
-    print(f"摘要位置: {abstract_scope}")
-    print(f"正文位置: {body_scope or '无（快讯报告）'}")
+    print(f"摘要位置: {abstract_scope or '无'}")
+    print(f"正文位置: {body_scope or '无'}")
+    print(f"Summary 位置: {summary_scope or '无'}")
     print(f"法律披露附录: {appendix_scope}（保留原样）")
 
     if not auto_confirm:
@@ -779,11 +875,37 @@ def create_template(
             reason = body_location.get('reason', '未知原因') if body_location else '未知原因'
             print(f"警告: 未能自动定位正文位置 - {reason}")
     else:
-        print("正文: 用户确认无正文（快讯报告模式），跳过")
+        print("正文: 用户确认无正文，跳过")
+
+    # 替换 Summary 区域为 {{ summary }} 占位符（如果有 Summary）
+    if summary_scope:
+        # 使用之前检测的位置信息
+        summary_detected = detected_locations.get("summary")
+        summary_location = summary_detected.get("location") if summary_detected else None
+
+        if not summary_location or not summary_location.get("found"):
+            # 尝试重新检测
+            summary_location = find_summary_by_markers(str(word_path))
+
+        if summary_location and summary_location.get("found"):
+            start_para = summary_location["start_paragraph"]
+            end_para = summary_location["end_paragraph"]
+
+            doc = replace_summary_in_doc(
+                doc,
+                start_paragraph=start_para,
+                end_paragraph=end_para
+            )
+            print(f"Summary 位置: 段落 {start_para} 到 {end_para}")
+        else:
+            reason = summary_location.get('reason', '未知原因') if summary_location else '未知原因'
+            print(f"警告: 未能自动定位 Summary 位置 - {reason}")
+    else:
+        print("Summary: 用户确认无 Summary，跳过")
 
     # ========== 验证占位符 ==========
     print("\n正在验证模板占位符...")
-    validation = validate_template_placeholders(doc, elements, abstract_scope, body_scope)
+    validation = validate_template_placeholders(doc, elements, abstract_scope, body_scope, summary_scope)
 
     if validation["found_placeholders"]:
         print(f"已提取占位符: {', '.join(validation['found_placeholders'])}")
