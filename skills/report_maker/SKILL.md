@@ -84,12 +84,12 @@ pip3 install --break-system-packages "docxtpl>=0.20.0" docxcompose
 
 **步骤 2/4：自动扫描草稿文件**
 
-**在 `reports/{报告类型}/` 目录下**扫描草稿文件和对应的 elements.yaml：
+**在 `inbox/samples/{报告类型}/` 目录下**扫描草稿文件和对应的 elements.yaml：
 
 ```
 您的选择: company
 
-正在扫描 reports/company/ 目录...
+正在扫描 inbox/samples/company/ 目录...
 找到以下草稿文档：
   1. 西锐飞机首次覆盖报告（中文）提交版.docx
   2. Bloom Energy Corporation 1231.docx
@@ -102,18 +102,18 @@ pip3 install --break-system-packages "docxtpl>=0.20.0" docxcompose
 
 | 报告类型 | 扫描目录 |
 |---------|---------|
-| company | `reports/company/` |
-| sector | `reports/sector/` |
-| flash | `reports/flash/` |
-| company_flash | `reports/company_flash/` |
-| sector_flash | `reports/sector_flash/` |
-| macro | `reports/macro/` |
-| strategy | `reports/strategy/` |
-| quantitative | `reports/quantitative/` |
-| bond | `reports/bond/` |
+| company | `inbox/samples/company/` |
+| sector | `inbox/samples/sector/` |
+| flash | `inbox/samples/flash/` |
+| company_flash | `inbox/samples/flash/` |
+| sector_flash | `inbox/samples/flash/` |
+| macro | `inbox/samples/macro/` |
+| strategy | `inbox/samples/macro/` |
+| quantitative | `inbox/samples/macro/` |
+| bond | `inbox/samples/macro/` |
 
 **扫描规则**：
-- 扫描 `reports/{报告类型}/` 目录下的 `.docx` 文件
+- 扫描 `inbox/samples/{报告类型}/` 目录下的 `.docx` 文件
 - 排除以 `~$` 开头的临时文件
 - 排除 `_AutoRefresh` 后缀的文件（这些是生成的 PDF 预览）
 

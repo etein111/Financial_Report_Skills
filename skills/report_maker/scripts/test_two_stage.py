@@ -28,7 +28,7 @@ def stage1_extract_and_confirm():
     
     # 1. 接收草稿
     print("\n[步骤 1] 接收草稿")
-    draft_path = "samples/西锐飞机首次覆盖报告（中文）提交版.docx"
+    draft_path = "inbox/samples/company/西锐飞机首次覆盖报告（中文）提交版.docx"
     report_type = "company"  # 人工指定
     print(f"   草稿: {draft_path}")
     print(f"   报告类型: {report_type}")
@@ -52,7 +52,7 @@ def stage1_extract_and_confirm():
     
     # 5. LLM 提取要素（模拟）
     print("\n[步骤 5] LLM 提取要素")
-    elements_path = f"samples/{Path(draft_path).stem} elements.yaml"
+    elements_path = f"inbox/samples/company/{Path(draft_path).stem} elements.yaml"
     elements = load_yaml(elements_path)
     print(f"   提取到 {len(elements)} 个字段")
     

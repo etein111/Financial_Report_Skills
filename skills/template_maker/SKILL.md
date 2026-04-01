@@ -56,7 +56,7 @@ description: "当用户说「制作模板」、「创建模板」、「分析模
 
 您的选择: flash
 
-正在扫描 samples/flash/ 目录...
+正在扫描 inbox/samples/flash/ 目录...
 找到以下样本文档：
   1. 全球消费及互联网周报_3_16-3_19_AutoRefresh.docx
   2. 全球消费及互联网周报_3_16-3_19-草稿.docx
@@ -67,15 +67,15 @@ description: "当用户说「制作模板」、「创建模板」、「分析模
 **自动扫描规则**：
 | 模板类型 | 扫描目录 |
 |---------|---------|
-| company | samples/ |
-| sector | samples/ |
-| flash | samples/flash/ |
-| company_flash | samples/flash/ |
-| sector_flash | samples/flash/ |
-| macro | samples/macro/ |
-| strategy | samples/macro/ |
-| quantitative | samples/macro/ |
-| bond | samples/macro/ |
+| company | inbox/samples/company/ |
+| sector | inbox/samples/sector/ |
+| flash | inbox/samples/flash/ |
+| company_flash | inbox/samples/flash/ |
+| sector_flash | inbox/samples/flash/ |
+| macro | inbox/samples/macro/ |
+| strategy | inbox/samples/macro/ |
+| quantitative | inbox/samples/macro/ |
+| bond | inbox/samples/macro/ |
 
 **自动查找 elements.yaml**：
 选择样本文档后，系统自动在同目录下查找匹配的 elements.yaml：
@@ -89,8 +89,8 @@ description: "当用户说「制作模板」、「创建模板」、「分析模
 
 ```
 【查找 elements.yaml】
-在 samples/flash/ 目录下查找...
-✓ 找到: samples/flash/全球消费及互联网周报_3_16-3_19_AutoRefresh elements.yaml
+在 inbox/samples/flash/ 目录下查找...
+✓ 找到: inbox/samples/flash/全球消费及互联网周报_3_16-3_19_AutoRefresh elements.yaml
 ```
 
 如果找到多个 elements.yaml，显示列表供用户选择。

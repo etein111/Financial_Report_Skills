@@ -116,16 +116,16 @@ def validate_template_placeholders(doc, elements: dict, abstract_scope: str, bod
 
 # 模板类型到扫描目录的映射
 TEMPLATE_SCAN_DIRS = {
-    'company': 'samples',
-    'sector': 'samples',
-    'flash': 'samples/flash',  # 通用 flash
-    'company_flash': 'samples/flash',
-    'sector_flash': 'samples/flash',
-    'macro': 'samples/macro',
-    'strategy': 'samples/macro',
-    'quantitative': 'samples/macro',
-    'bond': 'samples/macro',
-    'common': 'samples/macro',
+    'company': 'inbox/samples/company',
+    'sector': 'inbox/samples/sector',
+    'flash': 'inbox/samples/flash',  # 通用 flash
+    'company_flash': 'inbox/samples/flash',
+    'sector_flash': 'inbox/samples/flash',
+    'macro': 'inbox/samples/macro',
+    'strategy': 'inbox/samples/macro',
+    'quantitative': 'inbox/samples/macro',
+    'bond': 'inbox/samples/macro',
+    'common': 'inbox/samples/macro',
 }
 
 
@@ -141,11 +141,11 @@ def scan_docx_files_by_template(base_dir: Path, template_type: str) -> list[tupl
     """
     # 确保 base_dir 是 Path 对象
     base_dir = Path(base_dir)
-    scan_dir_name = TEMPLATE_SCAN_DIRS.get(template_type.lower(), 'samples')
+    scan_dir_name = TEMPLATE_SCAN_DIRS.get(template_type.lower(), 'inbox/samples')
     scan_dir = base_dir / scan_dir_name
 
     if not scan_dir.exists():
-        scan_dir = base_dir / 'samples'  # 回退到 samples 目录
+        scan_dir = base_dir / 'inbox/samples'  # 回退到 inbox/samples 目录
 
     docx_files = []
     # 只扫描指定目录，不递归
@@ -741,13 +741,13 @@ def main():
         epilog="""
 示例:
   # 交互式创建模板
-  python invoke.py --name common --word samples/macro.docx --elements samples/macro_elements.yaml
+  python invoke.py --name common --word inbox/samples/macro/docx --elements inbox/samples/macro_elements.yaml
 
   # 自动化模式（跳过确认）
-  python invoke.py --name company --word samples/company.docx --elements samples/company_elements.yaml --auto-confirm
+  python invoke.py --name company --word inbox/samples/company/docx --elements inbox/samples/company_elements.yaml --auto-confirm
 
   # 快讯报告（无正文，无附录）
-  python invoke.py --name flash --word samples/flash.docx --elements samples/flash_elements.yaml --no-body --no-appendix --auto-confirm
+  python invoke.py --name flash --word inbox/samples/flash/docx --elements inbox/samples/flash_elements.yaml --no-body --no-appendix --auto-confirm
         """
     )
 

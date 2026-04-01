@@ -29,7 +29,7 @@ def test_workflow():
     
     # 1. 读取样本 elements
     print("\n1. 读取样本 elements.yaml")
-    elements_path = "samples/西锐飞机首次覆盖报告（中文）提交版 elements.yaml"
+    elements_path = "inbox/samples/company/西锐飞机首次覆盖报告（中文）提交版 elements.yaml"
     elements = load_yaml(elements_path)
     print(f"   读取到 {len(elements)} 个字段")
     print(f"   示例字段: ticker={elements.get('ticker')}, company={elements.get('company')}")
@@ -57,7 +57,7 @@ def test_workflow():
     
     # 5. 读取草稿文档结构
     print("\n5. 读取草稿文档结构")
-    draft_path = "samples/西锐飞机首次覆盖报告（中文）提交版.docx"
+    draft_path = "inbox/samples/company/西锐飞机首次覆盖报告（中文）提交版.docx"
     doc_structure = read_document_structure(draft_path)
     if "error" in doc_structure:
         print(f"   ❌ {doc_structure['error']}")
