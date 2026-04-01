@@ -28,6 +28,48 @@ def _parse_docx_xml(doc_path: str) -> etree._Element:
             return etree.parse(f).getroot()
 
 
+def _build_body_para_index_map(tree: etree._Element) -> Dict[int, int]:
+    """建立XML段落索引到python-docx段落索引的映射。
+
+    python-docx的doc.paragraphs只包含body直接子元素中的<w:p>，
+    而tree.iter('{W}p')会遍历所有<w:p>（包括嵌套在表格内的）。
+    这个函数建立两者之间的映射关系。
+
+    Args:
+        tree: document.xml 根元素
+
+    Returns:
+        {xml_para_index: docx_para_index, ...} 映射字典
+    """
+    body = tree.find(f'{W}body')
+    if body is None:
+        return {}
+
+    # 收集body直接子元素中的所有<w:p>元素
+    body_direct_p_elements = []
+    for child in body:
+        tag = etree.QName(child.tag).localname
+        if tag == 'p':
+            body_direct_p_elements.append(child)
+        # 表格内的段落不计入python-docux的段落索引
+
+    # 建立映射：xml全局索引 -> body直接子元素中的p索引
+    xml_all_paras = list(tree.iter(f'{W}p'))
+
+    # 创建从xml索引到docx索引的映射
+    xml_to_docx_map = {}
+    docx_idx = 0
+
+    for xml_idx, p_elem in enumerate(xml_all_paras):
+        # 检查这个p元素是否是body的直接子元素
+        if p_elem in body_direct_p_elements:
+            xml_to_docx_map[xml_idx] = docx_idx
+            docx_idx += 1
+        # 如果不是body直接子元素，不建立映射
+
+    return xml_to_docx_map
+
+
 def _get_paragraphs_and_tables(tree: etree._Element) -> Tuple[List[etree._Element], List[etree._Element]]:
     """获取所有段落和表格元素。
 
@@ -246,6 +288,7 @@ def find_body_range_by_sections(doc_path: str, abstract_end_hint: int = None) ->
        - 最后一个分节符之前，或 APPENDIX 标题之前
 
     使用 lxml 直接解析 document.xml，确保完整读取。
+    返回的索引是 python-docux 兼容的。
 
     Args:
         doc_path: 文档路径
@@ -262,7 +305,11 @@ def find_body_range_by_sections(doc_path: str, abstract_end_hint: int = None) ->
     tree = _parse_docx_xml(doc_path)
     paragraphs = list(tree.iter(f'{W}p'))
     total_paragraphs = len(paragraphs)
-    sect_pr_indices = []  # [paragraph_index, ...]
+
+    # 建立XML索引到python-docux索引的映射
+    xml_to_docx = _build_body_para_index_map(tree)
+
+    sect_pr_indices = []  # [xml_paragraph_index, ...]
 
     for para_idx, para in enumerate(paragraphs):
         # 检查段落是否有分节符
@@ -280,7 +327,7 @@ def find_body_range_by_sections(doc_path: str, abstract_end_hint: int = None) ->
         first_sect_idx = sect_pr_indices[0]
         # 如果第一个分节符在文档前 30%，认为是首页结束
         if first_sect_idx < total_paragraphs * 0.3:
-            start_paragraph = first_sect_idx + 1
+            start_paragraph = xml_to_docx.get(first_sect_idx + 1, first_sect_idx + 1)
         elif abstract_end_hint is not None:
             start_paragraph = abstract_end_hint + 1
     elif len(sect_pr_indices) == 1:
@@ -300,14 +347,16 @@ def find_body_range_by_sections(doc_path: str, abstract_end_hint: int = None) ->
     if sect_pr_indices:
         # 使用最后一个分节符作为正文结束
         last_sect_idx = sect_pr_indices[-1]
-        end_paragraph = last_sect_idx + 1
+        end_paragraph = xml_to_docx.get(last_sect_idx + 1, last_sect_idx + 1)
 
     # 同时检查 APPENDIX 标题位置（可能比分节符更早）
     appendix_result = find_first_appendix_position(doc_path)
     if appendix_result.get("found"):
         appendix_start = appendix_result["start_paragraph"]
-        if appendix_start < end_paragraph:
-            end_paragraph = appendix_start
+        # 转换为docx索引
+        appendix_start_docx = xml_to_docx.get(appendix_start, appendix_start)
+        if appendix_start_docx < end_paragraph:
+            end_paragraph = appendix_start_docx
 
     # 确保 start < end
     if start_paragraph >= end_paragraph:
@@ -316,10 +365,11 @@ def find_body_range_by_sections(doc_path: str, abstract_end_hint: int = None) ->
     # 获取正文预览（第一段非空内容）
     preview_text = ""
     for i in range(start_paragraph, min(start_paragraph + 10, end_paragraph)):
-        para_text = _get_para_text(paragraphs[i]).strip()
-        if para_text and len(para_text) > 10:
-            preview_text = para_text[:80] if len(para_text) > 80 else para_text
-            break
+        if i < len(paragraphs):
+            para_text = _get_para_text(paragraphs[i]).strip()
+            if para_text and len(para_text) > 10:
+                preview_text = para_text[:80] if len(para_text) > 80 else para_text
+                break
 
     return {
         "found": True,
@@ -416,6 +466,7 @@ def find_summary_by_markers(doc_path: str) -> Dict[str, Any]:
     4. 通常位于文档后半部分
 
     使用 lxml 直接解析 document.xml，确保嵌套表格不漏读。
+    返回的索引是 python-docux 兼容的。
 
     Args:
         doc_path: 文档路径
@@ -423,8 +474,8 @@ def find_summary_by_markers(doc_path: str) -> Dict[str, Any]:
     Returns:
         {
             "found": bool,
-            "start_paragraph": int,  # 开始段落索引
-            "end_paragraph": int,    # 结束段落索引
+            "start_paragraph": int,  # 开始段落索引（python-docux兼容）
+            "end_paragraph": int,    # 结束段落索引（python-docux兼容）
             "context": str
         }
     """
@@ -432,6 +483,9 @@ def find_summary_by_markers(doc_path: str) -> Dict[str, Any]:
 
     paragraphs = list(tree.iter(f'{W}p'))
     total_paragraphs = len(paragraphs)
+
+    # 建立XML索引到python-docux索引的映射
+    xml_to_docx = _build_body_para_index_map(tree)
 
     # 只在文档后半部分搜索（Summary 通常在 APPENDIX 中）
     start_search_idx = total_paragraphs // 2
@@ -494,12 +548,27 @@ def find_summary_by_markers(doc_path: str) -> Dict[str, Any]:
                     end_idx = next_idx
                     break
 
+            # 转换为docx索引
+            docx_start = xml_to_docx.get(idx, idx)
+            # 如果end_idx不在映射中（可能在表格内），向前找最近的有效docx索引
+            if end_idx in xml_to_docx:
+                docx_end = xml_to_docx[end_idx]
+            else:
+                # 向前找最近的一个在映射中的xml索引
+                docx_end = None
+                for prev_idx in range(end_idx - 1, idx, -1):
+                    if prev_idx in xml_to_docx:
+                        docx_end = xml_to_docx[prev_idx]
+                        break
+                if docx_end is None:
+                    docx_end = max(xml_to_docx.values()) if xml_to_docx else 0
+
             return {
                 "found": True,
-                "start_paragraph": idx,
-                "end_paragraph": end_idx,
+                "start_paragraph": docx_start,
+                "end_paragraph": docx_end,
                 "preview": preview_text,
-                "context": f"段落 {idx} 到 {end_idx}: {text[:50]}..."
+                "context": f"段落 {docx_start} 到 {docx_end}: {text[:50]}..."
             }
 
     return {"found": False, "reason": "未找到 Summary 标记"}
@@ -513,6 +582,7 @@ def find_first_appendix_position(doc_path: str) -> Dict[str, Any]:
     （如 "附录APPENDIX 重要信息披露"）。
 
     使用 lxml 直接解析 document.xml，确保嵌套表格不漏读。
+    返回的索引是 python-docux 兼容的。
 
     Args:
         doc_path: 文档路径
@@ -527,6 +597,9 @@ def find_first_appendix_position(doc_path: str) -> Dict[str, Any]:
     """
     tree = _parse_docx_xml(doc_path)
     paragraphs = list(tree.iter(f'{W}p'))
+
+    # 建立XML索引到python-docux索引的映射
+    xml_to_docx = _build_body_para_index_map(tree)
 
     for i, para in enumerate(paragraphs):
         text = _get_para_text(para).strip()
@@ -551,11 +624,13 @@ def find_first_appendix_position(doc_path: str) -> Dict[str, Any]:
             is_appendix_title = True
 
         if is_appendix_title:
+            # 转换为docx索引
+            docx_idx = xml_to_docx.get(i, i)
             return {
                 "found": True,
-                "start_paragraph": i,
+                "start_paragraph": docx_idx,
                 "text": text[:100],
-                "context": f"段落 {i}: {text[:50]}"
+                "context": f"段落 {docx_idx}: {text[:50]}"
             }
 
     return {"found": False, "reason": "未找到 APPENDIX 相关标题"}

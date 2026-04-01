@@ -590,7 +590,7 @@ def replace_body_in_doc(doc: Document, start_paragraph: int,
 
     Args:
         doc: Document 对象
-        start_paragraph: 起始段落索引
+        start_paragraph: 起始段落索引（python-docx paragraphs索引）
         end_paragraph: 结束段落索引（不包含）
 
     Returns:
@@ -607,74 +607,54 @@ def replace_body_in_doc(doc: Document, start_paragraph: int,
     # 获取 body 元素
     body = doc._body._body
 
-    # 建立段落索引到 XML 元素的映射
-    # doc.paragraphs 包含所有段落（包括表格内的），但我们需要找到它们在 body 中的位置
-    para_to_element = {}
-    para_idx = 0
-    for child in body:
-        tag = etree.QName(child.tag).localname
-        if tag == 'p':
-            para_to_element[para_idx] = child
-            para_idx += 1
-        elif tag == 'tbl':
-            # 表格内的段落也计入索引
-            for p in child.iter(f'{W}p'):
-                para_to_element[para_idx] = p
-                para_idx += 1
-        elif tag == 'sdt':
-            # SDT（目录）内的段落也计入索引
-            for p in child.iter(f'{W}p'):
-                para_to_element[para_idx] = p
-                para_idx += 1
-
-    # 找到起始和结束位置对应的 body 直接子元素
-    start_element = para_to_element.get(start_paragraph)
-    end_idx = min(end_paragraph - 1, len(doc.paragraphs) - 1)
-    end_element = para_to_element.get(end_idx)
-
-    if start_element is None:
-        raise ValueError(f"无法找到段落 {start_paragraph} 对应的元素")
-
-    # 找到起始元素在 body 中的直接父元素（可能是段落本身、表格或 SDT）
-    def find_body_child(element):
-        """向上查找元素在 body 中的直接子元素"""
-        current = element
-        while current is not None:
-            parent = current.getparent()
-            if parent is not None and parent.tag == f'{W}body':
-                return current
-            current = parent
-        return None
-
-    start_body_child = find_body_child(start_element)
-    end_body_child = find_body_child(end_element) if end_element else start_body_child
-
-    # 收集 body 直接子元素列表
+    # 建立 doc.paragraphs 索引到 body 直接子元素的映射
+    # 对于 doc.paragraphs[n]，找到它在 body_children 中的直接父元素
     body_children = list(body)
 
-    # 找到起始和结束在 body 子元素中的索引
-    try:
-        start_child_idx = body_children.index(start_body_child)
-    except ValueError:
-        start_child_idx = 0
+    # 创建段落索引到 body_children 索引的映射
+    # doc.paragraphs[n]._element 对应的 body_children 元素
+    para_to_body_idx = {}
 
-    try:
-        end_child_idx = body_children.index(end_body_child)
-    except ValueError:
-        end_child_idx = len(body_children) - 1
+    for body_idx, child in enumerate(body_children):
+        tag = etree.QName(child.tag).localname
+        if tag == 'p':
+            # body直接子元素就是段落元素
+            # 找到这个段落在 doc.paragraphs 中的位置
+            for para_idx, para in enumerate(doc.paragraphs):
+                if para._element is child:
+                    para_to_body_idx[para_idx] = body_idx
+                    break
+        elif tag == 'tbl':
+            # 表格元素：检查表格内的每个段落在 doc.paragraphs 中的位置
+            for p_elem in child.iter(f'{W}p'):
+                for para_idx, para in enumerate(doc.paragraphs):
+                    if para._element is p_elem:
+                        para_to_body_idx[para_idx] = body_idx
+                        break
+        elif tag == 'sdt':
+            # SDT 元素：检查 SDT 内的每个段落
+            for p_elem in child.iter(f'{W}p'):
+                for para_idx, para in enumerate(doc.paragraphs):
+                    if para._element is p_elem:
+                        para_to_body_idx[para_idx] = body_idx
+                        break
 
-    # 收集要删除的元素（正文区域内的所有元素）
+    # 找到起始和结束位置对应的 body_children 索引
+    start_body_idx = para_to_body_idx.get(start_paragraph, 0)
+    end_body_idx = para_to_body_idx.get(end_paragraph - 1, len(body_children) - 1)
+
+    # 确保 start_body_idx < end_body_idx
+    if start_body_idx > end_body_idx:
+        start_body_idx, end_body_idx = end_body_idx, start_body_idx
+
+    # 收集要删除的元素（正文区域内的所有 body_children 元素）
     elements_to_remove = []
     first_body_element = None
     last_sect_pr = None
 
-    for i, child in enumerate(body_children):
+    for body_idx in range(start_body_idx, end_body_idx + 1):
+        child = body_children[body_idx]
         tag = etree.QName(child.tag).localname
-
-        if i < start_child_idx:
-            continue
-        if i > end_child_idx:
-            break
 
         if first_body_element is None:
             first_body_element = child
