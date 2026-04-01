@@ -352,11 +352,13 @@ def _confirm_abstract_location(detected: dict) -> str | None:
     print("【步骤 1/4】确认摘要位置")
     print("=" * 60)
 
+    # 获取实际的 location 数据
+    location = detected.get("location", {}) if detected else {}
+
     # 如果检测到摘要，先展示内容让用户确认
-    if detected and detected.get("found"):
-        location = detected.get("location", detected)
+    if location.get("found"):
         detected_scope = location.get('scope') or location.get('context', '未知')
-        preview = location.get('preview') or detected.get('preview', '')
+        preview = location.get('preview', '')
 
         print(f"\n自动检测到摘要：")
         print(f"  位置：{detected_scope}")
@@ -398,7 +400,7 @@ def _confirm_abstract_location(detected: dict) -> str | None:
 
     else:
         # 未检测到摘要，直接询问是否有
-        reason = detected.get('reason', '未知原因') if detected else '未知原因'
+        reason = location.get('reason', '未知原因') if location else '未知原因'
         print(f"\n未自动检测到摘要（{reason}）")
         print("这份报告是否有摘要部分？")
 
@@ -439,9 +441,11 @@ def _confirm_body_location(detected: dict) -> str | None:
     print("【步骤 2/4】确认正文位置")
     print("=" * 60)
 
+    # 获取实际的 location 数据
+    location = detected.get("location", {}) if detected else {}
+
     # 如果检测到正文，先展示信息让用户确认
-    if detected and detected.get("found"):
-        location = detected.get("location", detected)
+    if location.get("found"):
         detected_scope = location.get('scope') or location.get('context', '未知')
 
         print(f"\n自动检测到正文：")
@@ -481,7 +485,7 @@ def _confirm_body_location(detected: dict) -> str | None:
 
     else:
         # 未检测到正文，直接询问是否有
-        reason = detected.get('reason', '未知原因') if detected else '未知原因'
+        reason = location.get('reason', '未知原因') if location else '未知原因'
         print(f"\n未自动检测到正文（{reason}）")
         print("这份报告是否有正文部分？")
 
@@ -522,9 +526,11 @@ def _confirm_summary_location(detected: dict) -> str | None:
     print("【步骤 3/4】确认英文 Summary 位置")
     print("=" * 60)
 
+    # 获取实际的 location 数据
+    location = detected.get("location", {}) if detected else {}
+
     # 如果检测到 Summary，先展示信息让用户确认
-    if detected and detected.get("found"):
-        location = detected.get("location", detected)
+    if location.get("found"):
         detected_scope = location.get('scope') or location.get('context', '未知')
 
         print(f"\n自动检测到英文 Summary：")
@@ -565,7 +571,7 @@ def _confirm_summary_location(detected: dict) -> str | None:
 
     else:
         # 未检测到 Summary，直接询问是否有
-        reason = detected.get('reason', '未知原因') if detected else '未知原因'
+        reason = location.get('reason', '未知原因') if location else '未知原因'
         print(f"\n未自动检测到英文 Summary（{reason}）")
         print("这份报告是否有英文 Summary 部分？")
         print("  （通常在 APPENDIX 1 中，或 Executive Summary）")
@@ -598,12 +604,12 @@ def _get_appendix_location(detected: dict) -> str:
     Returns:
         附录位置描述
     """
-    if detected and detected.get("found"):
+    if detected:
         location = detected.get('location', {})
-        return location.get('context', DEFAULT_APPENDIX_SCOPE)
-    else:
-        # 法律附录一定有，使用默认位置
-        return DEFAULT_APPENDIX_SCOPE
+        if location.get("found"):
+            return location.get('context', DEFAULT_APPENDIX_SCOPE)
+    # 法律附录一定有，使用默认位置
+    return DEFAULT_APPENDIX_SCOPE
 
 
 def _confirm_report_type_mapping(name: str, router_path: Path, auto_confirm: bool) -> str | None:
