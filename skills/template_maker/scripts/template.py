@@ -31,6 +31,170 @@ def save_document(doc: Document, output_path: str) -> None:
     """
     doc.save(output_path)
 
+def save_document_with_cleanup(doc: Document, output_path: str) -> None:
+    """保存 Word 文档并清理孤立的嵌入对象（图表、Excel 等）。
+
+    当删除正文区域后，原有的图表和嵌入对象可能不再被引用，
+    此函数会自动清理这些孤立文件，减小文档大小。
+
+    Args:
+        doc: Document 对象
+        output_path: 输出路径
+    """
+    import zipfile
+    import io
+    from lxml import etree
+
+    # 先保存到内存
+    buffer = io.BytesIO()
+    doc.save(buffer)
+    buffer.seek(0)
+    doc_bytes = buffer.read()
+
+    used_files = set()
+    try:
+        with zipfile.ZipFile(io.BytesIO(doc_bytes), 'r') as z:
+            rId_to_target = {}
+            try:
+                with z.open('word/_rels/document.xml.rels') as f:
+                    tree = etree.parse(f)
+                    for rel in tree.iter('{http://schemas.openxmlformats.org/package/2006/relationships}Relationship'):
+                        rid = rel.get('Id')
+                        target = rel.get('Target')
+                        if rid and target:
+                            rId_to_target[rid] = target
+            except KeyError:
+                pass
+
+            chart_ole_refs = set()
+            for name in z.namelist():
+                if name.startswith('word/charts/_rels/') and name.endswith('.xml.rels'):
+                    try:
+                        with z.open(name) as f:
+                            chart_tree = etree.parse(f)
+                            for rel in chart_tree.iter('{http://schemas.openxmlformats.org/package/2006/relationships}Relationship'):
+                                target = rel.get('Target')
+                                rel_type = rel.get('Type')
+                                if target and ('oleObject' in rel_type or 'package' in rel_type or 'Workbook' in target):
+                                    if 'embeddings/' in target:
+                                        fname = target.split('embeddings/')[-1]
+                                        chart_ole_refs.add(f'embeddings/{fname}')
+                                    elif target.startswith('embeddings/'):
+                                        chart_ole_refs.add(target)
+                    except Exception:
+                        pass
+
+            for rid, target in rId_to_target.items():
+                if 'embeddings/' in target:
+                    used_files.add(target)
+                elif target.startswith('../embeddings/'):
+                    used_files.add(target.replace('../', ''))
+            for ref in chart_ole_refs:
+                if 'embeddings/' in ref:
+                    used_files.add(ref)
+
+            essential_files = {'word/document.xml', 'word/styles.xml', 'word/settings.xml',
+                             'word/numbering.xml', 'Content_Types.xml', '[Content_Types].xml'}
+
+            referenced_charts = set()
+            for rid, target in rId_to_target.items():
+                if 'charts/chart' in target:
+                    if target.startswith('charts/'):
+                        referenced_charts.add(f'word/{target}')
+                    elif target.startswith('word/charts/'):
+                        referenced_charts.add(target)
+
+            referenced_embeddings = set()
+            for rid, target in rId_to_target.items():
+                if 'embeddings/' in target:
+                    referenced_embeddings.add(f'word/{target}')
+                elif target.startswith('../embeddings/'):
+                    referenced_embeddings.add(f'word/{target.replace("../", "")}')
+            for ref in chart_ole_refs:
+                if ref.startswith('embeddings/'):
+                    referenced_embeddings.add(f'word/{ref}')
+
+            # 收集所有被引用的 media 文件
+            # 需要检查 rId 是否真的在文档内容中被使用
+            referenced_media = set()
+            rId_to_media = {}
+            for rid, target in rId_to_target.items():
+                if 'media/' in target:
+                    rId_to_media[rid] = f'word/{target}'
+
+            # 检查 document.xml 中实际使用的 rId 引用
+            doc_content = z.read('word/document.xml').decode('utf-8', errors='ignore')
+            import re
+            used_rids = set(re.findall(r'r:embed="(rId\d+)"', doc_content))
+
+            # 也检查 header 和 footer 文件
+            for name in z.namelist():
+                if name.startswith('word/header') and name.endswith('.xml'):
+                    try:
+                        content = z.read(name).decode('utf-8', errors='ignore')
+                        used_rids.update(re.findall(r'r:embed="(rId\d+)"', content))
+                    except:
+                        pass
+                elif name.startswith('word/footer') and name.endswith('.xml'):
+                    try:
+                        content = z.read(name).decode('utf-8', errors='ignore')
+                        used_rids.update(re.findall(r'r:embed="(rId\d+)"', content))
+                    except:
+                        pass
+
+            # 只添加实际被使用的 media 文件
+            for rid in used_rids:
+                if rid in rId_to_media:
+                    referenced_media.add(rId_to_media[rid])
+
+            # 也检查 chart 中的内嵌媒体引用
+            for name in z.namelist():
+                if name.startswith('word/charts/') and name.endswith('.xml'):
+                    try:
+                        chart_content = z.read(name).decode('utf-8', errors='ignore')
+                        for match in chart_content.split('media/'):
+                            if '/' in match or '\\' in match:
+                                parts = (match.split('/')[0] if '/' in match else match.split('\\')[0]).split('"')[0].split('>')[0]
+                                if parts and not parts.startswith('..'):
+                                    referenced_media.add(f'word/media/{parts}')
+                    except:
+                        pass
+
+            all_files = set(z.namelist())
+            files_to_delete = set()
+            for f in all_files:
+                if f in essential_files or f.startswith('word/_rels/'):
+                    continue
+                if '/_rels/' in f or f.endswith('.rels'):
+                    continue
+                if f.startswith('word/charts/chart'):
+                    if f.endswith('.xml.rels'):
+                        continue
+                    if f not in referenced_charts:
+                        files_to_delete.add(f)
+                        files_to_delete.add(f + '.rels')
+                elif f.startswith('word/embeddings/'):
+                    if f not in referenced_embeddings:
+                        files_to_delete.add(f)
+                elif f.startswith('word/media/'):
+                    if f not in referenced_media:
+                        files_to_delete.add(f)
+
+            if not files_to_delete:
+                with open(output_path, 'wb') as dst:
+                    dst.write(doc_bytes)
+                return
+
+            with zipfile.ZipFile(output_path, 'w', zipfile.ZIP_DEFLATED) as new_z:
+                for item in z.namelist():
+                    if item not in files_to_delete:
+                        new_z.writestr(item, z.read(item))
+            print(f'  已清理 {len(files_to_delete)} 个孤立文件')
+    except Exception as e:
+        with open(output_path, 'wb') as dst:
+            dst.write(doc_bytes)
+        print(f'  清理失败，使用原始保存: {e}')
+
 
 # ==================== 字段替换 ====================
 
@@ -811,6 +975,63 @@ def replace_body_in_doc(doc: Document, start_paragraph: int,
                 pPr = etree.Element(f'{W}pPr')
                 first_body_element.insert(0, pPr)
             pPr.append(last_sect_pr)
+
+    # 清理图表关系：删除 document.xml.rels 中的图表引用
+    # 这样 save_document_with_cleanup 会将图表视为孤立文件并删除
+    try:
+        # 获取文档的内部 zip 结构
+        from docx.opc.constants import RELATIONSHIP_TYPE as RT
+        import zipfile
+        import io
+
+        # 保存到内存
+        buffer = io.BytesIO()
+        doc.save(buffer)
+        buffer.seek(0)
+
+        # 读取并修改 relationships
+        with zipfile.ZipFile(buffer, 'r') as zin:
+            rels_content = zin.read('word/_rels/document.xml.rels')
+
+        # 解析 XML
+        rels_tree = etree.fromstring(rels_content)
+        nsmap = {'r': 'http://schemas.openxmlformats.org/package/2006/relationships'}
+
+        # 找到并删除所有 chart 引用
+        chart_rels_to_remove = []
+        for rel in rels_tree.findall('r:Relationship', nsmap):
+            rel_type = rel.get('Type', '')
+            target = rel.get('Target', '')
+            if 'chart' in rel_type.lower() or (target.startswith('charts/') and target.endswith('.xml')):
+                chart_rels_to_remove.append(rel)
+
+        for rel in chart_rels_to_remove:
+            rels_tree.remove(rel)
+
+        # 重新序列化为 XML
+        new_rels_content = etree.tostring(rels_tree, xml_declaration=True, encoding='UTF-8', standalone=True)
+
+        # 更新 buffer 中的文件
+        buffer.seek(0)
+        output_buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, 'r') as zin:
+            with zipfile.ZipFile(output_buffer, 'w', zipfile.ZIP_DEFLATED) as zout:
+                for item in zin.namelist():
+                    if item == 'word/_rels/document.xml.rels':
+                        zout.writestr(item, new_rels_content)
+                    else:
+                        zout.writestr(item, zin.read(item))
+
+        # 重新加载文档
+        output_buffer.seek(0)
+        from docx import Document
+        doc = Document(output_buffer)
+
+    except Exception as e:
+        # 如果清理失败，继续使用原始文档（图表会被保留）
+        import traceback
+        traceback.print_exc()
+        print(f'  警告: 清理图表关系失败: {e}')
 
     return doc
 
