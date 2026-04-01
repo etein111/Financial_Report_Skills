@@ -145,8 +145,8 @@ def find_abstract_by_elements(doc_path: str, elements: dict) -> Dict[str, Any]:
             if field_value in para_text:
                 # 检查这个段落是否像摘要（长文本，没有明显的键值对格式）
                 if _is_likely_abstract_paragraph(para_text, field_value):
-                    # 提取预览文本（前80个字符）
-                    preview_text = field_value[:80] if len(field_value) > 80 else field_value
+                    # 提取预览文本（原文的前80个字符）
+                    preview_text = para_text[:80] if len(para_text) > 80 else para_text
                     return {
                         "found": True,
                         "table": None,
@@ -166,8 +166,8 @@ def find_abstract_by_elements(doc_path: str, elements: dict) -> Dict[str, Any]:
                     if field_value in cell_text:
                         # 检查这个单元格是否像摘要
                         if _is_likely_abstract_cell_text(cell_text, field_value, tc):
-                            # 提取预览文本（前80个字符）
-                            preview_text = field_value[:80] if len(field_value) > 80 else field_value
+                            # 提取预览文本（原文的前80个字符）
+                            preview_text = cell_text[:80] if len(cell_text) > 80 else cell_text
                             return {
                                 "found": True,
                                 "table": tbl_idx,
@@ -234,13 +234,22 @@ def _is_likely_abstract_cell_text(cell_text: str, field_value: str, tc: etree._E
 
 # ==================== 正文范围查找 ====================
 
-def find_body_range_by_sections(doc_path: str) -> Dict[str, Any]:
+def find_body_range_by_sections(doc_path: str, abstract_end_hint: int = None) -> Dict[str, Any]:
     """根据分节符位置确定正文范围。
+
+    正文范围逻辑：
+    1. 正文开始位置：
+       - 如果有多个分节符，且第一个分节符在文档前 30%，正文从该分节符之后开始（首页结束）
+       - 否则使用 abstract_end_hint（如果提供）
+       - 都没有则从段落 0 开始
+    2. 正文结束位置：
+       - 最后一个分节符之前，或 APPENDIX 标题之前
 
     使用 lxml 直接解析 document.xml，确保完整读取。
 
     Args:
         doc_path: 文档路径
+        abstract_end_hint: 摘要结束位置提示（可选），用于辅助确定正文起始
 
     Returns:
         {
@@ -252,6 +261,7 @@ def find_body_range_by_sections(doc_path: str) -> Dict[str, Any]:
     """
     tree = _parse_docx_xml(doc_path)
     paragraphs = list(tree.iter(f'{W}p'))
+    total_paragraphs = len(paragraphs)
     sect_pr_indices = []  # [paragraph_index, ...]
 
     for para_idx, para in enumerate(paragraphs):
@@ -262,22 +272,61 @@ def find_body_range_by_sections(doc_path: str) -> Dict[str, Any]:
             if sect_pr is not None:
                 sect_pr_indices.append(para_idx)
 
-    # 如果有分节符，以最后一个分节符之后作为正文结束
-    if sect_pr_indices:
-        last_sect_idx = sect_pr_indices[-1]
-        return {
-            "found": True,
-            "start_paragraph": 0,  # 正文从第一段开始
-            "end_paragraph": last_sect_idx + 1,
-            "context": f"正文范围: 段落 0 到 {last_sect_idx}（分节符之前）"
-        }
+    # 确定正文开始位置
+    start_paragraph = 0
 
-    # 如果没有分节符，返回整个文档
+    if len(sect_pr_indices) >= 2:
+        # 有多个分节符：第一个通常是首页结束
+        first_sect_idx = sect_pr_indices[0]
+        # 如果第一个分节符在文档前 30%，认为是首页结束
+        if first_sect_idx < total_paragraphs * 0.3:
+            start_paragraph = first_sect_idx + 1
+        elif abstract_end_hint is not None:
+            start_paragraph = abstract_end_hint + 1
+    elif len(sect_pr_indices) == 1:
+        # 只有一个分节符（通常是法律披露开始）
+        # 尝试使用 abstract_end_hint
+        if abstract_end_hint is not None:
+            start_paragraph = abstract_end_hint + 1
+        # 否则从 0 开始（保守策略）
+    else:
+        # 没有分节符
+        if abstract_end_hint is not None:
+            start_paragraph = abstract_end_hint + 1
+
+    # 确定正文结束位置
+    end_paragraph = total_paragraphs
+
+    if sect_pr_indices:
+        # 使用最后一个分节符作为正文结束
+        last_sect_idx = sect_pr_indices[-1]
+        end_paragraph = last_sect_idx + 1
+
+    # 同时检查 APPENDIX 标题位置（可能比分节符更早）
+    appendix_result = find_first_appendix_position(doc_path)
+    if appendix_result.get("found"):
+        appendix_start = appendix_result["start_paragraph"]
+        if appendix_start < end_paragraph:
+            end_paragraph = appendix_start
+
+    # 确保 start < end
+    if start_paragraph >= end_paragraph:
+        start_paragraph = 0
+
+    # 获取正文预览（第一段非空内容）
+    preview_text = ""
+    for i in range(start_paragraph, min(start_paragraph + 10, end_paragraph)):
+        para_text = _get_para_text(paragraphs[i]).strip()
+        if para_text and len(para_text) > 10:
+            preview_text = para_text[:80] if len(para_text) > 80 else para_text
+            break
+
     return {
         "found": True,
-        "start_paragraph": 0,
-        "end_paragraph": len(paragraphs),
-        "context": f"正文范围: 段落 0 到 {len(paragraphs) - 1}（整个文档）"
+        "start_paragraph": start_paragraph,
+        "end_paragraph": end_paragraph,
+        "preview": preview_text,
+        "context": f"正文范围: 段落 {start_paragraph} 到 {end_paragraph - 1}"
     }
 
 
@@ -428,15 +477,20 @@ def find_summary_by_markers(doc_path: str) -> Dict[str, Any]:
         if is_summary_title:
             # 找到结束位置：下一个 APPENDIX 标题或法律披露标题
             end_idx = total_paragraphs
+            preview_text = text  # 默认使用标题
             for next_idx in range(idx + 1, total_paragraphs):
-                next_text = _get_para_text(paragraphs[next_idx]).strip().upper()
+                next_text = _get_para_text(paragraphs[next_idx]).strip()
+                next_text_upper = next_text.upper()
                 if not next_text:
                     continue
+                # 如果还没找到预览内容，取第一个非空的正文段落
+                if preview_text == text and len(next_text) > 20:
+                    preview_text = next_text[:80] if len(next_text) > 80 else next_text
                 # 遇到下一个 APPENDIX 或法律披露标题就结束
-                if (next_text.startswith('APPENDIX') and next_idx != idx) or \
-                   '附录' in next_text or \
-                   'IMPORTANT DISCLOSURE' in next_text or \
-                   '重要信息披露' in next_text:
+                if (next_text_upper.startswith('APPENDIX') and next_idx != idx) or \
+                   '附录' in next_text_upper or \
+                   'IMPORTANT DISCLOSURE' in next_text_upper or \
+                   '重要信息披露' in next_text_upper:
                     end_idx = next_idx
                     break
 
@@ -444,6 +498,7 @@ def find_summary_by_markers(doc_path: str) -> Dict[str, Any]:
                 "found": True,
                 "start_paragraph": idx,
                 "end_paragraph": end_idx,
+                "preview": preview_text,
                 "context": f"段落 {idx} 到 {end_idx}: {text[:50]}..."
             }
 

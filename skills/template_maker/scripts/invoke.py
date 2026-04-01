@@ -305,8 +305,14 @@ def _auto_detect_locations(word_path: Path, elements: dict) -> dict:
             "location": abstract_location
         }
 
+    # 获取摘要结束位置作为正文开始的提示
+    abstract_end_hint = None
+    if abstract_location.get("found") and abstract_location.get("start_paragraph") is not None:
+        # 如果摘要在段落中，使用段落索引
+        abstract_end_hint = abstract_location["start_paragraph"]
+
     # 检测正文位置
-    body_location = find_body_range_by_sections(str(word_path))
+    body_location = find_body_range_by_sections(str(word_path), abstract_end_hint=abstract_end_hint)
     if body_location.get("found"):
         result["body"] = {
             "location": body_location
@@ -447,9 +453,13 @@ def _confirm_body_location(detected: dict) -> str | None:
     # 如果检测到正文，先展示信息让用户确认
     if location.get("found"):
         detected_scope = location.get('scope') or location.get('context', '未知')
+        preview = location.get('preview', '')
 
         print(f"\n自动检测到正文：")
         print(f"  范围：{detected_scope}")
+        if preview:
+            preview_text = preview[:80] if isinstance(preview, str) else str(preview)[:80]
+            print(f"  内容预览：{preview_text}...")
 
         print("\n请确认检测是否正确：")
         print("  - 回车或 y：正确，使用此范围")
@@ -532,9 +542,13 @@ def _confirm_summary_location(detected: dict) -> str | None:
     # 如果检测到 Summary，先展示信息让用户确认
     if location.get("found"):
         detected_scope = location.get('scope') or location.get('context', '未知')
+        preview = location.get('preview', '')
 
         print(f"\n自动检测到英文 Summary：")
         print(f"  范围：{detected_scope}")
+        if preview:
+            preview_text = preview[:80] if isinstance(preview, str) else str(preview)[:80]
+            print(f"  内容预览：{preview_text}...")
 
         print("\n请确认检测是否正确：")
         print("  - 回车或 y：正确，使用此范围")
@@ -854,8 +868,13 @@ def create_template(
         body_location = body_detected.get("location") if body_detected else None
 
         if not body_location or not body_location.get("found"):
-            # 尝试重新检测
-            body_location = find_body_range_by_sections(str(word_path))
+            # 尝试重新检测，使用摘要位置作为提示
+            abstract_detected = detected_locations.get("abstract")
+            abstract_location = abstract_detected.get("location") if abstract_detected else None
+            abstract_end_hint = None
+            if abstract_location and abstract_location.get("found") and abstract_location.get("start_paragraph") is not None:
+                abstract_end_hint = abstract_location["start_paragraph"]
+            body_location = find_body_range_by_sections(str(word_path), abstract_end_hint=abstract_end_hint)
 
         if body_location and body_location.get("found"):
             start_para = body_location["start_paragraph"]
