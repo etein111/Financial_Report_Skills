@@ -108,6 +108,7 @@ def find_abstract_by_elements(doc_path: str, elements: dict) -> Dict[str, Any]:
     2. 摘要不包含评级(RATING)、目标价(TARGET PRICE)等单独字段
     3. 摘要通常是自然段落，不是表格中的键值对
     4. 跳过标题字段（title, title_ch, title_en），避免将标题误判为摘要
+    5. 如果在表格中找到摘要，返回整个表格而不是单个单元格
 
     使用 lxml 直接解析，确保嵌套表格不漏读。
 
@@ -122,11 +123,16 @@ def find_abstract_by_elements(doc_path: str, elements: dict) -> Dict[str, Any]:
             "row": int,         # 行索引
             "col_start": int,   # 起始列
             "col_end": int,     # 结束列
+            "start_paragraph": int,  # 起始段落索引（python-docx兼容）
+            "end_paragraph": int,    # 结束段落索引（python-docx兼容）
             "context": str      # 上下文描述
         }
     """
     tree = _parse_docx_xml(doc_path)
     paragraphs, tables = _get_paragraphs_and_tables(tree)
+
+    # 建立XML索引到python-docx索引的映射
+    xml_to_docx = _build_body_para_index_map(tree)
 
     # 收集所有字段值用于匹配
     field_values = []
@@ -153,6 +159,8 @@ def find_abstract_by_elements(doc_path: str, elements: dict) -> Dict[str, Any]:
             if field_value in para_text:
                 # 检查这个段落是否像摘要（长文本，没有明显的键值对格式）
                 if _is_likely_abstract_paragraph(para_text, field_value):
+                    # 转换为docx索引
+                    docx_para_idx = xml_to_docx.get(para_idx, para_idx)
                     # 提取预览文本（原文的前80个字符）
                     preview_text = para_text[:80] if len(para_text) > 80 else para_text
                     return {
@@ -161,13 +169,69 @@ def find_abstract_by_elements(doc_path: str, elements: dict) -> Dict[str, Any]:
                         "row": None,
                         "col_start": None,
                         "col_end": None,
-                        "start_paragraph": para_idx,
+                        "start_paragraph": docx_para_idx,
+                        "end_paragraph": docx_para_idx + 1,
                         "preview": preview_text,
-                        "context": f"段落 {para_idx}: {para_text[:50]}..."
+                        "context": f"段落 {docx_para_idx}: {para_text[:50]}..."
                     }
 
         # 在表格中搜索（使用 lxml，嵌套表格不漏读）
         for tbl_idx, table in enumerate(tables):
+            # 先检查整个表格是否像摘要
+            table_text = ''.join(_get_cell_text(tc) for tc in table.iter(f'{W}tc'))
+            if field_value in table_text:
+                # 检查这个表格是否像摘要（包含多个字段值的连贯文本）
+                if _is_likely_abstract_table(table, field_value, elements):
+                    # 找到表格在 body 中的位置，计算 docx 段落索引
+                    # 表格在 body_children 中的索引
+                    body = tree.find(f'{W}body')
+                    body_children = list(body)
+                    tbl_element = None
+                    for child in body_children:
+                        if etree.QName(child.tag).localname == 'tbl' and table is child:
+                            tbl_element = child
+                            break
+                        # 检查是否嵌套表格
+                        for nested_tbl in child.iter(f'{W}tbl'):
+                            if nested_tbl is table:
+                                tbl_element = child
+                                break
+
+                    # 获取表格的起始段落索引
+                    start_para_idx = None
+                    end_para_idx = None
+                    all_paras = list(table.iter(f'{W}p'))
+                    if all_paras:
+                        first_para = all_paras[0]
+                        last_para = all_paras[-1]
+                        # 在 xml_to_docx 中查找对应的 docx 索引
+                        xml_all_paras = list(tree.iter(f'{W}p'))
+                        for xml_idx, p in enumerate(xml_all_paras):
+                            if p is first_para and start_para_idx is None:
+                                start_para_idx = xml_to_docx.get(xml_idx, xml_idx)
+                            if p is last_para:
+                                end_para_idx = xml_to_docx.get(xml_idx, xml_idx) + 1
+
+                    # 提取预览文本（表格第一个单元格的前80个字符）
+                    first_tc = table.find(f'.//{W}tc')
+                    preview_text = ""
+                    if first_tc is not None:
+                        cell_text = _get_cell_text(first_tc)
+                        preview_text = cell_text[:80] if len(cell_text) > 80 else cell_text
+
+                    return {
+                        "found": True,
+                        "table": tbl_idx,
+                        "row": 0,  # 整个表格
+                        "col_start": 0,
+                        "col_end": 999,  # 999表示整行
+                        "start_paragraph": start_para_idx if start_para_idx else 0,
+                        "end_paragraph": end_para_idx if end_para_idx else 1,
+                        "preview": preview_text,
+                        "context": f"表格 {tbl_idx} (整个摘要表格): {preview_text[:50]}..."
+                    }
+
+            # 如果整个表格不像摘要，检查单个单元格
             for row_idx, row in enumerate(table.findall(f'{W}tr')):
                 for col_idx, tc in enumerate(row.findall(f'{W}tc')):
                     cell_text = _get_cell_text(tc)
@@ -176,12 +240,25 @@ def find_abstract_by_elements(doc_path: str, elements: dict) -> Dict[str, Any]:
                         if _is_likely_abstract_cell_text(cell_text, field_value, tc):
                             # 提取预览文本（原文的前80个字符）
                             preview_text = cell_text[:80] if len(cell_text) > 80 else cell_text
+
+                            # 计算这个单元格对应的 docx 段落索引
+                            start_para_idx = None
+                            end_para_idx = None
+                            xml_all_paras = list(tree.iter(f'{W}p'))
+                            for xml_idx, p in enumerate(xml_all_paras):
+                                if p in tc.iter(f'{W}p') and start_para_idx is None:
+                                    start_para_idx = xml_to_docx.get(xml_idx, xml_idx)
+                                if p in tc.iter(f'{W}p'):
+                                    end_para_idx = xml_to_docx.get(xml_idx, xml_idx) + 1
+
                             return {
                                 "found": True,
                                 "table": tbl_idx,
                                 "row": row_idx,
                                 "col_start": col_idx,
                                 "col_end": col_idx,
+                                "start_paragraph": start_para_idx if start_para_idx else 0,
+                                "end_paragraph": end_para_idx if end_para_idx else 1,
                                 "preview": preview_text,
                                 "context": f"表格 {tbl_idx} 行 {row_idx} 列 {col_idx}: {cell_text[:50]}..."
                             }
@@ -368,6 +445,77 @@ def _is_likely_abstract_paragraph(text: str, field_value: str) -> bool:
     return True
 
 
+def _is_likely_abstract_table(table: etree._Element, field_value: str, elements: dict) -> bool:
+    """判断表格是否像摘要。
+
+    摘要表格的特征：
+    1. 包含多个字段值（如 company, rating, target_price 等）
+    2. 表格内容较长（不是简单的键值对表格）
+    3. 表格至少有2行（通常是标题行+数据行，或多个数据行）
+
+    Args:
+        table: 表格元素
+        field_value: 当前匹配的字段值
+        elements: elements.yaml 内容
+
+    Returns:
+        True 如果像摘要表格
+    """
+    W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
+
+    # 收集表格中的所有文本
+    all_text = ''
+    field_value_count = 0
+    row_count = 0
+
+    for row in table.findall(f'{W}tr'):
+        row_count += 1
+        for tc in row.findall(f'{W}tc'):
+            cell_text = _get_cell_text(tc)
+            all_text += cell_text
+
+            # 统计字段值出现次数
+            if field_value in cell_text:
+                field_value_count += 1
+
+            # 检查是否有其他字段值
+            for fname, fvalue in elements.items():
+                if fvalue and isinstance(fvalue, str) and len(fvalue) > 5:
+                    if fvalue in cell_text:
+                        field_value_count += 1
+
+    # 摘要表格通常有多个字段值
+    if field_value_count < 2:
+        return False
+
+    # 摘要表格通常至少2行
+    if row_count < 2:
+        return False
+
+    # 摘要表格内容应该较长
+    if len(all_text) < 200:
+        return False
+
+    # 检查是否是键值对格式的表格（这种表格不是摘要）
+    # 键值对表格的特征：每行有2个单元格，且第二列较短
+    is_key_value_table = True
+    for row in table.findall(f'{W}tr'):
+        tcs = row.findall(f'{W}tc')
+        if len(tcs) != 2:
+            is_key_value_table = False
+            break
+        second_cell_text = _get_cell_text(tcs[1])
+        if len(second_cell_text) > 100:
+            is_key_value_table = False
+            break
+
+    # 键值对表格不是摘要
+    if is_key_value_table:
+        return False
+
+    return True
+
+
 def _is_likely_abstract_cell_text(cell_text: str, field_value: str, tc: etree._Element = None) -> bool:
     """判断单元格是否像摘要。
 
@@ -463,21 +611,17 @@ def find_body_range_by_sections(doc_path: str, abstract_end_hint: int = None) ->
             start_paragraph = abstract_end_hint + 1
 
     # 确定正文结束位置
+    # 关键：正文应该到分节符（分页符）才算，APPENDIX 标题不应该覆盖分节符的判断
     end_paragraph = total_paragraphs
 
     if sect_pr_indices:
         # 使用最后一个分节符作为正文结束
+        # 注意：分节符段落（sectPr）本身应该被包含在正文范围内
         last_sect_idx = sect_pr_indices[-1]
-        end_paragraph = xml_to_docx.get(last_sect_idx + 1, last_sect_idx + 1)
+        end_paragraph = xml_to_docx.get(last_sect_idx, last_sect_idx) + 1
 
-    # 同时检查 APPENDIX 标题位置（可能比分节符更早）
-    appendix_result = find_first_appendix_position(doc_path)
-    if appendix_result.get("found"):
-        appendix_start = appendix_result["start_paragraph"]
-        # 转换为docx索引
-        appendix_start_docx = xml_to_docx.get(appendix_start, appendix_start)
-        if appendix_start_docx < end_paragraph:
-            end_paragraph = appendix_start_docx
+    # 注意：不再使用 APPENDIX 标题来调整正文结束位置
+    # 正文范围应该由分节符确定，APPENDIX 内容会被保留
 
     # 确保 start < end
     if start_paragraph >= end_paragraph:

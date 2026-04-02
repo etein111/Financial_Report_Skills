@@ -841,40 +841,48 @@ def create_template(
         print(f"字段替换: {', '.join(replaced_fields)}")
 
     # 替换摘要区域为 {{ abstract }} 占位符
-    # 使用之前检测的位置信息，而不是重新检测
+    # 优先使用段落方式替换，这样可以正确处理整个摘要区域（包括整个表格）
     abstract_detected = detected_locations.get("abstract")
     abstract_location = abstract_detected.get("location") if abstract_detected else None
 
     if abstract_scope and abstract_location and abstract_location.get("found"):
-        # 根据检测结果类型选择替换方式
-        if "table" in abstract_location:
-            # 表格方式（find_abstract_by_elements 返回的结果）
+        # 优先使用段落方式（find_abstract_by_elements 现在也返回 start_paragraph）
+        if "start_paragraph" in abstract_location:
+            # 段落方式：可以正确处理整个摘要区域
+            doc = replace_abstract_in_doc_by_paragraph(
+                doc,
+                start_paragraph=abstract_location["start_paragraph"],
+                end_paragraph=abstract_location["end_paragraph"]
+            )
+        elif "table" in abstract_location:
+            # 备用表格方式
             doc = replace_abstract_in_doc(
                 doc,
                 table=abstract_location["table"],
                 row=abstract_location["row"],
                 col_start=abstract_location["col_start"],
                 col_end=abstract_location["col_end"]
-            )
-        elif "start_paragraph" in abstract_location:
-            # 段落方式（find_abstract_by_markers 返回的结果）
-            doc = replace_abstract_in_doc_by_paragraph(
-                doc,
-                start_paragraph=abstract_location["start_paragraph"],
-                end_paragraph=abstract_location["end_paragraph"]
             )
         print(f"摘要位置: {abstract_location['context']}")
     elif abstract_scope:
         # 用户确认有摘要，但自动检测失败，尝试重新检测
         abstract_location = find_abstract_by_elements(str(word_path), elements)
         if abstract_location.get("found"):
-            doc = replace_abstract_in_doc(
-                doc,
-                table=abstract_location["table"],
-                row=abstract_location["row"],
-                col_start=abstract_location["col_start"],
-                col_end=abstract_location["col_end"]
-            )
+            # 优先使用段落方式
+            if "start_paragraph" in abstract_location:
+                doc = replace_abstract_in_doc_by_paragraph(
+                    doc,
+                    start_paragraph=abstract_location["start_paragraph"],
+                    end_paragraph=abstract_location["end_paragraph"]
+                )
+            else:
+                doc = replace_abstract_in_doc(
+                    doc,
+                    table=abstract_location["table"],
+                    row=abstract_location["row"],
+                    col_start=abstract_location["col_start"],
+                    col_end=abstract_location["col_end"]
+                )
             print(f"摘要位置: {abstract_location['context']}")
         else:
             print(f"警告: 用户确认有摘要，但未能自动定位摘要位置 - {abstract_location.get('reason', '未知原因')}")
@@ -928,23 +936,9 @@ def create_template(
             start_para = body_location["start_paragraph"]
             end_para = body_location["end_paragraph"]
 
-            # 使用第一个 APPENDIX 标题位置来确定正文结束位置
-            # 关键：APPENDIX 标题本身应该保留在文档中，所以 end_para 应该设置为
-            # appendix_start - 1，这样 APPENDIX 标题之前的最后一个正文段落会被删除，
-            # 但 APPENDIX 标题本身会被保留
-            first_appendix = detected_locations.get("first_appendix")
-            if first_appendix and first_appendix.get("found"):
-                appendix_start = first_appendix.get("start_paragraph")
-                is_legal = first_appendix.get("is_legal_disclosure", False)
-                if appendix_start and appendix_start < end_para:
-                    # 保留 APPENDIX 标题：end_para 设置为 appendix_start（不包含）
-                    # 这样正文范围是 [start_para, appendix_start)，APPENDIX 标题不会被删除
-                    end_para = appendix_start
-                    appendix_type = "法律披露附录" if is_legal else "内容附录"
-                    print(f"正文结束位置调整为 {appendix_type} 之前: 段落 {appendix_start}")
-                    print(f"  APPENDIX 标题: {first_appendix.get('text', '')[:50]}")
-                    print(f"  法律披露将原样保留在模板中")
-
+            # 正文范围由分节符确定，APPENDIX 内容会被保留
+            # 如果需要使用 first_appendix 来调整，应该只在 find_body_range_by_sections 中处理
+            # 此处直接使用 body_location 返回的范围
             doc = replace_body_in_doc(
                 doc,
                 start_paragraph=start_para,
