@@ -31,170 +31,6 @@ def save_document(doc: Document, output_path: str) -> None:
     """
     doc.save(output_path)
 
-def save_document_with_cleanup(doc: Document, output_path: str) -> None:
-    """保存 Word 文档并清理孤立的嵌入对象（图表、Excel 等）。
-
-    当删除正文区域后，原有的图表和嵌入对象可能不再被引用，
-    此函数会自动清理这些孤立文件，减小文档大小。
-
-    Args:
-        doc: Document 对象
-        output_path: 输出路径
-    """
-    import zipfile
-    import io
-    from lxml import etree
-
-    # 先保存到内存
-    buffer = io.BytesIO()
-    doc.save(buffer)
-    buffer.seek(0)
-    doc_bytes = buffer.read()
-
-    used_files = set()
-    try:
-        with zipfile.ZipFile(io.BytesIO(doc_bytes), 'r') as z:
-            rId_to_target = {}
-            try:
-                with z.open('word/_rels/document.xml.rels') as f:
-                    tree = etree.parse(f)
-                    for rel in tree.iter('{http://schemas.openxmlformats.org/package/2006/relationships}Relationship'):
-                        rid = rel.get('Id')
-                        target = rel.get('Target')
-                        if rid and target:
-                            rId_to_target[rid] = target
-            except KeyError:
-                pass
-
-            chart_ole_refs = set()
-            for name in z.namelist():
-                if name.startswith('word/charts/_rels/') and name.endswith('.xml.rels'):
-                    try:
-                        with z.open(name) as f:
-                            chart_tree = etree.parse(f)
-                            for rel in chart_tree.iter('{http://schemas.openxmlformats.org/package/2006/relationships}Relationship'):
-                                target = rel.get('Target')
-                                rel_type = rel.get('Type')
-                                if target and ('oleObject' in rel_type or 'package' in rel_type or 'Workbook' in target):
-                                    if 'embeddings/' in target:
-                                        fname = target.split('embeddings/')[-1]
-                                        chart_ole_refs.add(f'embeddings/{fname}')
-                                    elif target.startswith('embeddings/'):
-                                        chart_ole_refs.add(target)
-                    except Exception:
-                        pass
-
-            for rid, target in rId_to_target.items():
-                if 'embeddings/' in target:
-                    used_files.add(target)
-                elif target.startswith('../embeddings/'):
-                    used_files.add(target.replace('../', ''))
-            for ref in chart_ole_refs:
-                if 'embeddings/' in ref:
-                    used_files.add(ref)
-
-            essential_files = {'word/document.xml', 'word/styles.xml', 'word/settings.xml',
-                             'word/numbering.xml', 'Content_Types.xml', '[Content_Types].xml'}
-
-            referenced_charts = set()
-            for rid, target in rId_to_target.items():
-                if 'charts/chart' in target:
-                    if target.startswith('charts/'):
-                        referenced_charts.add(f'word/{target}')
-                    elif target.startswith('word/charts/'):
-                        referenced_charts.add(target)
-
-            referenced_embeddings = set()
-            for rid, target in rId_to_target.items():
-                if 'embeddings/' in target:
-                    referenced_embeddings.add(f'word/{target}')
-                elif target.startswith('../embeddings/'):
-                    referenced_embeddings.add(f'word/{target.replace("../", "")}')
-            for ref in chart_ole_refs:
-                if ref.startswith('embeddings/'):
-                    referenced_embeddings.add(f'word/{ref}')
-
-            # 收集所有被引用的 media 文件
-            # 需要检查 rId 是否真的在文档内容中被使用
-            referenced_media = set()
-            rId_to_media = {}
-            for rid, target in rId_to_target.items():
-                if 'media/' in target:
-                    rId_to_media[rid] = f'word/{target}'
-
-            # 检查 document.xml 中实际使用的 rId 引用
-            doc_content = z.read('word/document.xml').decode('utf-8', errors='ignore')
-            import re
-            used_rids = set(re.findall(r'r:embed="(rId\d+)"', doc_content))
-
-            # 也检查 header 和 footer 文件
-            for name in z.namelist():
-                if name.startswith('word/header') and name.endswith('.xml'):
-                    try:
-                        content = z.read(name).decode('utf-8', errors='ignore')
-                        used_rids.update(re.findall(r'r:embed="(rId\d+)"', content))
-                    except:
-                        pass
-                elif name.startswith('word/footer') and name.endswith('.xml'):
-                    try:
-                        content = z.read(name).decode('utf-8', errors='ignore')
-                        used_rids.update(re.findall(r'r:embed="(rId\d+)"', content))
-                    except:
-                        pass
-
-            # 只添加实际被使用的 media 文件
-            for rid in used_rids:
-                if rid in rId_to_media:
-                    referenced_media.add(rId_to_media[rid])
-
-            # 也检查 chart 中的内嵌媒体引用
-            for name in z.namelist():
-                if name.startswith('word/charts/') and name.endswith('.xml'):
-                    try:
-                        chart_content = z.read(name).decode('utf-8', errors='ignore')
-                        for match in chart_content.split('media/'):
-                            if '/' in match or '\\' in match:
-                                parts = (match.split('/')[0] if '/' in match else match.split('\\')[0]).split('"')[0].split('>')[0]
-                                if parts and not parts.startswith('..'):
-                                    referenced_media.add(f'word/media/{parts}')
-                    except:
-                        pass
-
-            all_files = set(z.namelist())
-            files_to_delete = set()
-            for f in all_files:
-                if f in essential_files or f.startswith('word/_rels/'):
-                    continue
-                if '/_rels/' in f or f.endswith('.rels'):
-                    continue
-                if f.startswith('word/charts/chart'):
-                    if f.endswith('.xml.rels'):
-                        continue
-                    if f not in referenced_charts:
-                        files_to_delete.add(f)
-                        files_to_delete.add(f + '.rels')
-                elif f.startswith('word/embeddings/'):
-                    if f not in referenced_embeddings:
-                        files_to_delete.add(f)
-                elif f.startswith('word/media/'):
-                    if f not in referenced_media:
-                        files_to_delete.add(f)
-
-            if not files_to_delete:
-                with open(output_path, 'wb') as dst:
-                    dst.write(doc_bytes)
-                return
-
-            with zipfile.ZipFile(output_path, 'w', zipfile.ZIP_DEFLATED) as new_z:
-                for item in z.namelist():
-                    if item not in files_to_delete:
-                        new_z.writestr(item, z.read(item))
-            print(f'  已清理 {len(files_to_delete)} 个孤立文件')
-    except Exception as e:
-        with open(output_path, 'wb') as dst:
-            dst.write(doc_bytes)
-        print(f'  清理失败，使用原始保存: {e}')
-
 
 # ==================== 字段替换 ====================
 
@@ -295,6 +131,8 @@ def replace_analyst_fields_in_doc(doc: Document, elements: dict) -> Document:
     1. 对于有值的分析师，找到组合字符串并替换为组合占位符
     2. 定位分析师表格（[Table_Author]），为所有位置创建占位符
 
+    使用 lxml 直接解析 document.xml 以正确处理合并单元格。
+
     Args:
         doc: Document 对象
         elements: 包含分析师字段的字典
@@ -302,6 +140,10 @@ def replace_analyst_fields_in_doc(doc: Document, elements: dict) -> Document:
     Returns:
         修改后的 Document 对象
     """
+    from lxml import etree
+
+    W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
+
     # 收集分析师数据
     analysts = {}
     for i in range(1, 9):
@@ -311,10 +153,28 @@ def replace_analyst_fields_in_doc(doc: Document, elements: dict) -> Document:
         email = elements.get(f'a{i}_email', '')
         analysts[i] = {'cn': cn, 'en': en, 'sfc': sfc, 'email': email}
 
-    # 找到所有分析师表格（[Table_Author]）
-    author_tables = []
-    for table in doc.tables:
-        _find_author_tables(table, author_tables)
+    # 获取文档的 body 元素
+    body = doc._body._body
+
+    # 使用 lxml 找到所有 Table_Author 表格
+    # 因为 python-docx 的合并单元格处理有问题，需要用 lxml 直接解析
+    author_tbl_element = None
+    for tbl in body.findall(f'.//{W}tbl'):
+        # 检查第一个单元格是否包含 [Table_Author]
+        first_tc = tbl.find(f'.//{W}tr/{W}tc')
+        if first_tc is not None:
+            tc_text = ''.join(t.text or '' for t in first_tc.iter(f'{W}t'))
+            if '[Table_Author]' in tc_text:
+                author_tbl_element = tbl
+                break
+
+    if author_tbl_element is None:
+        # 如果没找到 Table_Author，尝试其他方法
+        for tbl in body.findall(f'.//{W}tbl'):
+            tbl_text = ''.join(t.text or '' for t in tbl.iter(f'{W}t'))
+            if '[Table_Author]' in tbl_text:
+                author_tbl_element = tbl
+                break
 
     # 替换有值的分析师信息（使用 Jinja2 if-block 格式）
     for i, data in analysts.items():
@@ -348,15 +208,19 @@ def replace_analyst_fields_in_doc(doc: Document, elements: dict) -> Document:
     # 3. 如果数据行是奇数：跳过第1行（作为表头），从第2行开始
     # 4. 每2行一组，横向填充
 
-    if author_tables:
-        # 只处理第一个表格（其他都是合并单元格的视图）
-        author_table = author_tables[0]
+    if author_tbl_element is not None:
+        # 使用 lxml 直接操作 author_tbl_element
+        author_tbl = author_tbl_element
 
-        # 根据表格列数计算能容纳的分析师数量，而不是根据实际有值的数量
-        # 用户说 "2x5" 意思是 2行 x 5列，即5列横向排列
-        # 用户说 "2x3，就是三个分析师一行"
-        rows = len(author_table.rows)
-        cols = len(author_table.columns)
+        # 获取表格的行和列
+        trs = author_tbl.findall(W + 'tr')
+        rows = len(trs)
+
+        # 获取第一行的列数（用于计算分析师数量）
+        first_tr = trs[0] if trs else None
+        first_tr_tcs = first_tr.findall(W + 'tc') if first_tr else []
+        cols = len(first_tr_tcs)
+
         data_rows = rows - 1  # 减去标记行
 
         # 计算起始行
@@ -373,11 +237,30 @@ def replace_analyst_fields_in_doc(doc: Document, elements: dict) -> Document:
         analyst_count = cols_available * groups
 
         # 动态计算填充位置
-        analyst_positions = _calculate_analyst_positions(author_table, analyst_count)
+        # 需要创建一个类似 python-docx table 的接口供 _calculate_analyst_positions 使用
+        class TableProxy:
+            def __init__(self, tbl_element, w_ns):
+                self._tbl = tbl_element
+                self._W = w_ns
+                # 计算行列信息
+                self._rows = tbl_element.findall(w_ns + 'tr')
+                if self._rows:
+                    first_row = self._rows[0]
+                    self._cols = len(first_row.findall(w_ns + 'tc'))
+                else:
+                    self._cols = 0
 
-        # 直接在 XML 级别操作，避免 python-docx 处理合并单元格的问题
-        from lxml import etree
-        W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
+            @property
+            def rows(self):
+                return self._rows
+
+            @property
+            def columns(self):
+                # 返回一个列表以便 len() 操作
+                return [None] * self._cols
+
+        table_proxy = TableProxy(author_tbl, W)
+        analyst_positions = _calculate_analyst_positions(table_proxy, analyst_count)
 
         def _get_cell_text(tc):
             """获取单元格直接子元素的文本（不包括嵌套 tc 的文本）。"""
@@ -390,9 +273,6 @@ def replace_analyst_fields_in_doc(doc: Document, elements: dict) -> Document:
                             if t is not None and t.text:
                                 parts.append(t.text)
             return ''.join(parts)
-
-        # 获取 author_table 的底层 XML 元素
-        author_tbl = author_table._tbl
 
         for info_row, col, email_row, _, analyst_idx in analyst_positions:
             i = analyst_idx
@@ -451,22 +331,6 @@ def replace_analyst_fields_in_doc(doc: Document, elements: dict) -> Document:
     return doc
 
 
-def _count_analysts_with_data(elements: dict) -> int:
-    """计算 elements 中实际有值的分析师数量。
-
-    Args:
-        elements: 包含分析师字段的字典
-
-    Returns:
-        有数据的分析师数量
-    """
-    count = 0
-    for i in range(1, 9):
-        if elements.get(f'a{i}_cn') or elements.get(f'a{i}_en'):
-            count += 1
-    return count
-
-
 def _calculate_analyst_positions(author_table, analyst_count: int) -> list:
     """根据表格维数和分析师数量计算填充位置。
 
@@ -519,25 +383,6 @@ def _calculate_analyst_positions(author_table, analyst_count: int) -> list:
     return positions
 
 
-def _find_author_tables(table, result_list):
-    """递归查找所有 [Table_Author] 表格。
-
-    查找规则：如果表格的第一行第一个单元格包含 [Table_Author]，则该表格是分析师表格。
-    """
-    # 检查当前表格是否是分析师表格
-    if table.rows and table.rows[0].cells:
-        first_cell_text = table.rows[0].cells[0].text.strip()
-        if '[Table_Author]' in first_cell_text:
-            result_list.append(table)
-            return  # 找到后不再递归搜索子表格
-
-    # 递归搜索嵌套表格
-    for row in table.rows:
-        for cell in row.cells:
-            for nested in cell.tables:
-                _find_author_tables(nested, result_list)
-
-
 def _replace_text_in_nested_tables(doc: Document, old_text: str, new_text: str):
     """在文档的所有表格（包括嵌套表格）中替换文本。"""
     for table in doc.tables:
@@ -558,84 +403,6 @@ def _replace_in_all_cells(table, old_text: str, new_text: str):
                 _replace_in_all_cells(nested_table, old_text, new_text)
 
 
-def _set_cell_text(cell, text: str):
-    """设置单元格文本（清空现有内容后设置）。
-
-    处理合并单元格时可能存在的重复内容问题。
-    """
-    from lxml import etree
-    W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
-
-    # 获取单元格底层 XML 元素
-    tc = cell._tc
-
-    # 删除所有现有段落
-    for p in tc.findall(W + 'p'):
-        tc.remove(p)
-
-    # 创建新段落（使用 rPr 保持格式兼容）
-    new_p = etree.SubElement(tc, W + 'p')
-    new_r = etree.SubElement(new_p, W + 'r')
-    new_t = etree.SubElement(new_r, W + 't')
-    new_t.text = text
-
-
-def _set_cell_text_jinja(cell, placeholder: str):
-    """设置单元格文本，处理可能重复的内容。
-
-    有些模板（OpenCode生成）的单元格内容会重复，
-    这个函数会清理重复内容后设置新文本。
-    """
-    from lxml import etree
-    import re
-    W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
-
-    # 获取单元格底层 XML 元素
-    tc = cell._tc
-
-    # 获取当前所有段落的文本，检测是否有重复
-    all_text = ''.join(tc.itertext())
-
-    # 如果文本看起来有重复（比如 {{ a1_cn }} 出现多次），清理一下
-    # 通过检查段落的 run 数量来判断
-    paragraphs = tc.findall(W + 'p')
-    runs_data = []
-    for p in paragraphs:
-        runs = p.findall(W + 'r')
-        for r in runs:
-            t = r.find(W + 't')
-            if t is not None and t.text:
-                runs_data.append(t.text)
-
-    # 检查是否有连续重复的内容片段
-    if len(runs_data) > 1:
-        combined_text = ''.join(runs_data)
-        # 尝试检测是否是重复模式：把文本对半拆分后比较
-        half_len = len(combined_text) // 2
-        if half_len > 10 and combined_text[:half_len] == combined_text[half_len:]:
-            # 内容确实重复了，使用前半部分作为唯一内容
-            unique_text = combined_text[:half_len]
-            # 从 unique_text 中提取占位符
-            # 格式如：{{ a1_cn }} {{ a1_en }}], SFC:{{ a1_sfc }}
-            match = re.search(r'\{\{[^}]+\}\}', unique_text)
-            if match:
-                # 只保留占位符部分
-                placeholder = match.group(0)
-                # 如果有多行，只取第一行
-                if '\\n' in placeholder:
-                    placeholder = placeholder.split('\\n')[0]
-
-    # 删除所有现有段落
-    for p in tc.findall(W + 'p'):
-        tc.remove(p)
-
-    # 创建新段落
-    new_p = etree.SubElement(tc, W + 'p')
-    new_r = etree.SubElement(new_p, W + 'r')
-    new_t = etree.SubElement(new_r, W + 't')
-    new_t.text = placeholder
-
-
 def replace_abstract_in_doc(doc: Document, table: int, row: int,
                            col_start: int, col_end: int) -> Document:
     """在文档中替换摘要区域为 {{ abstract }} 占位符（返回新文档）。
@@ -643,9 +410,11 @@ def replace_abstract_in_doc(doc: Document, table: int, row: int,
     只在第一个单元格设置占位符，其他单元格清空内容。
     清空时会删除所有内容，包括图表、图片等。
 
+    使用 lxml 直接解析以正确处理合并单元格。
+
     Args:
         doc: Document 对象
-        table: 表格索引
+        table: 表格索引（基于 lxml 的表格索引）
         row: 行索引
         col_start: 起始列索引
         col_end: 结束列索引
@@ -655,25 +424,34 @@ def replace_abstract_in_doc(doc: Document, table: int, row: int,
     """
     from lxml import etree
 
-    if table >= len(doc.tables):
-        raise ValueError(f"表格索引 {table} 超出范围")
+    W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
 
-    tbl = doc.tables[table]
-    if row >= len(tbl.rows):
+    # 获取文档的 body 元素
+    body = doc._body._body
+
+    # 使用 lxml 找到所有表格（与 find_abstract_by_elements 一致的索引方式）
+    all_tables = list(body.findall(f'.//{W}tbl'))
+
+    if table >= len(all_tables):
+        raise ValueError(f"表格索引 {table} 超出范围 (lxml找到{len(all_tables)}个表格)")
+
+    tbl_element = all_tables[table]
+
+    # 获取表格的行
+    trs = tbl_element.findall(W + 'tr')
+    if row >= len(trs):
         raise ValueError(f"行索引 {row} 超出范围")
 
-    tbl_row = tbl.rows[row]
+    tbl_row = trs[row]
 
     # 替换指定范围的单元格
     first_cell = True
-    for col_idx in range(col_start, min(col_end + 1, len(tbl_row.cells))):
-        cell = tbl_row.cells[col_idx]
-        tc = cell._tc  # 获取底层 XML 元素
+    for col_idx in range(col_start, min(col_end + 1, len(tbl_row.findall(W + 'tc')))):
+        tc = tbl_row.findall(W + 'tc')[col_idx]
 
         if first_cell:
             # 第一个单元格：清空所有内容，只保留一个段落设置占位符
             # 删除单元格内除第一个段落外的所有子元素（段落、表格等）
-            W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
             children_to_remove = []
             first_p = None
             for child in tc:
@@ -706,7 +484,6 @@ def replace_abstract_in_doc(doc: Document, table: int, row: int,
             first_cell = False
         else:
             # 其他单元格：完全清空内容
-            W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
             children_to_remove = []
             first_p = None
             for child in tc:
@@ -729,6 +506,116 @@ def replace_abstract_in_doc(doc: Document, table: int, row: int,
                     tag = etree.QName(child.tag).localname
                     if tag not in ('pPr',):
                         first_p.remove(child)
+
+    return doc
+
+
+def replace_abstract_in_doc_by_paragraph(doc: Document, start_paragraph: int,
+                                        end_paragraph: int) -> Document:
+    """在文档中替换摘要区域为 {{ abstract }} 占位符（返回新文档）。
+
+    使用段落索引来确定范围，删除范围内的所有内容，只保留一个占位符。
+
+    Args:
+        doc: Document 对象
+        start_paragraph: 起始段落索引（python-docx paragraphs索引）
+        end_paragraph: 结束段落索引（不包含）
+
+    Returns:
+        修改后的 Document 对象
+    """
+    from lxml import etree
+
+    W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
+
+    if start_paragraph >= len(doc.paragraphs):
+        raise ValueError(f"起始段落 {start_paragraph} 超出范围")
+
+    # 获取 body 元素
+    body = doc._body._body
+
+    # 建立 doc.paragraphs 索引到 body 直接子元素的映射
+    body_children = list(body)
+
+    # 创建段落索引到 body_children 索引的映射
+    para_to_body_idx = {}
+
+    for body_idx, child in enumerate(body_children):
+        tag = etree.QName(child.tag).localname
+        if tag == 'p':
+            # body直接子元素就是段落元素
+            for para_idx, para in enumerate(doc.paragraphs):
+                if para._element is child:
+                    para_to_body_idx[para_idx] = body_idx
+                    break
+        elif tag == 'tbl':
+            # 表格元素
+            for p_elem in child.iter(f'{W}p'):
+                for para_idx, para in enumerate(doc.paragraphs):
+                    if para._element is p_elem:
+                        para_to_body_idx[para_idx] = body_idx
+                        break
+        elif tag == 'sdt':
+            # SDT 元素
+            for p_elem in child.iter(f'{W}p'):
+                for para_idx, para in enumerate(doc.paragraphs):
+                    if para._element is p_elem:
+                        para_to_body_idx[para_idx] = body_idx
+                        break
+
+    # 找到起始和结束位置对应的 body_children 索引
+    start_body_idx = para_to_body_idx.get(start_paragraph, 0)
+    end_body_idx = para_to_body_idx.get(end_paragraph - 1, len(body_children) - 1)
+
+    # 确保 start_body_idx < end_body_idx
+    if start_body_idx > end_body_idx:
+        start_body_idx, end_body_idx = end_body_idx, start_body_idx
+
+    # 收集要删除的元素（摘要区域内的所有 body_children 元素）
+    elements_to_remove = []
+    first_body_element = None
+
+    for body_idx in range(start_body_idx, end_body_idx + 1):
+        child = body_children[body_idx]
+        tag = etree.QName(child.tag).localname
+
+        if first_body_element is None:
+            first_body_element = child
+
+        elements_to_remove.append(child)
+
+    # 删除收集的元素（从后往前删除，保留第一个用于放置占位符）
+    for element in reversed(elements_to_remove[1:]):
+        body.remove(element)
+
+    # 在第一个元素位置设置占位符
+    if first_body_element is not None and elements_to_remove:
+        tag = etree.QName(first_body_element.tag).localname
+
+        if tag == 'p':
+            # 如果第一个是段落，清空内容设置占位符
+            for child in list(first_body_element):
+                child_tag = etree.QName(child.tag).localname
+                if child_tag not in ('pPr',):
+                    first_body_element.remove(child)
+
+            # 添加新的 run 包含占位符
+            r = etree.SubElement(first_body_element, f'{W}r')
+            t = etree.SubElement(r, f'{W}t')
+            t.text = "{{ abstract }}"
+        else:
+            # 如果第一个不是段落，需要替换为段落
+            idx = list(body).index(first_body_element)
+            body.remove(first_body_element)
+
+            # 创建新段落
+            new_p = etree.Element(f'{W}p')
+            r = etree.SubElement(new_p, f'{W}r')
+            t = etree.SubElement(r, f'{W}t')
+            t.text = "{{ abstract }}"
+
+            body.insert(idx, new_p)
+            first_body_element = new_p
 
     return doc
 
@@ -1032,126 +919,6 @@ def replace_body_in_doc(doc: Document, start_paragraph: int,
         import traceback
         traceback.print_exc()
         print(f'  警告: 清理图表关系失败: {e}')
-
-    return doc
-
-
-# ==================== 位置调整 ====================
-
-def adjust_abstract_position_in_doc(doc: Document, table: int, row: int,
-                                   col_start: int, col_end: int) -> Document:
-    """调整摘要位置（返回新文档）。
-
-    Args:
-        doc: Document 对象
-        table: 表格索引
-        row: 行索引
-        col_start: 起始列索引
-        col_end: 结束列索引
-
-    Returns:
-        修改后的 Document 对象
-    """
-    return replace_abstract_in_doc(doc, table, row, col_start, col_end)
-
-
-def adjust_body_range_in_doc(doc: Document, start_paragraph: int,
-                            end_paragraph: int) -> Document:
-    """调整正文范围（返回新文档）。
-
-    Args:
-        doc: Document 对象
-        start_paragraph: 起始段落索引
-        end_paragraph: 结束段落索引（不包含）
-
-    Returns:
-        修改后的 Document 对象
-    """
-    return replace_body_in_doc(doc, start_paragraph, end_paragraph)
-
-
-# ==================== 字段管理 ====================
-
-def add_field_to_doc(doc: Document, field_name: str, field_value: str,
-                    position_hint: str) -> Document:
-    """在文档中添加新字段（返回新文档）。
-
-    Args:
-        doc: Document 对象
-        field_name: 字段名（如 "analyst"）
-        field_value: 字段值（如 "张三"）
-        position_hint: 位置提示
-            - "after:company" (在 company 字段之后)
-            - "table:0,row:3,col:2" (在表格 0 第 3 行第 2 列)
-            - "paragraph:5" (在段落 5 之后)
-
-    Returns:
-        修改后的 Document 对象
-    """
-    placeholder = "{{" + f" {field_name} " + "}}"
-
-    # 解析位置提示
-    if position_hint.startswith("after:"):
-        # 在指定字段之后插入
-        existing_field = position_hint[6:]
-        # 这里需要调用 document.py 的 find_content_location
-        # 暂时跳过实现
-        pass
-
-    elif position_hint.startswith("table:"):
-        # 直接指定表格位置
-        parts = position_hint.split(",")
-        table_idx = int(parts[0].split(":")[1])
-
-        table = doc.tables[table_idx]
-        # 在指定位置插入占位符
-        # ... (具体实现)
-        pass
-
-    elif position_hint.startswith("paragraph:"):
-        # 在指定段落之后插入
-        para_idx = int(position_hint.split(":")[1])
-
-        # 在指定段落前插入新段落
-        if para_idx < len(doc.paragraphs):
-            new_para = doc.paragraphs[para_idx]._element.addprevious(
-                doc.paragraphs[para_idx]._element.__class__()
-            )
-            # 设置文本
-            from docx.oxml.text.paragraph import CT_P
-            from docx.text.paragraph import Paragraph
-            new_para_obj = Paragraph(new_para, doc)
-            new_para_obj.text = placeholder
-
-    return doc
-
-
-def remove_field_from_doc(doc: Document, field_name: str) -> Document:
-    """从文档中删除字段（返回新文档）。
-
-    Args:
-        doc: Document 对象
-        field_name: 字段名
-
-    Returns:
-        修改后的 Document 对象
-    """
-    placeholder = "{{" + f" {field_name} " + "}}"
-
-    # 在段落中查找并删除
-    for para in doc.paragraphs:
-        if placeholder in para.text:
-            # 删除包含占位符的段落
-            para._element.getparent().remove(para._element)
-
-    # 在表格中查找并删除
-    for table in doc.tables:
-        for row in table.rows:
-            for cell in row.cells:
-                for para in cell.paragraphs:
-                    if placeholder in para.text:
-                        # 清空内容
-                        para.text = ""
 
     return doc
 

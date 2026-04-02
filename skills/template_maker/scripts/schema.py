@@ -47,8 +47,6 @@ DEFAULT_APPENDIX = {
 }
 
 
-# ==================== 生成 ====================
-
 def generate_schema(elements: Dict[str, Any],
                    abstract_config: Optional[Dict[str, Any]] = None,
                    body_config: Optional[Dict[str, Any]] = None,
@@ -87,21 +85,6 @@ def generate_schema(elements: Dict[str, Any],
     return schema
 
 
-# ==================== 文件操作 ====================
-
-def load_schema(path: str) -> Dict[str, Any]:
-    """从文件加载 schema。
-
-    Args:
-        path: schema.yaml 文件路径
-
-    Returns:
-        schema 字典
-    """
-    with open(path, 'r', encoding='utf-8') as f:
-        return yaml.safe_load(f)
-
-
 def save_schema(path: str, schema: Dict[str, Any]) -> None:
     """保存 schema 到文件。
 
@@ -112,60 +95,6 @@ def save_schema(path: str, schema: Dict[str, Any]) -> None:
     with open(path, 'w', encoding='utf-8') as f:
         yaml.dump(schema, f, allow_unicode=True, default_flow_style=False)
 
-
-# ==================== 修改（纯函数）====================
-
-def update_field(schema: Dict[str, Any],
-                name: str,
-                description: str,
-                format: str = None) -> Dict[str, Any]:
-    """更新或添加字段（返回新 schema）。
-
-    Args:
-        schema: 原 schema 字典
-        name: 字段名
-        description: 字段描述
-        format: 格式示例（可选）
-
-    Returns:
-        新的 schema 字典
-    """
-    new_schema = schema.copy()
-    field_def = {"description": description}
-    if format:
-        field_def["format"] = format
-    new_schema[name] = field_def
-    return new_schema
-
-
-def update_fragment(schema: Dict[str, Any],
-                   name: str,
-                   scope: str = None,
-                   hints: list = None) -> Dict[str, Any]:
-    """更新片段配置（返回新 schema）。
-
-    Args:
-        schema: 原 schema 字典
-        name: 片段名（"abstract" 或 "body"）
-        scope: 位置描述（可选）
-        hints: 提示信息列表（可选）
-
-    Returns:
-        新的 schema 字典
-    """
-    default = DEFAULT_ABSTRACT if name == "abstract" else DEFAULT_BODY
-    config = {}
-    if scope:
-        config["scope"] = scope
-    if hints is not None:
-        config["hints"] = hints
-
-    new_schema = schema.copy()
-    new_schema[name] = _apply_fragment_config(default, config if config else None)
-    return new_schema
-
-
-# ==================== 辅助函数 ====================
 
 def _apply_fragment_config(default: Dict[str, Any],
                           config: Optional[Dict[str, Any]]) -> Dict[str, Any]:

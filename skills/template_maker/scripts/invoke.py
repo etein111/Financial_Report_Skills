@@ -19,11 +19,12 @@ from template import (
     load_document, save_document,
     replace_field_value_in_doc,
     replace_abstract_in_doc,
+    replace_abstract_in_doc_by_paragraph,
     replace_summary_in_doc,
     replace_body_in_doc,
     replace_analyst_fields_in_doc
 )
-from document import find_abstract_by_elements, find_body_range_by_sections, find_appendix_by_markers, find_first_appendix_position, find_summary_by_markers
+from document import find_abstract_by_elements, find_abstract_by_markers, find_body_range_by_sections, find_appendix_by_markers, find_first_appendix_position, find_summary_by_markers
 from router import load_router, update_mapping, save_router, get_all_router_mappings
 import yaml
 
@@ -298,8 +299,12 @@ def _auto_detect_locations(word_path: Path, elements: dict) -> dict:
         "first_appendix": None  # 第一个 APPENDIX 标题位置（用于确定正文结束位置）
     }
 
-    # 检测摘要位置
-    abstract_location = find_abstract_by_elements(str(word_path), elements)
+    # 检测摘要位置（优先使用独立于 elements 的检测逻辑）
+    abstract_location = find_abstract_by_markers(str(word_path))
+    if not abstract_location.get("found"):
+        # 如果标记检测失败，尝试依赖 elements 的检测逻辑
+        abstract_location = find_abstract_by_elements(str(word_path), elements)
+
     if abstract_location.get("found"):
         result["abstract"] = {
             "location": abstract_location
@@ -344,7 +349,7 @@ def _confirm_abstract_location(detected: dict) -> str | None:
     """交互确认摘要位置。
 
     流程：
-    1. 如果检测到摘要：先展示内容前几个字，问用户是否正确
+    1. 如果检测到摘要：先展示开头和结尾内容，问用户是否正确
     2. 如果用户说不正确：再问有没有摘要、在哪里
     3. 如果未检测到：直接问有没有摘要、在哪里
 
@@ -363,14 +368,16 @@ def _confirm_abstract_location(detected: dict) -> str | None:
 
     # 如果检测到摘要，先展示内容让用户确认
     if location.get("found"):
-        detected_scope = location.get('scope') or location.get('context', '未知')
-        preview = location.get('preview', '')
+        detected_scope = location.get('context', '未知')
+        preview_start = location.get('preview_start', '')
+        preview_end = location.get('preview_end', '')
 
         print(f"\n自动检测到摘要：")
         print(f"  位置：{detected_scope}")
-        if preview:
-            preview_text = preview[:80] if isinstance(preview, str) else str(preview)[:80]
-            print(f"  内容预览：{preview_text}...")
+        if preview_start:
+            print(f"  开头：{preview_start}...")
+        if preview_end:
+            print(f"  结尾：...{preview_end}")
 
         print("\n请确认检测是否正确：")
         print("  - 回车或 y：正确，使用此位置")
@@ -433,7 +440,7 @@ def _confirm_body_location(detected: dict) -> str | None:
     """交互确认正文位置。
 
     流程：
-    1. 如果检测到正文：先展示范围信息，问用户是否正确
+    1. 如果检测到正文：先展示开头和结尾内容，问用户是否正确
     2. 如果用户说不正确：再问有没有正文、在哪里
     3. 如果未检测到：直接问有没有正文、在哪里
 
@@ -452,14 +459,16 @@ def _confirm_body_location(detected: dict) -> str | None:
 
     # 如果检测到正文，先展示信息让用户确认
     if location.get("found"):
-        detected_scope = location.get('scope') or location.get('context', '未知')
-        preview = location.get('preview', '')
+        detected_scope = location.get('context', '未知')
+        preview_start = location.get('preview_start', '')
+        preview_end = location.get('preview_end', '')
 
         print(f"\n自动检测到正文：")
         print(f"  范围：{detected_scope}")
-        if preview:
-            preview_text = preview[:80] if isinstance(preview, str) else str(preview)[:80]
-            print(f"  内容预览：{preview_text}...")
+        if preview_start:
+            print(f"  开头：{preview_start}...")
+        if preview_end:
+            print(f"  结尾：...{preview_end}")
 
         print("\n请确认检测是否正确：")
         print("  - 回车或 y：正确，使用此范围")
@@ -522,7 +531,7 @@ def _confirm_summary_location(detected: dict) -> str | None:
     """交互确认英文 Summary 位置。
 
     流程：
-    1. 如果检测到 Summary：先展示范围信息，问用户是否正确
+    1. 如果检测到 Summary：先展示开头和结尾内容，问用户是否正确
     2. 如果用户说不正确：再问有没有 Summary、在哪里
     3. 如果未检测到：直接问有没有 Summary、在哪里
 
@@ -541,14 +550,16 @@ def _confirm_summary_location(detected: dict) -> str | None:
 
     # 如果检测到 Summary，先展示信息让用户确认
     if location.get("found"):
-        detected_scope = location.get('scope') or location.get('context', '未知')
-        preview = location.get('preview', '')
+        detected_scope = location.get('context', '未知')
+        preview_start = location.get('preview_start', '')
+        preview_end = location.get('preview_end', '')
 
         print(f"\n自动检测到英文 Summary：")
         print(f"  范围：{detected_scope}")
-        if preview:
-            preview_text = preview[:80] if isinstance(preview, str) else str(preview)[:80]
-            print(f"  内容预览：{preview_text}...")
+        if preview_start:
+            print(f"  开头：{preview_start}...")
+        if preview_end:
+            print(f"  结尾：...{preview_end}")
 
         print("\n请确认检测是否正确：")
         print("  - 回车或 y：正确，使用此范围")
@@ -835,13 +846,23 @@ def create_template(
     abstract_location = abstract_detected.get("location") if abstract_detected else None
 
     if abstract_scope and abstract_location and abstract_location.get("found"):
-        doc = replace_abstract_in_doc(
-            doc,
-            table=abstract_location["table"],
-            row=abstract_location["row"],
-            col_start=abstract_location["col_start"],
-            col_end=abstract_location["col_end"]
-        )
+        # 根据检测结果类型选择替换方式
+        if "table" in abstract_location:
+            # 表格方式（find_abstract_by_elements 返回的结果）
+            doc = replace_abstract_in_doc(
+                doc,
+                table=abstract_location["table"],
+                row=abstract_location["row"],
+                col_start=abstract_location["col_start"],
+                col_end=abstract_location["col_end"]
+            )
+        elif "start_paragraph" in abstract_location:
+            # 段落方式（find_abstract_by_markers 返回的结果）
+            doc = replace_abstract_in_doc_by_paragraph(
+                doc,
+                start_paragraph=abstract_location["start_paragraph"],
+                end_paragraph=abstract_location["end_paragraph"]
+            )
         print(f"摘要位置: {abstract_location['context']}")
     elif abstract_scope:
         # 用户确认有摘要，但自动检测失败，尝试重新检测
@@ -860,6 +881,33 @@ def create_template(
             print("提示: 摘要区域需要手动调整模板")
     else:
         print("摘要: 用户确认无摘要，跳过")
+
+    # 替换 Summary 区域为 {{ summary }} 占位符（如果有 Summary）
+    # 注意：Summary 处理在 Body 之前，因为 Body 处理会改变文档结构，导致索引失效
+    if summary_scope:
+        # 使用之前检测的位置信息
+        summary_detected = detected_locations.get("summary")
+        summary_location = summary_detected.get("location") if summary_detected else None
+
+        if not summary_location or not summary_location.get("found"):
+            # 尝试重新检测
+            summary_location = find_summary_by_markers(str(word_path))
+
+        if summary_location and summary_location.get("found"):
+            start_para = summary_location["start_paragraph"]
+            end_para = summary_location["end_paragraph"]
+
+            doc = replace_summary_in_doc(
+                doc,
+                start_paragraph=start_para,
+                end_paragraph=end_para
+            )
+            print(f"Summary 位置: 段落 {start_para} 到 {end_para}")
+        else:
+            reason = summary_location.get('reason', '未知原因') if summary_location else '未知原因'
+            print(f"警告: 未能自动定位 Summary 位置 - {reason}")
+    else:
+        print("Summary: 用户确认无 Summary，跳过")
 
     # 替换正文区域为 {{ body }} 占位符（如果有正文）
     if body_scope:
@@ -901,32 +949,6 @@ def create_template(
             print(f"警告: 未能自动定位正文位置 - {reason}")
     else:
         print("正文: 用户确认无正文，跳过")
-
-    # 替换 Summary 区域为 {{ summary }} 占位符（如果有 Summary）
-    if summary_scope:
-        # 使用之前检测的位置信息
-        summary_detected = detected_locations.get("summary")
-        summary_location = summary_detected.get("location") if summary_detected else None
-
-        if not summary_location or not summary_location.get("found"):
-            # 尝试重新检测
-            summary_location = find_summary_by_markers(str(word_path))
-
-        if summary_location and summary_location.get("found"):
-            start_para = summary_location["start_paragraph"]
-            end_para = summary_location["end_paragraph"]
-
-            doc = replace_summary_in_doc(
-                doc,
-                start_paragraph=start_para,
-                end_paragraph=end_para
-            )
-            print(f"Summary 位置: 段落 {start_para} 到 {end_para}")
-        else:
-            reason = summary_location.get('reason', '未知原因') if summary_location else '未知原因'
-            print(f"警告: 未能自动定位 Summary 位置 - {reason}")
-    else:
-        print("Summary: 用户确认无 Summary，跳过")
 
     # ========== 验证占位符 ==========
     print("\n正在验证模板占位符...")

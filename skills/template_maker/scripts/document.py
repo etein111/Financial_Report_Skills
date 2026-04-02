@@ -7,7 +7,7 @@
 
 import re
 import zipfile
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List
 from lxml import etree
 
 
@@ -70,22 +70,6 @@ def _build_body_para_index_map(tree: etree._Element) -> Dict[int, int]:
     return xml_to_docx_map
 
 
-def _get_paragraphs_and_tables(tree: etree._Element) -> Tuple[List[etree._Element], List[etree._Element]]:
-    """获取所有段落和表格元素。
-
-    直接从 XML 结构中提取，避免 python-docx 漏读问题。
-
-    Args:
-        tree: document.xml 根元素
-
-    Returns:
-        (paragraphs, tables) 元组
-    """
-    paragraphs = list(tree.iter(f'{W}p'))
-    tables = list(tree.iter(f'{W}tbl'))
-    return paragraphs, tables
-
-
 def _get_para_text(para: etree._Element) -> str:
     """获取段落的所有文本。
 
@@ -112,24 +96,6 @@ def _get_cell_text(tc: etree._Element) -> str:
         if t.text:
             texts.append(t.text)
     return ''.join(texts)
-
-
-def _get_table_cells(table: etree._Element) -> List[List[str]]:
-    """获取表格所有单元格的文本。
-
-    Args:
-        table: 表格元素
-
-    Returns:
-        二维列表，每行是单元格文本列表
-    """
-    rows = []
-    for tr in table.findall(f'{W}tr'):
-        cells = []
-        for tc in tr.findall(f'{W}tc'):
-            cells.append(_get_cell_text(tc))
-        rows.append(cells)
-    return rows
 
 
 # ==================== 摘要查找 ====================
@@ -223,6 +189,159 @@ def find_abstract_by_elements(doc_path: str, elements: dict) -> Dict[str, Any]:
     return {"found": False, "reason": "未找到匹配的摘要内容"}
 
 
+def find_abstract_by_markers(doc_path: str) -> Dict[str, Any]:
+    """根据标记词查找中文摘要（核心观点）位置。
+
+    摘要结构特征：
+    1. 固定开始标记：如"核心观点"、"摘要"、"投资要点"、"Executive Summary"等
+    2. 通常位于文档开头（首页之后，第一节正文之前）
+    3. 长度适中，通常包含多个投资观点
+    4. 后续通常是正文标题（如"一、xxx"）
+
+    使用 lxml 直接解析 document.xml，确保嵌套表格不漏读。
+    返回的索引是 python-docux 兼容的。
+
+    Args:
+        doc_path: 文档路径
+
+    Returns:
+        {
+            "found": bool,
+            "start_paragraph": int,  # 开始段落索引（python-docux兼容）
+            "end_paragraph": int,    # 结束段落索引（python-docux兼容）
+            "preview_start": str,    # 开头内容预览
+            "preview_end": str,      # 结尾内容预览
+            "context": str
+        }
+    """
+    tree = _parse_docx_xml(doc_path)
+
+    paragraphs = list(tree.iter(f'{W}p'))
+    total_paragraphs = len(paragraphs)
+
+    # 建立XML索引到python-docux索引的映射
+    xml_to_docx = _build_body_para_index_map(tree)
+
+    # 在文档前半部分搜索（摘要通常在正文开头）
+    # 跳过前几个段落（通常是标题、提示语等）
+    # 注意：正文段落通常在 xml 索引 30 之后
+    start_search_idx = 1
+    end_search_idx = min(total_paragraphs // 2, 50)  # 只搜索前50个段落或前半部分
+
+    # 搜索摘要起始标记
+    for idx in range(start_search_idx, end_search_idx):
+        p = paragraphs[idx]
+        text = _get_para_text(p).strip()
+        text_upper = text.upper()
+
+        # 跳过空段落
+        if not text:
+            continue
+
+        # 跳过太长的段落（标题通常较短，但核心观点可能较长）
+        if len(text) > 500:
+            continue
+
+        # 跳过包含明显不是摘要的标记
+        if any(word in text_upper for word in ['APPENDIX', 'IMPORTANT', 'DISCLOSURE', '附录', '重要']):
+            continue
+
+        is_abstract_title = False
+
+        # 检查是否是摘要标题
+        # 1. "核心观点" 开头
+        if '核心观点' in text:
+            is_abstract_title = True
+
+        # 2. "摘要" 开头（但不是"本文摘要"之类太长的）
+        elif text_upper.startswith('摘要') and len(text) < 50:
+            is_abstract_title = True
+
+        # 3. "投资要点" 开头
+        elif '投资要点' in text:
+            is_abstract_title = True
+
+        # 4. "Executive Summary" 开头
+        elif text_upper.startswith('EXECUTIVE SUMMARY'):
+            is_abstract_title = True
+
+        if is_abstract_title:
+            # 找到结束位置：下一个章节标题（如"一、"、"（一）"等）或 APPENDIX
+            end_idx = idx + 1
+            preview_start = text
+            preview_end = ""
+            last_content_text = ""
+
+            for next_idx in range(idx + 1, total_paragraphs):
+                next_text = _get_para_text(paragraphs[next_idx]).strip()
+                next_text_upper = next_text.upper()
+
+                if not next_text:
+                    continue
+
+                # 记录最后一个有内容的段落（用于结尾预览）
+                last_content_text = next_text
+
+                # 遇到章节标题就结束（一、二、三 或 （一）、（二）等）
+                if (next_text.startswith('一、') or next_text.startswith('二、') or
+                    next_text.startswith('三、') or next_text.startswith('四、') or
+                    next_text.startswith('五、') or next_text.startswith('六、') or
+                    next_text.startswith('七、') or next_text.startswith('八、') or
+                    next_text.startswith('九、') or
+                    next_text.startswith('（一）') or next_text.startswith('（二）') or
+                    next_text.startswith('（三）') or
+                    next_text.startswith('1.') or next_text.startswith('2.') or
+                    next_text.startswith('3.') or
+                    # 投资建议
+                    '投资建议' in next_text_upper or
+                    # 风险提示
+                    '风险提示' in next_text_upper or
+                    # 正文章节开头
+                    ('海外' in next_text and ('板块' in next_text or '市场' in next_text)) or
+                    ('互联网' in next_text) or
+                    ('航空' in next_text) or
+                    # APPENDIX
+                    'APPENDIX' in next_text_upper):
+                    end_idx = next_idx
+                    # 结尾预览使用结束标记之前的最后一个有内容段落
+                    # 向前查找最后一个有内容的段落
+                    for prev_idx in range(next_idx - 1, idx, -1):
+                        prev_text = _get_para_text(paragraphs[prev_idx]).strip()
+                        if prev_text:
+                            preview_end = prev_text[-80:] if len(prev_text) > 80 else prev_text
+                            break
+                    break
+
+            # 转换为docx索引
+            docx_start = xml_to_docx.get(idx, idx)
+            if end_idx in xml_to_docx:
+                docx_end = xml_to_docx[end_idx]
+            else:
+                # 向前找最近的一个在映射中的xml索引
+                docx_end = None
+                for prev_idx in range(end_idx - 1, idx, -1):
+                    if prev_idx in xml_to_docx:
+                        docx_end = xml_to_docx[prev_idx]
+                        break
+                if docx_end is None:
+                    docx_end = max(xml_to_docx.values()) if xml_to_docx else 0
+
+            # 如果没有找到结尾预览，使用最后记录的内容
+            if not preview_end and last_content_text:
+                preview_end = last_content_text[-80:] if len(last_content_text) > 80 else last_content_text
+
+            return {
+                "found": True,
+                "start_paragraph": docx_start,
+                "end_paragraph": docx_end,
+                "preview_start": preview_start[:80] if len(preview_start) > 80 else preview_start,
+                "preview_end": preview_end,
+                "context": f"段落 {docx_start} 到 {docx_end}"
+            }
+
+    return {"found": False, "reason": "未找到摘要标记"}
+
+
 def _is_likely_abstract_paragraph(text: str, field_value: str) -> bool:
     """判断段落是否像摘要。
 
@@ -299,6 +418,8 @@ def find_body_range_by_sections(doc_path: str, abstract_end_hint: int = None) ->
             "found": bool,
             "start_paragraph": int,
             "end_paragraph": int,
+            "preview_start": str,    # 开头内容预览
+            "preview_end": str,      # 结尾内容预览
             "context": str
         }
     """
@@ -362,21 +483,31 @@ def find_body_range_by_sections(doc_path: str, abstract_end_hint: int = None) ->
     if start_paragraph >= end_paragraph:
         start_paragraph = 0
 
-    # 获取正文预览（第一段非空内容）
-    preview_text = ""
+    # 获取正文开头预览（第一段非空内容）
+    preview_start = ""
     for i in range(start_paragraph, min(start_paragraph + 10, end_paragraph)):
         if i < len(paragraphs):
             para_text = _get_para_text(paragraphs[i]).strip()
             if para_text and len(para_text) > 10:
-                preview_text = para_text[:80] if len(para_text) > 80 else para_text
+                preview_start = para_text[:80] if len(para_text) > 80 else para_text
+                break
+
+    # 获取正文结尾预览（最后一段非空内容）
+    preview_end = ""
+    for i in range(end_paragraph - 1, max(start_paragraph, end_paragraph - 10) - 1, -1):
+        if i < len(paragraphs) and i >= 0:
+            para_text = _get_para_text(paragraphs[i]).strip()
+            if para_text and len(para_text) > 10:
+                preview_end = para_text[-80:] if len(para_text) > 80 else para_text
                 break
 
     return {
         "found": True,
         "start_paragraph": start_paragraph,
         "end_paragraph": end_paragraph,
-        "preview": preview_text,
-        "context": f"正文范围: 段落 {start_paragraph} 到 {end_paragraph - 1}"
+        "preview_start": preview_start,
+        "preview_end": preview_end,
+        "context": f"段落 {start_paragraph} 到 {end_paragraph - 1}"
     }
 
 
@@ -476,6 +607,8 @@ def find_summary_by_markers(doc_path: str) -> Dict[str, Any]:
             "found": bool,
             "start_paragraph": int,  # 开始段落索引（python-docux兼容）
             "end_paragraph": int,    # 结束段落索引（python-docux兼容）
+            "preview_start": str,    # 开头内容预览
+            "preview_end": str,      # 结尾内容预览
             "context": str
         }
     """
@@ -531,21 +664,35 @@ def find_summary_by_markers(doc_path: str) -> Dict[str, Any]:
         if is_summary_title:
             # 找到结束位置：下一个 APPENDIX 标题或法律披露标题
             end_idx = total_paragraphs
-            preview_text = text  # 默认使用标题
+            preview_start = text  # 默认使用标题
+            preview_end = ""
+            last_content_text = ""
+
             for next_idx in range(idx + 1, total_paragraphs):
                 next_text = _get_para_text(paragraphs[next_idx]).strip()
                 next_text_upper = next_text.upper()
                 if not next_text:
                     continue
+
+                # 记录最后一个有内容的段落
+                last_content_text = next_text
+
                 # 如果还没找到预览内容，取第一个非空的正文段落
-                if preview_text == text and len(next_text) > 20:
-                    preview_text = next_text[:80] if len(next_text) > 80 else next_text
+                if preview_start == text and len(next_text) > 20:
+                    preview_start = next_text[:80] if len(next_text) > 80 else next_text
+
                 # 遇到下一个 APPENDIX 或法律披露标题就结束
                 if (next_text_upper.startswith('APPENDIX') and next_idx != idx) or \
                    '附录' in next_text_upper or \
                    'IMPORTANT DISCLOSURE' in next_text_upper or \
                    '重要信息披露' in next_text_upper:
                     end_idx = next_idx
+                    # 向前查找最后一个有内容的段落作为结尾预览
+                    for prev_idx in range(next_idx - 1, idx, -1):
+                        prev_text = _get_para_text(paragraphs[prev_idx]).strip()
+                        if prev_text:
+                            preview_end = prev_text[-80:] if len(prev_text) > 80 else prev_text
+                            break
                     break
 
             # 转换为docx索引
@@ -563,12 +710,17 @@ def find_summary_by_markers(doc_path: str) -> Dict[str, Any]:
                 if docx_end is None:
                     docx_end = max(xml_to_docx.values()) if xml_to_docx else 0
 
+            # 如果没有找到结尾预览，使用最后记录的内容
+            if not preview_end and last_content_text:
+                preview_end = last_content_text[-80:] if len(last_content_text) > 80 else last_content_text
+
             return {
                 "found": True,
                 "start_paragraph": docx_start,
                 "end_paragraph": docx_end,
-                "preview": preview_text,
-                "context": f"段落 {docx_start} 到 {docx_end}: {text[:50]}..."
+                "preview_start": preview_start,
+                "preview_end": preview_end,
+                "context": f"段落 {docx_start} 到 {docx_end}"
             }
 
     return {"found": False, "reason": "未找到 Summary 标记"}
@@ -634,125 +786,3 @@ def find_first_appendix_position(doc_path: str) -> Dict[str, Any]:
             }
 
     return {"found": False, "reason": "未找到 APPENDIX 相关标题"}
-
-
-# ==================== 辅助函数 ====================
-
-def find_content_location(doc_path: str, field_name: str, field_value: str) -> Dict[str, Any]:
-    """查找特定字段内容在文档中的位置。
-
-    使用 lxml 直接解析 document.xml，确保嵌套表格不漏读。
-
-    Args:
-        doc_path: 文档路径
-        field_name: 字段名
-        field_value: 字段值
-
-    Returns:
-        {
-            "found": bool,
-            "type": "paragraph" | "table" | "header" | "footer",
-            "index": int,  # 段落索引或表格索引
-            "row": int,    # 如果是表格，则为行索引
-            "col": int,    # 如果是表格，则为列索引
-            "context": str
-        }
-    """
-    tree = _parse_docx_xml(doc_path)
-
-    # 在段落中搜索
-    paragraphs = list(tree.iter(f'{W}p'))
-    for idx, para in enumerate(paragraphs):
-        para_text = _get_para_text(para)
-        if field_value in para_text:
-            return {
-                "found": True,
-                "type": "paragraph",
-                "index": idx,
-                "context": f"段落 {idx}: {para_text[:50]}..."
-            }
-
-    # 在表格中搜索（包括嵌套表格）
-    for tbl_idx, table in enumerate(tree.iter(f'{W}tbl')):
-        for row_idx, tr in enumerate(table.findall(f'{W}tr')):
-            for col_idx, tc in enumerate(tr.findall(f'{W}tc')):
-                cell_text = _get_cell_text(tc)
-                if field_value in cell_text:
-                    return {
-                        "found": True,
-                        "type": "table",
-                        "index": tbl_idx,
-                        "row": row_idx,
-                        "col": col_idx,
-                        "context": f"表格 {tbl_idx} 行 {row_idx} 列 {col_idx}: {cell_text[:50]}..."
-                    }
-
-    # 在页眉页脚中搜索（需要从 docx 中读取 header/footer）
-    try:
-        import zipfile
-        for section_idx, section in enumerate(_iter_sections(doc_path)):
-            for part_name in ['header', 'footer']:
-                part = _get_section_part(section, part_name)
-                if part is None:
-                    continue
-                for para in part.iter(f'{W}p'):
-                    para_text = _get_para_text(para)
-                    if field_value in para_text:
-                        return {
-                            "found": True,
-                            "type": part_name,
-                            "index": section_idx,
-                            "context": f"节 {section_idx} {part_name}: {para_text[:50]}..."
-                        }
-    except Exception:
-        # 如果读取页眉页脚失败，跳过这个来源
-        pass
-
-    return {"found": False, "reason": f"未找到字段 {field_name} 的内容"}
-
-
-def _iter_sections(doc_path: str):
-    """迭代文档中的所有 section 元素。
-
-    Args:
-        doc_path: docx 文件路径
-
-    Yields:
-        section 元素
-    """
-    with zipfile.ZipFile(doc_path, 'r') as z:
-        # 获取 section 数量
-        doc_xml = z.read('word/document.xml')
-        tree = etree.fromstring(doc_xml)
-        body = tree.find(f'{W}body')
-        if body is not None:
-            for sectPr in body.iter(f'{W}sectPr'):
-                yield sectPr
-
-
-def _get_section_part(section: etree._Element, part_name: str) -> Optional[etree._Element]:
-    """获取 section 的页眉或页脚部分。
-
-    Args:
-        section: sectPr 元素
-        part_name: 'header' 或 'footer'
-
-    Returns:
-        header/footer 元素，如果不存在返回 None
-    """
-    # 查找 headerReference 或 footerReference
-    ref_name = f'{W}{part_name}Reference'
-    ref = section.find(ref_name)
-    if ref is None:
-        return None
-
-    # 获取 ID
-    id_attr = f'{W}id'
-    rid = ref.get(id_attr)
-    if rid is None:
-        return None
-
-    # 从 relationships 中查找实际文件
-    # 这需要读取 .rels 文件，但 lxml 不能直接处理
-    # 回退：返回 None
-    return None
