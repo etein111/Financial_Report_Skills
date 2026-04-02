@@ -1481,95 +1481,45 @@ def render_report(
         # 6. 处理 BODY_MARKER - 在占位符位置插入 body 内容
         doc = Document(str(temp_path))
 
-        # 找到 BODY_MARKER 位置的元素索引
-        body_elem = doc.element.body
-        all_elements = list(body_elem)
-        marker_idx = None
+        if Path(body_path).exists() and Path(body_path).stat().st_size > 0:
+            body_doc = Document(body_path)
 
-        for i, elem in enumerate(all_elements):
-            if elem.tag.endswith('}p'):
-                text = ''.join(t.text for t in elem.iter() if t.text)
-                if BODY_MARKER in text:
-                    marker_idx = i
-                    print(f"  找到 body 占位符位置: 第 {i} 个元素")
-                    break
+            # 直接在原文档 XML 上操作，在 marker 位置插入 body 内容
+            body_inserted = insert_body_at_marker(doc, body_doc, BODY_MARKER)
 
-        if marker_idx is not None and Path(body_path).exists() and Path(body_path).stat().st_size > 0:
-            # 策略：将文档在 marker 处分成三部分
-            # part1 = marker 之前的内容
-            # body = 要插入的正文
-            # part3 = marker 之后的内容（包括法律附录）
+            if body_inserted:
+                print(f"  已在 BODY_MARKER 位置插入 body（保留格式和后续内容）")
+            else:
+                # 如果没找到 marker，使用 docxcompose 追加到末尾
+                print(f"  ⚠️ 未找到 BODY_MARKER，使用 docxcompose 追加 body")
+                doc.save(str(temp_path))
+                master = Document(str(temp_path))
+                composer = Composer(master)
+                composer.append(Document(body_path))
+                composer.save(output_path)
+                # 复制图片资源
+                _copy_media_between_docx(body_path, output_path)
+                temp_path.unlink(missing_ok=True)
+                # 跳过后续保存
+                doc = Document(output_path)
 
-            from docx import Document as DocxDocument
+            # 保存文档
+            doc.save(output_path)
 
-            # 6.1 创建 part1（marker 之前的内容）
-            part1_doc = DocxDocument()
-            # 复制 marker 之前的所有元素
-            for elem in all_elements[:marker_idx]:
-                tag = elem.tag.split('}')[-1]
-                if tag in ['p', 'tbl', 'sdt']:
-                    part1_doc.element.body.append(deepcopy(elem))
-
-            part1_path = Path(output_path).parent / "temp_part1.docx"
-            part1_doc.save(str(part1_path))
-
-            # 6.2 创建 part3（marker 之后的内容，跳过 marker 本身）
-            part3_doc = DocxDocument()
-            has_part3_content = False
-            for elem in all_elements[marker_idx + 1:]:
-                tag = elem.tag.split('}')[-1]
-                if tag in ['p', 'tbl', 'sdt']:
-                    part3_doc.element.body.append(deepcopy(elem))
-                    has_part3_content = True
-
-            part3_path = Path(output_path).parent / "temp_part3.docx"
-            if has_part3_content:
-                part3_doc.save(str(part3_path))
-
-            # 6.3 加载 body 文档
-            body_doc = DocxDocument(body_path)
-
-            # 6.4 使用 docxcompose 合并：part1 + body + part3
-            master = DocxDocument(str(part1_path))
-            composer = Composer(master)
-
-            # 追加 body
-            composer.append(body_doc)
-
-            # 追加 part3（如果有内容）
-            if has_part3_content:
-                part3_for_merge = DocxDocument(str(part3_path))
-                composer.append(part3_for_merge)
-
-            # 保存最终文档
-            composer.save(output_path)
-
-            # 6.5 清理临时文件
-            part1_path.unlink(missing_ok=True)
-            if has_part3_content:
-                part3_path.unlink(missing_ok=True)
-
-            print(f"  已在 BODY_MARKER 位置插入 body（保留后续内容）")
-
-        elif marker_idx is None:
-            # 没有找到 marker，直接追加 body
-            from docx import Document as DocxDocument
-            master = DocxDocument(str(temp_path))
-            composer = Composer(master)
-            if Path(body_path).exists() and Path(body_path).stat().st_size > 0:
-                body_doc = DocxDocument(body_path)
-                composer.append(body_doc)
-                print(f"  ⚠️ 未找到 body 占位符，直接追加 body 到末尾")
-            composer.save(output_path)
+            # 复制 body 中的图片资源到输出文档
+            copied_images = _copy_media_between_docx(body_path, output_path)
+            if copied_images > 0:
+                print(f"  已复制 {copied_images} 个图片资源")
 
         else:
-            # 没有 body 文件，直接保存（删除 marker）
-            # 删除 BODY_MARKER 段落
+            # 没有 body 文件，删除 BODY_MARKER 段落并保存
+            body_elem = doc.element.body
             for elem in list(body_elem):
                 if elem.tag.endswith('}p'):
                     text = ''.join(t.text for t in elem.iter() if t.text)
                     if BODY_MARKER in text:
                         body_elem.remove(elem)
+                        print(f"  已删除 BODY_MARKER（无 body 文件）")
                         break
             doc.save(output_path)
 
