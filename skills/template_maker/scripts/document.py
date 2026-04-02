@@ -549,10 +549,10 @@ def find_body_range_by_sections(doc_path: str, abstract_end_hint: int = None) ->
     正文范围逻辑：
     1. 正文开始位置：
        - 如果有多个分节符，且第一个分节符在文档前 30%，正文从该分节符之后开始（首页结束）
-       - 否则使用 abstract_end_hint（如果提供）
-       - 都没有则从段落 0 开始
+       - 目录（SDT）如果在分节符之后，也应该被包含在正文范围内
+       - 都不满足则使用 abstract_end_hint
     2. 正文结束位置：
-       - 最后一个分节符之前，或 APPENDIX 标题之前
+       - 最后一个分节符（分页符）之前
 
     使用 lxml 直接解析 document.xml，确保完整读取。
     返回的索引是 python-docux 兼容的。
@@ -572,12 +572,14 @@ def find_body_range_by_sections(doc_path: str, abstract_end_hint: int = None) ->
         }
     """
     tree = _parse_docx_xml(doc_path)
+    body = tree.find(f'{W}body')
     paragraphs = list(tree.iter(f'{W}p'))
     total_paragraphs = len(paragraphs)
 
     # 建立XML索引到python-docux索引的映射
     xml_to_docx = _build_body_para_index_map(tree)
 
+    # 收集分节符位置
     sect_pr_indices = []  # [xml_paragraph_index, ...]
 
     for para_idx, para in enumerate(paragraphs):
@@ -588,7 +590,22 @@ def find_body_range_by_sections(doc_path: str, abstract_end_hint: int = None) ->
             if sect_pr is not None:
                 sect_pr_indices.append(para_idx)
 
+    # 收集 SDT（目录）的位置
+    sdt_indices = []  # [(xml_body_idx, sdt_text), ...]
+    for body_idx, child in enumerate(body):
+        if etree.QName(child.tag).localname == 'sdt':
+            # 获取 SDT 的标题（如果有）
+            sdt_text = ''
+            for p in child.iter(f'{W}p'):
+                t_text = ''.join(t.text or '' for t in p.iter(f'{W}t'))
+                if t_text:
+                    sdt_text = t_text[:50]
+                    break
+            sdt_indices.append((body_idx, sdt_text))
+
     # 确定正文开始位置
+    # 关键：正文应该从分节符之后开始，而不是从 abstract_end_hint 开始
+    # 这样可以确保目录（SDT）被包含在正文范围内
     start_paragraph = 0
 
     if len(sect_pr_indices) >= 2:
@@ -610,8 +627,29 @@ def find_body_range_by_sections(doc_path: str, abstract_end_hint: int = None) ->
         if abstract_end_hint is not None:
             start_paragraph = abstract_end_hint + 1
 
+    # 确保目录（SDT）被包含在正文范围内
+    # 如果 SDT 在 start_paragraph 之前，把 start_paragraph 往前调
+    for body_idx, sdt_text in sdt_indices:
+        # 找到 SDT 在 xml 段落中的位置
+        sdt_first_para = None
+        for p in body[body_idx].iter(f'{W}p'):
+            if sdt_first_para is None:
+                sdt_first_para = p
+                break
+        if sdt_first_para is not None:
+            xml_idx = None
+            for i, p in enumerate(paragraphs):
+                if p is sdt_first_para:
+                    xml_idx = i
+                    break
+            if xml_idx is not None:
+                sdt_para_idx = xml_to_docx.get(xml_idx, xml_idx)
+                if sdt_para_idx < start_paragraph:
+                    # SDT 在计算的正文开始位置之前，包含它
+                    start_paragraph = sdt_para_idx
+                    break
+
     # 确定正文结束位置
-    # 关键：正文应该到分节符（分页符）才算，APPENDIX 标题不应该覆盖分节符的判断
     end_paragraph = total_paragraphs
 
     if sect_pr_indices:
