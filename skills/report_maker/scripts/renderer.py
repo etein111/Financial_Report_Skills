@@ -1253,19 +1253,20 @@ def render_report(
         # 1. 准备渲染上下文
         context = prepare_context_with_analysts(elements)
 
-        # 2. 复制模板并通过 XML 替换所有占位符
+        # 2. 添加 abstract 和 body 的 MARKER 到上下文
+        # docxtpl 会将 {{ abstract }} 和 {{ body }} 替换为 MARKER
+        # 后续再在 MARKER 位置插入实际内容
+        context['abstract'] = ABSTRACT_MARKER
+        context['body'] = BODY_MARKER
+
+        # 3. 使用 docxtpl 渲染模板（支持 {% if %} 语法）
         temp_path = Path(output_path).parent / "temp_rendered.docx"
-        _copy_docx(template_path, str(temp_path))
-        replace_all_placeholders_in_xml(str(temp_path), context, elements)
+        template = DocxTemplate(template_path)
+        template.render(context)
+        template.save(str(temp_path))
 
-        # 3. 加载渲染后的文档
+        # 4. 加载渲染后的文档
         doc = Document(str(temp_path))
-
-        # 3.5 清理空分析师单元格
-        analysts_with_data = context.get('_analysts_with_data', set())
-        cleaned_cells = clean_empty_analyst_cells(doc, analysts_with_data)
-        if cleaned_cells > 0:
-            print(f"  已清理 {cleaned_cells} 个空分析师单元格")
 
         # 4. 插入 abstract
         if Path(abstract_path).exists() and Path(abstract_path).stat().st_size > 0:
