@@ -31,7 +31,6 @@ except ImportError:
 from lxml import etree
 
 import common
-import docx_reader
 
 
 W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
@@ -47,6 +46,39 @@ def _get_para_text(para_elem) -> str:
         段落文本
     """
     return ''.join(t.text or '' for t in para_elem.iter(f'{W}t'))
+
+
+def _get_all_tables_lxml(doc_path: str) -> List[etree._Element]:
+    """使用 lxml 获取文档中所有表格（包括嵌套表格）。
+
+    解决 python-docx 漏读嵌套表格的问题。
+
+    Args:
+        doc_path: docx 文件路径
+
+    Returns:
+        表格元素列表
+    """
+    with zipfile.ZipFile(doc_path, 'r') as z:
+        with z.open('word/document.xml') as f:
+            tree = etree.parse(f).getroot()
+    return list(tree.iter(f'{W}tbl'))
+
+
+def _get_cell_text_lxml(tc_elem) -> str:
+    """获取单元格的文本（包括嵌套内容）。
+
+    Args:
+        tc_elem: 单元格元素
+
+    Returns:
+        单元格文本
+    """
+    texts = []
+    for t in tc_elem.iter(f'{W}t'):
+        if t.text:
+            texts.append(t.text)
+    return ''.join(texts)
 
 
 def extract_abstract(draft_path: str, scope: str, output_path: Optional[str] = None) -> Path:
@@ -82,30 +114,27 @@ def extract_abstract(draft_path: str, scope: str, output_path: Optional[str] = N
             p.getparent().remove(p)
 
         # 策略1：从首页表格中查找摘要（常见于公司报告模板）
-        # 使用 docx_reader 确保所有表格都能读取（包括嵌套表格）
-        # 使用 read_docx_tables_with_elements 保留原始 lxml 元素以便 deepcopy
+        # 使用 lxml 确保所有表格都能读取（包括嵌套表格）
         abstract_found = False
-        all_tables = docx_reader.read_docx_tables_with_elements(draft_path)
+        all_tables = _get_all_tables_lxml(draft_path)
 
         if all_tables:
             first_table = all_tables[0]
 
             # 搜索包含摘要内容特征的单元格
-            for row in first_table.get('rows', []):
-                for cell in row.get('cells', []):
-                    cell_text = cell.get('text', '').strip()
+            for row in first_table.findall(f'{W}tr'):
+                for tc in row.findall(f'{W}tc'):
+                    cell_text = _get_cell_text_lxml(tc).strip()
                     # 摘要通常以公司名或关键词开头，且较长
                     if any(marker in cell_text for marker in [
                         '是私人航空业', '是全球', '公司是', '本报告',
                         '投资亮点', '核心观点', '摘要'
                     ]) and len(cell_text) > 200:
-                        # 使用 deepcopy 复制段落，保留所有格式（加粗、字体等）
-                        cell_elem = cell.get('element')
-                        if cell_elem is not None:
-                            for para_elem in cell_elem.findall(f'{W}p'):
-                                if _get_para_text(para_elem).strip():
-                                    new_para = deepcopy(para_elem)
-                                    abstract_doc.element.body.append(new_para)
+                        # 使用 deepcopy 复制段落，保留所有格式
+                        for para_elem in tc.findall(f'{W}p'):
+                            if _get_para_text(para_elem).strip():
+                                new_para = deepcopy(para_elem)
+                                abstract_doc.element.body.append(new_para)
                         abstract_found = True
                         break
                 if abstract_found:

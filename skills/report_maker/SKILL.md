@@ -390,30 +390,6 @@ body: <输出目录>/body.docx
 
 ### 3. 渲染报告（纯脚本，无 LLM）
 
-**⚠️ 模板支持 Jinja2 语法，包括 `{% if %}` 条件渲染**
-
-模板现在支持 Jinja2 的 `{% if %}` 语法来条件性地渲染字段。这对于分析师字段特别有用，可以避免空分析师时产生孤立的连接符（如 `], SFC:`）。
-
-**分析师字段的推荐模板写法**：
-
-```jinja2
-{% if a1_cn %}
-{{ a1_cn }} {{ a1_en }}], SFC:{{ a1_sfc }}
-{% if a2_cn %}
-{{ a2_cn }} {{ a2_en }}], SFC:{{ a2_sfc }}
-{% endif %}
-{% if a1_email %}Email: {{ a1_email }}{% endif %}
-{% if a2_email %} {{ a2_email }}{% endif %}
-{% endif %}
-```
-
-当 `a1_cn` 为空时，整个分析师信息块都不会渲染，避免了需要额外清理 `], SFC:` 等连接符的问题。
-
-**支持的 Jinja2 控制结构**：
-- `{% if field %}` - 条件渲染
-- `{% for item in list %}` - 循环渲染
-- `{% macro %}` - 宏定义（可选）
-
 **渲染行为由 elements.yaml 中的 has_abstract 和 has_body 决定**：
 
 - 如果 `has_abstract=True`：插入摘要到模板（完整保留原始格式）
@@ -437,7 +413,7 @@ body: <输出目录>/body.docx
 - 如果用占位符填充 body，会导致 body 丢失自己的页边距，继承模板格式
 
 使用 `renderer.render_report()` 函数完成以下操作：
-1. 通过 docxtpl 渲染模板（支持 Jinja2 `{% if %}` 条件语法）
+1. 通过 XML 级别替换所有占位符（不破坏嵌套表格结构）
 2. 插入摘要到表格单元格（使用 deepcopy 保留格式）
 3. 使用 docxcompose 合并正文（保留图片和表格）
 4. 追加法律附录
