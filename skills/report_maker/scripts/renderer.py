@@ -1484,6 +1484,11 @@ def render_report(
         fixed_template_path = Path(output_path).parent / "temp_fixed_template.docx"
         _fix_split_placeholders_in_docx(template_path, str(fixed_template_path))
 
+        # 3.5 扩展分析师认证声明（为多个分析师复制声明段落）
+        expanded_analysts = expand_analyst_certification(str(fixed_template_path), elements)
+        if expanded_analysts > 0:
+            print(f"  已扩展分析师认证声明（新增 {expanded_analysts} 个分析师）")
+
         # 4. 使用 docxtpl 渲染修复后的模板（支持 {% if %} 语法）
         template = DocxTemplate(str(fixed_template_path))
         template.render(context)
@@ -1934,3 +1939,160 @@ def _ensure_final_sectPr(body_element, final_sectPr) -> None:
     # 添加模板的 sectPr
     if final_sectPr is not None:
         body_element.append(final_sectPr)
+
+
+def expand_analyst_certification(docx_path: str, elements: Dict[str, Any]) -> int:
+    """扩展分析师认证声明，为每个分析师生成独立的声明段落。
+
+    在模板中，分析师声明只有一个版本（使用 a1_cn, a1_en）。
+    如果有多个分析师（a2, a3...），需要复制整段声明并替换对应的占位符。
+
+    分析师认证声明模板格式：
+    我， {{ a1_cn }}，在此保证...I, {{ a1_en }}, certify that...
+
+    Args:
+        docx_path: docx 文件路径
+        elements: 包含分析师数据的字典（a1_cn, a1_en, a2_cn, a2_en, ...）
+
+    Returns:
+        扩展的分析师数量（不包括第一个）
+    """
+    import zipfile
+    import os
+    import re
+    from lxml import etree
+
+    # 1. 统计有多少个分析师有数据
+    analysts = []
+    for i in range(1, 9):
+        cn = elements.get(f'a{i}_cn', '')
+        en = elements.get(f'a{i}_en', '')
+        if cn or en:
+            analysts.append({
+                'index': i,
+                'cn': cn or '',
+                'en': en or ''
+            })
+
+    if len(analysts) <= 1:
+        # 只有一个或没有分析师，不需要扩展
+        return 0
+
+    W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
+
+    try:
+        # 2. 解压 docx
+        docx_dir = os.path.dirname(docx_path)
+        temp_dir = os.path.join(docx_dir, '_temp_analyst_expand')
+
+        with zipfile.ZipFile(docx_path, 'r') as z:
+            z.extractall(temp_dir)
+
+        # 3. 读取 document.xml
+        doc_xml_path = os.path.join(temp_dir, 'word', 'document.xml')
+        tree = etree.parse(doc_xml_path)
+        root = tree.getroot()
+
+        # 4. 找到分析师声明所在的表格单元格
+        # 搜索包含 "在此保证" 和 "a1_cn" 的单元格
+        # 优先选择较小的单元格（独立的分析师声明表格），而不是大的法律附录
+        certification_cell = None
+        certification_row = None
+        certification_table = None
+        best_cell_length = float('inf')
+
+        for tbl in root.iter(f'{W}tbl'):
+            for tr in tbl.findall(f'{W}tr'):
+                for tc in tr.findall(f'{W}tc'):
+                    cell_text = ''.join(t.text or '' for t in tc.iter(f'{W}t'))
+                    if '在此保证' in cell_text and ('a1_cn' in cell_text or '{{ a1_cn }}' in cell_text):
+                        # 选择文本长度较短的单元格（独立声明 vs 大附录）
+                        if len(cell_text) < best_cell_length:
+                            best_cell_length = len(cell_text)
+                            certification_cell = tc
+                            certification_row = tr
+                            certification_table = tbl
+
+        if certification_cell is None:
+            print("  ⚠️ 未找到分析师认证声明单元格")
+            # 清理临时目录
+            import shutil
+            shutil.rmtree(temp_dir)
+            return 0
+
+        # 5. 获取声明段落模板
+        # 单元格中可能有多个段落，找到包含声明的那个
+        certification_paragraphs = []
+        for p in certification_cell.findall(f'{W}p'):
+            p_text = ''.join(t.text or '' for t in p.iter(f'{W}t'))
+            if '在此保证' in p_text:
+                certification_paragraphs.append(p)
+
+        if not certification_paragraphs:
+            print("  ⚠️ 未找到分析师认证声明段落")
+            import shutil
+            shutil.rmtree(temp_dir)
+            return 0
+
+        # 获取第一个声明段落作为模板
+        template_para = certification_paragraphs[0]
+        template_para_xml = etree.tostring(template_para, encoding='unicode')
+
+        # 6. 为额外的分析师创建声明段落
+        # 在第一个声明段落后插入
+        insert_position = list(certification_cell).index(template_para) + 1
+
+        expanded_count = 0
+        for analyst in analysts[1:]:  # 跳过第一个分析师
+            # 复制模板段落
+            new_para_xml = template_para_xml
+
+            # 替换占位符：a1_cn -> 实际值, a1_en -> 实际值
+            # 支持多种格式：{{ a1_cn }}、{{a1_cn}}、{ a1_cn }
+            new_para_xml = re.sub(
+                r'\{\{\s*a1_cn\s*\}\}|\{%?\s*a1_cn\s*%?\}',
+                analyst['cn'],
+                new_para_xml
+            )
+            new_para_xml = re.sub(
+                r'\{\{\s*a1_en\s*\}\}|\{%?\s*a1_en\s*%?\}',
+                analyst['en'],
+                new_para_xml
+            )
+
+            # 解析新段落
+            new_para = etree.fromstring(new_para_xml)
+
+            # 插入到单元格中
+            certification_cell.insert(insert_position, new_para)
+            insert_position += 1
+            expanded_count += 1
+
+        # 7. 写回 document.xml
+        tree.write(doc_xml_path, xml_declaration=True, encoding='UTF-8', standalone=True)
+
+        # 8. 重新打包为 docx
+        os.remove(docx_path)
+        with zipfile.ZipFile(docx_path, 'w', zipfile.ZIP_DEFLATED) as z:
+            for root_dir, dirs, files in os.walk(temp_dir):
+                for file in files:
+                    file_path = os.path.join(root_dir, file)
+                    arcname = os.path.relpath(file_path, temp_dir)
+                    z.write(file_path, arcname)
+
+        # 9. 清理临时目录
+        import shutil
+        shutil.rmtree(temp_dir)
+
+        return expanded_count
+
+    except Exception as e:
+        print(f"  扩展分析师声明时出错: {e}")
+        import traceback
+        traceback.print_exc()
+        # 清理临时目录
+        import shutil
+        temp_dir = os.path.join(os.path.dirname(docx_path), '_temp_analyst_expand')
+        if os.path.exists(temp_dir):
+            shutil.rmtree(temp_dir)
+        return 0
