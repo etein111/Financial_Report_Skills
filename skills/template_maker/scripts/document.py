@@ -727,11 +727,14 @@ def find_summary_by_markers(doc_path: str) -> Dict[str, Any]:
 
 
 def find_first_appendix_position(doc_path: str) -> Dict[str, Any]:
-    """找到文档中第一个 APPENDIX 标题的位置。
+    """找到文档中法律披露附录的位置（优先）。
 
-    这个函数用于确定正文的结束位置。正文应该在第一个 APPENDIX 标题之前结束，
-    无论这个 APPENDIX 是内容附录（如 "APPENDIX 1 Summary"）还是法律附录
-    （如 "附录APPENDIX 重要信息披露"）。
+    正文应该结束于法律披露附录之前，这样法律披露内容可以被原样保留。
+    法律披露附录的特征：
+    1. "附录APPENDIX" + "重要信息" / "IMPORTANT DISCLOSURES"
+    2. "IMPORTANT DISCLOSURES" 单独出现
+
+    如果没有找到法律披露附录，则返回第一个 APPENDIX 标题（如 "APPENDIX 1 Summary"）。
 
     使用 lxml 直接解析 document.xml，确保嵌套表格不漏读。
     返回的索引是 python-docux 兼容的。
@@ -744,7 +747,8 @@ def find_first_appendix_position(doc_path: str) -> Dict[str, Any]:
             "found": bool,
             "start_paragraph": int,
             "text": str,
-            "context": str
+            "context": str,
+            "is_legal_disclosure": bool  # 是否是法律披露附录
         }
     """
     tree = _parse_docx_xml(doc_path)
@@ -753,6 +757,9 @@ def find_first_appendix_position(doc_path: str) -> Dict[str, Any]:
     # 建立XML索引到python-docux索引的映射
     xml_to_docx = _build_body_para_index_map(tree)
 
+    legal_disclosure_para = None  # 法律披露附录段落
+    any_appendix_para = None  # 任何 APPENDIX 段落
+
     for i, para in enumerate(paragraphs):
         text = _get_para_text(para).strip()
         text_upper = text.upper()
@@ -760,16 +767,19 @@ def find_first_appendix_position(doc_path: str) -> Dict[str, Any]:
         if not text:
             continue
 
+        is_legal_disclosure = False
         is_appendix_title = False
 
-        # 1. 中英混合格式（如 "附录APPENDIX 重要信息披露"）
-        if '附录' in text and 'APPENDIX' in text_upper:
+        # 1. 法律披露附录：中英混合格式 + 重要信息披露
+        if '附录' in text and 'APPENDIX' in text_upper and ('重要信息' in text or 'IMPORTANT DISCLOSURE' in text_upper):
+            is_legal_disclosure = True
             is_appendix_title = True
-        # 2. 纯英文 APPENDIX 开头（如 "APPENDIX 1 Summary"）
-        elif text_upper.startswith('APPENDIX'):
-            is_appendix_title = True
-        # 3. IMPORTANT DISCLOSURES
+        # 2. 法律披露附录：单独的 IMPORTANT DISCLOSURES
         elif 'IMPORTANT DISCLOSURE' in text_upper:
+            is_legal_disclosure = True
+            is_appendix_title = True
+        # 3. 纯英文 APPENDIX 开头（如 "APPENDIX 1 Summary"）
+        elif text_upper.startswith('APPENDIX'):
             is_appendix_title = True
         # 4. 独立的中文"附录"（后面没有其他内容）
         elif text.startswith('附录') and len(text) < 50:
@@ -778,11 +788,32 @@ def find_first_appendix_position(doc_path: str) -> Dict[str, Any]:
         if is_appendix_title:
             # 转换为docx索引
             docx_idx = xml_to_docx.get(i, i)
-            return {
-                "found": True,
-                "start_paragraph": docx_idx,
-                "text": text[:100],
-                "context": f"段落 {docx_idx}: {text[:50]}"
-            }
+
+            # 优先记录法律披露附录
+            if is_legal_disclosure and legal_disclosure_para is None:
+                legal_disclosure_para = {
+                    "found": True,
+                    "start_paragraph": docx_idx,
+                    "text": text[:100],
+                    "context": f"段落 {docx_idx}: {text[:50]}",
+                    "is_legal_disclosure": True
+                }
+            # 记录第一个遇到的任何 APPENDIX 作为后备
+            elif any_appendix_para is None:
+                any_appendix_para = {
+                    "found": True,
+                    "start_paragraph": docx_idx,
+                    "text": text[:100],
+                    "context": f"段落 {docx_idx}: {text[:50]}",
+                    "is_legal_disclosure": False
+                }
+
+            # 如果找到了法律披露附录，直接返回（优先使用法律披露）
+            if legal_disclosure_para is not None:
+                return legal_disclosure_para
+
+    # 如果没有找到法律披露附录，返回任何 APPENDIX 标题
+    if any_appendix_para is not None:
+        return any_appendix_para
 
     return {"found": False, "reason": "未找到 APPENDIX 相关标题"}

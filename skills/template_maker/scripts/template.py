@@ -515,6 +515,8 @@ def replace_abstract_in_doc_by_paragraph(doc: Document, start_paragraph: int,
     """在文档中替换摘要区域为 {{ abstract }} 占位符（返回新文档）。
 
     使用段落索引来确定范围，删除范围内的所有内容，只保留一个占位符。
+    关键修复：正确处理段落位于表格/SDT 嵌套内的情况，只删除目标段落本身，
+    而不影响文档中的其他内容。
 
     Args:
         doc: Document 对象
@@ -537,8 +539,8 @@ def replace_abstract_in_doc_by_paragraph(doc: Document, start_paragraph: int,
     # 建立 doc.paragraphs 索引到 body 直接子元素的映射
     body_children = list(body)
 
-    # 创建段落索引到 body_children 索引的映射
-    para_to_body_idx = {}
+    # 创建更精确的映射：段落索引 -> (body_children索引, 元素, 是否是body直接子元素)
+    para_info = {}
 
     for body_idx, child in enumerate(body_children):
         tag = etree.QName(child.tag).localname
@@ -546,43 +548,66 @@ def replace_abstract_in_doc_by_paragraph(doc: Document, start_paragraph: int,
             # body直接子元素就是段落元素
             for para_idx, para in enumerate(doc.paragraphs):
                 if para._element is child:
-                    para_to_body_idx[para_idx] = body_idx
+                    para_info[para_idx] = (body_idx, child, True)
                     break
         elif tag == 'tbl':
-            # 表格元素
-            for p_elem in child.iter(f'{W}p'):
-                for para_idx, para in enumerate(doc.paragraphs):
-                    if para._element is p_elem:
-                        para_to_body_idx[para_idx] = body_idx
-                        break
+            # 表格元素：表格内段落不建立直接映射，避免删除整个表格
+            # 只记录表格在 body_children 中的位置
+            pass
         elif tag == 'sdt':
-            # SDT 元素
-            for p_elem in child.iter(f'{W}p'):
-                for para_idx, para in enumerate(doc.paragraphs):
-                    if para._element is p_elem:
-                        para_to_body_idx[para_idx] = body_idx
-                        break
+            # SDT 元素：同上
+            pass
 
-    # 找到起始和结束位置对应的 body_children 索引
-    start_body_idx = para_to_body_idx.get(start_paragraph, 0)
-    end_body_idx = para_to_body_idx.get(end_paragraph - 1, len(body_children) - 1)
+    # 找到起始和结束段落对应的 body_children 元素
+    start_para_elem = doc.paragraphs[start_paragraph]._element
+    end_para_elem = doc.paragraphs[end_paragraph - 1]._element if end_paragraph > 0 else None
 
-    # 确保 start_body_idx < end_body_idx
-    if start_body_idx > end_body_idx:
-        start_body_idx, end_body_idx = end_body_idx, start_body_idx
+    # 收集要处理的段落元素（从起始到结束的所有段落）
+    paragraphs_to_process = []
+    for para_idx in range(start_paragraph, end_paragraph):
+        if para_idx in para_info:
+            _, elem, is_direct = para_info[para_idx]
+            if is_direct:
+                paragraphs_to_process.append((para_idx, elem))
 
-    # 收集要删除的元素（摘要区域内的所有 body_children 元素）
-    elements_to_remove = []
-    first_body_element = None
+    # 如果没有找到直接的段落元素，尝试通过 body_children 遍历
+    if not paragraphs_to_process:
+        # 找到起始和结束段落所在的 body_children 范围
+        start_body_idx = 0
+        end_body_idx = len(body_children) - 1
 
-    for body_idx in range(start_body_idx, end_body_idx + 1):
-        child = body_children[body_idx]
-        tag = etree.QName(child.tag).localname
+        # 遍历 body_children 找到包含起始和结束段落的元素
+        for body_idx, child in enumerate(body_children):
+            if start_para_elem in child.iter():
+                start_body_idx = body_idx
+            if end_para_elem and end_para_elem in child.iter():
+                end_body_idx = body_idx
+                break
 
-        if first_body_element is None:
-            first_body_element = child
+        # 收集范围内的所有 body_children 元素
+        elements_to_remove = []
+        first_body_element = None
 
-        elements_to_remove.append(child)
+        for body_idx in range(start_body_idx, end_body_idx + 1):
+            child = body_children[body_idx]
+            tag = etree.QName(child.tag).localname
+
+            if first_body_element is None:
+                first_body_element = child
+
+            # 只收集段落元素，不收集表格（避免删除整个表格）
+            if tag == 'p':
+                elements_to_remove.append(child)
+            elif tag == 'tbl' or tag == 'sdt':
+                # 检查表格/SDT 是否包含在范围内
+                if start_para_elem in child.iter() or (end_para_elem and end_para_elem in child.iter()):
+                    # 表格/SDT 被部分包含，收集它但后续会特殊处理
+                    elements_to_remove.append(child)
+
+    else:
+        # 使用精确的段落信息
+        elements_to_remove = [elem for _, elem in paragraphs_to_process]
+        first_body_element = elements_to_remove[0] if elements_to_remove else None
 
     # 删除收集的元素（从后往前删除，保留第一个用于放置占位符）
     for element in reversed(elements_to_remove[1:]):
@@ -626,6 +651,7 @@ def replace_summary_in_doc(doc: Document, start_paragraph: int,
 
     删除 Summary 区域内的所有段落和表格，只保留一个占位符。
     使用段落索引来确定范围，确保正确处理所有内容。
+    关键修复：正确处理段落位于表格/SDT 嵌套内的情况。
 
     Args:
         doc: Document 对象
@@ -648,53 +674,65 @@ def replace_summary_in_doc(doc: Document, start_paragraph: int,
     # 建立 doc.paragraphs 索引到 body 直接子元素的映射
     body_children = list(body)
 
-    # 创建段落索引到 body_children 索引的映射
-    para_to_body_idx = {}
+    # 创建更精确的映射：段落索引 -> (body_children索引, 元素, 是否是body直接子元素)
+    para_info = {}
 
     for body_idx, child in enumerate(body_children):
         tag = etree.QName(child.tag).localname
         if tag == 'p':
-            # body直接子元素就是段落元素
-            # 找到这个段落在 doc.paragraphs 中的位置
             for para_idx, para in enumerate(doc.paragraphs):
                 if para._element is child:
-                    para_to_body_idx[para_idx] = body_idx
+                    para_info[para_idx] = (body_idx, child, True)
                     break
         elif tag == 'tbl':
-            # 表格元素：检查表格内的每个段落在 doc.paragraphs 中的位置
-            for p_elem in child.iter(f'{W}p'):
-                for para_idx, para in enumerate(doc.paragraphs):
-                    if para._element is p_elem:
-                        para_to_body_idx[para_idx] = body_idx
-                        break
+            # 表格元素：不建立映射，避免删除整个表格
+            pass
         elif tag == 'sdt':
-            # SDT 元素：检查 SDT 内的每个段落
-            for p_elem in child.iter(f'{W}p'):
-                for para_idx, para in enumerate(doc.paragraphs):
-                    if para._element is p_elem:
-                        para_to_body_idx[para_idx] = body_idx
-                        break
+            # SDT 元素：不建立映射，避免删除整个 SDT
+            pass
 
-    # 找到起始和结束位置对应的 body_children 索引
-    start_body_idx = para_to_body_idx.get(start_paragraph, 0)
-    end_body_idx = para_to_body_idx.get(end_paragraph - 1, len(body_children) - 1)
+    # 找到起始和结束段落对应的 body_children 元素
+    start_para_elem = doc.paragraphs[start_paragraph]._element
+    end_para_elem = doc.paragraphs[end_paragraph - 1]._element if end_paragraph > 0 else None
 
-    # 确保 start_body_idx < end_body_idx
-    if start_body_idx > end_body_idx:
-        start_body_idx, end_body_idx = end_body_idx, start_body_idx
+    # 收集要处理的段落元素
+    paragraphs_to_process = []
+    for para_idx in range(start_paragraph, end_paragraph):
+        if para_idx in para_info:
+            _, elem, is_direct = para_info[para_idx]
+            if is_direct:
+                paragraphs_to_process.append((para_idx, elem))
 
-    # 收集要删除的元素（Summary 区域内的所有 body_children 元素）
-    elements_to_remove = []
-    first_body_element = None
+    # 如果没有找到直接的段落元素，通过 body_children 遍历
+    if not paragraphs_to_process:
+        start_body_idx = 0
+        end_body_idx = len(body_children) - 1
 
-    for body_idx in range(start_body_idx, end_body_idx + 1):
-        child = body_children[body_idx]
-        tag = etree.QName(child.tag).localname
+        for body_idx, child in enumerate(body_children):
+            if start_para_elem in child.iter():
+                start_body_idx = body_idx
+            if end_para_elem and end_para_elem in child.iter():
+                end_body_idx = body_idx
+                break
 
-        if first_body_element is None:
-            first_body_element = child
+        elements_to_remove = []
+        first_body_element = None
 
-        elements_to_remove.append(child)
+        for body_idx in range(start_body_idx, end_body_idx + 1):
+            child = body_children[body_idx]
+            tag = etree.QName(child.tag).localname
+
+            if first_body_element is None:
+                first_body_element = child
+
+            if tag == 'p':
+                elements_to_remove.append(child)
+            elif tag == 'tbl' or tag == 'sdt':
+                if start_para_elem in child.iter() or (end_para_elem and end_para_elem in child.iter()):
+                    elements_to_remove.append(child)
+    else:
+        elements_to_remove = [elem for _, elem in paragraphs_to_process]
+        first_body_element = elements_to_remove[0] if elements_to_remove else None
 
     # 删除收集的元素（从后往前删除，保留第一个用于放置占位符）
     for element in reversed(elements_to_remove[1:]):
@@ -705,22 +743,18 @@ def replace_summary_in_doc(doc: Document, start_paragraph: int,
         tag = etree.QName(first_body_element.tag).localname
 
         if tag == 'p':
-            # 如果第一个是段落，清空内容设置占位符
             for child in list(first_body_element):
                 child_tag = etree.QName(child.tag).localname
                 if child_tag not in ('pPr',):
                     first_body_element.remove(child)
 
-            # 添加新的 run 包含占位符
             r = etree.SubElement(first_body_element, f'{W}r')
             t = etree.SubElement(r, f'{W}t')
             t.text = "{{ summary }}"
         else:
-            # 如果第一个不是段落，需要替换为段落
             idx = list(body).index(first_body_element)
             body.remove(first_body_element)
 
-            # 创建新段落
             new_p = etree.Element(f'{W}p')
             r = etree.SubElement(new_p, f'{W}r')
             t = etree.SubElement(r, f'{W}t')
@@ -762,36 +796,45 @@ def replace_body_in_doc(doc: Document, start_paragraph: int,
     body = doc._body._body
 
     # 建立 doc.paragraphs 索引到 body 直接子元素的映射
-    # 对于 doc.paragraphs[n]，找到它在 body_children 中的直接父元素
     body_children = list(body)
 
     # 创建段落索引到 body_children 索引的映射
-    # doc.paragraphs[n]._element 对应的 body_children 元素
+    # 关键修复：对于表格/SDT 内的段落，映射到表格/SDT 元素本身，而不是表格内的段落
     para_to_body_idx = {}
 
     for body_idx, child in enumerate(body_children):
         tag = etree.QName(child.tag).localname
         if tag == 'p':
             # body直接子元素就是段落元素
-            # 找到这个段落在 doc.paragraphs 中的位置
             for para_idx, para in enumerate(doc.paragraphs):
                 if para._element is child:
                     para_to_body_idx[para_idx] = body_idx
                     break
         elif tag == 'tbl':
-            # 表格元素：检查表格内的每个段落在 doc.paragraphs 中的位置
+            # 表格元素：映射到表格本身，避免删除整个表格后重新计算索引
+            # 找到这个表格的第一个段落在 doc.paragraphs 中的位置
+            first_para_in_table = None
             for p_elem in child.iter(f'{W}p'):
                 for para_idx, para in enumerate(doc.paragraphs):
                     if para._element is p_elem:
                         para_to_body_idx[para_idx] = body_idx
+                        if first_para_in_table is None:
+                            first_para_in_table = para_idx
                         break
+                if first_para_in_table is not None:
+                    break
         elif tag == 'sdt':
-            # SDT 元素：检查 SDT 内的每个段落
+            # SDT 元素：同上
+            first_para_in_sdt = None
             for p_elem in child.iter(f'{W}p'):
                 for para_idx, para in enumerate(doc.paragraphs):
                     if para._element is p_elem:
                         para_to_body_idx[para_idx] = body_idx
+                        if first_para_in_sdt is None:
+                            first_para_in_sdt = para_idx
                         break
+                if first_para_in_sdt is not None:
+                    break
 
     # 找到起始和结束位置对应的 body_children 索引
     start_body_idx = para_to_body_idx.get(start_paragraph, 0)
@@ -831,13 +874,11 @@ def replace_body_in_doc(doc: Document, start_paragraph: int,
 
         if tag == 'p':
             # 如果第一个是段落，清空内容设置占位符
-            # 删除所有子元素（除了 pPr）
             for child in list(first_body_element):
                 child_tag = etree.QName(child.tag).localname
                 if child_tag not in ('pPr',):
                     first_body_element.remove(child)
 
-            # 添加新的 run 包含占位符
             r = etree.SubElement(first_body_element, f'{W}r')
             t = etree.SubElement(r, f'{W}t')
             t.text = "{{ body }}"
@@ -846,7 +887,6 @@ def replace_body_in_doc(doc: Document, start_paragraph: int,
             idx = list(body).index(first_body_element)
             body.remove(first_body_element)
 
-            # 创建新段落
             new_p = etree.Element(f'{W}p')
             r = etree.SubElement(new_p, f'{W}r')
             t = etree.SubElement(r, f'{W}t')

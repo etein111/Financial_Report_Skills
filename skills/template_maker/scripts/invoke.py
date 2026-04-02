@@ -929,14 +929,21 @@ def create_template(
             end_para = body_location["end_paragraph"]
 
             # 使用第一个 APPENDIX 标题位置来确定正文结束位置
-            # 这样可以保留所有 APPENDIX 内容（包括 "APPENDIX 1 Summary" 和法律附录）
+            # 关键：APPENDIX 标题本身应该保留在文档中，所以 end_para 应该设置为
+            # appendix_start - 1，这样 APPENDIX 标题之前的最后一个正文段落会被删除，
+            # 但 APPENDIX 标题本身会被保留
             first_appendix = detected_locations.get("first_appendix")
             if first_appendix and first_appendix.get("found"):
                 appendix_start = first_appendix.get("start_paragraph")
+                is_legal = first_appendix.get("is_legal_disclosure", False)
                 if appendix_start and appendix_start < end_para:
+                    # 保留 APPENDIX 标题：end_para 设置为 appendix_start（不包含）
+                    # 这样正文范围是 [start_para, appendix_start)，APPENDIX 标题不会被删除
                     end_para = appendix_start
-                    print(f"正文结束位置调整为第一个 APPENDIX 起始位置: 段落 {appendix_start}")
+                    appendix_type = "法律披露附录" if is_legal else "内容附录"
+                    print(f"正文结束位置调整为 {appendix_type} 之前: 段落 {appendix_start}")
                     print(f"  APPENDIX 标题: {first_appendix.get('text', '')[:50]}")
+                    print(f"  法律披露将原样保留在模板中")
 
             doc = replace_body_in_doc(
                 doc,
