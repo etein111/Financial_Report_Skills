@@ -199,7 +199,31 @@ templates/
 
 **⚠️ 核心原则：必须使用 LLM 提取，禁止硬编码搜索**
 
-将草稿内容和 schema.yaml 发送给 LLM，在**一次调用中**完成：
+#### 4.1 预处理：提取完整文档结构（必须执行）
+
+**问题**：Claude 直接读取 .docx 文件时，可能无法正确解析嵌套表格内容，导致丢失关键字段。
+
+**解决方案**：在 LLM 提取前，先用脚本提取完整的文档结构：
+
+```python
+from skills.report_maker.scripts import docx_reader
+
+# 提取所有表格（包括嵌套表格）的完整内容
+tables = docx_reader.read_docx_tables(draft_path)
+all_text_lines = docx_reader.flatten_table_text(tables)
+full_document_text = '\n'.join(all_text_lines)
+
+# 将 full_document_text 提供给 LLM 进行字段提取
+```
+
+**为什么必须这样做**：
+- Word 文档的嵌套表格在 XML 结构中是层层嵌套的
+- 普通的文档读取工具（如 python-docx 的 cell.text）会漏掉嵌套表格内容
+- `docx_reader.py` 使用 lxml 直接解析 XML，确保所有层级的内容都能提取
+
+#### 4.2 LLM 提取
+
+将**预处理后的完整文档内容**和 schema.yaml 发送给 LLM，在**一次调用中**完成：
 1. 提取所有 elements 字段（**必须用 LLM，禁止用脚本搜索**）
 2. 判断并提取摘要位置
 3. 判断并提取正文位置
@@ -207,6 +231,7 @@ templates/
 **禁止以下提取方式**：
 - ❌ 用 LLM 以外的其他方式，如关键词匹配等
 - ❌ 跳过了 LLM 步骤，直接使用 field_extractor 自动提取
+- ❌ 直接读取 .docx 文件而不经过预处理
 
 **LLM 提取提示词**：
 
@@ -217,20 +242,36 @@ templates/
 根据 schema.yaml 中定义的字段，从草稿中提取数据：
 {schema_yaml_内容}
 
-⚠️ 注意：很多字段嵌套在表格单元格中，请仔细检查所有表格内容。
-常见嵌套位置：
-- 封面表格：公司名、股票代码、评级、目标价
-- 侧边栏表格（通常在封面右侧或底部）：
-  - current_price（当前价格）
-  - current_price_date（价格日期）
-  - market_cap（市值）
-  - shares_in_issue（流通股）
-  - one_year_high / one_year_low（52周高低点）
-  - source（数据来源）
-- 分析师信息表格（通常在封面底部或末页）：
-  - 分析师中文名、英文名
-  - SFC 代码
-  - 邮箱
+### 🔴 强制搜索要求（必须遵守）
+
+**Word 文档表格结构说明**：
+- 研究报告的封面通常是一个大表格，里面嵌套了多层子表格
+- 关键数据（价格、市值、分析师等）通常在 2-3 层嵌套的子表格中
+- 你必须深入到**每一层嵌套表格**中搜索字段
+
+**强制搜索路径**（按顺序执行）：
+1. **封面主表格** → 提取：report_date, company, ticker, title, rating, target_price
+2. **封面右侧/底部的侧边栏嵌套表格** → 提取：
+   - current_price（当前价格，通常标注为"现价"或"Price"）
+   - current_price_date（从注释文字中提取，如"注：现价X为YYYY年MM月DD日收盘价"）
+   - market_cap（市值）
+   - shares_in_issue（发行股数/流通股）
+   - one_year_high / one_year_low（52周高低点，可能写作"1年股价最高最低值: 73.40-20.50"）
+   - source（资料来源）
+3. **封面底部或末页的分析师嵌套表格** → 提取：
+   - a1_cn（中文名）、a1_en（英文名）、a1_sfc（SFC执照号）、a1_email
+   - 同样检查 a2-a8
+
+**⚠️ 禁止行为**：
+- ❌ 在主表格找到部分字段后就停止搜索
+- ❌ 看到字段为空就直接返回空值
+- ❌ 假设某些字段不存在
+
+**✅ 必须行为**：
+- ✅ 遍历所有表格的所有单元格
+- ✅ 对每个单元格，检查其内部是否还有嵌套表格
+- ✅ 递归搜索直到最深层
+- ✅ 如果某字段确实不存在，在返回结果中说明"未找到"
 
 ## 第二部分：摘要提取
 1. 是否有摘要部分？（摘要通常是首页右侧的投资亮点、核心观点区域）
