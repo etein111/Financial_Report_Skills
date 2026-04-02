@@ -1060,10 +1060,17 @@ def _fix_split_placeholders_in_docx(docx_path: str, output_path: str = None) -> 
         tree = etree.parse(doc_xml_path)
         root = tree.getroot()
 
-        # 处理每个段落和表格单元格中的 run
+        # 检测是否有 Jinja2 占位符模式的正则
+        jinja_pattern = re.compile(r'(\{\{[^}]*\}\}|\{%[^%]*%\})')
+
         def fix_runs_in_parent(parent):
             """修复一个父元素中的 run，合并被拆分的占位符"""
-            runs = parent.findall(f'.//{W}r')
+            # 查找所有直接子 run（不递归查找孙元素）
+            runs = []
+            for child in parent:
+                if isinstance(child, etree._Element) and child.tag == f'{W}r':
+                    runs.append(child)
+
             if not runs:
                 return
 
@@ -1077,11 +1084,7 @@ def _fix_split_placeholders_in_docx(docx_path: str, output_path: str = None) -> 
             # 合并所有文本来检测占位符
             full_text = ''.join([rt[2] for rt in run_texts])
 
-            # 检测是否有被拆分的占位符模式
-            # 模式: {{ ... }} 或 {% ... %}
-            jinja_pattern = r'(\{\{[^}]*\}\}|\{%[^%]*%\})'
-
-            if not re.search(jinja_pattern, full_text):
+            if not jinja_pattern.search(full_text):
                 return  # 没有 Jinja2 语法
 
             # 重建文本：将所有文本合并到第一个 run 中
@@ -1089,12 +1092,9 @@ def _fix_split_placeholders_in_docx(docx_path: str, output_path: str = None) -> 
                 first_run, first_t, _ = run_texts[0]
 
                 if first_t is None:
-                    # 创建 <w:t> 元素
                     first_t = etree.SubElement(first_run, f'{W}t')
 
-                # 设置合并后的文本
                 first_t.text = full_text
-                # 保留空格
                 first_t.set('{http://www.w3.org/XML/1998/namespace}space', 'preserve')
 
                 # 清空其他 run 的文本
@@ -1102,14 +1102,36 @@ def _fix_split_placeholders_in_docx(docx_path: str, output_path: str = None) -> 
                     if t is not None:
                         t.text = ''
 
-        # 处理所有段落
-        for p in root.iter(f'{W}p'):
-            fix_runs_in_parent(p)
+        def fix_element(elem):
+            """递归处理元素及其子元素"""
+            # 处理段落
+            if elem.tag == f'{W}p':
+                fix_runs_in_parent(elem)
+            elif elem.tag == f'{W}tc':
+                # 处理单元格内的段落
+                for child in elem:
+                    if child.tag == f'{W}p':
+                        fix_runs_in_parent(child)
+                    elif child.tag == f'{W}tbl':
+                        # 处理嵌套表格
+                        fix_element(child)
+                # 也处理直接子段落（有些结构可能不同）
+                for p in elem.findall(f'{W}p'):
+                    fix_runs_in_parent(p)
+            elif elem.tag == f'{W}tbl':
+                # 处理表格行
+                for tr in elem.findall(f'{W}tr'):
+                    for tc in tr.findall(f'{W}tc'):
+                        fix_element(tc)
 
-        # 处理表格单元格
-        for tc in root.iter(f'{W}tc'):
-            for p in tc.findall(f'{W}p'):
-                fix_runs_in_parent(p)
+            # 递归处理所有子元素
+            for child in list(elem):
+                fix_element(child)
+
+        # 从 body 开始处理
+        body = root.find(f'{W}body')
+        if body is not None:
+            fix_element(body)
 
         # 写回 document.xml
         tree.write(doc_xml_path, xml_declaration=True, encoding='UTF-8', standalone=True)
@@ -1629,7 +1651,8 @@ def _copy_media_between_docx(source_path: str, target_path: str) -> int:
     """从源 docx 复制所有媒体资源到目标 docx。
 
     使用 zipfile 直接操作，确保图片文件被正确复制。
-    同时更新 rels 文件中的引用关系。
+    当 body_doc 的 XML 被 deepcopy 到 master_doc 后，图片引用（rId）会被保留，
+    但目标文档的 rels 文件中没有对应的关系。本函数补充这些缺失的关系。
 
     Args:
         source_path: 源 docx 文件路径（如 body.docx）
@@ -1640,21 +1663,22 @@ def _copy_media_between_docx(source_path: str, target_path: str) -> int:
     """
     import zipfile
     import os
+    import hashlib
     from lxml import etree
 
     copied_count = 0
 
     try:
-        # 读取源文档的媒体文件和关系
-        source_media = {}  # {media/imageN.xxx: bytes}
-        source_rels = {}   # {rIdN: media/imageN.xxx}
+        # 读取源文档的所有媒体文件和关系
+        source_rid_to_media = {}  # {rId: (media_name, media_bytes, media_hash)}
 
         with zipfile.ZipFile(source_path, 'r') as z:
             for name in z.namelist():
                 if name.startswith('word/media/'):
-                    # 提取媒体文件名（去掉 word/ 前缀）
-                    media_name = name[5:]  # media/imageN.xxx
-                    source_media[media_name] = z.read(name)
+                    media_bytes = z.read(name)
+                    media_hash = hashlib.md5(media_bytes).hexdigest()
+                    # 记录所有媒体（不管是否有 rels 引用）
+                    source_rid_to_media[f'_h_{media_hash}'] = (name[5:], media_bytes, media_hash)
 
             # 读取源文档的关系文件
             if 'word/_rels/document.xml.rels' in z.namelist():
@@ -1666,94 +1690,155 @@ def _copy_media_between_docx(source_path: str, target_path: str) -> int:
                     target = rel.get('Target')
                     rel_type = rel.get('Type')
                     if target and target.startswith('media/') and 'image' in rel_type:
-                        source_rels[rel_id] = target
+                        media_name = target
+                        if f'word/{media_name}' in z.namelist():
+                            media_bytes = z.read(f'word/{media_name}')
+                            media_hash = hashlib.md5(media_bytes).hexdigest()
+                            source_rid_to_media[rel_id] = (media_name, media_bytes, media_hash)
 
-        if not source_media:
+        if not source_rid_to_media:
             return 0
 
         # 读取目标文档
-        target_media = set()
-        target_rels_xml = None
+        target_media_by_hash = {}  # {hash: media_name}
+        target_rid_to_hash = {}     # {rId: hash} - 目标文档中已有的图片关系
         target_files = {}
 
         with zipfile.ZipFile(target_path, 'r') as z:
             for name in z.namelist():
                 if name.startswith('word/media/'):
-                    media_name = name[5:]
-                    target_media.add(media_name)
+                    media_bytes = z.read(name)
+                    media_hash = hashlib.md5(media_bytes).hexdigest()
+                    target_media_by_hash[media_hash] = name[5:]
                 target_files[name] = z.read(name)
 
+            # 读取目标文档的 relations
             if 'word/_rels/document.xml.rels' in z.namelist():
-                target_rels_xml = target_files['word/_rels/document.xml.rels']
+                rels_xml = z.read('word/_rels/document.xml.rels')
+                rels_tree = etree.fromstring(rels_xml)
+                ns = {'r': 'http://schemas.openxmlformats.org/package/2006/relationships'}
+                for rel in rels_tree.findall('r:Relationship', ns):
+                    rel_id = rel.get('Id')
+                    target = rel.get('Target')
+                    rel_type = rel.get('Type')
+                    if target and target.startswith('media/') and 'image' in rel_type:
+                        if f'word/{target}' in z.namelist():
+                            media_bytes = z.read(f'word/{target}')
+                            media_hash = hashlib.md5(media_bytes).hexdigest()
+                            target_rid_to_hash[rel_id] = media_hash
 
         # 找出目标文档中已有的最大 image 编号
         max_image_num = 0
-        for media_name in target_media:
-            if media_name.startswith('media/image'):
+        for media_name in target_files.keys():
+            if 'word/media/image' in media_name:
                 try:
-                    # 提取数字部分：media/image1.png -> 1
-                    num_str = media_name[11:].split('.')[0]
+                    num_str = media_name.split('image')[1].split('.')[0]
                     num = int(num_str)
                     if num > max_image_num:
                         max_image_num = num
-                except ValueError:
+                except (ValueError, IndexError):
                     pass
 
-        # 准备需要复制的媒体文件（重命名以避免冲突）
-        media_rename_map = {}  # {原 media/imageN.xxx: 新 media/imageM.xxx}
+        # 找出目标文档中已有的 rId
+        existing_rids = set(target_rid_to_hash.keys())
 
-        for media_name, media_bytes in source_media.items():
-            if media_name in target_media:
-                # 检查内容是否相同
-                existing_bytes = None
-                with zipfile.ZipFile(target_path, 'r') as z:
-                    existing_bytes = z.read('word/' + media_name)
-                if existing_bytes == media_bytes:
-                    # 内容相同，不需要复制
-                    media_rename_map[media_name] = media_name
+        # 更新目标文档的 rels 文件
+        target_rels_tree = None
+        if 'word/_rels/document.xml.rels' in target_files:
+            target_rels_tree = etree.fromstring(target_files['word/_rels/document.xml.rels'])
+
+        # rid_mapping: {源rId: (新rId, 新media_name)}
+        rid_mapping = {}
+
+        # 为源文档中的每个图片关系在目标文档中创建对应关系
+        for rel_id, (media_name, media_bytes, media_hash) in source_rid_to_media.items():
+            if rel_id.startswith('_h_'):  # 跳过无关系的媒体
+                continue
+
+            if media_hash in target_media_by_hash:
+                # 目标文档中已有相同内容的图片
+                existing_rid = None
+                for rid, h in target_rid_to_hash.items():
+                    if h == media_hash:
+                        existing_rid = rid
+                        break
+
+                if existing_rid:
+                    # 使用已有的 rId
+                    rid_mapping[rel_id] = (existing_rid, target_media_by_hash[media_hash])
                     continue
+                else:
+                    # 这是不可能的情况，因为 target_media_by_hash 是按 hash 索引的
+                    pass
 
-            # 需要复制，生成新文件名
+            # 需要复制图片到目标文档
             max_image_num += 1
             ext = media_name.rsplit('.', 1)[-1] if '.' in media_name else 'png'
             new_media_name = f'media/image{max_image_num}.{ext}'
-            media_rename_map[media_name] = new_media_name
-            target_files['word/' + new_media_name] = media_bytes
+
+            # 生成新的唯一 rId
+            new_rid = rel_id
+            counter = 1
+            while new_rid in existing_rids:
+                new_rid = f'{rel_id}_{counter}'
+                counter += 1
+
+            rid_mapping[rel_id] = (new_rid, new_media_name)
+            existing_rids.add(new_rid)
+
+            # 添加图片文件
+            target_files[f'word/{new_media_name}'] = media_bytes
             copied_count += 1
 
-        # 更新目标文档的 rels 文件
-        if target_rels_xml and source_rels:
-            target_rels_tree = etree.fromstring(target_rels_xml)
-            ns = {'r': 'http://schemas.openxmlformats.org/package/2006/relationships'}
-            nsmap = {None: 'http://schemas.openxmlformats.org/package/2006/relationships'}
+            # 在 rels 中添加新关系
+            if target_rels_tree is not None:
+                new_rel = etree.SubElement(target_rels_tree, 'Relationship')
+                new_rel.set('Id', new_rid)
+                new_rel.set('Type', 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image')
+                new_rel.set('Target', new_media_name)
 
-            # 找出目标文档中已有的 rId
-            existing_rids = set()
-            for rel in target_rels_tree.findall('r:Relationship', ns):
-                existing_rids.add(rel.get('Id'))
+        # 更新 document.xml 中的图片引用（将源 rId 替换为新 rId）
+        if rid_mapping:
+            doc_xml = target_files.get('word/document.xml')
+            if doc_xml:
+                doc_tree = etree.fromstring(doc_xml)
+                W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
+                R = '{http://schemas.openxmlformats.org/officeDocument/2006/relationships}'
 
-            # 添加新的图片关系
-            for rel_id, old_target in source_rels.items():
-                if rel_id not in existing_rids and old_target in media_rename_map:
-                    new_target = media_rename_map[old_target]
-                    new_rel = etree.SubElement(target_rels_tree, 'Relationship')
-                    new_rel.set('Id', rel_id)
-                    new_rel.set('Type', 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image')
-                    new_rel.set('Target', new_target)
+                # 遍历所有元素，查找包含 rId 引用的属性
+                for elem in doc_tree.iter():
+                    # 检查 r:embed 属性（图片引用）
+                    embed_attr = f'{R}embed'
+                    if embed_attr in elem.attrib:
+                        old_rid = elem.attrib[embed_attr]
+                        if old_rid in rid_mapping:
+                            new_rid, new_media_name = rid_mapping[old_rid]
+                            elem.attrib[embed_attr] = new_rid
 
-            # 更新 rels 文件内容
+                    # 检查 r:id 属性（关系引用）
+                    id_attr = f'{R}id'
+                    if id_attr in elem.attrib:
+                        old_rid = elem.attrib[id_attr]
+                        if old_rid in rid_mapping:
+                            new_rid, new_media_name = rid_mapping[old_rid]
+                            elem.attrib[id_attr] = new_rid
+
+                target_files['word/document.xml'] = etree.tostring(
+                    doc_tree, xml_declaration=True, encoding='UTF-8', standalone=True
+                )
+
+        # 更新 rels 文件
+        if target_rels_tree is not None and copied_count > 0:
             target_files['word/_rels/document.xml.rels'] = etree.tostring(
                 target_rels_tree, xml_declaration=True, encoding='UTF-8', standalone=True
             )
 
-        # 更新 [Content_Types].xml 以包含新的媒体类型
-        if '[Content_Types].xml' in target_files:
+        # 更新 [Content_Types].xml
+        if '[Content_Types].xml' in target_files and copied_count > 0:
             ct_tree = etree.fromstring(target_files['[Content_Types].xml'])
-            ct_ns = {'ct': 'http://schemas.openxmlformats.org/package/2006/content-types'}
 
-            # 检查是否需要添加扩展名映射
             existing_exts = set()
-            for default in ct_tree.findall('ct:Default', ct_ns):
+            for default in ct_tree.findall('.//{http://schemas.openxmlformats.org/package/2006/content-types}Default'):
                 existing_exts.add(default.get('Extension', '').lower())
 
             ext_content_types = {
@@ -1767,8 +1852,8 @@ def _copy_media_between_docx(source_path: str, target_path: str) -> int:
                 'wmf': 'image/x-wmf',
             }
 
-            for media_name in media_rename_map.values():
-                ext = media_name.rsplit('.', 1)[-1].lower() if '.' in media_name else ''
+            for _, new_media_name, _ in [(k, v[1], None) for k, v in rid_mapping.items() if not k.startswith('_h_')]:
+                ext = new_media_name.rsplit('.', 1)[-1].lower() if '.' in new_media_name else ''
                 if ext and ext not in existing_exts and ext in ext_content_types:
                     new_default = etree.SubElement(ct_tree, '{http://schemas.openxmlformats.org/package/2006/content-types}Default')
                     new_default.set('Extension', ext)
