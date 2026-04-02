@@ -1022,6 +1022,128 @@ def copy_headers_footers(source_doc: Document, target_doc: Document, target_sect
             pass
 
 
+def _fix_split_placeholders_in_docx(docx_path: str, output_path: str = None) -> str:
+    """修复 Word 文档中被拆分的 Jinja2 占位符。
+
+    Word 在保存时会将 {{ a1_email }} 拆分成多个 <w:t> 元素，
+    如 {{ a1_ + email + }}，导致 docxtpl 无法识别。
+
+    此函数在 XML 级别合并这些被拆分的占位符。
+
+    Args:
+        docx_path: 输入 docx 文件路径
+        output_path: 输出 docx 文件路径（默认覆盖原文件）
+
+    Returns:
+        修复后的文件路径
+    """
+    import zipfile
+    import re
+    import os
+    from lxml import etree
+
+    if output_path is None:
+        output_path = docx_path
+
+    W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
+
+    try:
+        # 读取 docx
+        docx_dir = os.path.dirname(docx_path)
+        temp_dir = os.path.join(docx_dir, '_temp_fix_placeholders')
+
+        with zipfile.ZipFile(docx_path, 'r') as z:
+            z.extractall(temp_dir)
+
+        # 读取 document.xml
+        doc_xml_path = os.path.join(temp_dir, 'word', 'document.xml')
+        tree = etree.parse(doc_xml_path)
+        root = tree.getroot()
+
+        # 处理每个段落和表格单元格中的 run
+        def fix_runs_in_parent(parent):
+            """修复一个父元素中的 run，合并被拆分的占位符"""
+            runs = parent.findall(f'.//{W}r')
+            if not runs:
+                return
+
+            # 收集所有 run 的文本
+            run_texts = []
+            for r in runs:
+                t_elem = r.find(f'{W}t')
+                text = t_elem.text if t_elem is not None and t_elem.text else ''
+                run_texts.append((r, t_elem, text))
+
+            # 合并所有文本来检测占位符
+            full_text = ''.join([rt[2] for rt in run_texts])
+
+            # 检测是否有被拆分的占位符模式
+            # 模式: {{ ... }} 或 {% ... %}
+            jinja_pattern = r'(\{\{[^}]*\}\}|\{%[^%]*%\})'
+
+            if not re.search(jinja_pattern, full_text):
+                return  # 没有 Jinja2 语法
+
+            # 重建文本：将所有文本合并到第一个 run 中
+            if run_texts:
+                first_run, first_t, _ = run_texts[0]
+
+                if first_t is None:
+                    # 创建 <w:t> 元素
+                    first_t = etree.SubElement(first_run, f'{W}t')
+
+                # 设置合并后的文本
+                first_t.text = full_text
+                # 保留空格
+                first_t.set('{http://www.w3.org/XML/1998/namespace}space', 'preserve')
+
+                # 清空其他 run 的文本
+                for r, t, _ in run_texts[1:]:
+                    if t is not None:
+                        t.text = ''
+
+        # 处理所有段落
+        for p in root.iter(f'{W}p'):
+            fix_runs_in_parent(p)
+
+        # 处理表格单元格
+        for tc in root.iter(f'{W}tc'):
+            for p in tc.findall(f'{W}p'):
+                fix_runs_in_parent(p)
+
+        # 写回 document.xml
+        tree.write(doc_xml_path, xml_declaration=True, encoding='UTF-8', standalone=True)
+
+        # 重新打包
+        if os.path.exists(output_path) and output_path != docx_path:
+            os.remove(output_path)
+        elif output_path == docx_path:
+            os.remove(docx_path)
+
+        with zipfile.ZipFile(output_path, 'w', zipfile.ZIP_DEFLATED) as z:
+            for root_dir, dirs, files in os.walk(temp_dir):
+                for file in files:
+                    file_path = os.path.join(root_dir, file)
+                    arcname = os.path.relpath(file_path, temp_dir)
+                    z.write(file_path, arcname)
+
+        # 清理临时目录
+        import shutil
+        shutil.rmtree(temp_dir)
+
+        return output_path
+
+    except Exception as e:
+        print(f"  修复占位符时出错: {e}")
+        import traceback
+        traceback.print_exc()
+        # 如果出错，复制原文件
+        if output_path != docx_path:
+            import shutil
+            shutil.copy2(docx_path, output_path)
+        return output_path
+
+
 def replace_analyst_placeholders_in_xml(docx_path: str, elements: Dict[str, Any]) -> str:
     """在 XML 级别替换嵌套表格中的分析师占位符。
 
@@ -1259,11 +1381,18 @@ def render_report(
         context['abstract'] = ABSTRACT_MARKER
         context['body'] = BODY_MARKER
 
-        # 3. 使用 docxtpl 渲染模板（支持 {% if %} 语法）
+        # 3. 修复模板中被拆分的占位符（Word 会把 {{ a1_email }} 拆成多个 run）
         temp_path = Path(output_path).parent / "temp_rendered.docx"
-        template = DocxTemplate(template_path)
+        fixed_template_path = Path(output_path).parent / "temp_fixed_template.docx"
+        _fix_split_placeholders_in_docx(template_path, str(fixed_template_path))
+
+        # 4. 使用 docxtpl 渲染修复后的模板（支持 {% if %} 语法）
+        template = DocxTemplate(str(fixed_template_path))
         template.render(context)
         template.save(str(temp_path))
+
+        # 清理修复后的临时模板
+        fixed_template_path.unlink(missing_ok=True)
 
         # 4. 加载渲染后的文档
         doc = Document(str(temp_path))
