@@ -513,64 +513,6 @@ def _format_analysts_value(value: str) -> str:
 
 # ==================== 辅助函数 ====================
 
-def find_table_by_keyword(
-    tables: List[Dict[str, Any]],
-    keyword: str
-) -> Optional[Dict[str, Any]]:
-    """根据关键词查找表格。
-
-    Args:
-        tables: 表格列表
-        keyword: 关键词
-
-    Returns:
-        匹配的表格，未找到返回 None
-    """
-    keyword_lower = keyword.lower()
-
-    for table in tables:
-        table_text = _get_table_text(table)
-        if keyword_lower in table_text.lower():
-            return table
-
-    return None
-
-
-def _get_table_text(table: Dict[str, Any]) -> str:
-    """获取表格的所有文本。
-
-    Args:
-        table: 表格数据
-
-    Returns:
-        表格文本
-    """
-    texts = []
-
-    def _collect_text(node: Dict[str, Any]) -> None:
-        """递归收集文本。"""
-        node_type = node.get('type', '')
-
-        if node_type == 'cell':
-            text = node.get('text', '').strip()
-            if text:
-                texts.append(text)
-
-            for nested_table in node.get('nested_tables', []):
-                _collect_text(nested_table)
-
-        elif node_type == 'row':
-            for cell in node.get('cells', []):
-                _collect_text(cell)
-
-        elif node_type == 'table':
-            for row in node.get('rows', []):
-                _collect_text(row)
-
-    _collect_text(table)
-    return ' '.join(texts)
-
-
 def _extract_current_price_date_from_notes(
     nested_tables: List[Dict[str, Any]]
 ) -> Optional[str]:

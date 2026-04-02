@@ -600,22 +600,21 @@ def _find_table_paragraph_position(doc: Document, table_index: int) -> int:
     table = doc.tables[table_index]
 
     # 尝试通过表格元素的位置找到段落索引
-    # 这是一个近似方法，因为 python-docx 不直接提供表格在段落中的位置
-
-    # 方法：遍历所有段落，找到第一个出现在表格之后的段落
-    # 通过比较元素在 XML 中的位置
+    # 遍历 body 的子元素，找到表格的位置，然后计算前面有多少段落
 
     try:
         table_element = table._element
+        body = doc.element.body
 
-        for i, para in enumerate(doc.paragraphs):
-            para_element = para._element
-
-            # 比较元素在文档中的位置
-            # 如果段落元素在表格元素之后，返回这个段落的索引
-            if _is_element_after(para_element, table_element):
-                # 返回表格前一个段落的索引
-                return max(0, i - 1)
+        # 遍历 body 的直接子元素
+        para_count = 0
+        for child in body:
+            if child is table_element:
+                # 找到表格，返回之前的段落数
+                return para_count
+            # 检查是否是段落元素
+            if child.tag.endswith('}p'):
+                para_count += 1
 
     except Exception:
         pass
@@ -623,24 +622,6 @@ def _find_table_paragraph_position(doc: Document, table_index: int) -> int:
     # 如果无法精确定位，返回一个估计值
     # 假设表格大致分布在文档中
     return int(len(doc.paragraphs) * (table_index + 1) / (len(doc.tables) + 1))
-
-
-def _is_element_after(elem1, elem2) -> bool:
-    """检查 elem1 是否在 elem2 之后（在文档流中）。
-
-    Args:
-        elem1: 第一个元素
-        elem2: 第二个元素
-
-    Returns:
-        True 如果 elem1 在 elem2 之后
-    """
-    try:
-        # 通过比较元素的 lxml 内存地址或位置来判断
-        # 这是一个简化方法，可能不完全准确
-        return id(elem1) > id(elem2)
-    except Exception:
-        return False
 
 
 def _copy_paragraph(target_doc: Document, source_para) -> None:

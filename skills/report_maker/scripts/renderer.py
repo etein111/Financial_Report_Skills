@@ -994,115 +994,6 @@ def insert_body_at_marker(doc: Document, body_doc: Document, marker: str) -> boo
     return False
 
 
-def fix_body_margins(body_doc: Document, left_margin_cm: float = 1.0, right_margin_cm: float = 1.0) -> None:
-    """修复 body 文档的页边距。
-
-    body 从 draft 提取时可能带有首页的特殊页边距（如 6.35cm），
-    需要重置为标准值。
-
-    Args:
-        body_doc: body 文档
-        left_margin_cm: 左边距（厘米）
-        right_margin_cm: 右边距（厘米）
-    """
-    if Cm is None:
-        return
-
-    for section in body_doc.sections:
-        section.left_margin = Cm(left_margin_cm)
-        section.right_margin = Cm(right_margin_cm)
-
-
-def copy_headers_footers(source_doc: Document, target_doc: Document, target_section_start: int = 1) -> None:
-    """复制源文档的页眉页脚到目标文档。
-
-    复制所有类型的页眉页脚：默认、首页、奇偶页。
-
-    Args:
-        source_doc: 源文档（body.docx）
-        target_doc: 目标文档（output.docx）
-        target_section_start: 目标文档中开始复制的 section 索引
-    """
-    source_sections = list(source_doc.sections)
-    target_sections = list(target_doc.sections)
-
-    def copy_element(source, target):
-        """复制 XML 元素内容"""
-        if source is None or target is None:
-            return
-        source_elem = source._element
-        target_elem = target._element
-        for child in list(target_elem):
-            target_elem.remove(child)
-        for child in source_elem:
-            target_elem.append(deepcopy(child))
-
-    # 复制页眉页脚到目标 section
-    for i, source_section in enumerate(source_sections):
-        target_idx = target_section_start + i
-        if target_idx >= len(target_sections):
-            break
-
-        target_section = target_sections[target_idx]
-
-        # 复制 section 的页眉页脚设置
-        target_section.different_first_page_header_footer = source_section.different_first_page_header_footer
-
-        # 断开所有链接
-        try:
-            target_section.header.is_linked_to_previous = False
-        except:
-            pass
-        try:
-            target_section.footer.is_linked_to_previous = False
-        except:
-            pass
-        try:
-            target_section.first_page_header.is_linked_to_previous = False
-        except:
-            pass
-        try:
-            target_section.first_page_footer.is_linked_to_previous = False
-        except:
-            pass
-        try:
-            target_section.even_page_header.is_linked_to_previous = False
-        except:
-            pass
-        try:
-            target_section.even_page_footer.is_linked_to_previous = False
-        except:
-            pass
-
-        # 复制页眉
-        try:
-            copy_element(source_section.header, target_section.header)
-        except:
-            pass
-        try:
-            copy_element(source_section.first_page_header, target_section.first_page_header)
-        except:
-            pass
-        try:
-            copy_element(source_section.even_page_header, target_section.even_page_header)
-        except:
-            pass
-
-        # 复制页脚
-        try:
-            copy_element(source_section.footer, target_section.footer)
-        except:
-            pass
-        try:
-            copy_element(source_section.first_page_footer, target_section.first_page_footer)
-        except:
-            pass
-        try:
-            copy_element(source_section.even_page_footer, target_section.even_page_footer)
-        except:
-            pass
-
-
 def _fix_split_placeholders_in_docx(docx_path: str, output_path: str = None) -> str:
     """修复 Word 文档中被拆分的 Jinja2 占位符。
 
@@ -1327,17 +1218,6 @@ def replace_analyst_placeholders_in_xml(docx_path: str, elements: Dict[str, Any]
             shutil.rmtree(temp_dir)
 
     return docx_path
-
-
-def _copy_docx(src: str, dst: str) -> None:
-    """复制 docx 文件。
-
-    Args:
-        src: 源文件路径
-        dst: 目标文件路径
-    """
-    import shutil
-    shutil.copy2(src, dst)
 
 
 def replace_all_placeholders_in_xml(
@@ -1837,44 +1717,6 @@ def _remove_docxcompose_extra_sectPr(docx_path: str) -> int:
         print(f"  清理 docxcompose sectPr 时出错: {e}")
 
     return removed_count
-
-
-def _clean_body_sectPr(body_doc: Document) -> None:
-    """清理 body 文档中的 sectPr，防止空白页。
-
-    Args:
-        body_doc: body 文档
-    """
-    ns = {'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'}
-    body_body = body_doc.element.body
-
-    # 删除段落内的 sectPr
-    for p_elem in body_body.findall('.//w:p', ns):
-        pPr = p_elem.find('w:pPr', ns)
-        if pPr is not None:
-            sectPr = pPr.find('w:sectPr', ns)
-            if sectPr is not None:
-                pPr.remove(sectPr)
-
-    # 删除独立的 sectPr（除了文档末尾的）
-    body_elements = list(body_body)
-    for elem in body_elements[:-1]:
-        if elem.tag.split('}')[-1] == 'sectPr':
-            body_body.remove(elem)
-
-    # 删除开头的空段落（保留目录控件 sdt）
-    body_elements = list(body_body)
-    for elem in body_elements:
-        tag = elem.tag.split('}')[-1]
-        if tag == 'p':
-            texts = elem.findall('.//w:t', ns)
-            text = ''.join([t.text or '' for t in texts]).strip()
-            if not text:
-                body_body.remove(elem)
-            else:
-                break
-        elif tag != 'sdt':
-            break
 
 
 def _clean_body_empty_paragraphs(body_doc: Document) -> None:

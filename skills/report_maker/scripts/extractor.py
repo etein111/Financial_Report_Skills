@@ -131,31 +131,6 @@ def _call_llm_api(prompt: str) -> Dict[str, Any]:
     raise NotImplementedError("LLM API 调用未实现")
 
 
-def _parse_yaml_response(response_text: str) -> Dict[str, Any]:
-    """解析 LLM 返回的 YAML 格式响应。
-
-    Args:
-        response_text: LLM 返回的文本
-
-    Returns:
-        解析后的字典
-    """
-    try:
-        # 提取 YAML 部分（去掉 markdown 代码块标记）
-        yaml_text = response_text.strip()
-        if yaml_text.startswith("```yaml"):
-            yaml_text = yaml_text[7:]
-        if yaml_text.startswith("```"):
-            yaml_text = yaml_text[3:]
-        if yaml_text.endswith("```"):
-            yaml_text = yaml_text[:-3]
-
-        return yaml.safe_load(yaml_text.strip()) or {}
-    except yaml.YAMLError as e:
-        print(f"警告: 解析 LLM 响应失败: {e}")
-        return {}
-
-
 # ==================== 主要提取函数 ====================
 
 def extract_elements(
