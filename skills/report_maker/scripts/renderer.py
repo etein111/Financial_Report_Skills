@@ -1439,6 +1439,117 @@ def replace_all_placeholders_in_xml(
     return docx_path
 
 
+def _escape_jinja_in_charts(docx_path: str) -> Dict[str, str]:
+    """转义图表 XML 中的 Jinja2 语法，防止 docxtpl 解析错误。
+
+    Word 图表的数据存储在 word/charts/*.xml 文件中，
+    如果图表数据包含 {{ }} 语法，Jinja2 会尝试解析导致错误。
+
+    Args:
+        docx_path: docx 文件路径
+
+    Returns:
+        被转义的文件内容字典 {文件名: 原始内容}，用于后续恢复
+    """
+    import zipfile
+    import os
+    import re
+
+    escaped_files = {}
+
+    try:
+        docx_dir = os.path.dirname(docx_path)
+        temp_dir = os.path.join(docx_dir, '_temp_escape_charts')
+
+        with zipfile.ZipFile(docx_path, 'r') as z:
+            z.extractall(temp_dir)
+
+        # 查找并转义 charts 目录下的所有 XML 文件
+        charts_dir = os.path.join(temp_dir, 'word', 'charts')
+        if os.path.exists(charts_dir):
+            for filename in os.listdir(charts_dir):
+                if filename.endswith('.xml'):
+                    filepath = os.path.join(charts_dir, filename)
+                    with open(filepath, 'r', encoding='utf-8') as f:
+                        content = f.read()
+
+                    # 检查是否包含 Jinja2 语法
+                    if '{{' in content or '{%' in content:
+                        # 保存原始内容
+                        escaped_files[f'word/charts/{filename}'] = content
+
+                        # 转义 {{ 和 {% 为 HTML 实体风格
+                        escaped_content = content.replace('{{', '&#123;&#123;')
+                        escaped_content = escaped_content.replace('}}', '&#125;&#125;')
+                        escaped_content = escaped_content.replace('{%', '&#123;%')
+                        escaped_content = escaped_content.replace('%}', '%&#125;')
+
+                        with open(filepath, 'w', encoding='utf-8') as f:
+                            f.write(escaped_content)
+
+        # 重新打包
+        os.remove(docx_path)
+        with zipfile.ZipFile(docx_path, 'w', zipfile.ZIP_DEFLATED) as z:
+            for root, dirs, files in os.walk(temp_dir):
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    arcname = os.path.relpath(file_path, temp_dir)
+                    z.write(file_path, arcname)
+
+        # 清理临时目录
+        import shutil
+        shutil.rmtree(temp_dir)
+
+    except Exception as e:
+        print(f"  转义图表 Jinja2 语法时出错: {e}")
+
+    return escaped_files
+
+
+def _restore_jinja_in_charts(docx_path: str, escaped_files: Dict[str, str]) -> None:
+    """恢复图表 XML 中被转义的 Jinja2 语法。
+
+    Args:
+        docx_path: docx 文件路径
+        escaped_files: 被转义的文件内容字典 {文件名: 原始内容}
+    """
+    import zipfile
+    import os
+
+    if not escaped_files:
+        return
+
+    try:
+        docx_dir = os.path.dirname(docx_path)
+        temp_dir = os.path.join(docx_dir, '_temp_restore_charts')
+
+        with zipfile.ZipFile(docx_path, 'r') as z:
+            z.extractall(temp_dir)
+
+        # 恢复原始内容
+        for arcname, original_content in escaped_files.items():
+            filepath = os.path.join(temp_dir, arcname)
+            if os.path.exists(filepath):
+                with open(filepath, 'w', encoding='utf-8') as f:
+                    f.write(original_content)
+
+        # 重新打包
+        os.remove(docx_path)
+        with zipfile.ZipFile(docx_path, 'w', zipfile.ZIP_DEFLATED) as z:
+            for root, dirs, files in os.walk(temp_dir):
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    arcname = os.path.relpath(file_path, temp_dir)
+                    z.write(file_path, arcname)
+
+        # 清理临时目录
+        import shutil
+        shutil.rmtree(temp_dir)
+
+    except Exception as e:
+        print(f"  恢复图表 Jinja2 语法时出错: {e}")
+
+
 def render_report(
     template_path: str,
     elements: Dict[str, Any],
@@ -1483,6 +1594,11 @@ def render_report(
         temp_path = Path(output_path).parent / "temp_rendered.docx"
         fixed_template_path = Path(output_path).parent / "temp_fixed_template.docx"
         _fix_split_placeholders_in_docx(template_path, str(fixed_template_path))
+
+        # 3.1 转义图表 XML 中的 Jinja2 语法（防止 docxtpl 解析错误）
+        escaped_chart_files = _escape_jinja_in_charts(str(fixed_template_path))
+        if escaped_chart_files:
+            print(f"  已转义 {len(escaped_chart_files)} 个图表文件中的 Jinja2 语法")
 
         # 3.5 扩展分析师认证声明（为多个分析师复制声明段落）
         expanded_analysts = expand_analyst_certification(str(fixed_template_path), elements)
@@ -1545,10 +1661,15 @@ def render_report(
                     break
             doc.save(output_path)
 
-        # 7. 清理临时文件
+        # 7. 恢复图表 XML 中被转义的 Jinja2 语法
+        if escaped_chart_files:
+            _restore_jinja_in_charts(output_path, escaped_chart_files)
+            print(f"  已恢复 {len(escaped_chart_files)} 个图表文件的原始内容")
+
+        # 8. 清理临时文件
         temp_path.unlink(missing_ok=True)
 
-        # 8. 验证输出
+        # 9. 验证输出
         final_doc = Document(output_path)
         image_count = sum(1 for rel in final_doc.part.rels.values() if 'image' in rel.reltype)
 
