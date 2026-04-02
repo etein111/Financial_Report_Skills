@@ -935,7 +935,12 @@ def insert_body_at_marker_compose(doc_path: str, body_path: str, marker: str, ou
         # 保存最终文档
         composer.save(output_path)
 
-        # 5. 清理临时文件
+        # 5. 清理 docxcompose 插入的多余 sectPr（防止法律附录页边距被破坏）
+        removed_sectPr = _remove_docxcompose_extra_sectPr(output_path)
+        if removed_sectPr > 0:
+            print(f"  已删除 {removed_sectPr} 个 docxcompose 插入的多余分节符")
+
+        # 6. 清理临时文件
         part1_path.unlink(missing_ok=True)
         if has_part3_content:
             part3_path.unlink(missing_ok=True)
@@ -1641,6 +1646,10 @@ def render_report(
 
             if body_inserted:
                 print(f"  已使用 docxcompose 三段式合并插入 body（保留图表和格式）")
+                # 补救：确保 body 中的图片被正确复制（docxcompose 可能丢失部分图片关系）
+                copied_count = _copy_media_between_docx(body_path, output_path)
+                if copied_count > 0:
+                    print(f"  已补充复制 {copied_count} 张图片（修复 docxcompose 图片丢失）")
             else:
                 # 如果没找到 marker，使用 docxcompose 追加到末尾
                 print(f"  ⚠️ 未找到 BODY_MARKER，使用 docxcompose 追加 body")
@@ -1648,6 +1657,14 @@ def render_report(
                 composer = Composer(doc)
                 composer.append(Document(body_path))
                 composer.save(output_path)
+                # 清理 docxcompose 插入的多余 sectPr
+                removed_sectPr = _remove_docxcompose_extra_sectPr(output_path)
+                if removed_sectPr > 0:
+                    print(f"  已删除 {removed_sectPr} 个 docxcompose 插入的多余分节符")
+                # 补救：确保 body 中的图片被正确复制
+                copied_count = _copy_media_between_docx(body_path, output_path)
+                if copied_count > 0:
+                    print(f"  已补充复制 {copied_count} 张图片（修复 docxcompose 图片丢失）")
 
         else:
             # 没有 body 文件，删除 BODY_MARKER 段落并保存
@@ -1746,6 +1763,80 @@ def _verify_appendix_with_lxml(doc_path: str) -> Dict[str, Any]:
     except Exception as e:
         print(f"  验证附录时出错: {e}")
         return {"found": False, "error": str(e)}
+
+
+def _remove_docxcompose_extra_sectPr(docx_path: str) -> int:
+    """删除 docxcompose 合并时插入的多余 sectPr。
+
+    docxcompose 在 append() 时会自动插入分节符，这些分节符通常使用
+    Word 默认页边距 (top=1440, bottom=1440, 即 1 英寸 = 1440 twips)。
+    这会导致法律附录等部分的页边距被破坏。
+
+    本函数检测并删除这些多余的 sectPr（段落内的 pPr/sectPr），
+    保留文档末尾的独立 sectPr。
+
+    Args:
+        docx_path: docx 文件路径
+
+    Returns:
+        删除的 sectPr 数量
+    """
+    import zipfile
+    from lxml import etree
+
+    W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
+    removed_count = 0
+
+    try:
+        # 读取文档
+        with zipfile.ZipFile(docx_path, 'r') as z:
+            files = {name: z.read(name) for name in z.namelist()}
+
+        if 'word/document.xml' not in files:
+            return 0
+
+        doc_tree = etree.fromstring(files['word/document.xml'])
+        body = doc_tree.find(f'{W}body')
+        if body is None:
+            return 0
+
+        # 查找段落内的 sectPr (pPr/sectPr) - 这些是 docxcompose 插入的分节符
+        # 特征：页边距为默认值 (top=1440, bottom=1440)
+        for p in body.findall(f'.//{W}p'):
+            pPr = p.find(f'{W}pPr')
+            if pPr is not None:
+                sectPr = pPr.find(f'{W}sectPr')
+                if sectPr is not None:
+                    # 检查是否是 docxcompose 插入的默认页边距 sectPr
+                    pgMar = sectPr.find(f'{W}pgMar')
+                    if pgMar is not None:
+                        top = pgMar.get(f'{W}top', '')
+                        bottom = pgMar.get(f'{W}bottom', '')
+                        # 默认页边距：top=1440, bottom=1440 (1 inch = 1440 twips)
+                        if top == '1440' and bottom == '1440':
+                            pPr.remove(sectPr)
+                            removed_count += 1
+                            continue
+
+                    # 如果没有 pgMar（使用继承的页边距），也可能是 docxcompose 插入的
+                    # 但为了安全，只删除有明确默认页边距的
+
+        if removed_count > 0:
+            # 保存修改后的文档
+            files['word/document.xml'] = etree.tostring(
+                doc_tree, xml_declaration=True, encoding='UTF-8', standalone=True
+            )
+
+            import os
+            os.remove(docx_path)
+            with zipfile.ZipFile(docx_path, 'w', zipfile.ZIP_DEFLATED) as z:
+                for name, content in files.items():
+                    z.writestr(name, content)
+
+    except Exception as e:
+        print(f"  清理 docxcompose sectPr 时出错: {e}")
+
+    return removed_count
 
 
 def _clean_body_sectPr(body_doc: Document) -> None:
