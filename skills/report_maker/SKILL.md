@@ -216,6 +216,12 @@ full_document_text = '\n'.join(all_text_lines)
 # 将 full_document_text 提供给 LLM 进行字段提取
 ```
 
+**⚠️ 执行方式要求**：
+- ✅ 直接在 Python REPL 或项目内脚本中执行上述代码
+- ✅ 所有文件路径必须是项目内的相对路径
+- ❌ 禁止创建临时 Python 脚本文件到 `/temp/` 或其他系统目录
+- ❌ 禁止将文档内容写入临时文件
+
 **为什么必须这样做**：
 - Word 文档的嵌套表格在 XML 结构中是层层嵌套的
 - 普通的文档读取工具（如 python-docx 的 cell.text）会漏掉嵌套表格内容
@@ -625,6 +631,11 @@ body: "body.docx"
 12. **只读 templates/** - report_maker 永远不修改模板资产
 13. **body 是拼接不是填充** - body.docx 使用 docxcompose 拼接，保留自己的页边距；模板中无需 `{{body}}` 占位符
 14. **禁止硬编码提取** - elements 字段只能通过 LLM 提取，不能用 `grep`、`python-docx` 搜索等硬编码方式
+15. **🔴 禁止访问项目外路径** - 所有文件操作必须在项目根目录内进行：
+    - ❌ 禁止访问 `/temp/*`、`/tmp/*`、`C:\Temp\*` 等系统临时目录
+    - ❌ 禁止访问用户目录外的任何路径
+    - ✅ 只允许访问项目内的 `templates/`、`reports/`、`inbox/samples/` 等目录
+    - ✅ 如需临时文件，在项目内的 `reports/<报告名>/` 目录创建
 
 ---
 
