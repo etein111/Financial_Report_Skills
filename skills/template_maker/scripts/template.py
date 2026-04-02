@@ -127,9 +127,11 @@ def _replace_in_table(table, value_str: str, placeholder: str, processed_cells: 
 def replace_analyst_fields_in_doc(doc: Document, elements: dict) -> Document:
     """替换分析师字段为占位符。
 
-    处理逻辑：
-    1. 对于有值的分析师，找到组合字符串并替换为组合占位符
-    2. 定位分析师表格（[Table_Author]），为所有位置创建占位符
+    将分析师表格规范化为 4x4 表格，格式如下：
+    Row 1: {% if a1_cn %} {{ a1_cn }} {{ a1_en }}], SFC:{{ a1_sfc }} {% endif %} | ... | {% if a4_cn %} {{ a4_cn }} {{ a4_en }}], SFC:{{ a4_sfc }} {% endif %}
+    Row 2: {{ a1_email }} | {{ a2_email }} | {{ a3_email }} | {{ a4_email }}
+    Row 3: {% if a5_cn %} {{ a5_cn }} {{ a5_en }}], SFC:{{ a5_sfc }} {% endif %} | ... | {% if a8_cn %} {{ a8_cn }} {{ a8_en }}], SFC:{{ a8_sfc }} {% endif %}
+    Row 4: {{ a5_email }} | {{ a6_email }} | {{ a7_email }} | {{ a8_email }}
 
     使用 lxml 直接解析 document.xml 以正确处理合并单元格。
 
@@ -157,7 +159,6 @@ def replace_analyst_fields_in_doc(doc: Document, elements: dict) -> Document:
     body = doc._body._body
 
     # 使用 lxml 找到所有 Table_Author 表格
-    # 因为 python-docx 的合并单元格处理有问题，需要用 lxml 直接解析
     author_tbl_element = None
     for tbl in body.findall(f'.//{W}tbl'):
         # 检查第一个单元格是否包含 [Table_Author]
@@ -176,211 +177,184 @@ def replace_analyst_fields_in_doc(doc: Document, elements: dict) -> Document:
                 author_tbl_element = tbl
                 break
 
-    # 替换有值的分析师信息（使用 Jinja2 if-block 格式）
-    for i, data in analysts.items():
-        # 姓名+SFC 占位符（带Jinja2 if条件）
-        # 格式: {% if a1_cn %} {{ a1_cn }} {{ a1_en }}], SFC:{{ a1_sfc }}
-        info_placeholder = '{% if a' + str(i) + '_cn %} {{ a' + str(i) + '_cn }} {{ a' + str(i) + '_en }}], SFC:{{ a' + str(i) + '_sfc }}'
-        email_placeholder = '{{ a' + str(i) + '_email }} {% endif %}'
-
-        if data['cn'] and data['en'] and data['sfc']:
-            # 构造可能的组合格式（文档中的格式可能有变化）
-            info_patterns = [
-                f"{data['cn']}·{data['en']}，SFC:{data['sfc']}",
-                f"{data['cn']} {data['en']}], SFC:{data['sfc']}",  # 逗号后有空格
-                f"{data['cn']} {data['en']}],SFC:{data['sfc']}",   # 逗号后无空格
-                f"{data['cn']}·{data['en']}, SFC:{data['sfc']}",
-                f"{data['cn']} {data['en']}, SFC:{data['sfc']}",
-                f"{data['cn']}{data['en']}, SFC:{data['sfc']}",   # 无空格（常见格式）
-            ]
-
-            # 在文档中查找并替换
-            for pattern in info_patterns:
-                _replace_text_in_nested_tables(doc, pattern, info_placeholder)
-
-        if data['email']:
-            _replace_text_in_nested_tables(doc, data['email'], email_placeholder)
-
-    # 为分析师表格中的所有位置创建占位符（动态计算位置）
-    # 算法：
-    # 1. 数据行数 = rows - 1（减去标记行）
-    # 2. 如果数据行是偶数：从第1行开始
-    # 3. 如果数据行是奇数：跳过第1行（作为表头），从第2行开始
-    # 4. 每2行一组，横向填充
-
+    # 如果找到了分析师表格，将其规范化为 4x4 表格
     if author_tbl_element is not None:
-        # 使用 lxml 直接操作 author_tbl_element
         author_tbl = author_tbl_element
 
         # 获取表格的行和列
         trs = author_tbl.findall(W + 'tr')
         rows = len(trs)
-
-        # 获取第一行的列数（用于计算分析师数量）
         first_tr = trs[0] if trs else None
         first_tr_tcs = first_tr.findall(W + 'tc') if first_tr else []
         cols = len(first_tr_tcs)
 
-        data_rows = rows - 1  # 减去标记行
+        # 判断是否需要重建表格
+        # 4x4 表格意味着：4 行数据行（不含标记行），4 列
+        # 格式：Row1(信息) | Row2(邮箱) | Row3(信息) | Row4(邮箱)
 
-        # 计算起始行
-        if data_rows % 2 == 0:
-            # 偶数数据行：从第1行开始
-            start_row = 1
-        else:
-            # 奇数数据行：跳过第1行（作为表头），从第2行开始
-            start_row = 2
+        # 先找到 [Table_Author] 标记单元格并清空其内容
+        marker_tc = None
+        for tbl in body.findall(f'.//{W}tbl'):
+            for row in tbl.findall(W + 'tr'):
+                for tc in row.findall(W + 'tc'):
+                    tc_text = ''.join(t.text or '' for t in tc.iter(f'{W}t'))
+                    if '[Table_Author]' in tc_text:
+                        marker_tc = tc
+                        break
+                if marker_tc:
+                    break
+            if marker_tc:
+                break
 
-        # 计算能填充的分析师数量（按列数填充，空值也填占位符）
-        cols_available = cols  # 每列一个分析师
-        groups = (rows - start_row) // 2  # 每2行一组（信息行+邮箱行）
-        analyst_count = cols_available * groups
+        # 清空标记单元格内容
+        if marker_tc is not None:
+            # 保留段落属性，删除内容
+            for child in list(marker_tc):
+                if etree.QName(child.tag).localname != 'pPr':
+                    marker_tc.remove(child)
+            # 在第一个段落添加空文本
+            first_p = marker_tc.find(W + 'p')
+            if first_p is not None:
+                for child in list(first_p):
+                    if etree.QName(child.tag).localname != 'pPr':
+                        first_p.remove(child)
+                r = etree.SubElement(first_p, W + 'r')
+                t = etree.SubElement(r, W + 't')
+                t.text = ''
 
-        # 动态计算填充位置
-        # 需要创建一个类似 python-docx table 的接口供 _calculate_analyst_positions 使用
-        class TableProxy:
-            def __init__(self, tbl_element, w_ns):
-                self._tbl = tbl_element
-                self._W = w_ns
-                # 计算行列信息
-                self._rows = tbl_element.findall(w_ns + 'tr')
-                if self._rows:
-                    first_row = self._rows[0]
-                    self._cols = len(first_row.findall(w_ns + 'tc'))
+        # 构建 4x4 表格内容
+        # Row 1: a1-a4 分析师信息
+        row1_cells = []
+        for i in [1, 2, 3, 4]:
+            placeholder = (
+                '{% if a' + str(i) + '_cn %} {{ a' + str(i) + '_cn }} {{ a' + str(i) + '_en }}], '
+                'SFC:{{ a' + str(i) + '_sfc }} {% endif %}'
+            )
+            row1_cells.append(placeholder)
+
+        # Row 2: a1-a4 邮箱
+        row2_cells = ['{{ a1_email }}', '{{ a2_email }}', '{{ a3_email }}', '{{ a4_email }}']
+
+        # Row 3: a5-a8 分析师信息
+        row3_cells = []
+        for i in [5, 6, 7, 8]:
+            placeholder = (
+                '{% if a' + str(i) + '_cn %} {{ a' + str(i) + '_cn }} {{ a' + str(i) + '_en }}], '
+                'SFC:{{ a' + str(i) + '_sfc }} {% endif %}'
+            )
+            row3_cells.append(placeholder)
+
+        # Row 4: a5-a8 邮箱
+        row4_cells = ['{{ a5_email }}', '{{ a6_email }}', '{{ a7_email }}', '{{ a8_email }}']
+
+        # 找到 marker_tc 所在的行，以它为基准重建表格
+        # 我们需要在 author_tbl 中找到 marker_tc 所在的行位置
+        marker_row_idx = None
+        marker_col_idx = None
+        for row_idx, row in enumerate(trs):
+            for col_idx, tc in enumerate(row.findall(W + 'tc')):
+                if tc is marker_tc:
+                    marker_row_idx = row_idx
+                    marker_col_idx = col_idx
+                    break
+            if marker_row_idx is not None:
+                break
+
+        if marker_row_idx is not None and marker_col_idx is not None:
+            # 找到包含 marker 的行的位置
+            # 我们需要获取该行的属性（如宽度等）来创建新的单元格
+            ref_row = trs[marker_row_idx]
+            ref_tc = ref_row.findall(W + 'tc')[marker_col_idx] if marker_col_idx < len(ref_row.findall(W + 'tc')) else None
+
+            def create_cell_text(text: str, ref_tc: etree._Element = None) -> etree._Element:
+                """创建包含文本的单元格"""
+                if ref_tc is not None:
+                    # 复制单元格属性
+                    new_tc = etree.fromstring(etree.tostring(ref_tc))
+                    # 清空内容
+                    for child in list(new_tc):
+                        tag = etree.QName(child.tag).localname
+                        if tag != 'pPr':  # 保留段落属性
+                            new_tc.remove(child)
+                    # 添加文本段落
+                    p = new_tc.find(W + 'p')
+                    if p is None:
+                        p = etree.SubElement(new_tc, W + 'p')
+                    # 清空段落内容
+                    for child in list(p):
+                        tag = etree.QName(child.tag).localname
+                        if tag != 'pPr':
+                            p.remove(child)
+                    # 添加文本
+                    r = etree.SubElement(p, W + 'r')
+                    t = etree.SubElement(r, W + 't')
+                    t.text = text
+                    return new_tc
                 else:
-                    self._cols = 0
+                    # 创建新单元格
+                    new_tc = etree.Element(W + 'tc')
+                    p = etree.SubElement(new_tc, W + 'p')
+                    r = etree.SubElement(p, W + 'r')
+                    t = etree.SubElement(r, W + 't')
+                    t.text = text
+                    return new_tc
 
-            @property
-            def rows(self):
-                return self._rows
+            def create_empty_cell() -> etree._Element:
+                """创建空单元格"""
+                new_tc = etree.Element(W + 'tc')
+                p = etree.SubElement(new_tc, W + 'p')
+                r = etree.SubElement(p, W + 'r')
+                t = etree.SubElement(r, W + 't')
+                t.text = ''
+                return new_tc
 
-            @property
-            def columns(self):
-                # 返回一个列表以便 len() 操作
-                return [None] * self._cols
+            # 替换 marker 单元格为新的 4x4 表格
+            # 找到 marker_tc 在 author_tbl 中的位置
+            all_tcs_in_tbl = list(author_tbl.iter(W + 'tc'))
+            if marker_tc in all_tcs_in_tbl:
+                tc_idx_in_tbl = all_tcs_in_tbl.index(marker_tc)
 
-        table_proxy = TableProxy(author_tbl, W)
-        analyst_positions = _calculate_analyst_positions(table_proxy, analyst_count)
+                # 计算 marker_tc 在第几行第几列
+                cum_cols = 0
+                target_row_idx = 0
+                target_col_idx = 0
+                for ri, row in enumerate(trs):
+                    tcs_in_row = row.findall(W + 'tc')
+                    if tc_idx_in_tbl >= cum_cols and tc_idx_in_tbl < cum_cols + len(tcs_in_row):
+                        target_row_idx = ri
+                        target_col_idx = tc_idx_in_tbl - cum_cols
+                        break
+                    cum_cols += len(tcs_in_row)
 
-        def _get_cell_text(tc):
-            """获取单元格直接子元素的文本（不包括嵌套 tc 的文本）。"""
-            parts = []
-            for elem in tc:
-                if elem.tag == W + 'p':
-                    for r in elem:
-                        if r.tag == W + 'r':
-                            t = r.find(W + 't')
-                            if t is not None and t.text:
-                                parts.append(t.text)
-            return ''.join(parts)
+                # 获取该行用于复制属性
+                ref_row_elem = trs[target_row_idx] if target_row_idx < len(trs) else None
+                ref_tc_elem = None
+                if ref_row_elem is not None:
+                    ref_tcs_in_row = ref_row_elem.findall(W + 'tc')
+                    if target_col_idx < len(ref_tcs_in_row):
+                        ref_tc_elem = ref_tcs_in_row[target_col_idx]
 
-        for info_row, col, email_row, _, analyst_idx in analyst_positions:
-            i = analyst_idx
+                # 创建新行
+                new_row1 = etree.SubElement(author_tbl, W + 'tr')
+                new_row2 = etree.SubElement(author_tbl, W + 'tr')
+                new_row3 = etree.SubElement(author_tbl, W + 'tr')
+                new_row4 = etree.SubElement(author_tbl, W + 'tr')
 
-            # 构建 Jinja2 格式的占位符
-            info_placeholder = '{% if a' + str(i) + '_cn %} {{ a' + str(i) + '_cn }} {{ a' + str(i) + '_en }}], SFC:{{ a' + str(i) + '_sfc }}'
-            email_placeholder = '{{ a' + str(i) + '_email }} {% endif %}'
-
-            # 直接在 author_tbl 中查找对应的单元格
-            trs = author_tbl.findall(W + 'tr')
-            if info_row >= len(trs):
-                continue
-
-            tr = trs[info_row]
-            tcs = tr.findall(W + 'tc')
-
-            # 处理信息单元格（姓名+SFC）
-            if col < len(tcs):
-                tc = tcs[col]
-                tc_text = _get_cell_text(tc)
-                if '{% if a' + str(i) + '_cn %}' not in tc_text:
-                    # 清理所有段落，只保留第一个 paragraph 的第一个 run
-                    paras = tc.findall(W + 'p')
-                    for p in paras[1:]:
-                        tc.remove(p)
-                    # 设置新文本
-                    paras = tc.findall(W + 'p')
-                    if paras:
-                        first_para = paras[0]
-                        runs = first_para.findall(W + 'r')
-                        if runs:
-                            t = runs[0].find(W + 't')
-                            if t is not None:
-                                t.text = info_placeholder
-
-            # 处理邮箱单元格
-            if email_row < len(trs):
-                tr_email = trs[email_row]
-                tcs_email = tr_email.findall(W + 'tc')
-                if col < len(tcs_email):
-                    tc = tcs_email[col]
-                    tc_text = _get_cell_text(tc)
-                    if '{% endif %}' not in tc_text:
-                        paras = tc.findall(W + 'p')
-                        for p in paras[1:]:
-                            tc.remove(p)
-                        paras = tc.findall(W + 'p')
-                        if paras:
-                            first_para = paras[0]
-                            runs = first_para.findall(W + 'r')
-                            if runs:
-                                t = runs[0].find(W + 't')
-                                if t is not None:
-                                    t.text = email_placeholder
+                # 为每行添加4个单元格
+                for cell_text in row1_cells:
+                    new_tc = create_cell_text(cell_text, ref_tc_elem)
+                    new_row1.append(new_tc)
+                for cell_text in row2_cells:
+                    new_tc = create_cell_text(cell_text, ref_tc_elem)
+                    new_row2.append(new_tc)
+                for cell_text in row3_cells:
+                    new_tc = create_cell_text(cell_text, ref_tc_elem)
+                    new_row3.append(new_tc)
+                for cell_text in row4_cells:
+                    new_tc = create_cell_text(cell_text, ref_tc_elem)
+                    new_row4.append(new_tc)
 
     return doc
-
-
-def _calculate_analyst_positions(author_table, analyst_count: int) -> list:
-    """根据表格维数和分析师数量计算填充位置。
-
-    算法：
-    1. 数据行数 = rows - 1（减去标记行）
-    2. 如果数据行是偶数：从第1行开始
-    3. 如果数据行是奇数：跳过第1行（作为表头），从第2行开始
-    4. 每2行一组，横向填充
-
-    Args:
-        author_table: 分析师表格对象
-        analyst_count: 实际有值的分析师数量
-
-    Returns:
-        list of (info_row, col, email_row, col, analyst_idx)
-    """
-    rows = len(author_table.rows)
-    cols = len(author_table.columns)
-    data_rows = rows - 1  # 减去标记行
-
-    positions = []
-
-    # 计算起始行
-    if data_rows % 2 == 0:
-        # 偶数数据行：从第1行开始
-        start_row = 1
-    else:
-        # 奇数数据行：跳过第1行（表头），从第2行开始
-        start_row = 2
-
-    # 计算能填充的分析师数量（取表格能容纳的数量和实际分析师数量的较小值）
-    cols_available = cols  # 每组横向填满
-    groups = (rows - start_row) // 2  # 能放几组
-    max_analysts = cols_available * groups
-    actual_count = min(analyst_count, max_analysts)
-
-    # 生成位置
-    analyst_idx = 1
-    for group in range(groups):
-        for col in range(cols_available):
-            if analyst_idx > actual_count:
-                break
-            info_row = start_row + group * 2
-            email_row = info_row + 1
-            positions.append((info_row, col, email_row, col, analyst_idx))
-            analyst_idx += 1
-        if analyst_idx > actual_count:
-            break
-
-    return positions
 
 
 def _replace_text_in_nested_tables(doc: Document, old_text: str, new_text: str):

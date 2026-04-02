@@ -1333,6 +1333,15 @@ def render_report(
 ) -> bool:
     """渲染报告，正确处理分析师字段、abstract 和 body。
 
+    支持 Jinja2 模板语法，包括 {% if %}, {% for %} 等控制结构。
+    模板中的分析师字段可以使用 if block 条件渲染：
+        {% if a1_cn %}
+        {{ a1_cn }} {{ a1_en }}], SFC:{{ a1_sfc }}
+        {% if a2_cn %}
+        {{ a2_cn }} {{ a2_en }}], SFC:{{ a2_sfc }}
+        {% endif %}
+        {% endif %}
+
     法律附录识别规则：
     - 前面有分页符（单独一页）
     - 开头必定是："附录APPENDIX"
@@ -1355,22 +1364,29 @@ def render_report(
     try:
         from docxcompose.composer import Composer
 
-        # 1. 准备渲染上下文
+        # 1. 准备渲染上下文（支持 Jinja2 if block）
         context = prepare_context_with_analysts(elements)
 
-        # 2. 复制模板并通过 XML 替换所有占位符
+        # 2. 使用 docxtpl 渲染模板（支持 Jinja2 语法）
+        # docxtpl 支持 {% if %}, {% for %} 等控制结构
+        template = DocxTemplate(template_path)
+
+        # 将 abstract 和 body 路径转换为绝对路径
+        abstract_abs = str(Path(abstract_path).resolve()) if abstract_path else ''
+        body_abs = str(Path(body_path).resolve()) if body_path else ''
+
+        # 添加到上下文供后续插入使用
+        context['_abstract_abs'] = abstract_abs
+        context['_body_abs'] = body_abs
+
+        template.render(context)
+
+        # 3. 保存 docxtpl 渲染结果
         temp_path = Path(output_path).parent / "temp_rendered.docx"
-        _copy_docx(template_path, str(temp_path))
-        replace_all_placeholders_in_xml(str(temp_path), context, elements)
+        template.save(str(temp_path))
 
-        # 3. 加载渲染后的文档
+        # 4. 加载渲染后的文档
         doc = Document(str(temp_path))
-
-        # 3.5 清理空分析师单元格
-        analysts_with_data = context.get('_analysts_with_data', set())
-        cleaned_cells = clean_empty_analyst_cells(doc, analysts_with_data)
-        if cleaned_cells > 0:
-            print(f"  已清理 {cleaned_cells} 个空分析师单元格")
 
         # 4. 插入 abstract
         if abstract_path and Path(abstract_path).is_file() and Path(abstract_path).stat().st_size > 0:
