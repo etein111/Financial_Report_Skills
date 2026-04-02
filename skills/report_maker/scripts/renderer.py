@@ -1416,94 +1416,73 @@ def render_report(
         # 清理修复后的临时模板
         fixed_template_path.unlink(missing_ok=True)
 
-        # 4. 加载渲染后的文档
+        # 5. 找到 BODY_MARKER 位置
         doc = Document(str(temp_path))
 
-        # 4. 插入 abstract
-        if Path(abstract_path).exists() and Path(abstract_path).stat().st_size > 0:
-            abstract_doc = Document(abstract_path)
-            if insert_abstract_to_cell(doc, abstract_doc, ABSTRACT_MARKER):
-                print(f"  已插入 abstract")
-            else:
-                print(f"  警告: 未找到 abstract 占位符")
-
-        # 5. 找到 BODY_MARKER 位置
-        body_element = doc.element.body
-        all_elements = list(body_element)
-        ns = {'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'}
-
-        marker_idx = None
-        marker_elem = None
-
+        # 找到 marker 位置的段落索引
+        marker_para_idx = None
+        all_elements = list(doc.element.body)
         for i, elem in enumerate(all_elements):
             if elem.tag.endswith('}p'):
                 text = ''.join(t.text for t in elem.iter() if t.text)
                 if BODY_MARKER in text:
-                    marker_idx = i
-                    marker_elem = elem
+                    marker_para_idx = i
                     print(f"  找到 body 占位符位置: 第 {i} 个元素")
                     break
 
-        # 6. 在 BODY_MARKER 位置插入 body 内容
-        if marker_elem is not None and Path(body_path).exists() and Path(body_path).stat().st_size > 0:
-            body_doc = Document(body_path)
+        if marker_para_idx is not None and Path(body_path).exists() and Path(body_path).stat().st_size > 0:
+            # 策略：将文档在 marker 处分成两部分，用 composer 合并
+            from docx import Document as DocxDocument
 
-            # 收集 body 末尾的 sectPr（body 自己的页边距设置）
-            body_sectPr = None
-            body_elements = list(body_doc.element.body)
-            for elem in reversed(body_elements):
-                tag = elem.tag.split('}')[-1]
-                if tag == 'sectPr':
-                    body_sectPr = deepcopy(elem)
-                    break
-
-            # 只清理 body 开头的空段落，保留 sectPr（页边距信息）
-            _clean_body_empty_paragraphs(body_doc)
-
-            # 在 marker 位置插入 body 的所有元素
-            insert_idx = marker_idx
-            for body_elem in body_doc.element.body:
-                tag = body_elem.tag.split('}')[-1]
-                # 复制段落、表格和目录控件，跳过 sectPr（稍后单独处理）
-                if tag in ['p', 'tbl', 'sdt']:
-                    new_elem = deepcopy(body_elem)
-                    body_element.insert(insert_idx, new_elem)
-                    insert_idx += 1
-
-            # 删除 marker 段落（现在位置变了，需要重新找）
-            all_elements = list(body_element)
-            for elem in all_elements:
+            # 5.1 删除 marker 段落，得到 part1
+            body_elem = doc.element.body
+            for elem in list(body_elem):
                 if elem.tag.endswith('}p'):
                     text = ''.join(t.text for t in elem.iter() if t.text)
                     if BODY_MARKER in text:
-                        body_element.remove(elem)
+                        body_elem.remove(elem)
                         break
 
-            # 在 body 内容末尾添加 body 的 sectPr（保留 body 的页边距）
-            if body_sectPr is not None:
-                body_element.append(body_sectPr)
+            # 保存 part1
+            part1_path = Path(output_path).parent / "temp_part1.docx"
+            doc.save(str(part1_path))
 
-            print(f"  已在占位符位置插入 body（保留 body 的页边距）")
+            # 5.2 加载 body 文档作为 part2
+            body_doc = DocxDocument(body_path)
+            part2_path = Path(output_path).parent / "temp_part2.docx"
+            body_doc.save(str(part2_path))
 
-        elif marker_elem is None:
-            print(f"  警告: 未找到 body 占位符 (BODY_MARKER)")
+            # 5.3 使用 docxcompose 合并：part1 + body + part2
+            master = DocxDocument(str(part1_path))
+            composer = Composer(master)
 
-        # 7. 保存最终文档
-        doc.save(output_path)
+            body_for_merge = DocxDocument(str(part2_path))
+            composer.append(body_for_merge)
 
-        # 8. 复制 body 的媒体资源（图片等）到输出文档
-        if Path(body_path).exists():
-            copied_media = _copy_media_between_docx(body_path, output_path)
-            if copied_media > 0:
-                print(f"  已复制 {copied_media} 个 body 媒体资源")
+            # 保存最终文档
+            composer.save(output_path)
 
-        # 8.5 复制 abstract 的媒体资源（如果有）
-        if Path(abstract_path).exists():
-            copied_abstract_media = _copy_media_between_docx(abstract_path, output_path)
-            if copied_abstract_media > 0:
-                print(f"  已复制 {copied_abstract_media} 个 abstract 媒体资源")
+            # 5.4 清理临时文件
+            part1_path.unlink(missing_ok=True)
+            part2_path.unlink(missing_ok=True)
 
-        # 9. 清理临时文件
+            print(f"  已使用 docxcompose 拼接 body")
+
+        elif marker_para_idx is None:
+            # 没有找到 marker，直接追加 body
+            master = DocxDocument(str(temp_path))
+            composer = Composer(master)
+            if Path(body_path).exists() and Path(body_path).stat().st_size > 0:
+                body_doc = DocxDocument(body_path)
+                composer.append(body_doc)
+                print(f"  未找到 body 占位符，直接追加 body")
+            composer.save(output_path)
+
+        else:
+            # 没有 body，直接保存
+            doc.save(output_path)
+
+        # 6. 清理临时文件
         temp_path.unlink(missing_ok=True)
 
         # 11. 验证输出
