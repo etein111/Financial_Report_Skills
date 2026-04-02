@@ -757,6 +757,8 @@ def clean_empty_analyst_cells(doc: Document, analysts_with_data: set) -> int:
 def insert_abstract_to_cell(doc: Document, abstract_doc: Document, marker: str) -> bool:
     """在表格单元格中插入 abstract 内容，完整保留格式。
 
+    使用 lxml 递归搜索所有表格（包括嵌套表格）。
+
     Args:
         doc: 目标文档
         abstract_doc: abstract 文档
@@ -765,23 +767,34 @@ def insert_abstract_to_cell(doc: Document, abstract_doc: Document, marker: str) 
     Returns:
         是否成功插入
     """
-    for table in doc.tables:
-        for row in table.rows:
-            for cell in row.cells:
-                if marker in cell.text:
-                    # 完全清空单元格（删除所有段落，只保留一个空段落）
-                    tc = cell._tc
-                    # 删除所有段落元素
-                    for p in tc.findall('.//{http://schemas.openxmlformats.org/wordprocessingml/2006/main}p'):
-                        tc.remove(p)
+    # 使用 lxml 递归搜索所有表格单元格（包括嵌套表格）
+    W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
+    body = doc.element.body
 
-                    # 插入 abstract 内容（使用 deepcopy 完整保留格式）
-                    for src_para in abstract_doc.paragraphs:
-                        if src_para.text.strip():
-                            # 直接复制整个段落元素
-                            tc.append(deepcopy(src_para._element))
+    def find_marker_in_cells(parent):
+        """递归搜索所有单元格中的 marker"""
+        for tc in parent.iter(f'{W}tc'):
+            cell_text = ''.join(t.text or '' for t in tc.iter(f'{W}t'))
+            if marker in cell_text:
+                return tc
+        return None
 
-                    return True
+    # 搜索所有表格（包括嵌套）
+    tc = find_marker_in_cells(body)
+
+    if tc is not None:
+        # 删除所有段落元素
+        for p in list(tc.findall(f'{W}p')):
+            tc.remove(p)
+
+        # 插入 abstract 内容（使用 deepcopy 完整保留格式）
+        for src_para in abstract_doc.element.body.iter(f'{W}p'):
+            para_text = ''.join(t.text or '' for t in src_para.iter(f'{W}t'))
+            if para_text.strip():
+                tc.append(deepcopy(src_para))
+
+        return True
+
     return False
 
 
@@ -829,9 +842,11 @@ def _insert_abstract_at_paragraph(doc: Document, abstract_doc: Document, marker:
 
 
 def insert_body_at_marker_compose(doc_path: str, body_path: str, marker: str, output_path: str) -> bool:
-    """使用 docxcompose 在标记位置插入 body 内容。
+    """使用 docxcompose 三段式合并：在 marker 位置插入 body。
 
-    将模板分成 marker 之前和之后两部分，然后用 docxcompose 合并。
+    将原文档拆分为 marker 之前和之后两部分，
+    然后用 docxcompose 合并：part1 + body + part3。
+    这样可以正确处理所有图片和资源引用。
 
     Args:
         doc_path: 渲染后的模板路径
@@ -844,73 +859,91 @@ def insert_body_at_marker_compose(doc_path: str, body_path: str, marker: str, ou
     """
     try:
         from docxcompose.composer import Composer
+        import shutil
 
-        # 加载文档
+        # 1. 找到 marker 位置
         doc = Document(doc_path)
-        body_doc = Document(body_path)
+        body_elem = doc.element.body
+        all_elements = list(body_elem)
 
-        # 找到 marker 位置
-        body_element = doc.element.body
         marker_idx = None
-
-        for i, elem in enumerate(body_element):
-            if elem.tag.endswith('}p'):
-                text = ''.join(t.text for t in elem.iter() if t.text)
-                if marker in text:
-                    marker_idx = i
-                    break
+        for i, elem in enumerate(all_elements):
+            text = ''.join(t.text or '' for t in elem.iter() if t.text)
+            if marker in text:
+                marker_idx = i
+                break
 
         if marker_idx is None:
-            print(f"  未找到 marker: {marker}")
             return False
 
-        # 创建两个临时文档：marker 之前和之后
-        # 方法：删除 marker 段落，然后用 docxcompose 插入 body
+        # 2. 创建 part1（marker 之前的内容）
+        part1_path = Path(output_path).parent / "temp_part1.docx"
+        shutil.copy(doc_path, str(part1_path))
 
-        # 删除 marker 段落
-        marker_elem = list(body_element)[marker_idx]
-        body_element.remove(marker_elem)
+        part1_doc = Document(str(part1_path))
+        part1_body = part1_doc.element.body
+        part1_elements = list(part1_body)
 
-        # 保存临时文档（没有 marker）
-        temp_path = Path(output_path).parent / "temp_no_marker.docx"
-        doc.save(str(temp_path))
+        # 删除 marker 及之后的所有元素
+        for elem in part1_elements[marker_idx:]:
+            tag = elem.tag.split('}')[-1]
+            if tag != 'sectPr':  # 保留 sectPr（页面设置）
+                part1_body.remove(elem)
 
-        # 使用 docxcompose 合并
-        # 策略：将 body 内容插入到正确位置
-        # docxcompose 默认是追加到末尾，我们需要更复杂的处理
+        part1_doc.save(str(part1_path))
 
-        # 另一种方法：直接操作 XML，但用 body_doc 的原始内容
-        doc = Document(str(temp_path))
-        body_element = doc.element.body
-        elements = list(body_element)
+        # 3. 创建 part3（marker 之后的内容）
+        part3_path = Path(output_path).parent / "temp_part3.docx"
+        shutil.copy(doc_path, str(part3_path))
 
-        # 计算插入位置（marker 原来的位置）
-        insert_idx = marker_idx
+        part3_doc = Document(str(part3_path))
+        part3_body = part3_doc.element.body
+        part3_elements = list(part3_body)
 
-        # 从 body_doc 复制所有元素
-        for body_elem in body_doc.element.body:
-            tag = body_elem.tag.split('}')[-1]
+        # 删除 marker 及之前的所有元素
+        has_part3_content = False
+        for elem in part3_elements[:marker_idx + 1]:
+            tag = elem.tag.split('}')[-1]
+            if tag != 'sectPr':
+                part3_body.remove(elem)
+
+        # 检查 part3 是否有实际内容
+        for elem in part3_body:
+            tag = elem.tag.split('}')[-1]
             if tag in ['p', 'tbl', 'sdt']:
-                new_elem = deepcopy(body_elem)
-                body_element.insert(insert_idx, new_elem)
-                insert_idx += 1
+                text = ''.join(t.text or '' for t in elem.iter() if t.text)
+                if text.strip():
+                    has_part3_content = True
+                    break
 
-        doc.save(output_path)
+        if has_part3_content:
+            part3_doc.save(str(part3_path))
 
-        # 清理临时文件
-        Path(temp_path).unlink(missing_ok=True)
-
-        # 使用 docxcompose 修复图片引用
-        # 重新打开并用 composer 合并空文档来触发资源整理
-        master = Document(output_path)
+        # 4. 使用 docxcompose 合并：part1 + body + part3
+        master = Document(str(part1_path))
         composer = Composer(master)
-        # 不实际追加任何文档，只是用 composer 保存
+
+        # 追加 body
+        body_doc = Document(body_path)
+        composer.append(body_doc)
+
+        # 追加 part3（如果有内容）
+        if has_part3_content:
+            part3_for_merge = Document(str(part3_path))
+            composer.append(part3_for_merge)
+
+        # 保存最终文档
         composer.save(output_path)
+
+        # 5. 清理临时文件
+        part1_path.unlink(missing_ok=True)
+        if has_part3_content:
+            part3_path.unlink(missing_ok=True)
 
         return True
 
     except Exception as e:
-        print(f"  docxcompose 插入失败: {e}")
+        print(f"  docxcompose 三段式合并失败: {e}")
         import traceback
         traceback.print_exc()
         return False
@@ -1478,49 +1511,33 @@ def render_report(
         # 保存处理 abstract 后的文档
         doc.save(str(temp_path))
 
-        # 6. 处理 BODY_MARKER - 在占位符位置插入 body 内容
-        doc = Document(str(temp_path))
-
+        # 6. 处理 BODY_MARKER - 使用 docxcompose 三段式合并
         if Path(body_path).exists() and Path(body_path).stat().st_size > 0:
-            body_doc = Document(body_path)
-
-            # 直接在原文档 XML 上操作，在 marker 位置插入 body 内容
-            body_inserted = insert_body_at_marker(doc, body_doc, BODY_MARKER)
+            # 使用三段式合并：part1 + body + part3
+            body_inserted = insert_body_at_marker_compose(
+                str(temp_path), body_path, BODY_MARKER, output_path
+            )
 
             if body_inserted:
-                print(f"  已在 BODY_MARKER 位置插入 body（保留格式和后续内容）")
+                print(f"  已使用 docxcompose 三段式合并插入 body（保留图表和格式）")
             else:
                 # 如果没找到 marker，使用 docxcompose 追加到末尾
                 print(f"  ⚠️ 未找到 BODY_MARKER，使用 docxcompose 追加 body")
-                doc.save(str(temp_path))
-                master = Document(str(temp_path))
-                composer = Composer(master)
+                doc = Document(str(temp_path))
+                composer = Composer(doc)
                 composer.append(Document(body_path))
                 composer.save(output_path)
-                # 复制图片资源
-                _copy_media_between_docx(body_path, output_path)
-                temp_path.unlink(missing_ok=True)
-                # 跳过后续保存
-                doc = Document(output_path)
-
-            # 保存文档
-            doc.save(output_path)
-
-            # 复制 body 中的图片资源到输出文档
-            copied_images = _copy_media_between_docx(body_path, output_path)
-            if copied_images > 0:
-                print(f"  已复制 {copied_images} 个图片资源")
 
         else:
             # 没有 body 文件，删除 BODY_MARKER 段落并保存
+            doc = Document(str(temp_path))
             body_elem = doc.element.body
             for elem in list(body_elem):
-                if elem.tag.endswith('}p'):
-                    text = ''.join(t.text for t in elem.iter() if t.text)
-                    if BODY_MARKER in text:
-                        body_elem.remove(elem)
-                        print(f"  已删除 BODY_MARKER（无 body 文件）")
-                        break
+                text = ''.join(t.text or '' for t in elem.iter() if t.text)
+                if BODY_MARKER in text:
+                    body_elem.remove(elem)
+                    print(f"  已删除 BODY_MARKER（无 body 文件）")
+                    break
             doc.save(output_path)
 
         # 7. 清理临时文件

@@ -385,7 +385,7 @@ def _search_field_in_table(
     aliases: List[str],
     field_def: Dict[str, Any]
 ) -> Optional[str]:
-    """在单个表格中搜索字段。
+    """在单个表格中搜索字段（递归搜索嵌套表格）。
 
     Args:
         table: 表格数据
@@ -395,6 +395,7 @@ def _search_field_in_table(
     Returns:
         提取值，未找到返回 None
     """
+    # 先在当前表格的行中搜索
     for row in table.get('rows', []):
         cells = row.get('cells', [])
 
@@ -414,6 +415,12 @@ def _search_field_in_table(
                         )
                         if value:
                             return value
+
+            # 递归搜索单元格内的嵌套表格
+            for nested_table in cell.get('nested_tables', []):
+                value = _search_field_in_table(nested_table, aliases, field_def)
+                if value:
+                    return value
 
     return None
 
