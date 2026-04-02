@@ -785,6 +785,49 @@ def insert_abstract_to_cell(doc: Document, abstract_doc: Document, marker: str) 
     return False
 
 
+def _insert_abstract_at_paragraph(doc: Document, abstract_doc: Document, marker: str) -> bool:
+    """在段落中的 marker 位置插入 abstract 内容。
+
+    当 abstract 不在表格单元格中时使用此方法。
+
+    Args:
+        doc: 目标文档
+        abstract_doc: abstract 文档
+        marker: 占位符标记
+
+    Returns:
+        是否成功插入
+    """
+    body_elem = doc.element.body
+    all_elements = list(body_elem)
+
+    for i, elem in enumerate(all_elements):
+        if elem.tag.endswith('}p'):
+            text = ''.join(t.text for t in elem.iter() if t.text)
+            if marker in text:
+                # 找到 marker 段落，删除它并在该位置插入 abstract 内容
+                insert_idx = i
+
+                # 删除 marker 段落
+                body_elem.remove(elem)
+
+                # 在该位置插入 abstract 内容（倒序插入以保持顺序）
+                abstract_elements = list(abstract_doc.element.body)
+                for j, abs_elem in enumerate(reversed(abstract_elements)):
+                    tag = abs_elem.tag.split('}')[-1]
+                    if tag in ['p', 'tbl', 'sdt']:
+                        # 检查是否是空段落
+                        if tag == 'p':
+                            para_text = ''.join(t.text for t in abs_elem.iter() if t.text)
+                            if not para_text.strip():
+                                continue  # 跳过空段落
+                        body_elem.insert(insert_idx, deepcopy(abs_elem))
+
+                return True
+
+    return False
+
+
 def insert_body_at_marker_compose(doc_path: str, body_path: str, marker: str, output_path: str) -> bool:
     """使用 docxcompose 在标记位置插入 body 内容。
 
@@ -1416,76 +1459,124 @@ def render_report(
         # 清理修复后的临时模板
         fixed_template_path.unlink(missing_ok=True)
 
-        # 5. 找到 BODY_MARKER 位置
+        # 5. 处理 ABSTRACT_MARKER - 在表格单元格中插入 abstract 内容
         doc = Document(str(temp_path))
 
-        # 找到 marker 位置的段落索引
-        marker_para_idx = None
-        all_elements = list(doc.element.body)
+        if Path(abstract_path).exists() and Path(abstract_path).stat().st_size > 0:
+            abstract_doc = Document(abstract_path)
+            abstract_inserted = insert_abstract_to_cell(doc, abstract_doc, ABSTRACT_MARKER)
+            if abstract_inserted:
+                print(f"  已在 ABSTRACT_MARKER 位置插入 abstract")
+            else:
+                # 如果没有在表格中找到，尝试在段落中查找并替换
+                abstract_inserted = _insert_abstract_at_paragraph(doc, abstract_doc, ABSTRACT_MARKER)
+                if abstract_inserted:
+                    print(f"  已在段落中插入 abstract")
+                else:
+                    print(f"  ⚠️ 未找到 ABSTRACT_MARKER，abstract 未插入")
+
+        # 保存处理 abstract 后的文档
+        doc.save(str(temp_path))
+
+        # 6. 处理 BODY_MARKER - 在占位符位置插入 body 内容
+        doc = Document(str(temp_path))
+
+        # 找到 BODY_MARKER 位置的元素索引
+        body_elem = doc.element.body
+        all_elements = list(body_elem)
+        marker_idx = None
+
         for i, elem in enumerate(all_elements):
             if elem.tag.endswith('}p'):
                 text = ''.join(t.text for t in elem.iter() if t.text)
                 if BODY_MARKER in text:
-                    marker_para_idx = i
+                    marker_idx = i
                     print(f"  找到 body 占位符位置: 第 {i} 个元素")
                     break
 
-        if marker_para_idx is not None and Path(body_path).exists() and Path(body_path).stat().st_size > 0:
-            # 策略：将文档在 marker 处分成两部分，用 composer 合并
+        if marker_idx is not None and Path(body_path).exists() and Path(body_path).stat().st_size > 0:
+            # 策略：将文档在 marker 处分成三部分
+            # part1 = marker 之前的内容
+            # body = 要插入的正文
+            # part3 = marker 之后的内容（包括法律附录）
+
             from docx import Document as DocxDocument
 
-            # 5.1 删除 marker 段落，得到 part1
-            body_elem = doc.element.body
+            # 6.1 创建 part1（marker 之前的内容）
+            part1_doc = DocxDocument()
+            # 复制 marker 之前的所有元素
+            for elem in all_elements[:marker_idx]:
+                tag = elem.tag.split('}')[-1]
+                if tag in ['p', 'tbl', 'sdt']:
+                    part1_doc.element.body.append(deepcopy(elem))
+
+            part1_path = Path(output_path).parent / "temp_part1.docx"
+            part1_doc.save(str(part1_path))
+
+            # 6.2 创建 part3（marker 之后的内容，跳过 marker 本身）
+            part3_doc = DocxDocument()
+            has_part3_content = False
+            for elem in all_elements[marker_idx + 1:]:
+                tag = elem.tag.split('}')[-1]
+                if tag in ['p', 'tbl', 'sdt']:
+                    part3_doc.element.body.append(deepcopy(elem))
+                    has_part3_content = True
+
+            part3_path = Path(output_path).parent / "temp_part3.docx"
+            if has_part3_content:
+                part3_doc.save(str(part3_path))
+
+            # 6.3 加载 body 文档
+            body_doc = DocxDocument(body_path)
+
+            # 6.4 使用 docxcompose 合并：part1 + body + part3
+            master = DocxDocument(str(part1_path))
+            composer = Composer(master)
+
+            # 追加 body
+            composer.append(body_doc)
+
+            # 追加 part3（如果有内容）
+            if has_part3_content:
+                part3_for_merge = DocxDocument(str(part3_path))
+                composer.append(part3_for_merge)
+
+            # 保存最终文档
+            composer.save(output_path)
+
+            # 6.5 清理临时文件
+            part1_path.unlink(missing_ok=True)
+            if has_part3_content:
+                part3_path.unlink(missing_ok=True)
+
+            print(f"  已在 BODY_MARKER 位置插入 body（保留后续内容）")
+
+        elif marker_idx is None:
+            # 没有找到 marker，直接追加 body
+            from docx import Document as DocxDocument
+            master = DocxDocument(str(temp_path))
+            composer = Composer(master)
+            if Path(body_path).exists() and Path(body_path).stat().st_size > 0:
+                body_doc = DocxDocument(body_path)
+                composer.append(body_doc)
+                print(f"  ⚠️ 未找到 body 占位符，直接追加 body 到末尾")
+            composer.save(output_path)
+
+        else:
+            # 没有 body 文件，直接保存（删除 marker）
+            # 删除 BODY_MARKER 段落
             for elem in list(body_elem):
                 if elem.tag.endswith('}p'):
                     text = ''.join(t.text for t in elem.iter() if t.text)
                     if BODY_MARKER in text:
                         body_elem.remove(elem)
                         break
-
-            # 保存 part1
-            part1_path = Path(output_path).parent / "temp_part1.docx"
-            doc.save(str(part1_path))
-
-            # 5.2 加载 body 文档作为 part2
-            body_doc = DocxDocument(body_path)
-            part2_path = Path(output_path).parent / "temp_part2.docx"
-            body_doc.save(str(part2_path))
-
-            # 5.3 使用 docxcompose 合并：part1 + body + part2
-            master = DocxDocument(str(part1_path))
-            composer = Composer(master)
-
-            body_for_merge = DocxDocument(str(part2_path))
-            composer.append(body_for_merge)
-
-            # 保存最终文档
-            composer.save(output_path)
-
-            # 5.4 清理临时文件
-            part1_path.unlink(missing_ok=True)
-            part2_path.unlink(missing_ok=True)
-
-            print(f"  已使用 docxcompose 拼接 body")
-
-        elif marker_para_idx is None:
-            # 没有找到 marker，直接追加 body
-            master = DocxDocument(str(temp_path))
-            composer = Composer(master)
-            if Path(body_path).exists() and Path(body_path).stat().st_size > 0:
-                body_doc = DocxDocument(body_path)
-                composer.append(body_doc)
-                print(f"  未找到 body 占位符，直接追加 body")
-            composer.save(output_path)
-
-        else:
-            # 没有 body，直接保存
             doc.save(output_path)
 
-        # 6. 清理临时文件
+        # 7. 清理临时文件
         temp_path.unlink(missing_ok=True)
 
-        # 11. 验证输出
+        # 8. 验证输出
         final_doc = Document(output_path)
         image_count = sum(1 for rel in final_doc.part.rels.values() if 'image' in rel.reltype)
 
