@@ -1339,7 +1339,19 @@ def render_report(
         # 7. 保存最终文档
         doc.save(output_path)
 
-        # 8. 清理临时文件
+        # 8. 复制 body 的媒体资源（图片等）到输出文档
+        if Path(body_path).exists():
+            copied_media = _copy_media_between_docx(body_path, output_path)
+            if copied_media > 0:
+                print(f"  已复制 {copied_media} 个 body 媒体资源")
+
+        # 8.5 复制 abstract 的媒体资源（如果有）
+        if Path(abstract_path).exists():
+            copied_abstract_media = _copy_media_between_docx(abstract_path, output_path)
+            if copied_abstract_media > 0:
+                print(f"  已复制 {copied_abstract_media} 个 abstract 媒体资源")
+
+        # 9. 清理临时文件
         temp_path.unlink(missing_ok=True)
 
         # 11. 验证输出
@@ -1483,52 +1495,171 @@ def _clean_body_empty_paragraphs(body_doc: Document) -> None:
             break
 
 
-def _copy_images_from_body(master_doc: Document, body_doc: Document) -> int:
-    """从 body 文档复制图片资源到主文档。
+def _copy_media_between_docx(source_path: str, target_path: str) -> int:
+    """从源 docx 复制所有媒体资源到目标 docx。
+
+    使用 zipfile 直接操作，确保图片文件被正确复制。
+    同时更新 rels 文件中的引用关系。
 
     Args:
-        master_doc: 主文档
-        body_doc: body 文档
+        source_path: 源 docx 文件路径（如 body.docx）
+        target_path: 目标 docx 文件路径（如 output.docx）
 
     Returns:
-        复制的图片数量
+        复制的媒体文件数量
     """
+    import zipfile
+    import os
+    from lxml import etree
+
     copied_count = 0
 
     try:
-        # 获取 body 文档中的所有图片关系
-        for rel_id, rel in body_doc.part.rels.items():
-            if 'image' in rel.reltype:
-                # 获取图片数据
-                image_part = rel.target_part
-                image_blob = image_part.blob
-                content_type = image_part.content_type
+        # 读取源文档的媒体文件和关系
+        source_media = {}  # {media/imageN.xxx: bytes}
+        source_rels = {}   # {rIdN: media/imageN.xxx}
 
-                # 添加到主文档
-                # 注意：这里的 rel_id 可能会改变，需要更新引用
-                # 但由于我们用 deepcopy 复制了 XML，引用已经存在
-                # 只需要确保图片资源存在即可
+        with zipfile.ZipFile(source_path, 'r') as z:
+            for name in z.namelist():
+                if name.startswith('word/media/'):
+                    # 提取媒体文件名（去掉 word/ 前缀）
+                    media_name = name[5:]  # media/imageN.xxx
+                    source_media[media_name] = z.read(name)
 
-                # 检查主文档是否已有该图片
-                image_exists = False
-                for master_rel in master_doc.part.rels.values():
-                    if 'image' in master_rel.reltype:
-                        if master_rel.target_part.blob == image_blob:
-                            image_exists = True
-                            break
+            # 读取源文档的关系文件
+            if 'word/_rels/document.xml.rels' in z.namelist():
+                rels_xml = z.read('word/_rels/document.xml.rels')
+                rels_tree = etree.fromstring(rels_xml)
+                ns = {'r': 'http://schemas.openxmlformats.org/package/2006/relationships'}
+                for rel in rels_tree.findall('r:Relationship', ns):
+                    rel_id = rel.get('Id')
+                    target = rel.get('Target')
+                    rel_type = rel.get('Type')
+                    if target and target.startswith('media/') and 'image' in rel_type:
+                        source_rels[rel_id] = target
 
-                if not image_exists:
-                    # 添加新图片到主文档
-                    # 使用相同的 rel_id 以保持引用一致
-                    from docx.opc.constants import RELATIONSHIP_TYPE as RT
-                    master_doc.part.relate_to(image_part, RT.IMAGE, rel_id)
-                    copied_count += 1
+        if not source_media:
+            return 0
+
+        # 读取目标文档
+        target_media = set()
+        target_rels_xml = None
+        target_files = {}
+
+        with zipfile.ZipFile(target_path, 'r') as z:
+            for name in z.namelist():
+                if name.startswith('word/media/'):
+                    media_name = name[5:]
+                    target_media.add(media_name)
+                target_files[name] = z.read(name)
+
+            if 'word/_rels/document.xml.rels' in z.namelist():
+                target_rels_xml = target_files['word/_rels/document.xml.rels']
+
+        # 找出目标文档中已有的最大 image 编号
+        max_image_num = 0
+        for media_name in target_media:
+            if media_name.startswith('media/image'):
+                try:
+                    # 提取数字部分：media/image1.png -> 1
+                    num_str = media_name[11:].split('.')[0]
+                    num = int(num_str)
+                    if num > max_image_num:
+                        max_image_num = num
+                except ValueError:
+                    pass
+
+        # 准备需要复制的媒体文件（重命名以避免冲突）
+        media_rename_map = {}  # {原 media/imageN.xxx: 新 media/imageM.xxx}
+
+        for media_name, media_bytes in source_media.items():
+            if media_name in target_media:
+                # 检查内容是否相同
+                existing_bytes = None
+                with zipfile.ZipFile(target_path, 'r') as z:
+                    existing_bytes = z.read('word/' + media_name)
+                if existing_bytes == media_bytes:
+                    # 内容相同，不需要复制
+                    media_rename_map[media_name] = media_name
+                    continue
+
+            # 需要复制，生成新文件名
+            max_image_num += 1
+            ext = media_name.rsplit('.', 1)[-1] if '.' in media_name else 'png'
+            new_media_name = f'media/image{max_image_num}.{ext}'
+            media_rename_map[media_name] = new_media_name
+            target_files['word/' + new_media_name] = media_bytes
+            copied_count += 1
+
+        # 更新目标文档的 rels 文件
+        if target_rels_xml and source_rels:
+            target_rels_tree = etree.fromstring(target_rels_xml)
+            ns = {'r': 'http://schemas.openxmlformats.org/package/2006/relationships'}
+            nsmap = {None: 'http://schemas.openxmlformats.org/package/2006/relationships'}
+
+            # 找出目标文档中已有的 rId
+            existing_rids = set()
+            for rel in target_rels_tree.findall('r:Relationship', ns):
+                existing_rids.add(rel.get('Id'))
+
+            # 添加新的图片关系
+            for rel_id, old_target in source_rels.items():
+                if rel_id not in existing_rids and old_target in media_rename_map:
+                    new_target = media_rename_map[old_target]
+                    new_rel = etree.SubElement(target_rels_tree, 'Relationship')
+                    new_rel.set('Id', rel_id)
+                    new_rel.set('Type', 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image')
+                    new_rel.set('Target', new_target)
+
+            # 更新 rels 文件内容
+            target_files['word/_rels/document.xml.rels'] = etree.tostring(
+                target_rels_tree, xml_declaration=True, encoding='UTF-8', standalone=True
+            )
+
+        # 更新 [Content_Types].xml 以包含新的媒体类型
+        if '[Content_Types].xml' in target_files:
+            ct_tree = etree.fromstring(target_files['[Content_Types].xml'])
+            ct_ns = {'ct': 'http://schemas.openxmlformats.org/package/2006/content-types'}
+
+            # 检查是否需要添加扩展名映射
+            existing_exts = set()
+            for default in ct_tree.findall('ct:Default', ct_ns):
+                existing_exts.add(default.get('Extension', '').lower())
+
+            ext_content_types = {
+                'png': 'image/png',
+                'jpeg': 'image/jpeg',
+                'jpg': 'image/jpeg',
+                'gif': 'image/gif',
+                'bmp': 'image/bmp',
+                'tiff': 'image/tiff',
+                'emf': 'image/x-emf',
+                'wmf': 'image/x-wmf',
+            }
+
+            for media_name in media_rename_map.values():
+                ext = media_name.rsplit('.', 1)[-1].lower() if '.' in media_name else ''
+                if ext and ext not in existing_exts and ext in ext_content_types:
+                    new_default = etree.SubElement(ct_tree, '{http://schemas.openxmlformats.org/package/2006/content-types}Default')
+                    new_default.set('Extension', ext)
+                    new_default.set('ContentType', ext_content_types[ext])
+                    existing_exts.add(ext)
+
+            target_files['[Content_Types].xml'] = etree.tostring(
+                ct_tree, xml_declaration=True, encoding='UTF-8', standalone=True
+            )
+
+        # 重新写入目标文档
+        if copied_count > 0:
+            os.remove(target_path)
+            with zipfile.ZipFile(target_path, 'w', zipfile.ZIP_DEFLATED) as z:
+                for name, content in target_files.items():
+                    z.writestr(name, content)
 
     except Exception as e:
-        print(f"  复制图片时出错: {e}")
-
-    if copied_count > 0:
-        print(f"  已复制 {copied_count} 张图片")
+        print(f"  复制媒体资源时出错: {e}")
+        import traceback
+        traceback.print_exc()
 
     return copied_count
 
