@@ -300,6 +300,99 @@ def extract_abstract(draft_path: str, scope: str, output_path: Optional[str] = N
         return out_path
 
 
+def _find_sectpr_margins_for_range(elements: list, start_idx: int, end_idx: int, W: str) -> Optional[Dict[str, str]]:
+    """查找适用于指定范围内容的 sectPr 页边距设置。
+
+    Word 文档中，sectPr 定义的是**该节结束时**的属性。
+    因此，对于 start_idx 到 end_idx 范围内的内容：
+    1. 首先查找范围内是否有 sectPr（定义该范围使用的页边距）
+    2. 如果范围内没有 sectPr，查找范围后最近的 sectPr（不包括文档末尾的 sectPr）
+    3. 如果都找不到，返回 None（使用文档末尾的 sectPr）
+
+    Args:
+        elements: body 的直接子元素列表
+        start_idx: 开始索引
+        end_idx: 结束索引
+        W: Word 命名空间前缀
+
+    Returns:
+        页边距字典 {'top': ..., 'bottom': ..., 'left': ..., 'right': ...}，如果找不到返回 None
+    """
+    def _extract_margins(sectPr):
+        """从 sectPr 提取页边距"""
+        pgMar = sectPr.find(f'{W}pgMar')
+        if pgMar is not None:
+            margins = {}
+            for attr in ['top', 'bottom', 'left', 'right', 'header', 'footer', 'gutter']:
+                val = pgMar.get(f'{W}{attr}')
+                if val is not None:
+                    margins[attr] = val
+            if margins:
+                return margins
+        return None
+
+    # 1. 首先在范围内查找 sectPr（从后往前找）
+    for i in range(min(end_idx, len(elements)) - 1, start_idx - 1, -1):
+        elem = elements[i]
+        tag = elem.tag.split('}')[-1]
+
+        if tag == 'p':
+            pPr = elem.find(f'{W}pPr')
+            if pPr is not None:
+                sectPr = pPr.find(f'{W}sectPr')
+                if sectPr is not None:
+                    margins = _extract_margins(sectPr)
+                    if margins:
+                        print(f"找到范围内的 sectPr（元素 {i}），页边距: {margins}")
+                        return margins
+
+    # 2. 范围内没有 sectPr，查找范围后最近的 sectPr（不包括文档末尾的直接 sectPr）
+    for i in range(end_idx, len(elements)):
+        elem = elements[i]
+        tag = elem.tag.split('}')[-1]
+
+        # 跳过文档末尾的直接 sectPr
+        if tag == 'sectPr':
+            continue
+
+        if tag == 'p':
+            pPr = elem.find(f'{W}pPr')
+            if pPr is not None:
+                sectPr = pPr.find(f'{W}sectPr')
+                if sectPr is not None:
+                    margins = _extract_margins(sectPr)
+                    if margins:
+                        print(f"找到范围后的 sectPr（元素 {i}），页边距: {margins}")
+                        return margins
+
+    return None
+
+
+def _apply_margins_to_final_sectpr(body, margins: Dict[str, str], W: str) -> bool:
+    """将页边距应用到文档末尾的 sectPr。
+
+    Args:
+        body: document.xml 的 body 元素
+        margins: 页边距字典
+        W: Word 命名空间前缀
+
+    Returns:
+        是否成功
+    """
+    # 找到末尾的 sectPr
+    elements = list(body)
+    for elem in reversed(elements):
+        tag = elem.tag.split('}')[-1]
+        if tag == 'sectPr':
+            pgMar = elem.find(f'{W}pgMar')
+            if pgMar is not None:
+                for attr, val in margins.items():
+                    pgMar.set(f'{W}{attr}', val)
+                print(f"已将页边距应用到最终 sectPr: {margins}")
+                return True
+    return False
+
+
 def extract_body(draft_path: str, scope: str, output_path: Optional[str] = None,
                  start_marker: Optional[str] = None, end_marker: Optional[str] = None) -> Path:
     """提取正文片段，保留完整格式、表格和图片。
@@ -420,6 +513,10 @@ def extract_body(draft_path: str, scope: str, output_path: Optional[str] = None,
 
         print(f"正文范围: 元素 {start_idx} - {end_idx}")
 
+        # 🔑 关键：在删除元素前，找到范围内的 sectPr 页边距
+        # 因为这些 sectPr 定义了正文内容应该使用的页边距
+        margins_to_preserve = _find_sectpr_margins_for_range(elements, start_idx, end_idx, W)
+
         # 删除范围外的元素
         elements_to_remove = []
 
@@ -440,6 +537,10 @@ def extract_body(draft_path: str, scope: str, output_path: Optional[str] = None,
                 body.remove(elem)
             except ValueError:
                 pass
+
+        # 🔑 关键：将保存的页边距应用到最终的 sectPr
+        if margins_to_preserve:
+            _apply_margins_to_final_sectpr(body, margins_to_preserve, W)
 
         doc.save(str(out_path))
 
@@ -1270,6 +1371,10 @@ def extract_english_summary(draft_path: str, scope: str, output_path: Optional[s
 
         print(f"英文摘要范围: 元素 {start_idx} - {end_idx}")
 
+        # 🔑 关键：在删除元素前，找到范围内的 sectPr 页边距
+        # 因为这些 sectPr 定义了英文摘要内容应该使用的页边距
+        margins_to_preserve = _find_sectpr_margins_for_range(elements, start_idx, end_idx, W)
+
         # 删除范围外的元素
         elements_to_remove = []
 
@@ -1290,6 +1395,10 @@ def extract_english_summary(draft_path: str, scope: str, output_path: Optional[s
                 body.remove(elem)
             except ValueError:
                 pass
+
+        # 🔑 关键：将保存的页边距应用到最终的 sectPr
+        if margins_to_preserve:
+            _apply_margins_to_final_sectpr(body, margins_to_preserve, W)
 
         doc.save(str(out_path))
 
