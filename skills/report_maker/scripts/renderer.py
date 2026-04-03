@@ -1197,36 +1197,53 @@ def _apply_english_summary_margins(docx_path: str, es_margins: Dict[str, str]) -
             return False
 
         # 找到法律附录的开始位置
-        # 标记：包含 "附录APPENDIX" 或 "IMPORTANT DISCLOSURE" 的段落
-        appendix_keywords = ['附录APPENDIX', 'APPENDIX', 'IMPORTANT DISCLOSURE', '重要声明']
-        appendix_para = None
+        # 标记：包含 "附录APPENDIX" 的元素（可能是段落或表格）
+        # 注意：不要匹配 "APPENDIX 1"（这是 english_summary 的一部分）
         appendix_idx = None
 
         all_elements = list(body)
         for idx, elem in enumerate(all_elements):
-            if elem.tag == f'{W}p':
-                text = ''.join(t.text or '' for t in elem.iter(f'{W}t'))
-                text_upper = text.upper().replace(' ', '')
-                for kw in appendix_keywords:
-                    if kw.upper().replace(' ', '') in text_upper:
-                        appendix_para = elem
-                        appendix_idx = idx
-                        break
-                if appendix_para is not None:
-                    break
+            # 获取元素中的所有文本
+            text = ''.join(t.text or '' for t in elem.iter(f'{W}t'))
 
-        if appendix_para is None or appendix_idx is None or appendix_idx == 0:
+            # 只匹配 "附录APPENDIX"，不匹配 "APPENDIX 1"
+            if '附录APPENDIX' in text:
+                appendix_idx = idx
+                print(f"  找到法律附录 '附录APPENDIX' 在 body 子元素 {idx}")
+                break
+            # 也检查 "重要信息披露" 或 "IMPORTANT DISCLOSURES"
+            if '重要信息披露' in text or 'IMPORTANT DISCLOSURES' in text.upper():
+                appendix_idx = idx
+                print(f"  找到法律附录 '重要信息披露' 在 body 子元素 {idx}")
+                break
+
+        if appendix_idx is None or appendix_idx == 0:
             print(f"  english_summary: 未找到法律附录位置，无法插入分节符")
             return False
 
-        # 在法律附录之前的段落添加 sectPr（连续分节符）
-        # 找到法律附录前的最后一个段落
+        # 在法律附录之前找到最后一个段落
         prev_para = None
+        prev_para_idx = None
         for i in range(appendix_idx - 1, -1, -1):
             elem = all_elements[i]
             if elem.tag == f'{W}p':
-                prev_para = elem
-                break
+                # 跳过空段落
+                text = ''.join(t.text or '' for t in elem.iter(f'{W}t')).strip()
+                if text:
+                    prev_para = elem
+                    prev_para_idx = i
+                    print(f"  在 body 子元素 {i} 添加 sectPr: {text[:50]}")
+                    break
+
+        if prev_para is None:
+            # 如果没有找到非空段落，使用最后一个段落
+            for i in range(appendix_idx - 1, -1, -1):
+                elem = all_elements[i]
+                if elem.tag == f'{W}p':
+                    prev_para = elem
+                    prev_para_idx = i
+                    print(f"  在空段落 body 子元素 {i} 添加 sectPr")
+                    break
 
         if prev_para is None:
             print(f"  english_summary: 法律附录前没有段落，无法插入分节符")
@@ -1247,7 +1264,7 @@ def _apply_english_summary_margins(docx_path: str, es_margins: Dict[str, str]) -
                 pgMar = etree.SubElement(existing_sectPr, f'{W}pgMar')
             for attr, val in es_margins.items():
                 pgMar.set(f'{W}{attr}', val)
-            print(f"  english_summary: 已更新分节符页边距: top={es_margins.get('top')}, bottom={es_margins.get('bottom')}")
+            print(f"  english_summary: 已更新分节符页边距: top={es_margins.get('top')}, bottom={es_margins.get('bottom')}, left={es_margins.get('left')}")
         else:
             # 创建新的 sectPr（连续分节符）
             sectPr = etree.SubElement(pPr, f'{W}sectPr')
@@ -1270,7 +1287,7 @@ def _apply_english_summary_margins(docx_path: str, es_margins: Dict[str, str]) -
                     for attr in pgSz.attrib:
                         new_pgSz.set(attr, pgSz.get(attr))
 
-            print(f"  english_summary: 已在法律附录前插入分节符，页边距: top={es_margins.get('top')}, bottom={es_margins.get('bottom')}")
+            print(f"  english_summary: 已在法律附录前插入分节符，页边距: top={es_margins.get('top')}, bottom={es_margins.get('bottom')}, left={es_margins.get('left')}")
 
         # 保存
         files['word/document.xml'] = etree.tostring(
