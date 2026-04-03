@@ -10,7 +10,7 @@ description: "当用户说「做研报」、「生成报告」、「写研报」
 **文件交互**：
 - 询问用户输入文件（草稿 .docx）的路径
 - 询问用户输出目录位置（可以选择已有目录，或新建目录）
-- 最终输出文件保存在用户指定的输出目录下的 `output.docx`
+- 最终输出文件命名格式：`公司名(ticker)：标题.docx`（如：`西锐飞机(2507 HK)：首次覆盖：安全、创新与强大生态系统铸就西锐私人航空全球领导者地位.docx`）
 
 ---
 
@@ -477,14 +477,16 @@ report_dir = Path('reports/cirrus(2507)_20251021')
 elements_path = report_dir / 'elements.yaml'
 abstract_path = report_dir / 'abstract.docx'
 body_path = report_dir / 'body.docx'
-output_path = report_dir / 'output.docx'
+
+# 加载 elements.yaml
+elements = common.load_yaml(elements_path)
+
+# 生成输出文件路径（格式：公司名(ticker)：标题.docx）
+output_path = common.get_report_output_path(report_dir, elements)
 
 # 模板路径（用户已确认选择的模板）
 template_name = "company"  # 用户选择的模板
 template_path = f'templates/{template_name}/template.docx'
-
-# 加载 elements.yaml
-elements = common.load_yaml(elements_path)
 
 # 渲染报告
 renderer.render_report(
@@ -523,11 +525,11 @@ def render_report(
 | `elements` | `Dict` | 从 `elements.yaml` 加载的要素字典 | `{'report_date': '21 Oct 2025', ...}` |
 | `abstract_path` | `str` | 摘要片段文件路径 | `reports/cirrus(2507)_20251021/abstract.docx` |
 | `body_path` | `str` | 正文片段文件路径 | `reports/cirrus(2507)_20251021/body.docx` |
-| `output_path` | `str` | 输出文件路径 | `reports/cirrus(2507)_20251021/output.docx` |
+| `output_path` | `str` | 输出文件路径（使用 `common.get_report_output_path()` 生成） | `reports/xxx/西锐飞机(2507 HK)：首次覆盖：....docx` |
 
 ### 4. 验证占位符填充
 
-**必须验证**：渲染后的 output.docx 中不存在任何 `{{}}` 占位符。
+**必须验证**：渲染后的报告中不存在任何 `{{}}` 占位符。
 
 ```python
 import re
@@ -574,8 +576,8 @@ reports/<report_name>/
 ├── elements.yaml        # 提取的要素
 ├── abstract.docx        # 摘要片段
 ├── body.docx            # 正文片段
-├── output.docx          # ✅ 最终 Word 文档
-└── output.pdf           # ✅ 最终 PDF 文档（可选）
+├── 公司名(ticker)：标题.docx  # ✅ 最终 Word 文档
+└── 公司名(ticker)：标题.pdf   # ✅ 最终 PDF 文档（可选）
 ```
 
 ---
@@ -615,7 +617,7 @@ body: "body.docx"
 3. **第二阶段无 LLM** - 渲染完全使用 Python 脚本，不需要 LLM 介入
 4. **格式保留是关键** - 摘要和正文必须保留原始格式（字体、图片、表格等）
 5. **工作目录要求** - 所有操作必须从项目根目录执行，否则找不到模板文件
-6. **输出位置** - 报告保存在用户指定的输出目录下的 `output.docx`
+6. **输出命名** - 报告文件名格式：`公司名(ticker)：标题.docx`，使用 `common.get_report_output_path()` 生成
 7. **依赖检查** - 确保已安装 docxtpl 和 docxcompose
 8. **空字段处理** - 必须保留空字段，值为 `""`
 9. **字段严格一致性** - elements.yaml 必须与 schema.yaml 完全一致
