@@ -291,6 +291,12 @@ full_document_text = '\n'.join(all_text_lines)
 3. has_body: true/false
 4. body_scope: "位置描述"
 
+## 第四部分：英文摘要提取
+1. 是否有英文摘要部分？（通常在正文之后、附录之前的独立页面）
+2. 如果有英文摘要，请指出其位置
+3. has_english_summary: true/false
+4. english_summary_scope: "位置描述"
+
 ## 输出格式
 请返回 YAML 格式：
 ```yaml
@@ -307,6 +313,10 @@ abstract_scope: "位置描述"
 # 正文信息
 has_body: true/false
 body_scope: "位置描述"
+
+# 英文摘要信息
+has_english_summary: true/false
+english_summary_scope: "位置描述"
 ```
 ```
 
@@ -322,16 +332,26 @@ llm_result = {
     "current_price": "60.40",
     # ... 其他字段 ...
 
-    # 摘要/正文信息
+    # 摘要信息
     "has_abstract": True,
     "abstract_scope": "首页右侧表格",
+
+    # 正文信息
     "has_body": True,
-    "body_scope": "从目录开始，到附录之前"
+    "body_scope": "从目录开始，到附录之前",
+
+    # 英文摘要信息
+    "has_english_summary": True,
+    "english_summary_scope": "正文之后一页"
 }
 
 # 分离 elements 和位置信息
-elements = {k: v for k, v in llm_result.items()
-            if k not in ['has_abstract', 'abstract_scope', 'has_body', 'body_scope']}
+position_keys = [
+    'has_abstract', 'abstract_scope',
+    'has_body', 'body_scope',
+    'has_english_summary', 'english_summary_scope'
+]
+elements = {k: v for k, v in llm_result.items() if k not in position_keys}
 ```
 
 **关键优势**：
@@ -363,12 +383,20 @@ if llm_result['has_body']:
         llm_result['body_scope'],
         output_path=f"{output_dir}/body.docx"
     )
+
+if llm_result.get('has_english_summary'):
+    splitter.extract_english_summary(
+        draft_path,
+        llm_result.get('english_summary_scope', '正文之后一页'),
+        output_path=f"{output_dir}/english_summary.docx"
+    )
 ```
 
 **格式保留机制**：
 - 使用 `deepcopy` 复制 XML 元素，保留所有格式信息
 - 摘要：复制单元格内的完整段落（字体、颜色、加粗等）
 - 正文：复制整个文档片段（包括图片、表格、目录控件）
+- 英文摘要：从正文结束位置到下一个分页符
 
 ### 6. 一次性确认所有字段
 
@@ -386,6 +414,8 @@ if llm_result['has_body']:
 | abstract_scope | `首页右侧表格` | ✅ |
 | has_body | `True` | ✅ |
 | body_scope | `从目录开始` | ✅ |
+| has_english_summary | `True` | ✅ |
+| english_summary_scope | `正文之后一页` | ✅ |
 ```
 
 用户可以一次性确认或修正多个字段。
@@ -396,10 +426,11 @@ if llm_result['has_body']:
 
 ```
 <输出目录>/
-├── draft.docx           # 原始草稿（复制）
-├── elements.yaml        # 提取的要素（含位置信息）
-├── abstract.docx        # 摘要片段（仅当 has_abstract=True 时，完整保留格式）
-└── body.docx            # 正文片段（仅当 has_body=True 时，完整保留格式）
+├── draft.docx             # 原始草稿（复制）
+├── elements.yaml          # 提取的要素（含位置信息）
+├── abstract.docx          # 摘要片段（仅当 has_abstract=True 时，完整保留格式）
+├── body.docx              # 正文片段（仅当 has_body=True 时，完整保留格式）
+└── english_summary.docx   # 英文摘要片段（仅当 has_english_summary=True 时）
 ```
 
 ### 8. 展示摘要并暂停
@@ -572,10 +603,11 @@ word2pdf convert "C:\reports\report1.docx" -o "C:\reports"
 
 ```
 reports/<report_name>/
-├── draft.docx           # 原始草稿
-├── elements.yaml        # 提取的要素
-├── abstract.docx        # 摘要片段
-├── body.docx            # 正文片段
+├── draft.docx               # 原始草稿
+├── elements.yaml            # 提取的要素
+├── abstract.docx            # 摘要片段
+├── body.docx                # 正文片段
+├── english_summary.docx     # 英文摘要片段（如有）
 ├── 公司名(ticker)：标题.docx  # ✅ 最终 Word 文档
 └── 公司名(ticker)：标题.pdf   # ✅ 最终 PDF 文档（可选）
 ```
@@ -606,6 +638,7 @@ analysts: "[{'chinese_name': '杨斌', 'english_name': 'Bin Yang', 'sfc_code': '
 source: "xxx"
 abstract: "abstract.docx"
 body: "body.docx"
+english_summary: "english_summary.docx"
 ```
 
 ---

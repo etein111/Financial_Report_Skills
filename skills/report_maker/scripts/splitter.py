@@ -81,26 +81,143 @@ def _get_cell_text_lxml(tc_elem) -> str:
     return ''.join(texts)
 
 
-def extract_abstract(draft_path: str, scope: str, output_path: Optional[str] = None) -> Path:
+def extract_fragment_by_markers(
+    draft_path: str,
+    start_marker: str,
+    end_marker: str,
+    output_path: str
+) -> Path:
+    """通用 fragment 提取函数，根据 LLM 识别的开始和结束标记提取内容。
+
+    使用"复制整个文档 → 删除范围外元素"的方式，
+    确保所有格式、图片和表格都被完整保留。
+
+    Args:
+        draft_path: 草稿文件路径
+        start_marker: 开始标记文本（LLM 从草稿中识别）
+        end_marker: 结束标记文本（LLM 从草稿中识别）
+        output_path: 输出路径
+
+    Returns:
+        输出文件路径
+    """
+    if Document is None:
+        return Path(output_path)
+
+    out_path = Path(output_path)
+
+    try:
+        # 复制整个文档（保留所有资源引用）
+        shutil.copy(draft_path, str(out_path))
+
+        # 打开复制的文档进行编辑
+        doc = Document(str(out_path))
+        body = doc.element.body
+        elements = list(body)
+
+        # 找到开始和结束位置
+        start_idx = None
+        end_idx = None
+
+        for i, elem in enumerate(elements):
+            text = ''.join(elem.itertext()).strip()
+            text_upper = text.upper()
+
+            # 找开始位置（不区分大小写）
+            if start_idx is None and start_marker.upper() in text_upper:
+                start_idx = i
+                print(f"找到开始标记: 元素 {i}, 文本: {text[:50]}...")
+
+            # 找结束位置（在找到开始位置之后）
+            if start_idx is not None and end_idx is None and i > start_idx:
+                if end_marker.upper() in text_upper:
+                    end_idx = i
+                    print(f"找到结束标记: 元素 {i}, 文本: {text[:50]}...")
+                    break
+
+        # 如果没找到开始标记
+        if start_idx is None:
+            print(f"警告：未找到开始标记 '{start_marker}'")
+            # 返回空文档
+            empty_doc = Document()
+            empty_doc.save(str(out_path))
+            return out_path
+
+        # 如果没找到结束标记，使用文档末尾
+        if end_idx is None:
+            end_idx = len(elements)
+            print(f"警告：未找到结束标记 '{end_marker}'，使用文档末尾")
+
+        print(f"提取范围: 元素 {start_idx} - {end_idx}")
+
+        # 删除范围外的元素
+        elements_to_remove = []
+
+        # 删除结束位置之后的元素（倒序）
+        for i in range(len(elements) - 1, end_idx - 1, -1):
+            elem = elements[i]
+            tag = elem.tag.split('}')[-1]
+            if tag not in ['sectPr']:
+                elements_to_remove.append(elem)
+
+        # 删除起始位置之前的元素（倒序）
+        for i in range(start_idx - 1, -1, -1):
+            elem = elements[i]
+            tag = elem.tag.split('}')[-1]
+            if tag not in ['sectPr']:
+                elements_to_remove.append(elem)
+
+        # 执行删除
+        for elem in elements_to_remove:
+            try:
+                body.remove(elem)
+            except ValueError:
+                pass
+
+        doc.save(str(out_path))
+
+        # 验证结果
+        final_doc = Document(str(out_path))
+        print(f"Fragment 提取完成: {len(final_doc.paragraphs)} 段落, {len(final_doc.tables)} 表格")
+
+        return out_path
+
+    except Exception as e:
+        print(f"提取 fragment 失败: {e}")
+        import traceback
+        traceback.print_exc()
+        return out_path
+
+
+def extract_abstract(draft_path: str, scope: str, output_path: Optional[str] = None,
+                     start_marker: Optional[str] = None, end_marker: Optional[str] = None) -> Path:
     """提取摘要片段，保留完整格式。
 
-    根据位置描述从草稿中提取摘要区域。
-    使用 deepcopy 保留原始格式（字体、加粗、样式等）。
-
-    注意：使用 lxml 解析 document.xml，确保嵌套表格不漏读。
+    优先使用 LLM 提供的 start_marker 和 end_marker。
+    如果未提供，则使用基于启发式规则的备用逻辑。
 
     Args:
         draft_path: 草稿文件路径
         scope: 位置描述（如"首页右侧"）
         output_path: 输出路径（可选）
+        start_marker: 开始标记文本（LLM 从草稿中识别）
+        end_marker: 结束标记文本（LLM 从草稿中识别）
 
     Returns:
         abstract.docx 文件路径
     """
-    if Document is None:
-        return Path(output_path or common.FILE_ABSTRACT)
-
     out_path = Path(output_path or common.FILE_ABSTRACT)
+
+    # 如果提供了 start_marker 和 end_marker，使用通用函数
+    if start_marker and end_marker:
+        print(f"使用 LLM 提供的标记提取摘要: '{start_marker}' -> '{end_marker}'")
+        return extract_fragment_by_markers(draft_path, start_marker, end_marker, str(out_path))
+
+    # 备用逻辑：使用启发式规则
+    print("使用启发式规则提取摘要（未提供 LLM 标记）")
+
+    if Document is None:
+        return out_path
 
     try:
         doc = Document(draft_path)
@@ -114,23 +231,19 @@ def extract_abstract(draft_path: str, scope: str, output_path: Optional[str] = N
             p.getparent().remove(p)
 
         # 策略1：从首页表格中查找摘要（常见于公司报告模板）
-        # 使用 lxml 确保所有表格都能读取（包括嵌套表格）
         abstract_found = False
         all_tables = _get_all_tables_lxml(draft_path)
 
         if all_tables:
             first_table = all_tables[0]
 
-            # 搜索包含摘要内容特征的单元格
             for row in first_table.findall(f'{W}tr'):
                 for tc in row.findall(f'{W}tc'):
                     cell_text = _get_cell_text_lxml(tc).strip()
-                    # 摘要通常以公司名或关键词开头，且较长
                     if any(marker in cell_text for marker in [
                         '是私人航空业', '是全球', '公司是', '本报告',
                         '投资亮点', '核心观点', '摘要'
                     ]) and len(cell_text) > 200:
-                        # 使用 deepcopy 复制段落，保留所有格式
                         for para_elem in tc.findall(f'{W}p'):
                             if _get_para_text(para_elem).strip():
                                 new_para = deepcopy(para_elem)
@@ -147,12 +260,10 @@ def extract_abstract(draft_path: str, scope: str, output_path: Optional[str] = N
             for para in body.iter(f'{W}p'):
                 text = _get_para_text(para).strip()
 
-                # 开始标记
                 if any(marker in text for marker in ['摘要', '投资亮点', '核心观点']):
                     in_abstract = True
                     continue
 
-                # 结束标记
                 if in_abstract and any(marker in text for marker in ['目录', '1 ', '1.']):
                     break
 
@@ -170,86 +281,107 @@ def extract_abstract(draft_path: str, scope: str, output_path: Optional[str] = N
         return out_path
 
 
-def extract_body(draft_path: str, scope: str, output_path: Optional[str] = None) -> Path:
+def extract_body(draft_path: str, scope: str, output_path: Optional[str] = None,
+                 start_marker: Optional[str] = None, end_marker: Optional[str] = None) -> Path:
     """提取正文片段，保留完整格式、表格和图片。
 
-    使用"复制整个文档 → 删除范围外元素"的方式，
-    确保所有格式、图片和表格都被完整保留。
-
-    包含目录（如果存在）。
+    优先使用 LLM 提供的 start_marker 和 end_marker。
+    如果未提供，则使用基于启发式规则的备用逻辑。
 
     Args:
         draft_path: 草稿文件路径
         scope: 位置描述（如"从第三页开始"）
         output_path: 输出路径（可选）
+        start_marker: 正文开始标记文本（LLM 从草稿中识别）
+        end_marker: 正文结束标记文本（LLM 从草稿中识别）
 
     Returns:
         body.docx 文件路径
     """
-    if Document is None:
-        return Path(output_path or common.FILE_BODY)
-
     out_path = Path(output_path or common.FILE_BODY)
 
+    # 如果提供了 start_marker 和 end_marker，使用通用函数
+    if start_marker and end_marker:
+        print(f"使用 LLM 提供的标记提取正文: '{start_marker}' -> '{end_marker}'")
+        return extract_fragment_by_markers(draft_path, start_marker, end_marker, str(out_path))
+
+    # 备用逻辑：使用启发式规则
+    print("使用启发式规则提取正文（未提供完整 LLM 标记）")
+
+    if Document is None:
+        return out_path
+
     try:
-        # 步骤1：复制整个文档（保留所有资源引用）
+        # 复制整个文档（保留所有资源引用）
         shutil.copy(draft_path, str(out_path))
 
-        # 步骤2：打开复制的文档进行编辑
+        # 打开复制的文档进行编辑
         doc = Document(str(out_path))
         body = doc.element.body
         elements = list(body)
 
-        # 步骤3：找到正文的起始和结束位置
+        # 找到正文的起始和结束位置
         start_idx = None
         end_idx = len(elements)
-        toc_idx = None  # 目录位置
+        toc_idx = None
 
-        # 正文结束标记（附录/免责声明）
-        end_markers = ['重要信息披露', '[Table_disclaimer]', '免责声明', 'APPENDIX', '附录']
+        # 结束标记：优先使用 LLM 提供的 end_marker
+        if end_marker:
+            end_markers = [end_marker]
+            print(f"使用 LLM 提供的结束标记: '{end_marker}'")
+        else:
+            end_markers = [
+                '重要信息披露',
+                '[Table_disclaimer]',
+                '免责声明',
+                'APPENDIX',
+                '附录',
+            ]
+            print("使用默认结束标记列表")
 
-        # 首先找到目录位置和正文结束位置
+        # 找目录位置和正文结束位置
         for i, elem in enumerate(elements):
             text = ''.join(elem.itertext()).strip()
+            text_upper = text.upper()
             tag = elem.tag.split('}')[-1]
 
-            # 找目录位置（"目录"标题或 sdt 目录控件）
+            # 找目录位置
             if toc_idx is None:
-                # 检查是否是目录标题
                 if text == '目录':
                     toc_idx = i
                     print(f"找到目录位置: 元素 {i}")
-                # 检查是否是 sdt 目录控件（Word 自动生成的目录）
                 elif tag == 'sdt' and '目录' in text:
                     toc_idx = i
                     print(f"找到目录控件: 元素 {i}")
 
             # 找结束位置
             for marker in end_markers:
-                if marker in text:
+                if marker.upper() in text_upper:
                     end_idx = i
+                    print(f"找到正文结束标记: 元素 {i}, 匹配 '{marker}', 文本: {text[:50]}...")
                     break
             if end_idx < len(elements):
                 break
 
         # 确定起始位置
-        if toc_idx is not None:
-            # 如果有目录，从目录开始
-            start_idx = toc_idx
-        else:
-            # 如果没有目录，找正文第一章
-            # 正文起始标记（章节1开头）- 排除目录条目（包含Tab+页码）
+        if start_marker:
+            # 使用 LLM 提供的开始标记
             for i, elem in enumerate(elements):
                 text = ''.join(elem.itertext()).strip()
-
-                # 检查是否是正文标题（以 "1 " 开头，但不是目录条目）
+                if start_marker.upper() in text.upper():
+                    start_idx = i
+                    print(f"找到正文开始标记: 元素 {i}, 文本: {text[:50]}...")
+                    break
+        elif toc_idx is not None:
+            start_idx = toc_idx
+        else:
+            # 找正文第一章
+            for i, elem in enumerate(elements):
+                text = ''.join(elem.itertext()).strip()
                 if text.startswith('1 ') or text.startswith('1.'):
-                    # 目录条目通常包含 Tab 字符和页码
-                    # 正文标题通常不包含 Tab 或以数字结尾
-                    if '\t' not in text and not text[-1].isdigit():
+                    if '\t' not in text and text and not text[-1].isdigit():
                         start_idx = i
                         break
-                    # 或者检查是否是 Heading 样式
                     if elem.tag.endswith('}p'):
                         pPr = elem.find('.//{http://schemas.openxmlformats.org/wordprocessingml/2006/main}pStyle')
                         if pPr is not None:
@@ -260,41 +392,33 @@ def extract_body(draft_path: str, scope: str, output_path: Optional[str] = None)
 
         if start_idx is None:
             print("警告：未找到正文起始位置，使用默认值")
-            start_idx = 10  # 默认跳过前10个元素
+            start_idx = 10
 
         print(f"正文范围: 元素 {start_idx} - {end_idx}")
 
-        # 步骤4：删除范围外的元素
+        # 删除范围外的元素
         elements_to_remove = []
 
-        # 删除结束位置之后的元素（倒序）
         for i in range(len(elements) - 1, end_idx - 1, -1):
             elem = elements[i]
             tag = elem.tag.split('}')[-1]
-            if tag not in ['sectPr']:  # 保留节属性
+            if tag not in ['sectPr']:
                 elements_to_remove.append(elem)
 
-        # 删除起始位置之前的元素（倒序）
         for i in range(start_idx - 1, -1, -1):
             elem = elements[i]
             tag = elem.tag.split('}')[-1]
             if tag not in ['sectPr']:
                 elements_to_remove.append(elem)
 
-        # 执行删除
         for elem in elements_to_remove:
             try:
                 body.remove(elem)
             except ValueError:
-                pass  # 元素可能已被删除
+                pass
 
-        # 注意：不重置页边距，保留原始草稿的 section 格式
-        # 原始草稿可能有不同的 section 和边距设置，这是设计意图的一部分
-
-        # 步骤5：保存
         doc.save(str(out_path))
 
-        # 验证结果
         final_doc = Document(str(out_path))
         print(f"正文提取完成: {len(final_doc.paragraphs)} 段落, "
               f"{len(final_doc.tables)} 表格, "
@@ -985,53 +1109,60 @@ def validate_appendix(draft_path: str, schema: Dict[str, Any]) -> Dict[str, Any]
         return {"has_appendix": False, "error": str(e)}
 
 
-def extract_english_summary(draft_path: str, scope: str, output_path: Optional[str] = None) -> Path:
+def extract_english_summary(draft_path: str, scope: str, output_path: Optional[str] = None,
+                            start_marker: Optional[str] = None, end_marker: Optional[str] = None) -> Path:
     """提取英文摘要片段（APPENDIX 1 Summary）。
 
-    英文摘要结构特征：
-    1. 固定开始标记：如 "APPENDIX 1 Summary"、"Summary"、"Executive Summary"
-    2. 处于独立页面（前面有分页符/分节符）
-    3. 结束位置：下一个分页符之前
-
-    使用"复制整个文档 → 删除范围外元素"的方式，
-    确保所有格式、图片和表格都被完整保留。
+    优先使用 LLM 提供的 start_marker 和 end_marker。
+    如果未提供，则使用基于启发式规则的备用逻辑（查找分页符作为结束）。
 
     Args:
         draft_path: 草稿文件路径
         scope: 位置描述（如"正文之后一页"）
         output_path: 输出路径（可选）
+        start_marker: 开始标记文本（LLM 从草稿中识别）
+        end_marker: 结束标记文本（LLM 从草稿中识别）
 
     Returns:
         english_summary.docx 文件路径
     """
-    if Document is None:
-        return Path(output_path or common.FILE_ENGLISH_SUMMARY)
-
     out_path = Path(output_path or common.FILE_ENGLISH_SUMMARY)
 
+    # 如果提供了 start_marker 和 end_marker，使用通用函数
+    if start_marker and end_marker:
+        print(f"使用 LLM 提供的标记提取英文摘要: '{start_marker}' -> '{end_marker}'")
+        return extract_fragment_by_markers(draft_path, start_marker, end_marker, str(out_path))
+
+    # 备用逻辑：使用启发式规则
+    print("使用启发式规则提取英文摘要（未提供完整 LLM 标记）")
+
+    if Document is None:
+        return out_path
+
     try:
-        # 步骤1：复制整个文档（保留所有资源引用）
         shutil.copy(draft_path, str(out_path))
 
-        # 步骤2：打开复制的文档进行编辑
         doc = Document(str(out_path))
         body = doc.element.body
         elements = list(body)
 
         # 英文摘要的起始标记
-        summary_keywords = [
-            'APPENDIX 1 SUMMARY',
-            'APPENDIX 1 Summary',
-            'Appendix 1 Summary',
-            'EXECUTIVE SUMMARY',
-            'Executive Summary',
-        ]
+        if start_marker:
+            summary_keywords = [start_marker]
+        else:
+            summary_keywords = [
+                'APPENDIX 1 SUMMARY',
+                'APPENDIX 1 Summary',
+                'Appendix 1 Summary',
+                'EXECUTIVE SUMMARY',
+                'Executive Summary',
+            ]
 
-        # 步骤3：找到英文摘要的起始和结束位置
+        # 找到英文摘要的起始和结束位置
         start_idx = None
         end_idx = len(elements)
 
-        # 先找到起始位置
+        # 找起始位置
         for i, elem in enumerate(elements):
             text = ''.join(elem.itertext()).strip()
 
@@ -1045,75 +1176,75 @@ def extract_english_summary(draft_path: str, scope: str, output_path: Optional[s
 
         if start_idx is None:
             print("警告：未找到英文摘要起始标记")
-            # 返回空文档
             empty_doc = Document()
             empty_doc.save(str(out_path))
             return out_path
 
-        # 从起始位置之后找分页符作为结束位置
-        for i in range(start_idx + 1, len(elements)):
-            elem = elements[i]
-            tag = elem.tag.split('}')[-1]
+        # 找结束位置
+        if end_marker:
+            # 使用 LLM 提供的结束标记
+            for i in range(start_idx + 1, len(elements)):
+                text = ''.join(elements[i].itertext()).strip()
+                if end_marker.upper() in text.upper():
+                    end_idx = i
+                    print(f"找到英文摘要结束标记: 元素 {i}")
+                    break
+        else:
+            # 备用：查找分页符
+            for i in range(start_idx + 1, len(elements)):
+                elem = elements[i]
+                tag = elem.tag.split('}')[-1]
 
-            # 检查是否包含分页符
-            has_page_break = False
+                has_page_break = False
 
-            if tag == 'p':
-                # 检查段落中的分页符：<w:br w:type="page"/> 或 <w:lastRenderedPageBreak/>
-                for br in elem.iter(f'{W}br'):
-                    br_type = br.get(f'{W}type', '')
-                    if br_type == 'page':
-                        has_page_break = True
-                        break
-                # 检查 lastRenderedPageBreak
-                if not has_page_break:
-                    for _ in elem.iter(f'{W}lastRenderedPageBreak'):
-                        has_page_break = True
-                        break
+                if tag == 'p':
+                    for br in elem.iter(f'{W}br'):
+                        br_type = br.get(f'{W}type', '')
+                        if br_type == 'page':
+                            has_page_break = True
+                            break
+                    if not has_page_break:
+                        for _ in elem.iter(f'{W}lastRenderedPageBreak'):
+                            has_page_break = True
+                            break
 
-            # 检查分节符（sectPr 在段落属性中表示分节）
-            if tag == 'p' and not has_page_break:
-                pPr = elem.find(f'{W}pPr')
-                if pPr is not None:
-                    sectPr = pPr.find(f'{W}sectPr')
-                    if sectPr is not None:
-                        has_page_break = True
+                if tag == 'p' and not has_page_break:
+                    pPr = elem.find(f'{W}pPr')
+                    if pPr is not None:
+                        sectPr = pPr.find(f'{W}sectPr')
+                        if sectPr is not None:
+                            has_page_break = True
 
-            if has_page_break:
-                end_idx = i
-                print(f"找到英文摘要结束位置（分页符）: 元素 {i}")
-                break
+                if has_page_break:
+                    end_idx = i
+                    print(f"找到英文摘要结束位置（分页符）: 元素 {i}")
+                    break
 
         print(f"英文摘要范围: 元素 {start_idx} - {end_idx}")
 
-        # 步骤4：删除范围外的元素
+        # 删除范围外的元素
         elements_to_remove = []
 
-        # 删除结束位置之后的元素（倒序）
         for i in range(len(elements) - 1, end_idx - 1, -1):
             elem = elements[i]
             tag = elem.tag.split('}')[-1]
-            if tag not in ['sectPr']:  # 保留节属性
+            if tag not in ['sectPr']:
                 elements_to_remove.append(elem)
 
-        # 删除起始位置之前的元素（倒序）
         for i in range(start_idx - 1, -1, -1):
             elem = elements[i]
             tag = elem.tag.split('}')[-1]
             if tag not in ['sectPr']:
                 elements_to_remove.append(elem)
 
-        # 执行删除
         for elem in elements_to_remove:
             try:
                 body.remove(elem)
             except ValueError:
-                pass  # 元素可能已被删除
+                pass
 
-        # 步骤5：保存
         doc.save(str(out_path))
 
-        # 验证结果
         final_doc = Document(str(out_path))
         print(f"英文摘要提取完成: {len(final_doc.paragraphs)} 段落, "
               f"{len(final_doc.tables)} 表格")
