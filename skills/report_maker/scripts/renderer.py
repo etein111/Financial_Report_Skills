@@ -641,6 +641,7 @@ def prepare_context_with_analysts(elements: Dict[str, Any]) -> Dict[str, Any]:
     analyst_chinese_name, analyst_english_name, analyst_sfc_code, analyst_email
 
     对于没有值的分析师字段（a2-a8），将占位符替换为空字符串。
+    对于值为"未找到"的字段，替换为空字符串。
 
     Args:
         elements: 原始要素字典
@@ -650,6 +651,17 @@ def prepare_context_with_analysts(elements: Dict[str, Any]) -> Dict[str, Any]:
     """
     context = {}
 
+    # 定义表示"未找到"的值（这些值应该被替换为空字符串）
+    not_found_values = ['未找到', '未提供', 'N/A', 'n/a', 'NA', 'na', 'None', 'none', '无', '-']
+
+    def clean_value(v):
+        """清理值，将"未找到"等替换为空字符串"""
+        if v is None:
+            return ''
+        if isinstance(v, str) and v.strip() in not_found_values:
+            return ''
+        return v
+
     # 跳过分析师原始字段和 fragment 字段
     skip_prefixes = ['a1_', 'a2_', 'a3_', 'a4_', 'a5_', 'a6_', 'a7_', 'a8_']
     for k, v in elements.items():
@@ -657,13 +669,13 @@ def prepare_context_with_analysts(elements: Dict[str, Any]) -> Dict[str, Any]:
             continue
         if any(k.startswith(p) for p in skip_prefixes):
             continue
-        context[k] = v
+        context[k] = clean_value(v)
 
     # 展平第一个分析师字段（用于模板渲染）
-    context['analyst_chinese_name'] = elements.get('a1_cn', '')
-    context['analyst_english_name'] = elements.get('a1_en', '')
-    context['analyst_sfc_code'] = elements.get('a1_sfc', '')
-    context['analyst_email'] = elements.get('a1_email', '')
+    context['analyst_chinese_name'] = clean_value(elements.get('a1_cn', ''))
+    context['analyst_english_name'] = clean_value(elements.get('a1_en', ''))
+    context['analyst_sfc_code'] = clean_value(elements.get('a1_sfc', ''))
+    context['analyst_email'] = clean_value(elements.get('a1_email', ''))
 
     # 确保所有分析师字段都有值（空字符串），避免模板中的占位符未被替换
     # 分析师字段：a1_cn, a1_en, a1_sfc, a1_email ... a8_cn, a8_en, a8_sfc, a8_email
@@ -671,27 +683,27 @@ def prepare_context_with_analysts(elements: Dict[str, Any]) -> Dict[str, Any]:
     for i in range(1, 9):
         for suffix in analyst_suffixes:
             field_name = f'a{i}_{suffix}'
-            # 如果 elements 中没有该字段或值为 None，设置为空字符串
-            context[field_name] = elements.get(field_name) or ''
+            # 如果 elements 中没有该字段或值为 None 或"未找到"，设置为空字符串
+            context[field_name] = clean_value(elements.get(field_name, ''))
 
     # 记录哪些分析师有数据（用于后续清理空分析师单元格）
     context['_analysts_with_data'] = set()
     for i in range(1, 9):
-        cn = elements.get(f'a{i}_cn', '')
-        en = elements.get(f'a{i}_en', '')
+        cn = clean_value(elements.get(f'a{i}_cn', ''))
+        en = clean_value(elements.get(f'a{i}_en', ''))
         if cn or en:  # 如果有中文名或英文名，认为该分析师有数据
             context['_analysts_with_data'].add(i)
 
     # 收集所有分析师（用于循环渲染，如果模板支持）
     analysts = []
     for i in range(1, 9):
-        cn = elements.get(f'a{i}_cn', '')
+        cn = clean_value(elements.get(f'a{i}_cn', ''))
         if cn:
             analysts.append({
                 'chinese_name': cn,
-                'english_name': elements.get(f'a{i}_en', ''),
-                'sfc_code': elements.get(f'a{i}_sfc', ''),
-                'email': elements.get(f'a{i}_email', '')
+                'english_name': clean_value(elements.get(f'a{i}_en', '')),
+                'sfc_code': clean_value(elements.get(f'a{i}_sfc', '')),
+                'email': clean_value(elements.get(f'a{i}_email', ''))
             })
     context['analysts'] = analysts
 

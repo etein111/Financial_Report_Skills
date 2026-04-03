@@ -508,6 +508,7 @@ report_dir = Path('reports/cirrus(2507)_20251021')
 elements_path = report_dir / 'elements.yaml'
 abstract_path = report_dir / 'abstract.docx'
 body_path = report_dir / 'body.docx'
+english_summary_path = report_dir / 'english_summary.docx'
 
 # 加载 elements.yaml
 elements = common.load_yaml(elements_path)
@@ -525,7 +526,8 @@ renderer.render_report(
     elements=elements,               # 要素字典（从 elements.yaml 加载）
     abstract_path=str(abstract_path), # 摘要文件路径
     body_path=str(body_path),        # 正文文件路径
-    output_path=str(output_path)     # 输出文件路径
+    output_path=str(output_path),    # 输出文件路径
+    english_summary_path=str(english_summary_path) if english_summary_path.exists() else None  # 英文摘要路径（可选）
 )
 
 print(f'✓ 报告已生成: {output_path}')
@@ -535,13 +537,14 @@ print(f'✓ 报告已生成: {output_path}')
 
 ```python
 def render_report(
-    template_path: str,      # 模板文件完整路径（相对于项目根目录）
-    elements: Dict[str, Any], # 要素字典（从 elements.yaml 加载）
-    abstract_path: str,      # 摘要文件路径
-    body_path: str,          # 正文文件路径
-    output_path: str         # 输出文件路径
+    template_path: str,           # 模板文件完整路径（相对于项目根目录）
+    elements: Dict[str, Any],     # 要素字典（从 elements.yaml 加载）
+    abstract_path: str,           # 摘要文件路径
+    body_path: str,               # 正文文件路径
+    output_path: str,             # 输出文件路径
+    english_summary_path: str = None  # 英文摘要文件路径（可选）
 ) -> bool:
-    """渲染报告，正确处理分析师字段、abstract 和 body。
+    """渲染报告，正确处理分析师字段、abstract、body 和 english_summary。
 
     Returns:
         bool: 是否成功
@@ -557,6 +560,7 @@ def render_report(
 | `abstract_path` | `str` | 摘要片段文件路径 | `reports/cirrus(2507)_20251021/abstract.docx` |
 | `body_path` | `str` | 正文片段文件路径 | `reports/cirrus(2507)_20251021/body.docx` |
 | `output_path` | `str` | 输出文件路径（使用 `common.get_report_output_path()` 生成） | `reports/xxx/西锐飞机(2507 HK)：首次覆盖：....docx` |
+| `english_summary_path` | `str` | 英文摘要文件路径（可选，模板有 `{{ english_summary }}` 时传入） | `reports/xxx/english_summary.docx` |
 
 ### 4. 验证占位符填充
 

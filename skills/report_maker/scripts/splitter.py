@@ -1226,11 +1226,23 @@ def extract_english_summary(draft_path: str, scope: str, output_path: Optional[s
                     print(f"找到英文摘要结束标记: 元素 {i}")
                     break
         else:
-            # 备用：查找分页符
+            # 备用：查找分页符或结束标记
+            end_markers_fallback = ['APPENDIX', '附录', '重要信息披露', '[Table_disclaimer]']
             for i in range(start_idx + 1, len(elements)):
                 elem = elements[i]
                 tag = elem.tag.split('}')[-1]
+                text = ''.join(elem.itertext()).strip()
 
+                # 先检查结束标记
+                for marker in end_markers_fallback:
+                    if marker.upper() in text.upper():
+                        end_idx = i
+                        print(f"找到英文摘要结束标记: 元素 {i}, 匹配 '{marker}'")
+                        break
+                if end_idx < len(elements):
+                    break
+
+                # 再检查分页符
                 has_page_break = False
 
                 if tag == 'p':
