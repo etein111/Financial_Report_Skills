@@ -1085,63 +1085,47 @@ def _fix_docxcompose_sectpr_margins(docx_path: str, body_margins: Dict[str, str]
                 if sectPr is not None:
                     ppr_sectprs.append(sectPr)
 
-        # 修复这些 sectPr 的页边距
-        # 第一个 sectPr（part1 和 body 之间）：应用 body 的页边距
-        # 因为这个 sectPr 定义的是它之前内容（part1/首页）的格式
-        # 所以我们可能不应该修改它...
-        #
-        # 实际上，Word 的 sectPr 定义的是它之前内容的格式：
-        # - 段落内的 sectPr（连续分节符）定义它之前段落的格式
-        # - body 末尾的 sectPr 定义整个文档最后一节的格式
-        #
-        # docxcompose 在合并时：
-        # 1. 在 part1 末尾插入一个 sectPr（定义 part1 的格式）
-        # 2. 追加 body 的内容
-        # 3. 在 body 末尾插入一个 sectPr（定义 body 的格式）
-        # 4. 追加 part3 的内容
-        #
-        # 问题是：docxcompose 插入的 sectPr 使用默认页边距，而不是 body 的页边距
-        #
-        # 解决方案：
-        # - 第一个 pPr/sectPr（part1 末尾）：保持原样（定义首页格式）
-        # - 第二个 pPr/sectPr（body 末尾）：使用 body 的页边距
-        # - body/sectPr（文档末尾）：保持原样（定义附录格式）
+        print(f"  发现 {len(ppr_sectprs)} 个段落内 sectPr")
 
-        if len(ppr_sectprs) >= 1 and body_margins:
-            # 修复第一个 sectPr（如果它使用默认页边距）
-            # 这个 sectPr 定义的是它之前内容（首页模板）的格式，不应该修改
-            pass
+        # 修复策略：
+        # - 如果只有 1 个 pPr/sectPr，它定义的是 body 的格式
+        # - 如果有 2 个或更多，第 2 个定义的是 body 的格式
+        # - 将 body 相关的 sectPr 页边距替换为 body_margins
 
-        if len(ppr_sectprs) >= 2 and body_margins:
-            # 修复第二个 sectPr（body 末尾）
-            # 这个 sectPr 定义的是 body 的格式，应该使用 body 的页边距
-            sectPr = ppr_sectprs[1]
+        target_sectpr_index = 0  # 默认修复第一个
+        if len(ppr_sectprs) >= 2:
+            target_sectpr_index = 1  # 有两个或更多时，修复第二个
+
+        if len(ppr_sectprs) > target_sectpr_index and body_margins:
+            sectPr = ppr_sectprs[target_sectpr_index]
             pgMar = sectPr.find(f'{W}pgMar')
+
             if pgMar is not None:
-                # 检查是否是默认页边距
-                top = pgMar.get(f'{W}top', '')
-                bottom = pgMar.get(f'{W}bottom', '')
-                if top == '1440' or bottom == '1440':
+                # 读取当前页边距
+                current_top = pgMar.get(f'{W}top', '')
+                current_left = pgMar.get(f'{W}left', '')
+                target_top = body_margins.get('top', '')
+                target_left = body_margins.get('left', '')
+
+                # 如果当前页边距与目标不同，则修复
+                if current_top != target_top or current_left != target_left:
+                    print(f"  sectPr[{target_sectpr_index}] 页边距: top={current_top}, left={current_left}")
+                    print(f"  目标页边距: top={target_top}, left={target_left}")
+
                     # 应用 body 的页边距
                     for attr, val in body_margins.items():
                         pgMar.set(f'{W}{attr}', val)
                     fixed_count += 1
-                    print(f"  已修复 body 分节符页边距: top={body_margins.get('top')}, bottom={body_margins.get('bottom')}")
-
-        # 如果只有一个 pPr/sectPr，它就是 body 的分节符
-        if len(ppr_sectprs) == 1 and body_margins:
-            sectPr = ppr_sectprs[0]
-            pgMar = sectPr.find(f'{W}pgMar')
-            if pgMar is not None:
-                top = pgMar.get(f'{W}top', '')
-                bottom = pgMar.get(f'{W}bottom', '')
-                if top == '1440' or bottom == '1440':
-                    # 删除这个默认页边距的 sectPr，让 body 继承文档末尾的 sectPr
-                    # 或者应用 body 的页边距
-                    for attr, val in body_margins.items():
-                        pgMar.set(f'{W}{attr}', val)
-                    fixed_count += 1
-                    print(f"  已修复 body 分节符页边距: top={body_margins.get('top')}, bottom={body_margins.get('bottom')}")
+                    print(f"  ✅ 已修复 body 分节符页边距")
+                else:
+                    print(f"  sectPr[{target_sectpr_index}] 页边距已正确，无需修复")
+            else:
+                # 没有 pgMar，创建一个
+                pgMar = etree.SubElement(sectPr, f'{W}pgMar')
+                for attr, val in body_margins.items():
+                    pgMar.set(f'{W}{attr}', val)
+                fixed_count += 1
+                print(f"  ✅ 已为 sectPr[{target_sectpr_index}] 添加页边距")
 
         if fixed_count > 0:
             # 保存修改后的文档
