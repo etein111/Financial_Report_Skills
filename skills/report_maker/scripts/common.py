@@ -29,8 +29,11 @@ FILE_ABSTRACT = "abstract.docx"
 FILE_BODY = "body.docx"
 FILE_ENGLISH_SUMMARY = "english_summary.docx"
 FILE_APPENDIX = "appendix.docx"
-FILE_OUTPUT_DOCX = "output.docx"
+FILE_OUTPUT_DOCX = "output.docx"  # 默认输出文件名（备用）
 FILE_OUTPUT_PDF = "output.pdf"
+
+# Windows 文件名禁止字符
+INVALID_FILENAME_CHARS = r'\/:*?"<>|'
 
 
 # ==================== YAML 工具函数 ====================
@@ -161,6 +164,77 @@ def normalize_report_name(filename: str) -> str:
             break
 
     return name
+
+
+def generate_report_filename(elements: Dict[str, Any], extension: str = ".docx") -> str:
+    """根据 elements 生成报告文件名。
+
+    格式：{company}({ticker})：{title}{extension}
+    示例：西锐飞机(2507 HK)：首次覆盖：安全、创新与强大生态系统铸就西锐私人航空全球领导者地位.docx
+
+    Args:
+        elements: 要素字典，需要包含 company、ticker、title 字段
+        extension: 文件扩展名，默认为 ".docx"
+
+    Returns:
+        生成的文件名，如果缺少必要字段则返回默认文件名
+    """
+    company = elements.get('company', '').strip()
+    ticker = elements.get('ticker', '').strip()
+    title = elements.get('title', '').strip()
+
+    # 如果缺少必要字段，返回默认文件名
+    if not company or not ticker or not title:
+        return FILE_OUTPUT_DOCX if extension == ".docx" else FILE_OUTPUT_PDF
+
+    # 格式化 ticker：将点号替换为空格（如 2507.HK -> 2507 HK）
+    ticker_formatted = ticker.replace('.', ' ')
+
+    # 构建文件名（使用中文全角冒号，避免 Windows 禁止字符）
+    filename = f"{company}({ticker_formatted})：{title}"
+
+    # 清理文件名中的非法字符
+    filename = sanitize_filename(filename)
+
+    # 添加扩展名
+    return filename + extension
+
+
+def sanitize_filename(filename: str) -> str:
+    """清理文件名中的非法字符。
+
+    移除 Windows 文件名中禁止的字符：\\ / : * ? \" < > |
+    保留中文全角字符（如中文冒号 ：）
+
+    Args:
+        filename: 原始文件名
+
+    Returns:
+        清理后的文件名
+    """
+    result = filename
+    for char in INVALID_FILENAME_CHARS:
+        result = result.replace(char, '')
+    return result
+
+
+def get_report_output_path(
+    report_dir: Union[str, Path],
+    elements: Dict[str, Any],
+    extension: str = ".docx"
+) -> Path:
+    """获取报告输出文件的完整路径。
+
+    Args:
+        report_dir: 报告目录路径
+        elements: 要素字典
+        extension: 文件扩展名
+
+    Returns:
+        完整的输出文件路径
+    """
+    filename = generate_report_filename(elements, extension)
+    return Path(report_dir) / filename
 
 
 # ==================== Schema 工具函数 ====================
