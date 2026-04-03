@@ -697,63 +697,6 @@ def prepare_context_with_analysts(elements: Dict[str, Any]) -> Dict[str, Any]:
     return context
 
 
-def clean_empty_analyst_cells(doc: Document, analysts_with_data: set) -> int:
-    """清理没有数据的分析师单元格。
-
-    当分析师没有数据时，清空整个单元格（包括固定标签如 SFC:、Email: 等）。
-    支持嵌套表格。
-
-    Args:
-        doc: Word 文档对象
-        analysts_with_data: 有数据的分析师编号集合（如 {1, 2}）
-
-    Returns:
-        清理的单元格数量
-    """
-    cleaned_count = 0
-
-    def clean_table(table):
-        """递归清理表格（包括嵌套表格）"""
-        nonlocal cleaned_count
-
-        for row in table.rows:
-            for cell in row.cells:
-                # 先处理嵌套表格
-                for nested_table in cell.tables:
-                    clean_table(nested_table)
-
-                cell_text = cell.text.strip()
-
-                # 跳过空单元格
-                if not cell_text:
-                    continue
-
-                # 检查是否是空分析师单元格的特征：
-                # 模板格式: "{{ a1_cn }} {{ a1_en }}], SFC:{{ a1_sfc }}"
-                # 空分析师渲染后: " ], SFC:" 或 "], SFC:"
-
-                # 检测模式：包含 "], SFC:" 但没有实际名字
-                if '], SFC:' in cell_text or '],SFC:' in cell_text:
-                    # 移除已知的标签和标点
-                    text_check = cell_text
-                    for pattern in ['], SFC:', '],SFC:', 'SFC:', ', SFC:', '@']:
-                        text_check = text_check.replace(pattern, '')
-
-                    # 移除空白字符
-                    text_check = text_check.strip()
-
-                    # 如果移除标签后没有实际内容（或只有很短的残留），清空单元格
-                    if len(text_check) < 3:
-                        cell.text = ''
-                        cleaned_count += 1
-
-    # 处理所有顶级表格
-    for table in doc.tables:
-        clean_table(table)
-
-    return cleaned_count
-
-
 def insert_abstract_to_cell(doc: Document, abstract_doc: Document, marker: str) -> bool:
     """在表格单元格中插入 abstract 内容，完整保留格式。
 
