@@ -797,6 +797,130 @@ def _insert_abstract_at_paragraph(doc: Document, abstract_doc: Document, marker:
     return False
 
 
+def _get_document_sectpr_margins(doc_path: str) -> Dict[str, str]:
+    """读取文档的 sectPr 页边距信息。
+
+    Args:
+        doc_path: 文档路径
+
+    Returns:
+        页边距字典 {'top': '...', 'bottom': '...', 'left': '...', 'right': '...', ...}
+    """
+    import zipfile
+    from lxml import etree
+
+    W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
+    margins = {}
+
+    try:
+        with zipfile.ZipFile(doc_path, 'r') as z:
+            with z.open('word/document.xml') as f:
+                tree = etree.parse(f)
+
+        # 查找文档末尾的 sectPr
+        body = tree.getroot().find(f'.//{W}body')
+        if body is not None:
+            sectPr = body.find(f'{W}sectPr')
+            if sectPr is not None:
+                pgMar = sectPr.find(f'{W}pgMar')
+                if pgMar is not None:
+                    for attr in ['top', 'bottom', 'left', 'right', 'header', 'footer', 'gutter']:
+                        val = pgMar.get(f'{W}{attr}')
+                        if val:
+                            margins[attr] = val
+
+    except Exception as e:
+        print(f"  读取文档页边距失败: {e}")
+
+    return margins
+
+
+def _apply_margins_to_sectpr(docx_path: str, margins: Dict[str, str], target_sectpr_index: int = -1) -> bool:
+    """将页边距应用到文档中的 sectPr。
+
+    Args:
+        docx_path: 文档路径
+        margins: 页边距字典
+        target_sectpr_index: 目标 sectPr 索引（-1 表示最后一个 body/sectPr，-2 表示倒数第二个段落内的 sectPr）
+
+    Returns:
+        是否成功
+    """
+    if not margins:
+        return False
+
+    import zipfile
+    from lxml import etree
+
+    W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
+
+    try:
+        # 读取文档
+        with zipfile.ZipFile(docx_path, 'r') as z:
+            files = {name: z.read(name) for name in z.namelist()}
+
+        if 'word/document.xml' not in files:
+            return False
+
+        doc_tree = etree.fromstring(files['word/document.xml'])
+        body = doc_tree.find(f'{W}body')
+        if body is None:
+            return False
+
+        # 收集所有 sectPr（包括段落内的和 body 末尾的）
+        all_sectPrs = []
+
+        # 段落内的 sectPr（连续分节符）
+        for p in body.findall(f'.//{W}p'):
+            pPr = p.find(f'{W}pPr')
+            if pPr is not None:
+                sectPr = pPr.find(f'{W}sectPr')
+                if sectPr is not None:
+                    all_sectPrs.append(('pPr', sectPr))
+
+        # body 末尾的 sectPr
+        body_sectPr = body.find(f'{W}sectPr')
+        if body_sectPr is not None:
+            all_sectPrs.append(('body', body_sectPr))
+
+        if not all_sectPrs:
+            return False
+
+        # 选择目标 sectPr
+        if target_sectpr_index < 0:
+            target_sectpr_index = len(all_sectPrs) + target_sectpr_index
+
+        if target_sectpr_index < 0 or target_sectpr_index >= len(all_sectPrs):
+            return False
+
+        _, target_sectPr = all_sectPrs[target_sectpr_index]
+
+        # 应用页边距
+        pgMar = target_sectPr.find(f'{W}pgMar')
+        if pgMar is None:
+            pgMar = etree.SubElement(target_sectPr, f'{W}pgMar')
+
+        for attr, val in margins.items():
+            pgMar.set(f'{W}{attr}', val)
+
+        # 保存
+        files['word/document.xml'] = etree.tostring(
+            doc_tree, xml_declaration=True, encoding='UTF-8', standalone=True
+        )
+
+        import os
+        os.remove(docx_path)
+        with zipfile.ZipFile(docx_path, 'w', zipfile.ZIP_DEFLATED) as z:
+            for name, content in files.items():
+                z.writestr(name, content)
+
+        return True
+
+    except Exception as e:
+        print(f"  应用页边距失败: {e}")
+        return False
+
+
 def insert_body_at_marker_compose(doc_path: str, body_path: str, marker: str, output_path: str) -> bool:
     """使用 docxcompose 三段式合并：在 marker 位置插入 body。
 
@@ -816,6 +940,11 @@ def insert_body_at_marker_compose(doc_path: str, body_path: str, marker: str, ou
     try:
         from docxcompose.composer import Composer
         import shutil
+
+        # 0. 保存 body.docx 的页边距信息（合并后需要恢复）
+        body_margins = _get_document_sectpr_margins(body_path)
+        if body_margins:
+            print(f"  body.docx 页边距: top={body_margins.get('top')}, bottom={body_margins.get('bottom')}")
 
         # 1. 找到 marker 位置
         doc = Document(doc_path)
@@ -891,10 +1020,12 @@ def insert_body_at_marker_compose(doc_path: str, body_path: str, marker: str, ou
         # 保存最终文档
         composer.save(output_path)
 
-        # 5. 清理 docxcompose 插入的多余 sectPr（防止法律附录页边距被破坏）
-        removed_sectPr = _remove_docxcompose_extra_sectPr(output_path)
-        if removed_sectPr > 0:
-            print(f"  已删除 {removed_sectPr} 个 docxcompose 插入的多余分节符")
+        # 5. 恢复 body 的页边距（修复 docxcompose 覆盖页边距的问题）
+        if body_margins:
+            # docxcompose 会在 part1 和 body 之间插入一个 sectPr（分节符）
+            # 这个 sectPr 应该使用 body 的页边距
+            # 找到并修复这个 sectPr
+            _fix_docxcompose_sectpr_margins(output_path, body_margins, has_part3_content)
 
         # 6. 清理临时文件
         part1_path.unlink(missing_ok=True)
@@ -905,6 +1036,257 @@ def insert_body_at_marker_compose(doc_path: str, body_path: str, marker: str, ou
 
     except Exception as e:
         print(f"  docxcompose 三段式合并失败: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+
+def _fix_docxcompose_sectpr_margins(docx_path: str, body_margins: Dict[str, str], has_part3: bool) -> int:
+    """修复 docxcompose 合并时插入的 sectPr 页边距。
+
+    docxcompose 在 append() 时会在合并点插入分节符（pPr/sectPr），
+    这些分节符通常使用默认页边距（1英寸 = 1440 twips）。
+
+    本函数将这些分节符的页边距修改为 body.docx 的原始页边距。
+
+    Args:
+        docx_path: docx 文件路径
+        body_margins: body.docx 的页边距
+        has_part3: 是否有 part3（附录）
+
+    Returns:
+        修复的 sectPr 数量
+    """
+    import zipfile
+    from lxml import etree
+
+    W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
+    fixed_count = 0
+
+    try:
+        # 读取文档
+        with zipfile.ZipFile(docx_path, 'r') as z:
+            files = {name: z.read(name) for name in z.namelist()}
+
+        if 'word/document.xml' not in files:
+            return 0
+
+        doc_tree = etree.fromstring(files['word/document.xml'])
+        body = doc_tree.find(f'{W}body')
+        if body is None:
+            return 0
+
+        # 收集所有段落内的 sectPr（docxcompose 插入的分节符）
+        ppr_sectprs = []
+        for p in body.findall(f'.//{W}p'):
+            pPr = p.find(f'{W}pPr')
+            if pPr is not None:
+                sectPr = pPr.find(f'{W}sectPr')
+                if sectPr is not None:
+                    ppr_sectprs.append(sectPr)
+
+        # 修复这些 sectPr 的页边距
+        # 第一个 sectPr（part1 和 body 之间）：应用 body 的页边距
+        # 因为这个 sectPr 定义的是它之前内容（part1/首页）的格式
+        # 所以我们可能不应该修改它...
+        #
+        # 实际上，Word 的 sectPr 定义的是它之前内容的格式：
+        # - 段落内的 sectPr（连续分节符）定义它之前段落的格式
+        # - body 末尾的 sectPr 定义整个文档最后一节的格式
+        #
+        # docxcompose 在合并时：
+        # 1. 在 part1 末尾插入一个 sectPr（定义 part1 的格式）
+        # 2. 追加 body 的内容
+        # 3. 在 body 末尾插入一个 sectPr（定义 body 的格式）
+        # 4. 追加 part3 的内容
+        #
+        # 问题是：docxcompose 插入的 sectPr 使用默认页边距，而不是 body 的页边距
+        #
+        # 解决方案：
+        # - 第一个 pPr/sectPr（part1 末尾）：保持原样（定义首页格式）
+        # - 第二个 pPr/sectPr（body 末尾）：使用 body 的页边距
+        # - body/sectPr（文档末尾）：保持原样（定义附录格式）
+
+        if len(ppr_sectprs) >= 1 and body_margins:
+            # 修复第一个 sectPr（如果它使用默认页边距）
+            # 这个 sectPr 定义的是它之前内容（首页模板）的格式，不应该修改
+            pass
+
+        if len(ppr_sectprs) >= 2 and body_margins:
+            # 修复第二个 sectPr（body 末尾）
+            # 这个 sectPr 定义的是 body 的格式，应该使用 body 的页边距
+            sectPr = ppr_sectprs[1]
+            pgMar = sectPr.find(f'{W}pgMar')
+            if pgMar is not None:
+                # 检查是否是默认页边距
+                top = pgMar.get(f'{W}top', '')
+                bottom = pgMar.get(f'{W}bottom', '')
+                if top == '1440' or bottom == '1440':
+                    # 应用 body 的页边距
+                    for attr, val in body_margins.items():
+                        pgMar.set(f'{W}{attr}', val)
+                    fixed_count += 1
+                    print(f"  已修复 body 分节符页边距: top={body_margins.get('top')}, bottom={body_margins.get('bottom')}")
+
+        # 如果只有一个 pPr/sectPr，它就是 body 的分节符
+        if len(ppr_sectprs) == 1 and body_margins:
+            sectPr = ppr_sectprs[0]
+            pgMar = sectPr.find(f'{W}pgMar')
+            if pgMar is not None:
+                top = pgMar.get(f'{W}top', '')
+                bottom = pgMar.get(f'{W}bottom', '')
+                if top == '1440' or bottom == '1440':
+                    # 删除这个默认页边距的 sectPr，让 body 继承文档末尾的 sectPr
+                    # 或者应用 body 的页边距
+                    for attr, val in body_margins.items():
+                        pgMar.set(f'{W}{attr}', val)
+                    fixed_count += 1
+                    print(f"  已修复 body 分节符页边距: top={body_margins.get('top')}, bottom={body_margins.get('bottom')}")
+
+        if fixed_count > 0:
+            # 保存修改后的文档
+            files['word/document.xml'] = etree.tostring(
+                doc_tree, xml_declaration=True, encoding='UTF-8', standalone=True
+            )
+
+            import os
+            os.remove(docx_path)
+            with zipfile.ZipFile(docx_path, 'w', zipfile.ZIP_DEFLATED) as z:
+                for name, content in files.items():
+                    z.writestr(name, content)
+
+    except Exception as e:
+        print(f"  修复 docxcompose sectPr 页边距时出错: {e}")
+
+    return fixed_count
+
+
+def _apply_english_summary_margins(docx_path: str, es_margins: Dict[str, str]) -> bool:
+    """在 english_summary 内容末尾（法律附录之前）插入分节符，应用 english_summary 的页边距。
+
+    english_summary 和 body 使用不同的页边距。
+    为了让 english_summary 有正确的页边距，我们需要在其内容末尾
+    （在法律附录 "附录APPENDIX" 之前）插入一个分节符。
+
+    Word 的 sectPr 定义的是它之前内容的格式。
+    所以我们在法律附录之前插入 sectPr，定义 english_summary 的格式。
+
+    Args:
+        docx_path: 文档路径
+        es_margins: english_summary.docx 的页边距
+
+    Returns:
+        是否成功
+    """
+    import zipfile
+    from lxml import etree
+
+    W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
+
+    try:
+        # 读取文档
+        with zipfile.ZipFile(docx_path, 'r') as z:
+            files = {name: z.read(name) for name in z.namelist()}
+
+        if 'word/document.xml' not in files:
+            return False
+
+        doc_tree = etree.fromstring(files['word/document.xml'])
+        body = doc_tree.find(f'{W}body')
+        if body is None:
+            return False
+
+        # 找到法律附录的开始位置
+        # 标记：包含 "附录APPENDIX" 或 "IMPORTANT DISCLOSURE" 的段落
+        appendix_keywords = ['附录APPENDIX', 'APPENDIX', 'IMPORTANT DISCLOSURE', '重要声明']
+        appendix_para = None
+        appendix_idx = None
+
+        all_elements = list(body)
+        for idx, elem in enumerate(all_elements):
+            if elem.tag == f'{W}p':
+                text = ''.join(t.text or '' for t in elem.iter(f'{W}t'))
+                text_upper = text.upper().replace(' ', '')
+                for kw in appendix_keywords:
+                    if kw.upper().replace(' ', '') in text_upper:
+                        appendix_para = elem
+                        appendix_idx = idx
+                        break
+                if appendix_para is not None:
+                    break
+
+        if appendix_para is None or appendix_idx is None or appendix_idx == 0:
+            print(f"  english_summary: 未找到法律附录位置，无法插入分节符")
+            return False
+
+        # 在法律附录之前的段落添加 sectPr（连续分节符）
+        # 找到法律附录前的最后一个段落
+        prev_para = None
+        for i in range(appendix_idx - 1, -1, -1):
+            elem = all_elements[i]
+            if elem.tag == f'{W}p':
+                prev_para = elem
+                break
+
+        if prev_para is None:
+            print(f"  english_summary: 法律附录前没有段落，无法插入分节符")
+            return False
+
+        # 检查这个段落是否已经有 sectPr
+        pPr = prev_para.find(f'{W}pPr')
+        if pPr is None:
+            pPr = etree.SubElement(prev_para, f'{W}pPr')
+            # 将 pPr 移到段落开头
+            prev_para.insert(0, pPr)
+
+        existing_sectPr = pPr.find(f'{W}sectPr')
+        if existing_sectPr is not None:
+            # 已有 sectPr，更新其页边距
+            pgMar = existing_sectPr.find(f'{W}pgMar')
+            if pgMar is None:
+                pgMar = etree.SubElement(existing_sectPr, f'{W}pgMar')
+            for attr, val in es_margins.items():
+                pgMar.set(f'{W}{attr}', val)
+            print(f"  english_summary: 已更新分节符页边距: top={es_margins.get('top')}, bottom={es_margins.get('bottom')}")
+        else:
+            # 创建新的 sectPr（连续分节符）
+            sectPr = etree.SubElement(pPr, f'{W}sectPr')
+
+            # 设置分节类型为连续（continuous）
+            sectType = etree.SubElement(sectPr, f'{W}type')
+            sectType.set(f'{W}val', 'continuous')
+
+            # 设置页边距
+            pgMar = etree.SubElement(sectPr, f'{W}pgMar')
+            for attr, val in es_margins.items():
+                pgMar.set(f'{W}{attr}', val)
+
+            # 从文档末尾的 sectPr 复制页面大小设置
+            body_sectPr = body.find(f'{W}sectPr')
+            if body_sectPr is not None:
+                pgSz = body_sectPr.find(f'{W}pgSz')
+                if pgSz is not None:
+                    new_pgSz = etree.SubElement(sectPr, f'{W}pgSz')
+                    for attr in pgSz.attrib:
+                        new_pgSz.set(attr, pgSz.get(attr))
+
+            print(f"  english_summary: 已在法律附录前插入分节符，页边距: top={es_margins.get('top')}, bottom={es_margins.get('bottom')}")
+
+        # 保存
+        files['word/document.xml'] = etree.tostring(
+            doc_tree, xml_declaration=True, encoding='UTF-8', standalone=True
+        )
+
+        import os
+        os.remove(docx_path)
+        with zipfile.ZipFile(docx_path, 'w', zipfile.ZIP_DEFLATED) as z:
+            for name, content in files.items():
+                z.writestr(name, content)
+
+        return True
+
+    except Exception as e:
+        print(f"  应用 english_summary 页边距失败: {e}")
         import traceback
         traceback.print_exc()
         return False
@@ -1492,14 +1874,18 @@ def render_report(
             else:
                 # 如果没找到 marker，使用 docxcompose 追加到末尾
                 print(f"  ⚠️ 未找到 BODY_MARKER，使用 docxcompose 追加 body")
+                # 保存 body 的页边距
+                body_margins = _get_document_sectpr_margins(body_path)
+
                 doc = Document(str(temp_path))
                 composer = Composer(doc)
                 composer.append(Document(body_path))
                 composer.save(output_path)
-                # 清理 docxcompose 插入的多余 sectPr
-                removed_sectPr = _remove_docxcompose_extra_sectPr(output_path)
-                if removed_sectPr > 0:
-                    print(f"  已删除 {removed_sectPr} 个 docxcompose 插入的多余分节符")
+
+                # 修复 docxcompose 插入的分节符页边距
+                if body_margins:
+                    _fix_docxcompose_sectpr_margins(output_path, body_margins, False)
+
                 # 补救：确保 body 中的图片被正确复制
                 copied_count = _copy_media_between_docx(body_path, output_path)
                 if copied_count > 0:
@@ -1519,6 +1905,11 @@ def render_report(
 
         # 6.5 处理 ENGLISH_SUMMARY_MARKER - 在标记位置插入 english_summary 内容
         if english_summary_path and Path(english_summary_path).exists() and Path(english_summary_path).stat().st_size > 0:
+            # 保存 english_summary 的页边距
+            es_margins = _get_document_sectpr_margins(english_summary_path)
+            if es_margins:
+                print(f"  english_summary.docx 页边距: top={es_margins.get('top')}, bottom={es_margins.get('bottom')}")
+
             doc = Document(output_path)
             english_summary_doc = Document(english_summary_path)
 
@@ -1535,6 +1926,12 @@ def render_report(
                     print(f"  ⚠️ 未找到 ENGLISH_SUMMARY_MARKER，english_summary 未插入")
 
             doc.save(output_path)
+
+            # 如果 english_summary 有自己的页边距，应用到它之前的分节符
+            # 注意：_insert_abstract_at_paragraph 会在插入内容的末尾位置
+            # 我们需要找到 english_summary 内容的位置，并在其前面添加分节符
+            if es_margins and es_inserted:
+                _apply_english_summary_margins(output_path, es_margins)
         else:
             # 没有 english_summary 文件，删除 ENGLISH_SUMMARY_MARKER
             doc = Document(output_path)
