@@ -1306,7 +1306,7 @@ def extract_english_summary(draft_path: str, scope: str, output_path: Optional[s
             for kw in summary_keywords:
                 if kw.upper() in text.upper():
                     start_idx = i
-                    print(f"找到英文摘要起始位置: 元素 {i}")
+                    print(f"找到英文摘要起始位置: 元素 {i}, 文本: '{text[:50]}'")
                     break
             if start_idx is not None:
                 break

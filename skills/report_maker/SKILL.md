@@ -292,10 +292,18 @@ full_document_text = '\n'.join(all_text_lines)
 4. body_scope: "位置描述"
 
 ## 第四部分：英文摘要提取
-1. 是否有英文摘要部分？（通常在正文之后、附录之前的独立页面）
+1. 是否有英文摘要部分？（通常在正文之后、附录之前的独立页面，标题可能是 "Summary"、"APPENDIX 1" 等）
 2. 如果有英文摘要，请指出其位置
-3. has_english_summary: true/false
-4. english_summary_scope: "位置描述"
+3. **重要**：请提供英文摘要**正文内容**的起始文本（不是标题！），即标题之后第一段实际内容的前15-30个字符
+4. has_english_summary: true/false
+5. english_summary_scope: "位置描述"
+6. english_summary_content_start: "正文内容的起始文本（如：Initial Coverage on XXX: ...）"
+
+**示例**：
+- ❌ 错误：`english_summary_content_start: "Summary"` （这是标题，不是内容）
+- ❌ 错误：`english_summary_content_start: "APPENDIX 1"` （这是标题，不是内容）
+- ✅ 正确：`english_summary_content_start: "Initial Coverage on Wasion Holdings"` （这是正文第一句）
+- ✅ 正确：`english_summary_content_start: "We initiate coverage on XXX"` （这是正文第一句）
 
 ## 输出格式
 请返回 YAML 格式：
@@ -317,6 +325,7 @@ body_scope: "位置描述"
 # 英文摘要信息
 has_english_summary: true/false
 english_summary_scope: "位置描述"
+english_summary_content_start: "正文内容起始文本"  # 不是标题，是实际内容的第一句
 ```
 ```
 
@@ -342,14 +351,15 @@ llm_result = {
 
     # 英文摘要信息
     "has_english_summary": True,
-    "english_summary_scope": "正文之后一页"
+    "english_summary_scope": "正文之后一页",
+    "english_summary_content_start": "Initial Coverage on Wasion Holdings"  # 正文第一句，不是标题
 }
 
 # 分离 elements 和位置信息
 position_keys = [
     'has_abstract', 'abstract_scope',
     'has_body', 'body_scope',
-    'has_english_summary', 'english_summary_scope'
+    'has_english_summary', 'english_summary_scope', 'english_summary_content_start'
 ]
 elements = {k: v for k, v in llm_result.items() if k not in position_keys}
 ```
@@ -388,7 +398,8 @@ if llm_result.get('has_english_summary'):
     splitter.extract_english_summary(
         draft_path,
         llm_result.get('english_summary_scope', '正文之后一页'),
-        output_path=f"{output_dir}/english_summary.docx"
+        output_path=f"{output_dir}/english_summary.docx",
+        start_marker=llm_result.get('english_summary_content_start')  # 传入正文起始文本
     )
 ```
 
