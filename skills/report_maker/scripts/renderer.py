@@ -1921,12 +1921,9 @@ def render_report(
             doc.save(output_path)
 
         # 6.5 处理 ENGLISH_SUMMARY_MARKER - 在标记位置插入 english_summary 内容
+        # 注意：english_summary 使用 template 的格式（对齐 APPENDIX 1 Summary 标题）
+        # 不需要读取 english_summary.docx 的页边距，因为 splitter 已清除段落缩进
         if english_summary_path and Path(english_summary_path).exists() and Path(english_summary_path).stat().st_size > 0:
-            # 保存 english_summary 的页边距
-            es_margins = _get_document_sectpr_margins(english_summary_path)
-            if es_margins:
-                print(f"  english_summary.docx 页边距: top={es_margins.get('top')}, bottom={es_margins.get('bottom')}")
-
             doc = Document(output_path)
             english_summary_doc = Document(english_summary_path)
 
@@ -1943,12 +1940,6 @@ def render_report(
                     print(f"  ⚠️ 未找到 ENGLISH_SUMMARY_MARKER，english_summary 未插入")
 
             doc.save(output_path)
-
-            # 如果 english_summary 有自己的页边距，应用到它之前的分节符
-            # 注意：_insert_abstract_at_paragraph 会在插入内容的末尾位置
-            # 我们需要找到 english_summary 内容的位置，并在其前面添加分节符
-            if es_margins and es_inserted:
-                _apply_english_summary_margins(output_path, es_margins)
         else:
             # 没有 english_summary 文件，删除 ENGLISH_SUMMARY_MARKER
             doc = Document(output_path)

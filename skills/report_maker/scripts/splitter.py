@@ -1396,6 +1396,17 @@ def extract_english_summary(draft_path: str, scope: str, output_path: Optional[s
             except ValueError:
                 pass
 
+        # 🔑 清除段落的缩进设置，让 english_summary 对齐 template 的格式
+        # draft 中的 english_summary 可能有错误的缩进（如负缩进），
+        # 清除后让内容继承 template 的 "APPENDIX 1 Summary" 格式
+        for p in body.findall(f'.//{W}p'):
+            pPr = p.find(f'{W}pPr')
+            if pPr is not None:
+                ind = pPr.find(f'{W}ind')
+                if ind is not None:
+                    pPr.remove(ind)
+                    print(f"  已清除段落缩进")
+
         # 🔑 关键：将保存的页边距应用到最终的 sectPr
         if margins_to_preserve:
             _apply_margins_to_final_sectpr(body, margins_to_preserve, W)
