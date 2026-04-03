@@ -306,12 +306,35 @@ full_document_text = '\n'.join(all_text_lines)
 - ❌ 错误：`body_end_marker: "附录APPENDIX"` （这是附录标题，不是正文内容）
 
 ## 第四部分：英文摘要提取
-1. 是否有英文摘要部分？（通常在正文之后、附录之前的独立页面，标题可能是 "Summary"、"APPENDIX 1" 等）
+1. 是否有英文摘要部分？
 2. 如果有英文摘要，请指出其位置
 3. **重要**：请提供英文摘要**正文内容**的起始文本（不是标题！），即标题之后第一段实际内容的前15-30个字符
 4. has_english_summary: true/false
 5. english_summary_scope: "位置描述"
 6. english_summary_content_start: "正文内容的起始文本（如：Initial Coverage on XXX: ...）"
+
+**🔴 英文摘要识别指南（必须仔细搜索）**：
+
+**常见位置**：
+- 通常在正文最后、法律附录（"附录APPENDIX"）之前
+- 可能是独立的一页
+- 位于文档的后半部分（通常在最后 50-100 个段落内）
+
+**常见标题形式**（任一形式都算有英文摘要）：
+- `Summary`（最常见，单独一行）
+- `APPENDIX 1`（后面跟着英文内容）
+- `APPENDIX 1 Summary`
+- `Executive Summary`
+- `English Summary`
+
+**识别方法**：
+1. 从文档末尾向前搜索，找到 "Summary" 或 "APPENDIX 1" 等标题
+2. 检查该标题后面是否跟着**英文段落**（而不是中文）
+3. 如果有英文段落，则 has_english_summary = true
+
+**⚠️ 注意区分**：
+- ❌ 法律附录的 "附录APPENDIX" 不是英文摘要（这是中英双语的法律披露部分）
+- ✅ 正文后、法律附录前的 "Summary" 才是英文摘要
 
 **示例**：
 - ❌ 错误：`english_summary_content_start: "Summary"` （这是标题，不是内容）
