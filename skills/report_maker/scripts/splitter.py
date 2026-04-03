@@ -237,21 +237,40 @@ def extract_abstract(draft_path: str, scope: str, output_path: Optional[str] = N
         if all_tables:
             first_table = all_tables[0]
 
-            for row in first_table.findall(f'{W}tr'):
-                for tc in row.findall(f'{W}tc'):
+            # 收集所有候选单元格（按长度排序，优先选择长文本）
+            candidate_cells = []
+            for row_idx, row in enumerate(first_table.findall(f'{W}tr')):
+                for col_idx, tc in enumerate(row.findall(f'{W}tc')):
                     cell_text = _get_cell_text_lxml(tc).strip()
-                    if any(marker in cell_text for marker in [
-                        '是私人航空业', '是全球', '公司是', '本报告',
-                        '投资亮点', '核心观点', '摘要'
-                    ]) and len(cell_text) > 200:
-                        for para_elem in tc.findall(f'{W}p'):
-                            if _get_para_text(para_elem).strip():
-                                new_para = deepcopy(para_elem)
-                                abstract_doc.element.body.append(new_para)
-                        abstract_found = True
-                        break
-                if abstract_found:
-                    break
+
+                    # 跳过模板占位符单元格
+                    if '[Table_' in cell_text:
+                        continue
+
+                    # 跳过太短的单元格
+                    if len(cell_text) < 200:
+                        continue
+
+                    # 计算权重（长度 + 位置偏好）
+                    # 优先选择不在第一列的单元格（第一列通常是标签）
+                    position_bonus = 100 if col_idx > 0 else 0
+                    weight = len(cell_text) + position_bonus
+
+                    candidate_cells.append((weight, tc, cell_text))
+
+            # 按权重排序，选择最佳候选
+            candidate_cells.sort(key=lambda x: -x[0])
+
+            if candidate_cells:
+                _, best_tc, cell_text = candidate_cells[0]
+                print(f"找到摘要单元格，长度: {len(cell_text)}")
+
+                # 复制单元格内容
+                for para_elem in best_tc.findall(f'{W}p'):
+                    if _get_para_text(para_elem).strip():
+                        new_para = deepcopy(para_elem)
+                        abstract_doc.element.body.append(new_para)
+                abstract_found = True
 
         # 策略2：如果表格中没找到，从段落中查找
         if not abstract_found:
@@ -312,11 +331,15 @@ def extract_body(draft_path: str, scope: str, output_path: Optional[str] = None,
         return out_path
 
     try:
-        # 复制整个文档（保留所有资源引用）
-        shutil.copy(draft_path, str(out_path))
+        # 复制整个文档到临时文件（保留所有资源引用）
+        import tempfile
+        import uuid
+        temp_dir = Path(tempfile.gettempdir())
+        temp_path = temp_dir / f"body_temp_{uuid.uuid4().hex[:8]}.docx"
+        shutil.copy(draft_path, str(temp_path))
 
-        # 打开复制的文档进行编辑
-        doc = Document(str(out_path))
+        # 打开临时文件进行编辑
+        doc = Document(str(temp_path))
         body = doc.element.body
         elements = list(body)
 
@@ -331,6 +354,7 @@ def extract_body(draft_path: str, scope: str, output_path: Optional[str] = None,
             print(f"使用 LLM 提供的结束标记: '{end_marker}'")
         else:
             end_markers = [
+                'Summary',  # 英文摘要标题（优先检查，避免 body 包含英文摘要）
                 '重要信息披露',
                 '[Table_disclaimer]',
                 '免责声明',
@@ -418,6 +442,12 @@ def extract_body(draft_path: str, scope: str, output_path: Optional[str] = None,
                 pass
 
         doc.save(str(out_path))
+
+        # 清理临时文件
+        try:
+            temp_path.unlink()
+        except Exception:
+            pass
 
         final_doc = Document(str(out_path))
         print(f"正文提取完成: {len(final_doc.paragraphs)} 段落, "
@@ -1140,9 +1170,14 @@ def extract_english_summary(draft_path: str, scope: str, output_path: Optional[s
         return out_path
 
     try:
-        shutil.copy(draft_path, str(out_path))
+        # 复制到临时文件以避免文件锁定问题
+        import tempfile
+        import uuid
+        temp_dir = Path(tempfile.gettempdir())
+        temp_path = temp_dir / f"english_summary_temp_{uuid.uuid4().hex[:8]}.docx"
+        shutil.copy(draft_path, str(temp_path))
 
-        doc = Document(str(out_path))
+        doc = Document(str(temp_path))
         body = doc.element.body
         elements = list(body)
 
@@ -1151,6 +1186,7 @@ def extract_english_summary(draft_path: str, scope: str, output_path: Optional[s
             summary_keywords = [start_marker]
         else:
             summary_keywords = [
+                'Summary',  # 简单的 Summary 标题
                 'APPENDIX 1 SUMMARY',
                 'APPENDIX 1 Summary',
                 'Appendix 1 Summary',
@@ -1244,6 +1280,12 @@ def extract_english_summary(draft_path: str, scope: str, output_path: Optional[s
                 pass
 
         doc.save(str(out_path))
+
+        # 清理临时文件
+        try:
+            temp_path.unlink()
+        except Exception:
+            pass
 
         final_doc = Document(str(out_path))
         print(f"英文摘要提取完成: {len(final_doc.paragraphs)} 段落, "
