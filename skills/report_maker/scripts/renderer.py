@@ -37,6 +37,7 @@ import common
 # 占位符标记（用于避免 docxtpl 破坏文档结构）
 ABSTRACT_MARKER = '###ABSTRACT_MARKER###'
 BODY_MARKER = '###BODY_MARKER###'
+ENGLISH_SUMMARY_MARKER = '###ENGLISH_SUMMARY_MARKER###'
 
 
 def render_template(
@@ -652,7 +653,7 @@ def prepare_context_with_analysts(elements: Dict[str, Any]) -> Dict[str, Any]:
     # 跳过分析师原始字段和 fragment 字段
     skip_prefixes = ['a1_', 'a2_', 'a3_', 'a4_', 'a5_', 'a6_', 'a7_', 'a8_']
     for k, v in elements.items():
-        if k in ['abstract', 'body']:
+        if k in ['abstract', 'body', 'english_summary']:
             continue
         if any(k.startswith(p) for p in skip_prefixes):
             continue
@@ -1383,9 +1384,10 @@ def render_report(
     elements: Dict[str, Any],
     abstract_path: str,
     body_path: str,
-    output_path: str
+    output_path: str,
+    english_summary_path: str = None
 ) -> bool:
-    """渲染报告，正确处理分析师字段、abstract 和 body。
+    """渲染报告，正确处理分析师字段、abstract、body 和 english_summary。
 
     法律附录识别规则：
     - 前面有分页符（单独一页）
@@ -1398,6 +1400,7 @@ def render_report(
         abstract_path: 摘要文件路径
         body_path: 正文文件路径
         output_path: 输出文件路径
+        english_summary_path: 英文摘要文件路径（可选）
 
     Returns:
         是否成功
@@ -1412,11 +1415,12 @@ def render_report(
         # 1. 准备渲染上下文
         context = prepare_context_with_analysts(elements)
 
-        # 2. 添加 abstract 和 body 的 MARKER 到上下文
-        # docxtpl 会将 {{ abstract }} 和 {{ body }} 替换为 MARKER
+        # 2. 添加 abstract、body 和 english_summary 的 MARKER 到上下文
+        # docxtpl 会将 {{ abstract }}、{{ body }}、{{ english_summary }} 替换为 MARKER
         # 后续再在 MARKER 位置插入实际内容
         context['abstract'] = ABSTRACT_MARKER
         context['body'] = BODY_MARKER
+        context['english_summary'] = ENGLISH_SUMMARY_MARKER
 
         # 3. 修复模板中被拆分的占位符（Word 会把 {{ a1_email }} 拆成多个 run）
         temp_path = Path(output_path).parent / "temp_rendered.docx"
@@ -1500,6 +1504,39 @@ def render_report(
                     print(f"  已删除 BODY_MARKER（无 body 文件）")
                     break
             doc.save(output_path)
+
+        # 6.5 处理 ENGLISH_SUMMARY_MARKER - 在标记位置插入 english_summary 内容
+        if english_summary_path and Path(english_summary_path).exists() and Path(english_summary_path).stat().st_size > 0:
+            doc = Document(output_path)
+            english_summary_doc = Document(english_summary_path)
+
+            # 尝试在表格单元格中插入
+            es_inserted = insert_abstract_to_cell(doc, english_summary_doc, ENGLISH_SUMMARY_MARKER)
+            if es_inserted:
+                print(f"  已在 ENGLISH_SUMMARY_MARKER 位置插入 english_summary（表格单元格）")
+            else:
+                # 如果没有在表格中找到，尝试在段落中查找并替换
+                es_inserted = _insert_abstract_at_paragraph(doc, english_summary_doc, ENGLISH_SUMMARY_MARKER)
+                if es_inserted:
+                    print(f"  已在段落中插入 english_summary")
+                else:
+                    print(f"  ⚠️ 未找到 ENGLISH_SUMMARY_MARKER，english_summary 未插入")
+
+            doc.save(output_path)
+        else:
+            # 没有 english_summary 文件，删除 ENGLISH_SUMMARY_MARKER
+            doc = Document(output_path)
+            body_elem = doc.element.body
+            marker_removed = False
+            for elem in list(body_elem):
+                text = ''.join(t.text or '' for t in elem.iter() if t.text)
+                if ENGLISH_SUMMARY_MARKER in text:
+                    body_elem.remove(elem)
+                    marker_removed = True
+                    print(f"  已删除 ENGLISH_SUMMARY_MARKER（无 english_summary 文件）")
+                    break
+            if marker_removed:
+                doc.save(output_path)
 
         # 7. 恢复图表 XML 中被转义的 Jinja2 语法
         if escaped_chart_files:

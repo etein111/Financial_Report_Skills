@@ -983,3 +983,145 @@ def validate_appendix(draft_path: str, schema: Dict[str, Any]) -> Dict[str, Any]
 
     except Exception as e:
         return {"has_appendix": False, "error": str(e)}
+
+
+def extract_english_summary(draft_path: str, scope: str, output_path: Optional[str] = None) -> Path:
+    """提取英文摘要片段（APPENDIX 1 Summary）。
+
+    英文摘要结构特征：
+    1. 固定开始标记：如 "APPENDIX 1 Summary"、"Summary"、"Executive Summary"
+    2. 处于独立页面（前面有分页符/分节符）
+    3. 结束位置：下一个分页符之前
+
+    使用"复制整个文档 → 删除范围外元素"的方式，
+    确保所有格式、图片和表格都被完整保留。
+
+    Args:
+        draft_path: 草稿文件路径
+        scope: 位置描述（如"正文之后一页"）
+        output_path: 输出路径（可选）
+
+    Returns:
+        english_summary.docx 文件路径
+    """
+    if Document is None:
+        return Path(output_path or common.FILE_ENGLISH_SUMMARY)
+
+    out_path = Path(output_path or common.FILE_ENGLISH_SUMMARY)
+
+    try:
+        # 步骤1：复制整个文档（保留所有资源引用）
+        shutil.copy(draft_path, str(out_path))
+
+        # 步骤2：打开复制的文档进行编辑
+        doc = Document(str(out_path))
+        body = doc.element.body
+        elements = list(body)
+
+        # 英文摘要的起始标记
+        summary_keywords = [
+            'APPENDIX 1 SUMMARY',
+            'APPENDIX 1 Summary',
+            'Appendix 1 Summary',
+            'EXECUTIVE SUMMARY',
+            'Executive Summary',
+        ]
+
+        # 步骤3：找到英文摘要的起始和结束位置
+        start_idx = None
+        end_idx = len(elements)
+
+        # 先找到起始位置
+        for i, elem in enumerate(elements):
+            text = ''.join(elem.itertext()).strip()
+
+            for kw in summary_keywords:
+                if kw.upper() in text.upper():
+                    start_idx = i
+                    print(f"找到英文摘要起始位置: 元素 {i}")
+                    break
+            if start_idx is not None:
+                break
+
+        if start_idx is None:
+            print("警告：未找到英文摘要起始标记")
+            # 返回空文档
+            empty_doc = Document()
+            empty_doc.save(str(out_path))
+            return out_path
+
+        # 从起始位置之后找分页符作为结束位置
+        for i in range(start_idx + 1, len(elements)):
+            elem = elements[i]
+            tag = elem.tag.split('}')[-1]
+
+            # 检查是否包含分页符
+            has_page_break = False
+
+            if tag == 'p':
+                # 检查段落中的分页符：<w:br w:type="page"/> 或 <w:lastRenderedPageBreak/>
+                for br in elem.iter(f'{W}br'):
+                    br_type = br.get(f'{W}type', '')
+                    if br_type == 'page':
+                        has_page_break = True
+                        break
+                # 检查 lastRenderedPageBreak
+                if not has_page_break:
+                    for _ in elem.iter(f'{W}lastRenderedPageBreak'):
+                        has_page_break = True
+                        break
+
+            # 检查分节符（sectPr 在段落属性中表示分节）
+            if tag == 'p' and not has_page_break:
+                pPr = elem.find(f'{W}pPr')
+                if pPr is not None:
+                    sectPr = pPr.find(f'{W}sectPr')
+                    if sectPr is not None:
+                        has_page_break = True
+
+            if has_page_break:
+                end_idx = i
+                print(f"找到英文摘要结束位置（分页符）: 元素 {i}")
+                break
+
+        print(f"英文摘要范围: 元素 {start_idx} - {end_idx}")
+
+        # 步骤4：删除范围外的元素
+        elements_to_remove = []
+
+        # 删除结束位置之后的元素（倒序）
+        for i in range(len(elements) - 1, end_idx - 1, -1):
+            elem = elements[i]
+            tag = elem.tag.split('}')[-1]
+            if tag not in ['sectPr']:  # 保留节属性
+                elements_to_remove.append(elem)
+
+        # 删除起始位置之前的元素（倒序）
+        for i in range(start_idx - 1, -1, -1):
+            elem = elements[i]
+            tag = elem.tag.split('}')[-1]
+            if tag not in ['sectPr']:
+                elements_to_remove.append(elem)
+
+        # 执行删除
+        for elem in elements_to_remove:
+            try:
+                body.remove(elem)
+            except ValueError:
+                pass  # 元素可能已被删除
+
+        # 步骤5：保存
+        doc.save(str(out_path))
+
+        # 验证结果
+        final_doc = Document(str(out_path))
+        print(f"英文摘要提取完成: {len(final_doc.paragraphs)} 段落, "
+              f"{len(final_doc.tables)} 表格")
+
+        return out_path
+
+    except Exception as e:
+        print(f"提取英文摘要失败: {e}")
+        import traceback
+        traceback.print_exc()
+        return out_path

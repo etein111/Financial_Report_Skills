@@ -19,11 +19,10 @@ from template import (
     load_document, save_document,
     replace_field_value_in_doc,
     replace_abstract_in_doc,
-    replace_summary_in_doc,
     replace_body_in_doc,
     replace_analyst_fields_in_doc
 )
-from document import find_abstract_by_elements, find_body_range_by_sections, find_appendix_by_markers, find_first_appendix_position, find_summary_by_markers
+from document import find_abstract_by_elements, find_body_range_by_sections, find_appendix_by_markers, find_first_appendix_position
 from router import load_router, update_mapping, save_router, get_all_router_mappings
 import yaml
 
@@ -262,7 +261,6 @@ def _auto_detect_locations(word_path: Path, elements: dict) -> dict:
     result = {
         "abstract": None,
         "body": None,
-        "summary": None,  # 英文 Summary（可选）
         "appendix": None,
         "first_appendix": None  # 第一个 APPENDIX 标题位置（用于确定正文结束位置）
     }
@@ -279,13 +277,6 @@ def _auto_detect_locations(word_path: Path, elements: dict) -> dict:
     if body_location.get("found"):
         result["body"] = {
             "location": body_location
-        }
-
-    # 检测英文 Summary 位置（可选，不是所有报告都有）
-    summary_location = find_summary_by_markers(str(word_path))
-    if summary_location.get("found"):
-        result["summary"] = {
-            "location": summary_location
         }
 
     # 检测第一个 APPENDIX 标题位置（用于确定正文结束位置）
@@ -599,7 +590,7 @@ def create_template(
 
     # 替换普通字段值为占位符（跳过分析师字段和结构化字段）
     analyst_fields = {f'a{i}_{f}' for i in range(1, 9) for f in ['cn', 'en', 'sfc', 'email']}
-    # 只跳过结构化字段（字典类型），保留 summary 等文本字段
+    # 只跳过结构化字段（字典类型），保留普通文本字段
     skip_fields = {'sections', 'analysts'}
     replaced_fields = []
 
