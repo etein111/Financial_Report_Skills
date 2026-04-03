@@ -287,9 +287,23 @@ full_document_text = '\n'.join(all_text_lines)
 
 ## 第三部分：正文提取
 1. 是否有正文部分？（正文是报告的主要分析内容，从目录或第一章开始）
-2. 如果有正文，请指出正文的起始位置（如"从目录开始"或"从第N页开始"）
+2. 如果有正文，请指出正文的起始和结束位置
 3. has_body: true/false
 4. body_scope: "位置描述"
+5. **重要**：请提供正文的**精确起始和结束标记文本**：
+   - body_start_marker: 正文开始的标记文本（如目录标题、第一章标题的前15-30个字符）
+   - body_end_marker: 正文结束的标记文本（正文最后一段的文本，**不包含**后续的 english_summary 或附录）
+
+**⚠️ body 的结束边界规则**：
+- **如果有 english_summary**：body_end_marker 应该是 english_summary 标题之前的最后一段内容
+- **如果没有 english_summary**：body_end_marker 应该是附录/法律披露（"附录APPENDIX"、"IMPORTANT DISCLOSURES"）之前的最后一段内容
+- body_end_marker 必须是正文内容本身，不能是 english_summary 或附录的标题
+
+**示例**：
+- ✅ 正确：`body_start_marker: "目录"` 或 `body_start_marker: "1 公司概况"`
+- ✅ 正确：`body_end_marker: "资料来源：公司公告"` （正文最后一段）
+- ❌ 错误：`body_end_marker: "Summary"` （这是 english_summary 标题，不是正文内容）
+- ❌ 错误：`body_end_marker: "附录APPENDIX"` （这是附录标题，不是正文内容）
 
 ## 第四部分：英文摘要提取
 1. 是否有英文摘要部分？（通常在正文之后、附录之前的独立页面，标题可能是 "Summary"、"APPENDIX 1" 等）
@@ -321,6 +335,8 @@ abstract_scope: "位置描述"
 # 正文信息
 has_body: true/false
 body_scope: "位置描述"
+body_start_marker: "正文起始标记文本"  # 如 "目录" 或 "1 公司概况"
+body_end_marker: "正文结束标记文本"    # english_summary 标题前的最后一段
 
 # 英文摘要信息
 has_english_summary: true/false
@@ -347,7 +363,9 @@ llm_result = {
 
     # 正文信息
     "has_body": True,
-    "body_scope": "从目录开始，到附录之前",
+    "body_scope": "从目录开始，到英文摘要之前",
+    "body_start_marker": "目录",
+    "body_end_marker": "资料来源：公司公告",  # english_summary 前的最后一段
 
     # 英文摘要信息
     "has_english_summary": True,
@@ -358,10 +376,11 @@ llm_result = {
 # 分离 elements 和位置信息
 position_keys = [
     'has_abstract', 'abstract_scope',
-    'has_body', 'body_scope',
+    'has_body', 'body_scope', 'body_start_marker', 'body_end_marker',
     'has_english_summary', 'english_summary_scope', 'english_summary_content_start'
 ]
 elements = {k: v for k, v in llm_result.items() if k not in position_keys}
+```
 ```
 
 **关键优势**：
@@ -391,7 +410,9 @@ if llm_result['has_body']:
     splitter.extract_body(
         draft_path,
         llm_result['body_scope'],
-        output_path=f"{output_dir}/body.docx"
+        output_path=f"{output_dir}/body.docx",
+        start_marker=llm_result.get('body_start_marker'),  # 精确起始标记
+        end_marker=llm_result.get('body_end_marker')       # 精确结束标记（english_summary 前）
     )
 
 if llm_result.get('has_english_summary'):
@@ -425,8 +446,11 @@ if llm_result.get('has_english_summary'):
 | abstract_scope | `首页右侧表格` | ✅ |
 | has_body | `True` | ✅ |
 | body_scope | `从目录开始` | ✅ |
+| body_start_marker | `目录` | ✅ |
+| body_end_marker | `资料来源：公司公告` | ✅ |
 | has_english_summary | `True` | ✅ |
 | english_summary_scope | `正文之后一页` | ✅ |
+| english_summary_content_start | `Initial Coverage on...` | ✅ |
 ```
 
 用户可以一次性确认或修正多个字段。

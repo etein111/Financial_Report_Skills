@@ -107,11 +107,15 @@ def extract_fragment_by_markers(
     out_path = Path(output_path)
 
     try:
-        # 复制整个文档（保留所有资源引用）
-        shutil.copy(draft_path, str(out_path))
+        # 复制到临时文件（避免 Windows 文件锁定问题）
+        import tempfile
+        import uuid
+        temp_dir = Path(tempfile.gettempdir())
+        temp_path = temp_dir / f"fragment_temp_{uuid.uuid4().hex[:8]}.docx"
+        shutil.copy(draft_path, str(temp_path))
 
-        # 打开复制的文档进行编辑
-        doc = Document(str(out_path))
+        # 打开临时文件进行编辑
+        doc = Document(str(temp_path))
         body = doc.element.body
         elements = list(body)
 
@@ -141,6 +145,7 @@ def extract_fragment_by_markers(
             # 返回空文档
             empty_doc = Document()
             empty_doc.save(str(out_path))
+            temp_path.unlink(missing_ok=True)
             return out_path
 
         # 如果没找到结束标记，使用文档末尾
@@ -174,7 +179,17 @@ def extract_fragment_by_markers(
             except ValueError:
                 pass
 
+        # 保存到输出路径
         doc.save(str(out_path))
+
+        # 释放文档对象，避免文件锁定
+        del doc
+
+        # 清理临时文件（忽略错误，让系统自动清理）
+        try:
+            temp_path.unlink()
+        except (PermissionError, OSError):
+            pass  # Windows 上可能仍被锁定，忽略错误
 
         # 验证结果
         final_doc = Document(str(out_path))
@@ -186,6 +201,12 @@ def extract_fragment_by_markers(
         print(f"提取 fragment 失败: {e}")
         import traceback
         traceback.print_exc()
+        # 清理临时文件
+        if 'temp_path' in locals():
+            try:
+                temp_path.unlink()
+            except (PermissionError, OSError):
+                pass
         return out_path
 
 
@@ -391,6 +412,67 @@ def _apply_margins_to_final_sectpr(body, margins: Dict[str, str], W: str) -> boo
                 print(f"已将页边距应用到最终 sectPr: {margins}")
                 return True
     return False
+
+
+def _clear_paragraph_indents(docx_path: str) -> bool:
+    """清除 Word 文档中所有段落的缩进设置。
+
+    用于清除 draft 中的错误缩进（如负缩进），
+    让内容在渲染时继承 template 的格式。
+
+    Args:
+        docx_path: Word 文档路径
+
+    Returns:
+        是否成功
+    """
+    try:
+        import zipfile
+        import tempfile
+        import os
+
+        # 读取文档
+        with zipfile.ZipFile(docx_path, 'r') as z:
+            xml_content = z.read('word/document.xml')
+
+        # 解析 XML
+        tree = etree.fromstring(xml_content)
+        cleared_count = 0
+
+        # 查找并删除所有 w:ind 元素
+        for ind in tree.findall(f'.//{W}ind'):
+            parent = ind.getparent()
+            if parent is not None:
+                parent.remove(ind)
+                cleared_count += 1
+
+        if cleared_count > 0:
+            print(f"  已清除 {cleared_count} 个段落缩进设置")
+
+            # 保存修改后的 XML
+            new_xml = etree.tostring(tree, xml_declaration=True, encoding='UTF-8', standalone='yes')
+
+            # 创建临时文件来保存修改后的 docx
+            temp_path = docx_path + '.tmp'
+
+            with zipfile.ZipFile(docx_path, 'r') as z_in:
+                with zipfile.ZipFile(temp_path, 'w', zipfile.ZIP_DEFLATED) as z_out:
+                    for item in z_in.namelist():
+                        if item == 'word/document.xml':
+                            z_out.writestr(item, new_xml)
+                        else:
+                            z_out.writestr(item, z_in.read(item))
+
+            # 替换原文件
+            os.replace(temp_path, docx_path)
+
+        return True
+
+    except Exception as e:
+        print(f"清除段落缩进失败: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
 
 
 def extract_body(draft_path: str, scope: str, output_path: Optional[str] = None,
@@ -1262,7 +1344,14 @@ def extract_english_summary(draft_path: str, scope: str, output_path: Optional[s
     # 如果提供了 start_marker 和 end_marker，使用通用函数
     if start_marker and end_marker:
         print(f"使用 LLM 提供的标记提取英文摘要: '{start_marker}' -> '{end_marker}'")
-        return extract_fragment_by_markers(draft_path, start_marker, end_marker, str(out_path))
+        result_path = extract_fragment_by_markers(draft_path, start_marker, end_marker, str(out_path))
+
+        # 🔑 关键：清除提取后文档中的段落缩进
+        # draft 中的 english_summary 可能有错误的缩进（如负缩进），
+        # 清除后让内容继承 template 的 "APPENDIX 1 Summary" 格式
+        _clear_paragraph_indents(str(result_path))
+
+        return result_path
 
     # 备用逻辑：使用启发式规则
     print("使用启发式规则提取英文摘要（未提供完整 LLM 标记）")
