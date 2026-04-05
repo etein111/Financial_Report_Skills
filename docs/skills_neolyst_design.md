@@ -54,52 +54,12 @@
 ### 3.1 对外接口
 
 - 当前对外核心接口：`submit_report(submission)`
+- `submission` 接收结构化报告元数据和本地文件路径
+- `submission` 当前由 `report_maker` 直接产出
 - 不单独暴露 `upload file` 和 `save draft`
 - 不支持基于已有 draft 再提交
 
-### 3.2 登录与会话细节
-
-- 当前只支持 `email + password` 登录
-- 使用 Supabase Auth 的 `signInWithPassword`
-- 不支持 magic link
-- 不支持 SSO
-- 当前版本允许同时保存明文 `email/password` 与 session，用于自动重新登录
-- 建议将 `/.neolyst` 加入 `.gitignore`
-
-建议最小结构如下：
-
-```json
-{
-  "auth": {
-    "email": "",
-    "password": ""
-  },
-  "session": {}
-}
-```
-
-### 3.3 内部公共入口
-
-- 统一使用 `getAuthenticatedClient()`
-- 所有需要访问 Supabase 的逻辑都通过该入口获取 client
-- session 无效时，先尝试恢复，失败后提示登录
-
-推荐返回结构：
-
-```ts
-type AuthenticatedClient = {
-  client: SupabaseClient
-  session: Session
-  user: User
-}
-```
-
-### 3.4 输入来源
-
-- `submit_report` 接收结构化报告元数据和本地文件路径
-- 当前输入由 `report_maker` 直接产出
-
-### 3.5 建议输入结构
+输入结构与字段说明：
 
 ```json
 {
@@ -129,85 +89,54 @@ type AuthenticatedClient = {
 }
 ```
 
-### 3.6 字段约束
-
 - `title`：报告标题
-- `report_type`：报告类型，必须来自有效模板类型
-- `ticker`：公司类报告使用
-- `rating`：`company` 必填
-- `target_price`：`company` 必填
-- `region_code`：`sector` / `sector_flash` / `common` 必填
-- `sector_id`：`sector` / `sector_flash` 必填
+- `report_type`：报告类型
+- `ticker`：股票代码
+- `rating`：评级
+- `target_price`：目标价
+- `region_code`：地区代码
+- `sector_id`：行业 ID
 - `report_language`：`en` 或 `zh`
-- `contact_person_id`：当前按现有实现视为可选
-- `investment_thesis`：提交前必填
-- `certificate_confirmed`：提交前必须为 `true`
-- `analysts`：至少 1 个，最多 4 个，必须唯一
+- `contact_person_id`：联系人 analyst ID，属于提交元数据的一部分
+- `investment_thesis`：投资要点
+- `certificate_confirmed`：合规确认标记
+- `analysts`：分析师列表
 - `files.report_file`：报告主文件路径
 - `files.pdf_file`：可选 PDF
-- `files.model_file`：`company` 必填
+- `files.model_file`：模型文件路径
 
-通用要求：
+`contact_person_id` 规则：
 
-- `title` 非空
-- `report_type` 非空
-- `report_language` 非空
-- `investment_thesis` 非空
-- `analysts` 至少 1 个
-- `certificate_confirmed = true`
-- `report_file` 已提供并上传成功
+- `contact_person_id` 由 `report_maker` 在提交前确认后写入 `submission` 元数据
+- 当 `analysts` 只有 1 人时，可直接使用该 analyst 作为 `contact_person_id`
+- 当 `analysts` 超过 1 人时，应由 `report_maker` 通过对话交互确认
 
-按类型补充要求：
+返回结构：
 
-- `company`：`ticker`、`rating`、`target_price`、`model_file`
-- `company_flash`：`ticker`
-- `sector`：`region_code`、`sector_id`
-- `sector_flash`：`region_code`、`sector_id`
-- `common`：`region_code`
+`submit_report` 成功时返回：
 
-来源合法性校验：
+```json
+{
+  "ok": true,
+  "report_id": "uuid",
+  "status": "submitted",
+  "version_no": 1
+}
+```
 
-- `report_type` 必须是有效 active type
-- `region_code` 必须来自有效 region
-- `sector_id` 必须来自有效 sector
-- `analysts[].analyst_id` 必须来自 active analyst
-- 公司类报告还需满足 Coverage 与 analyst 交集约束
+失败时返回：
 
-### 3.7 文件上传
+```json
+{
+  "ok": false,
+  "error": "human readable message"
+}
+```
 
-- 由本 skill 自己负责上传文件
-- 允许的文件类型：
-  - 报告主文件：`.doc` / `.docx` / `.ppt` / `.pptx`
-  - PDF：`.pdf`
-  - Model：`.xls` / `.xlsx` / `.csv`
-- 当前不将 `chief approval screenshot` 纳入核心提交流程
 
-### 3.8 执行流程
+### 3.2 整体结构
 
-1. 调用 `getAuthenticatedClient()`
-2. 读取并校验输入
-3. 校验来源合法性
-4. 创建 report
-5. 上传文件
-6. 保存 report 内容与文件路径
-7. 执行提交
-8. 返回结果
-
-### 3.9 失败处理与已知差异
-
-失败处理：
-
-- 提交失败时，保留已创建的 report / draft 状态
-- 避免文件已上传但业务对象丢失
-
-已知差异：
-
-- `contact_person_id` 当前按现有实现仍可选
-- 如果后续要与需求文档完全收敛，再单独调整
-
-### 3.10 Skill 内部模块建议
-
-可按以下最小结构组织：
+整体骨架如下：
 
 ```text
 neolyst/
@@ -221,7 +150,7 @@ neolyst/
     validators.ts
 ```
 
-模块职责：
+模块分工：
 
 - `auth.ts`：登录、刷新、session 读写
 - `config.ts`：处理根目录 `/.neolyst`
@@ -230,48 +159,55 @@ neolyst/
 - `storage.ts`：上传文件、构造 Storage 路径
 - `validators.ts`：输入校验、业务前置校验
 
-### 3.11 建议结果结构
 
-`submit_report` 成功时建议返回：
+### 3.3 SKILL.md 的职责
 
-```json
-{
-  "ok": true,
-  "report_id": "uuid",
-  "status": "submitted",
-  "version_no": 1
-}
-```
+`SKILL.md` 只做以下几件事：
 
-失败时建议返回：
-
-```json
-{
-  "ok": false,
-  "error": "human readable message"
-}
-```
-
-### 3.12 SKILL.md 的职责
-
-`SKILL.md` 建议只做以下几件事：
-
-- 说明 skill 名称为 `neolyst`
-- 说明当前先聚焦 `submit_report`
+- 说明 skill 名称为 `neolyst`，当前聚焦 `submit_report`
 - 说明 skill 会在工作目录根下使用 `/.neolyst`
 - 说明当 `/.neolyst` 缺失或 session 失效时，会提示输入 `email/password`
 - 说明输入应对齐 `report_maker` 输出的结构化 payload
 - 说明 skill 会自己上传文件，再创建并提交 report
 
-`SKILL.md` 不建议承载过多实现细节，例如：
+`SKILL.md` 不承载过多实现细节，例如：
 
 - Supabase client 创建细节
 - 具体 JSON 字段逐一解释
 - 复杂的异常分支
 
-这些细节应放在 `scripts/*.ts` 中实现。
+实现细节放在 `scripts/*.ts`。
 
-### 3.13 scripts/config.ts
+### 3.4 提交流程
+
+`scripts/submit-report.ts` 负责主流程实现。
+
+职责：
+
+- 串联认证、校验、建 report、上传文件、保存内容与执行提交
+
+主流程入口：
+
+- `submitReport(payload)`
+
+内部流程：
+
+1. 获取已认证 client
+2. 校验 payload 与来源合法性
+3. 创建 report
+4. 上传文件
+5. 保存 report 内容与文件路径
+6. 执行 direct submit
+7. 返回结果
+
+失败处理：
+
+- 提交失败时，保留已创建的 report / draft 状态
+- 避免文件已上传但业务对象丢失
+
+### 3.5 配置
+
+`/.neolyst` 配置由 `scripts/config.ts` 负责。
 
 职责：
 
@@ -280,13 +216,13 @@ neolyst/
 - 写入 `/.neolyst`
 - 提供一个稳定的数据结构给其他脚本使用
 
-建议导出：
+导出：
 
 - `getNeolystConfigPath()`
 - `readNeolystConfig()`
 - `writeNeolystConfig(config)`
 
-建议内部数据结构：
+内部数据结构：
 
 ```ts
 type NeolystConfig = {
@@ -298,7 +234,44 @@ type NeolystConfig = {
 }
 ```
 
-### 3.14 scripts/auth.ts
+### 3.6 身份与会话
+
+- 当前只支持 `email + password` 登录
+- 使用 Supabase Auth 的 `signInWithPassword`
+- 不支持 magic link
+- 不支持 SSO
+- 当前版本允许同时保存明文 `email/password` 与 session，用于自动重新登录
+- 将 `/.neolyst` 加入 `.gitignore`
+
+配置结构如下：
+
+```json
+{
+  "auth": {
+    "email": "",
+    "password": ""
+  },
+  "session": {}
+}
+```
+
+公共入口：
+
+- 统一使用 `getAuthenticatedClient()`
+- 所有需要访问 Supabase 的逻辑都通过该入口获取 client
+- session 无效时，先尝试恢复，失败后提示登录
+
+返回结构：
+
+```ts
+type AuthenticatedClient = {
+  client: SupabaseClient
+  session: Session
+  user: User
+}
+```
+
+`scripts/auth.ts`：
 
 职责：
 
@@ -307,7 +280,7 @@ type NeolystConfig = {
 - 当 session 不可用时，执行重新登录
 - 登录成功后回写最新 session 到 `/.neolyst`
 
-建议导出：
+导出：
 
 - `signInWithStoredPassword()`
 - `signInWithPrompt()`
@@ -318,26 +291,16 @@ type NeolystConfig = {
 - 当前允许使用 `/.neolyst.auth.email/password`
 - 当前不做复杂的账户切换能力
 
-### 3.15 scripts/client.ts
+`scripts/client.ts`：
 
 职责：
 
 - 统一创建可用的 Supabase client
 - 对外提供单一公共入口：`getAuthenticatedClient()`
 
-建议导出：
+导出：
 
 - `getAuthenticatedClient()`
-
-建议返回：
-
-```ts
-type AuthenticatedClient = {
-  client: SupabaseClient
-  session: Session
-  user: User
-}
-```
 
 推荐行为：
 
@@ -346,7 +309,10 @@ type AuthenticatedClient = {
 - 如仍失败，再提示用户输入账号密码
 - 成功后统一回写 `/.neolyst`
 
-### 3.16 scripts/validators.ts
+
+### 3.7 校验
+
+`scripts/validators.ts` 负责校验逻辑。
 
 职责：
 
@@ -354,7 +320,7 @@ type AuthenticatedClient = {
 - 执行业务前置校验
 - 对齐当前 `Analyst Submit` 已实现行为
 
-建议至少覆盖：
+校验范围：
 
 - 基础字段非空检查
 - report type 对应字段必填关系
@@ -362,13 +328,50 @@ type AuthenticatedClient = {
 - 文件路径存在性检查
 - 可选的本地文件扩展名预校验
 
-建议导出：
+输入约束：
+
+- `title` 非空
+- `report_type` 非空
+- `report_language` 非空
+- `investment_thesis` 非空
+- `analysts` 至少 1 个
+- `contact_person_id` 必须提供
+- `certificate_confirmed = true`
+- `files.report_file` 已提供
+
+按类型要求：
+
+- `company`：`ticker`、`rating`、`target_price`、`model_file`
+- `company_flash`：`ticker`
+- `sector`：`region_code`、`sector_id`
+- `sector_flash`：`region_code`、`sector_id`
+- `common`：`region_code`
+
+来源合法性校验：
+
+- `report_type` 必须是有效 active type
+- `region_code` 必须来自有效 region
+- `sector_id` 必须来自有效 sector
+- `analysts[].analyst_id` 必须来自 active analyst
+- `contact_person_id` 必须属于 `analysts[].analyst_id`
+- 公司类报告还需满足 Coverage 与 analyst 交集约束
+
+导出：
 
 - `validateSubmitReportPayload(payload)`
 - `assertRequiredFieldsByReportType(payload)`
 - `validateAnalystAssignments(payload)`
 
-### 3.17 scripts/storage.ts
+### 3.8 文件上传
+
+- 由本 skill 自己负责上传文件
+- 允许的文件类型：
+  - 报告主文件：`.doc` / `.docx` / `.ppt` / `.pptx`
+  - PDF：`.pdf`
+  - Model：`.xls` / `.xlsx` / `.csv`
+- 当前不将 `chief approval screenshot` 纳入核心提交流程
+
+`scripts/storage.ts`：
 
 职责：
 
@@ -376,19 +379,19 @@ type AuthenticatedClient = {
 - 生成 storage 路径
 - 对齐当前 Neolyst 的文件命名方式
 
-建议导出：
+导出：
 
 - `buildReportStoragePath(params)`
 - `uploadReportFiles(client, params)`
 
-`uploadReportFiles` 建议负责：
+`uploadReportFiles` 负责：
 
 - 上传 report 主文件
 - 可选上传 PDF
 - 对 `company` 类型上传 model
 - 返回上传后的路径与原始文件名
 
-建议返回结构：
+上传结果：
 
 ```ts
 type UploadedReportFiles = {
@@ -399,50 +402,6 @@ type UploadedReportFiles = {
   model_file_path: string | null
   model_file_name: string | null
 }
-```
-
-### 3.18 scripts/submit-report.ts
-
-职责：
-
-- 实现 `submit_report` 全流程
-- 调用 `getAuthenticatedClient()`
-- 校验输入
-- 查询动态来源数据
-- 创建 report
-- 上传文件
-- 保存 report 内容
-- 执行 direct submit
-
-建议导出：
-
-- `submitReport(payload)`
-
-建议内部流程：
-
-1. 获取已认证 client
-2. 校验 payload
-3. 查询 report type / region / sector / analyst 合法性
-4. 创建 report
-5. 上传文件
-6. 保存 report 内容
-7. 执行 direct submit
-8. 返回结果
-
-### 3.19 submitReport 的建议返回值
-
-```ts
-type SubmitReportResult =
-  | {
-      ok: true
-      report_id: string
-      status: "submitted"
-      version_no: number
-    }
-  | {
-      ok: false
-      error: string
-    }
 ```
 
 ## 4. 联调与环境
