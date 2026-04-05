@@ -32,12 +32,13 @@
 ### 2.3 Supabase 身份与会话策略
 
 - Neolyst Supabase 的登录身份由本 skill 管理和复用，`submit_report` 的相关读写都使用该身份。
-- 本 skill 使用 `email + password` 登录，登录态保存在工作目录根目录的 `/.neolyst`；当前只支持一个登录身份，会话失效时重新登录并更新 `/.neolyst`。
+- 本 skill 使用 `email + password` 登录，账号、密码和登录态保存在工作目录根目录的 `/.neolyst`；当前只支持一个登录身份，会话失效时重新登录并更新 `/.neolyst`。
 - 本 skill 不做代理执行，因为这会破坏 Neolyst 的安全性，也不符合实际业务关系；代理问题本质上来自当前尚未实现分析师直接对接 Agent。
 
 ### 2.4 技术访问方式
 
 - 本 skill 直接使用 `@supabase/supabase-js` 与 Neolyst Supabase 交互，不使用 Supabase CLI 作为业务入口。
+- 本 skill 的 TypeScript 脚本通过 `pnpm` 管理和执行。
 
 ### 2.5 来源合法性校验
 
@@ -48,6 +49,12 @@
 
 - 提交流程采用两段式：先创建并保存 report 相关内容，再执行提交；提交失败时保留已创建的中间结果。
 - 整体行为对齐当前 Web 的 `Analyst Submit`。
+
+### 2.7 Supabase URL
+
+- Supabase URL 由 skill 负责确定。
+- skill 内置默认 Supabase URL，`/.neolyst.server.url` 可作为覆盖项。
+- 用户可以通过对话修改 `/.neolyst.server.url`。
 
 ## 3. 实现落地
 
