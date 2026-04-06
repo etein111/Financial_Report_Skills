@@ -28,7 +28,7 @@ NeoSpace 的设计遵循以下核心原则，这些原则贯穿于系统的各�
 
 第二个原则是**流程可编排**。通过工作流引擎将各个 Skills 进行灵活编排，实现复杂的自动化流程。编排配置可以被修改和定制，以适应不同业务场景的需求。工作流引擎支持串行、并行、条件分支等多种执行模式，能够满足大多数业务流程的需求。
 
-第三个原则是**审核后更新**。NeoSpace 作为智能处理层，负责报告的自动化处理和审核检查，但在数据最终写入时，通过调用 Supabase Skills 来更新 Neolyst 系统的数据库。这种设计确保了数据一致性，所有业务数据仍然由 Neolyst 核心系统管理，NeoSpace 只负责处理逻辑。
+第三个原则是**一致性逻辑下沉到 Supabase**。NeoSpace 作为智能处理层，负责报告的自动化处理、文件准备和流程编排；凡涉及业务数据一致性、状态流转、关系维护、主表/版本表同步的核心逻辑，都通过调用 Supabase Skills 暴露的稳定接口在 Supabase 侧执行。这种设计确保了数据一致性，所有业务数据仍然由 Neolyst 核心系统管理，NeoSpace 只负责处理逻辑与接口编排。
 
 第四个原则是**业务人员可配置**。系统的设计目标是让业务人员（如分析师和排版助理）能够自行修改提取规则和维护排版模板，而无需研发人员介入。通过自然语言交互或修改 YAML 配置文件，业务人员即可新增报告模板或提取字段，实现业务主导的自动化流程。
 
@@ -58,7 +58,7 @@ NeoSpace 系统采用分层架构设计，从上到下分为四个主要层次�
 │                                    ▼                                         │
 │  ┌─────────────────────────────────────────────────────────────────────────┐│
 │  │                   Supabase Skills 数据操作层                             ││
-│  │              （审核通过后调用，更新 Neolyst 数据库）                     ││
+│  │        （承载一致性逻辑接口，服务 draft 保存、校验与提交等操作）         ││
 │  └─────────────────────────────────────────────────────────────────────────┘│
 └─────────────────────────────────────────────────────────────────────────────┘
                                       │
@@ -90,7 +90,7 @@ NeoSpace 工作台插件系统的技术栈分为两个主要部分：Neolyst 核
 
 **Agent Skills 智能处理层**是 NeoSpace 的核心，负责实现各种自动化 AI 能力。该层包含多个独立的 Skills，每个 Skill 针对特定的业务功能。Analyst Manager 负责从 Excel 提取分析师信息并与 Neolyst 数据进行比对。Report Checker 负责检查报告字段完整性和文件齐全性。Audit Workflow 处理报告的自动化审核流程。Approve Handler 处理各种审批场景，包括 Coverage 审批、首席审批和 RQC 审批。File Handler 管理文件上传、下载和格式转换。Translate Skill 提供报告翻译能力。Generate Report Skill 负责自动生成标准格式的报告。Publish Handler 处理报告的发布流程，包括 Word 转 PDF 和通知邮件发送。
 
-**Supabase Skills 数据操作层**是 NeoSpace 与 Neolyst 核心系统交互的桥梁。所有对 Neolyst 数据库的修改都通过该层进行，确保数据操作的一致性和安全性。该层封装了常见的数据操作，包括报告状态更新、分析师信息同步、Coverage 创建与更新、审批日志记录以及文件存储上传等。
+**Supabase Skills 数据操作层**是 NeoSpace 与 Neolyst 核心系统交互的桥梁。所有对 Neolyst 数据库的修改都通过该层进行，确保数据操作的一致性和安全性。该层封装了常见的数据操作，包括模板发布与复用、报告 draft 保存、提交前校验、报告状态更新、分析师信息同步、Coverage 创建与更新、审批日志记录以及文件存储上传等。
 
 **Next.js 应用层**是用户交互的前端入口，提供 Web 界面供用户操作。该层使用 Server Components 进行服务端渲染，优化首屏加载性能。Server Actions 用于处理表单提交和数据更新，Route Handlers 用于处理 API 请求。
 
@@ -130,11 +130,11 @@ NeoSpace 和 Neolyst 系统涉及多个核心数据实体，这些实体之间�
 
 **coverage_analyst 表**实现 Coverage 与分析师的多对多关系，支持每个 Coverage 最多 8 位分析师。关键字段包括 uuid 主键 id、coverage_id 外键、analyst_id 外键、role 角色字段（1 到 8）、sort_order 排序字段以及审计字段。约束条件确保同一 Coverage 中同一分析师只出现一次，同一 Coverage 中每个排序位置唯一。新建 Coverage 时，初始 `coverage_analyst` 与当前报告分析师列表保持一致；对已有 Coverage，单篇报告提交不自动改写其既有 `coverage_analyst`，报告作者关系独立记录在 `report_analyst` 中。
 
-**template 表**管理生成报告所使用的模板资产。关键字段包括 uuid 主键 id、name 模板名称、report_type 模板类型、language 模板语言、template_file_path Word 模板存储路径、schema_file_path 对应 `schema.yaml` 存储路径、uploaded_by 上传者外键以及审计字段。`report_type` 字段保存模板类型，也就是 `template_type`，与 draft 和提交阶段使用的研报类型 `report_type` 分离。`template_file_path` 与 `schema_file_path` 共同定义一套完整模板资产，其中 `schema.yaml` 用于描述需要抽取的字段，以及这些字段在分析师原始报告中的大致位置和特征。系统初始化应至少包含 company、sector、company_flash、sector_flash、common 五种模板类型在中英文维度上的模板资产。
+**template 表**管理生成报告所使用的模板资产。关键字段包括 uuid 主键 id、name 模板名称、report_type 报告类型、language 模板语言、template_file_path Word 模板存储路径、schema_file_path 对应 `schema.yaml` 存储路径、uploaded_by 上传者外键以及审计字段。模板侧字段名统一使用 live schema 中的 `report_type + language`，不引入额外的 `template_type` 概念，也不使用 `report_language` 作为模板记录字段名。`template_file_path` 与 `schema_file_path` 共同定义一套完整模板资产，其中 `schema.yaml` 用于描述需要抽取的字段，以及这些字段在分析师原始报告中的大致位置和特征。多个 `report_type` 可以通过多条 `template` 记录复用同一套模板资产路径。
 
-**report 表**是报告管理的核心表，存储报告的主要信息。关键字段包括 uuid 主键 id、owner_user_id 所有者外键（非空且不可转移）、title 标题（非空）、report_type 报告类型（非空）、ticker 股票代码、rating 评级、target_price 目标价、region_id/sector_id 关联外键、report_language 报告语言（zh 或 en）、contact_person_id 联系人外键、investment_thesis 投资观点、certificate_confirmed 证书确认（布尔值，默认 false）、status 状态（draft/submitted/published/rejected）、current_version_no 当前版本号、published_by/published_at 发布快照以及审计字段。约束规则规定报告不做物理删除，submitted 状态下所有者仍可编辑，仅在 submitted 转换为 published 时更新发布快照。
+**report 表**是报告管理的核心表，存储报告的主要信息。关键字段包括 uuid 主键 id、owner_user_id 所有者外键（非空且不可转移）、title 标题（非空）、report_type 报告类型（非空）、ticker 股票代码、rating 评级、target_price 目标价、region_code/sector_id 关联字段、report_language 报告语言（zh 或 en）、contact_person_id 联系人外键、investment_thesis 投资观点、certificate_confirmed 证书确认（布尔值，默认 false）、status 状态（draft/submitted/published/rejected）、current_version_no 当前版本号、published_by/published_at 发布快照以及审计字段。`owner_user_id` 与相关执行审计字段统一以当前登录身份写入，遵循“谁保存/提交，系统就记谁”。约束规则规定报告不做物理删除；draft 保存时即同步维护主表当前态，submitted 状态下所有者仍可编辑，仅在 submitted 转换为 published 时更新发布快照。
 
-**report_version 表**记录报告内容的版本历史，采用追加写入模式。关键字段包括 uuid 主键 id、report_id 报告外键、version_no 版本号（按报告递增）、snapshot_json JSON 格式的字段快照、word_file_path/model_file_path 文件路径、changed_by 修改人外键以及 changed_at 修改时间。约束条件确保报告和版本号的组合唯一，且采用追加模式禁止更新和删除。
+**report_version 表**记录报告内容的版本历史，采用追加写入模式。关键字段包括 uuid 主键 id、report_id 报告外键、version_no 版本号（按报告递增）、snapshot_json JSON 格式的字段快照、word_file_path/pdf_file_path/model_file_path 文件路径、changed_by 修改人外键以及 changed_at 修改时间。约束条件确保报告和版本号的组合唯一，且采用追加模式禁止更新和删除。
 
 **report_analyst 表**维护报告与分析师的作者关系。关键字段包括 uuid 主键 id、report_id 报告外键、analyst_id 分析师外键、role 角色、sort_order 排序以及审计字段。该表记录单篇报告的作者列表，与 `coverage_analyst` 的长期 Coverage 团队关系分离。所有者可维护自己报告的作者关系，管理员可全局维护。
 
@@ -261,7 +261,7 @@ NeoSpace 系统的工作流编排采用可视化配置的方式，允许业务�
 
 NeoSpace 系统提供了便捷的模板制作和维护功能，允许业务人员独立完成模板的创建和更新，无需研发人员介入。
 
-**步骤一：上传标准样本**。用户提供一份排版标准的历史报告 Word 文件以及对应的要素清单（elements.yaml），上传至系统并输入指令，例如“将其设为宏观报告模板”。
+**步骤一：上传标准样本**。用户提供一份排版标准的历史报告 Word 文件以及对应的字段清单（schema.yaml），上传至系统并输入指令，例如“将其设为宏观报告模板”。
 
 **步骤二：系统自动构建与验证**。系统自动解析 Word 文档，识别文档结构和占位符位置，将动态内容替换为占位符。验证阶段会基于原要素重新生成报告并与原文件进行比对，验证无差异后提示创建成功。
 
@@ -277,9 +277,9 @@ NeoSpace 系统提供了便捷的模板制作和维护功能，允许业务人�
 
 NeoSpace 系统使用 Supabase Storage 进行文件存储，主要分为两个存储桶：模板文件存储桶和报告文件存储桶。
 
-**模板文件存储**采用独立的模板专用 bucket。存储路径遵循规范：`templates/{template_type}/{language}/template.docx` 与 `templates/{template_type}/{language}/schema.yaml`。读取权限方面，所有已认证用户都可以读取模板文件（受路径约束）。写入权限方面，仅管理员可以上传、替换和删除模板文件。
+**模板文件存储**采用独立的模板专用 bucket。模板对象路径不由 `report_type` 公式推导，最终以 `template.template_file_path` 与 `template.schema_file_path` 为准。读取权限方面，所有已认证用户都可以读取模板文件（受路径约束）。写入权限方面，仅管理员可以上传、替换和删除模板文件。多个 `report_type` 可以引用同一路径，从而共用同一套模板资产。
 
-**报告文件存储**采用报告专用 bucket。存储路径遵循规范：`reports/{report_id}/`，其中 report_id 是报告的唯一标识。文件名遵循固定格式：`{report_id}_{version_no3}_{label}_{ts}.{ext}`。其中 version_no3 是三位版本号（如 001、002），label 是文件标签（report 表示报告文件，model 表示模型文件），ts 是 UTC 秒级时间戳（格式为 YYYYMMDDTHHMMSSZ），ext 是文件扩展名。
+**报告文件存储**采用报告专用 bucket。bucket 内路径遵循规范：`{report_id}/`，其中 report_id 是报告的唯一标识。文件名遵循固定格式：`{report_id}_{version_no3}_{label}_{ts}.{ext}`。其中 version_no3 是三位版本号（如 001、002），label 是文件标签（report 表示 Word 报告文件，pdf 表示 PDF 文件，model 表示模型文件），ts 是 UTC 秒级时间戳（格式为 YYYYMMDDTHHMMSSZ），ext 是文件扩展名。
 
 文件权限控制方面，读取权限归报告所有者、管理员和审批人员（SA）所有，但 SA 只能访问 submitted/published/rejected 状态范围的报告。写入权限归报告所有者和管理员所有。
 
@@ -287,7 +287,7 @@ NeoSpace 系统使用 Supabase Storage 进行文件存储，主要分为两个�
 
 NeoSpace 作为智能处理层，在完成自动化处理后需要将结果同步回 Neolyst 核心系统。数据同步遵循以下规范。
 
-**同步触发时机**：所有数据修改操作都在审核通过后执行。NeoSpace 不直接修改 Neolyst 数据库，而是通过 Supabase Skills 调用进行数据更新。
+**同步触发时机**：所有数据修改操作都通过 Supabase Skills 调用进行更新。draft 阶段允许保存机器处理结果与上传文件；提交阶段负责状态推进与审计写入；更复杂的一致性判断与主表/版本表同步逻辑统一在 Supabase 侧完成。
 
 **同步数据范围**：报告状态更新（draft → submitted → published/rejected）、分析师信息同步（Analyst Manager 处理后）、Coverage 创建与更新（首次覆盖审批通过后）、审批日志记录（状态流转时）、文件存储上传（报告文件上传到 Storage）。
 

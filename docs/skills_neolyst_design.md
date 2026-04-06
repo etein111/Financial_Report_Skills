@@ -2,7 +2,7 @@
 
 ## 1. 定位与边界
 
-`neolyst` 是 `neoskills` 中面向 Neolyst 的数据库操作 skill。它负责承接所有需要访问和操作 Neolyst 数据库的能力。`submit_report` 是当前优先落地的能力之一。
+`neolyst` 是 `neoskills` 中面向 Neolyst 的数据库操作 skill。它负责承接所有需要访问和操作 Neolyst 数据库的能力。
 
 `report_maker` 负责生成报告产物、补齐业务所需信息，并组装出满足 `neolyst` 契约的输入。`neolyst` 负责拿到完整输入后执行查询、校验、文件上传、数据写入和提交相关操作。
 
@@ -18,9 +18,12 @@
 
 ### 2.1 接口形态
 
-- `neolyst` 对外暴露八个接口：`resolve_analyst_by_email`、`resolve_template`、`upsert_template`、`resolve_coverage`、`create_coverage`、`save_draft_report`、`validators` 与 `submit_report`。
+- `neolyst` 对外暴露稳定的业务接口，包括：`resolve_analyst_by_email`、`resolve_template`、`upsert_template`、`reuse_template`、`resolve_coverage`、`create_coverage`、`save_draft_report`、`validators` 与 `submit_report`。
 - `resolve_analyst_by_email` 用于根据 analyst email 解析 `analyst_id`。
-- `resolve_template` 与 `upsert_template` 用于查询和维护模板资产。
+- `resolve_template` 用于查询模板资产。
+- `upsert_template` 用于上传或更新主模板资产。
+- `reuse_template` 用于声明某个 `report_type + language` 静态复用另一个已存在模板记录当前持久化的资产路径，不重复上传模板文件。
+  - 约束：源模板记录必须已存在、复用仅允许发生在同一 `language` 内、`report_type` 不可复用自己。
 - `resolve_coverage` 与 `create_coverage` 用于解析和创建 `coverage`。
 - `save_draft_report` 用于保存 draft。
 - `validators` 用于校验指定 `report_id + version_no` 的 draft 版本是否满足提交条件。
@@ -33,8 +36,8 @@
 - draft 输入采用全打平结构，业务字段和文件路径字段都位于顶层。
 - draft 输入不携带执行上下文字段，例如 `workspace_root`、`trace_id`、`server_url_override`、`dry_run`。
 - `save_draft_report` 的文件输入统一使用本地路径，由 `neolyst` 自行上传到 Neolyst Storage。
-- 模板文件的 storage 路径固定为 `templates/{template_type}/{report_language}/template.docx` 与 `templates/{template_type}/{report_language}/schema.yaml`。
-- 报告文件的 storage 路径固定为 `reports/{report_id}/`，文件名遵循 `ARCHITECTURE_TECHNICAL.md` 中约定的统一命名规则。
+- 模板文件位于模板 bucket，最终路径以 `template.template_file_path` 与 `template.schema_file_path` 为准，不由 `report_type` 公式推导。
+- 报告文件位于报告 bucket，bucket 内路径固定为 `{report_id}/`，文件名遵循 `ARCHITECTURE_TECHNICAL.md` 中约定的统一命名规则。
 - `report_id` 在首次保存 draft 时为空；机器处理后的 draft 和后续人工修订版都沿用同一个 `report_id` 追加新版本。
 - draft 分为“可保存字段”和“提交前必补齐字段”两层契约。
 - `company` / `company_flash` 在 draft 阶段允许暂时缺少 `coverage_id`，提交前必须补齐。
@@ -46,34 +49,40 @@
 - `validators` 接收 `report_id` 和 `version_no`，针对指定 draft 版本执行提交前校验。
 - `submit_report` 接收 `report_id` 和 `version_no`，针对指定 draft 版本执行提交。
 
-### 2.3 研报类型与模板类型
+### 2.3 研报类型与模板记录
 
-- 模板接口使用 `template_type`，其取值为：`company`、`sector`、`company_flash`、`sector_flash`、`common`。
-- draft 与提交接口使用研报类型 `report_type`，其取值为：`company`、`sector`、`flash`、`company_flash`、`sector_flash`、`macro`、`strategy`、`quantitative`、`bond`。
-- 研报类型用于研报分类、draft 保存和报告提交流程；模板类型用于选择模板资产。
-- 研报类型与模板类型是两个独立概念，可以同名，但不互相等价。
-- `report_maker` 在取模板时使用 `template_type`，在保存 draft 和提交时使用研报类型 `report_type`。
-- 模板记录按 `template_type + report_language` 唯一确定。`upsert_template` 以这组字段作为冲突键执行新增或更新，`resolve_template` 也以这组字段唯一解析模板资产。
+- draft、提交和模板接口统一使用研报类型 `report_type`，其取值为：`company`、`sector`、`flash`、`company_flash`、`sector_flash`、`macro`、`strategy`、`quantitative`、`bond`。
+- 模板接口以 `report_type + language` 作为业务定位键。`resolve_template` 以这组字段解析模板资产；`upsert_template` 与 `reuse_template` 的幂等写入、一致性约束和目标记录确定由 Supabase 侧模板接口负责保证。
+- `template.report_type` 就是报告类型本身，不引入单独的 `template_type` 概念。
+- 多个 `report_type` 可以共用同一套模板资产；发布时先上传一次主模板，再让其他 `report_type` 复用该主模板对应的 `template_file_path` 与 `schema_file_path`。
+- `reuse_template` 的复用是静态复制当前路径，不是动态引用；若主模板后续重新上传并变更路径，需要重新执行一次 `reuse_template` 才能同步到复用方。
 
 ### 2.4 身份与会话策略
 
 - Neolyst Supabase 的登录身份由 `neolyst` 管理和复用，`save_draft_report`、`validators` 与 `submit_report` 的相关读写都使用该身份。
 - 使用 `email + password` 登录，账号、密码和登录态保存在脚本执行时 `cwd` 根目录的 `/.neolyst`；只支持一个登录身份，会话失效时重新登录并更新 `/.neolyst`。
-- `/.neolyst` 为 JSON 文件，格式如下：`{ "email": "...", "password": "...", "access_token": "...", "refresh_token": "...", "expires_at": 1712345678 }`。`connection.ts` 启动时先用 `access_token` + `refresh_token` 恢复 session，若已过期则用 `email + password` 重新登录并回写该文件。
-- 提交相关的归属与审计字段统一使用 `connection` 当前登录的 Neolyst 用户；现阶段该执行处理人就是当前登录的 `admin`。`resolve_analyst_by_email` 只用于确定报告分析师身份，不用于决定提交执行用户。
+- `/.neolyst` 为 JSON 文件，格式如下：`{ "email": "...", "password": "...", "access_token": "...", "refresh_token": "...", "expires_at": 1712345678 }`。`connection.py` 启动时先用 `access_token` + `refresh_token` 恢复 session，若已过期则用 `email + password` 重新登录并回写该文件。
+- 报告所有者与执行审计均以当前登录身份为准。`owner_user_id`、`changed_by`、`action_by` 等字段遵循“谁保存/提交，系统就记谁”；`resolve_analyst_by_email` 只用于确定报告分析师身份，不用于决定执行审计用户。
 - 本 skill 不做代理执行，因为这会破坏 Neolyst 的安全性，也不符合实际业务关系。
 
-### 2.5 技术访问方式
+### 2.5 业务逻辑落点
 
-- 本 skill 直接使用 `@supabase/supabase-js` 与 Neolyst Supabase 交互，不使用 Supabase CLI 作为业务入口。
-- 本 skill 的 TypeScript 脚本通过 `pnpm` 管理和执行。
-- Storage 使用单一 bucket，不按 `templates` / `reports` 拆分 bucket。
+- 凡涉及业务数据一致性、状态流转、关系维护、主表/版本表同步的逻辑，均优先在 Supabase 侧实现为稳定接口。
+- `neolyst` skill 主要负责认证、文件上传、参数整理以及调用 Supabase 暴露的接口/函数，不在 skill 侧重复实现核心业务一致性规则。
+- 适合下沉到 Supabase 侧的逻辑包括：模板发布与复用、coverage 解析与创建、draft 保存、提交前校验、提交状态流转，以及 `report` / `report_version` / `report_analyst` 之间的一致性维护。
 
-### 2.6 Supabase URL
+### 2.6 技术访问方式
+
+- 本 skill 使用 Python `supabase-py` 与 Neolyst Supabase 交互，并通过 `uv` 管理依赖与执行环境。
+- 数据库结构真相仍以 `docs/neolyst_supabase_schema.sql` 为准。
+- Storage 使用两个独立 bucket：模板 bucket 与报告 bucket。
+- 模板 bucket 仅承载模板资产，路径以 `template_file_path` / `schema_file_path` 为准；报告 bucket 仅承载报告版本资产，bucket 内路径规则为 `{report_id}/...`。
+
+### 2.7 Supabase URL
 
 - Supabase URL 由 skill 负责确定；skill 内置默认 Supabase URL，`/.neolyst.server.url` 可作为覆盖项。
 
-### 2.7 提交流程
+### 2.8 提交流程
 
 - 报告生命周期采用 draft 驱动：机器处理后的结果先保存为 draft，人工确认后再执行提交。
 - `save_draft_report` 用于保存 draft，不要求当前版本已经满足最终提交条件。
@@ -81,9 +90,18 @@
 - 提交失败后的重新提交沿用原 `report_id`，在原 report 下创建新版本。
 - 整体行为对齐 Neolyst Web 的 `Analyst Submit`，不引入独立提交流程。
 
-### 2.8 校验与错误语义
+### 2.9 校验与错误语义
 
 - 提交前校验由 `neolyst` 负责，`validators(report_id, version_no)` 用于校验指定 draft 版本是否满足提交条件。
+- `reuse_template(report_type, language, same_as_report_type)` 的约束如下：
+  - `same_as_report_type + language` 对应的源模板记录必须已存在
+  - 复用关系只允许发生在同一 `language` 内
+  - `report_type` 不能与 `same_as_report_type` 相同
+- `reuse_template` 失败时直接抛出具体错误；至少覆盖以下场景：
+  - 源模板不存在
+  - 目标模板语言与源模板语言不一致
+  - 目标 `report_type` 试图复用自己
+  - 主模板后续已更新，但当前目标记录尚未重新执行复用
 - `resolve_coverage` 按 `ticker` 查询候选 `coverage`，再通过 `coverage_analyst` 判断报告 `1作 analyst_id` 是否属于该 `coverage` 的分析师列表；只要求该分析师出现在列表中，不要求其在 `coverage_analyst` 中也为 `role = 1`。
 - `resolve_coverage` 命中唯一 `coverage` 时返回 `coverage_id`；命中多条或未命中时直接抛出具体错误。
 - `create_coverage` 创建成功时返回新的 `coverage_id`；创建失败时直接抛出具体错误。
@@ -99,6 +117,8 @@
 
 `resolve_coverage` 只负责解析和确认 `coverage_id`，不修改数据库，也不承担补数据或自动创建逻辑。
 
+`resolve_coverage` 的候选查询、分析师关联过滤和唯一性判定优先在 Supabase 侧实现；skill 侧负责组织输入并调用该接口。
+
 ### 3.2 create_coverage 执行流程
 
 `create_coverage` 的输入为创建 `coverage` 所需的完整业务字段，以及初始 `coverage_analyst` 列表。创建 `coverage` 时至少写入 `ticker`、`english_full_name`、`sector_id`、`isin`、`country_of_domicile`；如已具备中文信息，可同时写入 `chinese_short_name` 和 `traditional_chinese`。随后再写入对应的 `coverage_analyst` 关系。
@@ -106,6 +126,8 @@
 初始 `coverage_analyst` 与本次报告分析师列表保持一致，最多支持 8 位分析师，其中必须包含报告 `1作 analyst_id`。创建成功后返回新的 `coverage_id`，供上游写回当前 draft。
 
 `create_coverage` 是显式创建接口，不由 `submit_report` 隐式触发。只有在 `resolve_coverage` 未命中，且上游已经与用户确认“该 Coverage 已完成审批”后，才进入 `create_coverage`。失败时直接抛出具体错误。
+
+`create_coverage` 的主数据写入、一致性校验和 `coverage_analyst` 关系创建优先在 Supabase 侧实现；skill 侧负责参数整理并调用该接口。
 
 ### 3.3 save_draft_report 执行流程
 
@@ -144,7 +166,9 @@
 }
 ```
 
-`save_draft_report` 在首次调用时创建新的 `report_id`，并保存机器处理后的第一个 draft 版本。保存过程中，本地文件先上传到 storage，再写入 `report_version.word_file_path`、`report_version.pdf_file_path`、`report_version.model_file_path`；后续校验和提交都以这些持久化字段为准。同时写入 `report_analyst` 记录（与本次 `analysts` 列表保持一致）。`report_version.snapshot_json` 保存本次 draft 输入的完整快照，本地文件路径字段除外。后续人工修订也沿用同一个 `report_id` 继续追加版本。
+`save_draft_report` 在首次调用时创建新的 `report_id`，并保存机器处理后的第一个 draft 版本。保存过程中，本地文件先上传到 storage，再写入 `report_version.word_file_path`、`report_version.pdf_file_path`、`report_version.model_file_path`；后续校验和提交都以这些持久化字段为准。同时同步更新 `report` 主表的当前态字段，并将 `current_version_no` 更新为本次版本号；`report_analyst` 按当前 `analysts` 列表刷新为报告最新作者关系。`report_version.snapshot_json` 保存本次 draft 输入的完整快照，本地文件路径字段除外。后续人工修订也沿用同一个 `report_id` 继续追加版本。
+
+`save_draft_report` 的主要写入逻辑优先在 Supabase 侧实现为稳定接口；skill 侧负责准备参数、上传文件并调用该接口。
 
 `save_draft_report` 成功时至少返回：
 
@@ -181,14 +205,14 @@
 - draft 版本中的文件字段必须已经是有效的 storage 路径或已持久化文件引用
 - 文件路径判定以 `report_version.word_file_path`、`report_version.pdf_file_path`、`report_version.model_file_path` 为准
 
-draft 可保存字段：
+draft 版本需已持久化的核心内容：
 
 - `title`
 - `report_type`
 - `report_language`
 - `analysts`
-- `report_file`
-- `pdf_file`
+- `report_version.word_file_path`
+- `report_version.pdf_file_path`
 
 提交前必填字段：
 
@@ -199,12 +223,12 @@ draft 可保存字段：
 - `investment_thesis`
 - `certificate_confirmed = true`
 - `analysts`
-- `report_file`
-- `pdf_file`
+- `report_version.word_file_path`
+- `report_version.pdf_file_path`
 
 按类型要求：
 
-- `company`：`coverage_id`、`ticker`、`rating`、`target_price`、`model_file`
+- `company`：`coverage_id`、`ticker`、`rating`、`target_price`、`report_version.model_file_path`
 - `company_flash`：`coverage_id`、`ticker`
 - `sector`：`region_code`、`sector_id`
 - `sector_flash`：`region_code`、`sector_id`
@@ -235,6 +259,8 @@ draft 可保存字段：
 - 校验通过：返回被校验通过的 `report_id` 和 `version_no`
 - 校验失败：直接抛出具体错误
 
+`validators` 的字段完整性判断、主数据校验和版本一致性校验优先在 Supabase 侧实现；skill 侧负责调用并透传错误。
+
 ### 3.5 submit_report 执行流程
 
 `submit_report` 接收 `report_id` 和 `version_no`，用于提交该 draft 版本。对应 draft 在进入该接口前必须已经完成必要的 `resolve_coverage`、`create_coverage` 补充以及 `validators` 校验。
@@ -257,7 +283,7 @@ draft 可保存字段：
 
 ### 3.6 模块拆分
 
-实现层按八个模块拆分：`connection`、`storage`、`analyst`、`template`、`coverage`、`draft-report`、`validators`、`submit-report`。
+实现层由以下模块组成：`connection`、`storage`、`analyst`、`template`、`coverage`、`draft_report`、`validators`、`submit_report`。
 
 目录结构如下：
 
@@ -265,41 +291,40 @@ draft 可保存字段：
 neolyst/
   SKILL.md
   scripts/
-    connection.ts
-    storage.ts
-    analyst.ts
-    template.ts
-    coverage.ts
-    draft-report.ts
-    validators.ts
-    submit-report.ts
+    connection.py
+    storage.py
+    analyst.py
+    template.py
+    coverage.py
+    draft_report.py
+    validators.py
+    submit_report.py
 ```
 
-`SKILL.md` 负责声明八个对外接口，说明高层输入输出约定，以及 `/.neolyst` 的使用方式。具体实现细节放在 `scripts/*.ts`。
+`SKILL.md` 负责声明对外业务接口，说明高层输入输出约定，以及 `/.neolyst` 的使用方式。具体实现细节放在 `scripts/*.py`。
 
-`connection.ts` 负责连接相关能力，包括读取和写入 `/.neolyst`、创建 Supabase client、恢复 session、失效后重新登录，以及对外提供已认证的访问连接。
+`connection.py` 负责连接相关能力，包括读取和写入 `/.neolyst`、创建 Supabase client、恢复 session、失效后重新登录，以及对外提供已认证的访问连接。
 
-`storage.ts` 负责模板文件和报告文件上传，以及统一的 storage 路径生成规则。
+`storage.py` 负责模板文件和报告文件上传，以及统一的 storage 路径生成规则。
 
-`storage.ts` 内部固定维护以下路径规则：
+`storage.py` 内部固定维护以下 bucket 与路径规则：
 
-- 模板资产：`templates/{template_type}/{report_language}/template.docx`
-- 模板 schema：`templates/{template_type}/{report_language}/schema.yaml`
-- 报告资产：`reports/{report_id}/...`
+- 模板 bucket：模板对象路径以 `template_file_path` / `schema_file_path` 为准，不由 `report_type` 公式推导
+- 报告 bucket：存放 `{report_id}/...`
 
-`analyst.ts` 负责 `resolve_analyst_by_email`。凡是 analyst 身份解析相关的查询都放在该模块内。
+`analyst.py` 负责 `resolve_analyst_by_email`。凡是 analyst 身份解析相关的查询都放在该模块内。
 
-`template.ts` 负责 `resolve_template` 和 `upsert_template`。`upsert_template` 接收本地 Word 模板路径和本地 `schema.yaml` 路径，由 `neolyst` 上传到 storage 并写入模板记录；`resolve_template` 负责将运行时模板和对应的 `schema.yaml` 下载到本地可用路径并返回。
+`template.py` 负责 `resolve_template`、`upsert_template` 与 `reuse_template`。`upsert_template` 接收本地 Word 模板路径 `template_local_path` 和本地 `schema.yaml` 路径 `schema_local_path`，由 `neolyst` 上传到 storage 后调用 Supabase 侧模板发布接口写入主模板记录；`reuse_template` 接收目标 `report_type + language` 与源 `same_as_report_type`，调用 Supabase 侧共享模板接口，把源记录当前已有的 `template_file_path` 与 `schema_file_path` 静态复制到目标模板记录；`resolve_template` 负责将运行时模板和对应的 `schema.yaml` 下载到本地可用路径并返回。
 
-`coverage.ts` 负责 `resolve_coverage` 和 `create_coverage`。凡是与 `coverage`、`coverage_analyst` 相关的查询和写入都放在该模块内。
+`coverage.py` 负责 `resolve_coverage` 和 `create_coverage`。凡是与 `coverage`、`coverage_analyst` 相关的查询和写入都通过该模块调用 Supabase 侧对应接口完成。
 
-`draft-report.ts` 负责 `save_draft_report`，处理 draft 版本创建、文件上传和版本追加。
+`draft_report.py` 负责 `save_draft_report`，处理 draft 版本创建、文件上传和调用 Supabase 侧 draft 保存接口。
 
-`validators.ts` 负责提交前校验，根据 `report_id` 和 `version_no` 判断指定 draft 版本是否满足提交条件，不负责创建业务对象，也不执行提交。
+`validators.py` 负责提交前校验，根据 `report_id` 和 `version_no` 调用 Supabase 侧校验接口判断指定 draft 版本是否满足提交条件，不负责创建业务对象，也不执行提交。
 
-`submit-report.ts` 负责提交已有 draft，串联连接获取、draft 版本定位、提交前校验和状态推进动作。提交时写入两个操作：`UPDATE report SET status='submitted', current_version_no=version_no`，以及 `INSERT report_status_log(from_status='draft', to_status='submitted', action_by=当前登录用户id, version_no=version_no)`。
+`submit_report.py` 负责提交已有 draft，串联连接获取、draft 版本定位、提交前校验和调用 Supabase 侧提交接口。`submit_report` 的职责聚焦于状态推进与提交审计；`report` 主表当前态字段和 `current_version_no` 已由 `save_draft_report` 在保存 draft 时同步更新。
 
-模块之间的依赖关系保持单向：`draft-report` 可以调用 `connection`、`storage` 和 `coverage`；`submit-report` 可以调用 `connection` 和 `validators`；`validators` 可以调用 `analyst`、`coverage` 和 `connection`；`template` 可以调用 `connection` 和 `storage`；`coverage`、`analyst` 与 `storage` 只依赖 `connection`；`connection` 不依赖任何业务模块。
+模块之间的依赖关系保持单向：`draft_report` 可以调用 `connection`、`storage` 和 `coverage`；`submit_report` 可以调用 `connection` 和 `validators`；`validators` 可以调用 `analyst`、`coverage` 和 `connection`；`template` 可以调用 `connection` 和 `storage`；`coverage`、`analyst` 与 `storage` 只依赖 `connection`；`connection` 不依赖任何业务模块。
 
 ## 4. 联调与环境
 
@@ -315,7 +340,7 @@ neolyst/
 
 `report_maker` 不改变现有草稿解析、字段确认、模板渲染和输出 Word/PDF 的主流程，但生成阶段即可调用 `neolyst` 的查询能力。凡是生成报告所需的 Neolyst 数据读取，都通过 `neolyst` 提供的接口完成，不直接绕过 `neolyst` 访问数据库。
 
-模板选择也通过 `neolyst` 完成。`report_maker` 根据 `template_type` 和 `report_language` 调用 `resolve_template` 获取当前使用的模板资产，不再从本地 `templates/` 目录读取模板。运行时使用的 Word 模板和对应 `schema.yaml` 都以 `neolyst` 中保存的模板记录为准。
+模板选择也通过 `neolyst` 完成。`report_maker` 根据 `report_type` 和 `language` 调用 `resolve_template` 获取当前使用的模板资产，不再从本地 `templates/` 目录读取模板。这里的 `language` 来自当前报告的 `report_language`。运行时使用的 Word 模板和对应 `schema.yaml` 都以 `neolyst` 中保存的模板记录为准。若多个 `report_type` 共用同一模板，则这些 `report_type` 在运行时都会解析到同一套模板资产路径。
 
 机器处理并生成 Word/PDF 后，`report_maker` 调用 `save_draft_report` 将机器处理结果保存为第一个 draft 版本。人工确认前，Neolyst 中已经存在该 `report_id` 下可查看的 draft。
 
@@ -378,29 +403,11 @@ draft 输入可包含以下字段：
 - draft 使用最终生成的 PDF 文件路径作为 `pdf_file`
 - `model_file` 仅在公司类报告提交时提供
 
-模板类型映射规则如下：
+模板解析规则如下：
 
-- `company -> company`
-- `sector -> sector`
-- `flash -> common`
-- `company_flash -> company_flash`
-- `sector_flash -> sector_flash`
-- `macro -> common`
-- `strategy -> common`
-- `quantitative -> common`
-- `bond -> common`
-
-研报类型映射规则如下：
-
-- `company -> company`
-- `sector -> sector`
-- `flash -> flash`
-- `company_flash -> company_flash`
-- `sector_flash -> sector_flash`
-- `macro -> macro`
-- `strategy -> strategy`
-- `quantitative -> quantitative`
-- `bond -> bond`
+- `resolve_template` 直接按 `report_type + language` 查询 `template` 记录
+- 若多个 `report_type` 共用同一模板资产，则这些 `report_type` 最终解析到同一组 `template_file_path` 与 `schema_file_path`
+- `report_maker` 不再维护额外的“报告类型 -> 模板类型”映射表
 
 ### 5.4 机器处理后的 draft 供人工在 neolyst 查看
 
@@ -428,31 +435,55 @@ draft 输入可包含以下字段：
 
 ### 6.1 模板资产写入 neolyst
 
-`template_maker` 不再将模板发布停留在本地 `templates/` 目录。模板创建或修改完成后，`template_maker` 调用 `upsert_template`，并将最终 Word 模板的本地路径和对应 `schema.yaml` 的本地路径交给 `neolyst`。由 `neolyst` 负责上传到 storage 并写入模板记录。
+`template_maker` 不再将模板发布停留在本地 `templates/` 目录。模板创建或修改完成后，`template_maker` 对主模板调用 `upsert_template`，并将最终 Word 模板的本地路径和对应 `schema.yaml` 的本地路径交给 `neolyst`。由 `neolyst` 负责上传到 storage，并调用 Supabase 侧模板发布接口完成幂等写入和模板记录更新。
 
-`upsert_template` 的输入至少包括：
+`template_maker` 负责提供“这条模板记录属于哪个 `report_type + language`”以及“本地源文件在哪里”；最终写入数据库的 `template_file_path` 与 `schema_file_path` 由 `neolyst` 调用 Supabase 侧模板发布接口确定和持久化，`template_maker` 不自行推导 storage 对象路径。
 
-- `template_type`
-- `report_language`
+对主模板发布，`template_maker` 提供实际的本地 Word 模板和 `schema.yaml`。对共享模板发布，`template_maker` 只需声明“当前 `report_type` 与另一个已发布 `report_type` 共用模板”，例如“`quantitative` 使用和 `macro` 一样的模板”，不重复上传模板文件。
+
+`upsert_template` 至少包括：
+
+- `report_type`
+- `language`
 - `name`
-- `template_file_path`
-- `schema_file_path`
+- `template_local_path`
+- `schema_local_path`
+
+`reuse_template` 至少包括：
+
+- `report_type`
+- `language`
+- `same_as_report_type`
 
 模板发布完成后，`neolyst` 中保存的模板记录成为 `report_maker` 后续取模板的唯一来源。模板记录同时保存 `template_file_path` 和 `schema_file_path`，二者共同构成一套完整模板资产。
 
 `schema.yaml` 是模板的一部分，不是独立附属文件。它定义当前模板需要抽取的字段，以及这些字段在分析师原始报告中的大致位置和特征，用于约束结构化抽取过程。
 
-### 6.2 模板映射关系写入 neolyst
+对 `template_maker` 而言，发布动作的核心结果不是“把文件放到某个约定目录”，而是“在 `template` 表中为指定 `report_type + language` 写入一条可被运行时解析的模板记录”。
 
-`template_maker` 负责维护模板类型与模板语言对应的模板关系。模板关系不再只保留在本地 `router.yaml` 或本地目录结构中，而是通过 `upsert_template` 直接写入 `neolyst`。
+### 6.2 共享模板关系写入 neolyst
 
-对于同一个 `template_type + report_language`，`template_maker` 维护对应的模板记录。后续 `report_maker` 调用 `resolve_template(template_type, report_language)` 时，直接使用这条记录返回的本地 Word 模板路径和本地 `schema.yaml` 路径。
+`template_maker` 负责维护 `report_type + language` 对应的模板记录。模板关系不再只保留在本地 `router.yaml` 或本地目录结构中，而是通过 `upsert_template` 与 `reuse_template` 直接写入 `neolyst`。
+
+对于同一个 `report_type + language`，`template_maker` 维护对应的模板记录。后续 `report_maker` 调用 `resolve_template(report_type, language)` 时，直接使用这条记录返回的本地 Word 模板路径和本地 `schema.yaml` 路径。
+
+若多个 `report_type` 需要共用同一模板，`template_maker` 先调用 `upsert_template` 发布一个主模板，再为其他 `report_type` 调用 `reuse_template` 发布共享关系。例如先上传 `macro + en` 的模板资产，再声明 `quantitative + en` 的 `same_as_report_type = macro`。`neolyst` 在处理共享关系时调用 Supabase 侧共享模板接口，读取主模板记录，并把主模板当前已有的 `template_file_path` 与 `schema_file_path` 静态复制到目标 `report_type + language` 记录，而不是再次上传一份相同模板，也不在数据库中新增额外的“别名字段”。
+
+若共享模板发布不满足约束，`reuse_template` 直接抛出具体错误。例如：
+
+- `same_as_report_type` 对应的源模板尚未发布
+- 目标记录与源记录的 `language` 不一致
+- 目标 `report_type` 试图复用自己
+- 主模板后续已更新，但当前目标记录尚未重新执行 `reuse_template`
+
+这意味着共享模板时，`template_maker` 的表达粒度仍然是“每个 `report_type + language` 一条运行时可解析的关系”，但真正的模板文件只上传一次。复用关系采用静态复制：如果主模板之后重新上传并生成新路径，需要显式再次执行 `reuse_template`。运行时也不再依赖额外映射表，始终直接查 `template(report_type, language)`。
 
 ### 6.3 本地模板目录的定位变化
 
 本地 `templates/` 目录保留为模板制作阶段的工作目录，用于编辑、验证和预览模板。模板一旦发布，运行时来源统一为 `neolyst.resolve_template` 返回的模板资产，`report_maker` 不再直接读取该目录中的模板文件。
 
+`router.yaml` 等本地辅助组织方式如果继续保留，也只服务于模板制作阶段的人类维护体验；它们不再是运行时模板选择的事实来源，也不参与 `report_type -> 模板` 的最终判定。
+
 ## 7. 后续待做
 
 - Coverage 审批链路。当前设计在用户确认“该 Coverage 已完成审批”后允许 `create_coverage` 直接创建 Coverage；后续需要补上首次覆盖场景下的正式审批流程，并与 `resolve_coverage` / `create_coverage` 的调用时机重新收口。
-- 分析师自助闭环。当前设计使用单一 `/.neolyst` 登录身份执行 draft 保存与提交；后续当 skill 自动化能力足够完整时，需要补上以实际分析师身份完成自助处理、查看和提交的 owner-based 权限闭环。

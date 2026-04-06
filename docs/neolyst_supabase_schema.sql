@@ -93,7 +93,7 @@ create table if not exists public.report_type (
 create table if not exists public.template (
   -- Live schema: template records are keyed by report_type + language.
   -- Assets are defined by the Word template file and its paired schema.yaml.
-  -- Note: live DB still uses report_type/language column names rather than the newer design doc terminology template_type/report_language.
+  -- Note: multiple report_type records may point to the same template_file_path/schema_file_path when reports share one template asset.
   id uuid primary key not null default gen_random_uuid(),
   name text not null,
   report_type text not null,
