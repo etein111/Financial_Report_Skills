@@ -1118,30 +1118,38 @@ def _fix_docxcompose_sectpr_margins(docx_path: str, body_margins: Dict[str, str]
             sectPr = ppr_sectprs[1]
             pgMar = sectPr.find(f'{W}pgMar')
             if pgMar is not None:
-                # 检查是否是默认页边距
-                top = pgMar.get(f'{W}top', '')
-                bottom = pgMar.get(f'{W}bottom', '')
-                if top == '1440' or bottom == '1440':
-                    # 应用 body 的页边距
+                # 比较当前 pgMar 和 body_margins，如果不同则替换
+                needs_fix = False
+                for attr, val in body_margins.items():
+                    current_val = pgMar.get(f'{W}{attr}', '')
+                    if current_val != val:
+                        needs_fix = True
+                        break
+
+                if needs_fix:
                     for attr, val in body_margins.items():
                         pgMar.set(f'{W}{attr}', val)
                     fixed_count += 1
-                    print(f"  已修复 body 分节符页边距: top={body_margins.get('top')}, bottom={body_margins.get('bottom')}")
+                    print(f"  已修复 body 分节符页边距: top={body_margins.get('top')}, bottom={body_margins.get('bottom')}, left={body_margins.get('left')}, right={body_margins.get('right')}")
 
         # 如果只有一个 pPr/sectPr，它就是 body 的分节符
         if len(ppr_sectprs) == 1 and body_margins:
             sectPr = ppr_sectprs[0]
             pgMar = sectPr.find(f'{W}pgMar')
             if pgMar is not None:
-                top = pgMar.get(f'{W}top', '')
-                bottom = pgMar.get(f'{W}bottom', '')
-                if top == '1440' or bottom == '1440':
-                    # 删除这个默认页边距的 sectPr，让 body 继承文档末尾的 sectPr
-                    # 或者应用 body 的页边距
+                # 比较当前 pgMar 和 body_margins，如果不同则替换
+                needs_fix = False
+                for attr, val in body_margins.items():
+                    current_val = pgMar.get(f'{W}{attr}', '')
+                    if current_val != val:
+                        needs_fix = True
+                        break
+
+                if needs_fix:
                     for attr, val in body_margins.items():
                         pgMar.set(f'{W}{attr}', val)
                     fixed_count += 1
-                    print(f"  已修复 body 分节符页边距: top={body_margins.get('top')}, bottom={body_margins.get('bottom')}")
+                    print(f"  已修复 body 分节符页边距: top={body_margins.get('top')}, bottom={body_margins.get('bottom')}, left={body_margins.get('left')}, right={body_margins.get('right')}")
 
         if fixed_count > 0:
             # 保存修改后的文档

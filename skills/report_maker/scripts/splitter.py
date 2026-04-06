@@ -474,8 +474,33 @@ def extract_body(draft_path: str, scope: str, output_path: Optional[str] = None,
             # 找结束位置
             for marker in end_markers:
                 if marker.upper() in text_upper:
-                    end_idx = i
+                    # 找到结束标记后，检查结束标记之前是否有分页符段落
+                    # 如果有，应该把分页符也包含在 body 中（确保正文结束后换页）
+                    page_break_idx = None
+                    for j in range(i - 1, max(0, i - 5), -1):
+                        prev_elem = elements[j]
+                        prev_tag = prev_elem.tag.split('}')[-1]
+                        if prev_tag == 'p':
+                            # 检查是否包含分页符
+                            has_page_break = False
+                            for br in prev_elem.iter(f'{W}br'):
+                                br_type = br.get(f'{W}type', '')
+                                if br_type == 'page':
+                                    has_page_break = True
+                                    break
+                            if has_page_break:
+                                page_break_idx = j
+                                print(f"找到正文结束前的分页符: 元素 {j}")
+                                break
+                            # 如果段落有文本就停止查找
+                            prev_text = ''.join(prev_elem.itertext()).strip()
+                            if prev_text:
+                                break
+
+                    end_idx = page_break_idx if page_break_idx is not None else i
                     print(f"找到正文结束标记: 元素 {i}, 匹配 '{marker}', 文本: {text[:50]}...")
+                    if page_break_idx is not None:
+                        print(f"  正文范围扩展到分页符: 元素 {page_break_idx}")
                     break
             if end_idx < len(elements):
                 break
