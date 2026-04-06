@@ -36,12 +36,16 @@
 - draft 输入不携带执行上下文字段，例如 `workspace_root`、`trace_id`、`server_url_override`、`dry_run`。
 - 文件输入统一使用本地路径，由 `neolyst` 自行上传到 Neolyst Storage。
 - `save_draft_report` 的输入文件字段使用本地路径；保存成功后的 draft 版本和 `report_version` 记录使用上传后的 storage 路径。
+- 模板文件的 storage 路径固定为 `templates/{template_type}/{report_language}/template.docx` 与 `templates/{template_type}/{report_language}/schema.yaml`。
+- 报告文件的 storage 路径固定为 `reports/{report_id}/`，文件名遵循 `ARCHITECTURE_TECHNICAL.md` 中约定的统一命名规则。
 - `report_id` 在首次保存 draft 时为空；机器处理后的 draft 和后续人工修订版都沿用同一个 `report_id` 追加新版本。
 - draft 分为“可保存字段”和“提交前必补齐字段”两层契约。
 - `company` / `company_flash` 在 draft 阶段允许暂时缺少 `coverage_id`；提交前必须补齐。
 - `contact_person_id` 在 draft 阶段允许暂时缺少；提交前必须由 `report_maker` 负责确认和填充。
 - `report_language` 作为模板选择字段，由 `report_maker` 自动识别并向用户确认后写入 draft。
 - `certificate_confirmed` 固定写为 `true`。
+- 文件路径的唯一准源为 Supabase 中已持久化的文件路径字段，也就是 `report_version.word_file_path`、`report_version.pdf_file_path`、`report_version.model_file_path`。`save_draft_report` 输入中的 `report_file`、`pdf_file`、`model_file` 仅用于上传前的本地文件定位。
+- `snapshot_json` 如保留文件字段，只作为版本快照，不作为文件路径校验和提交时的判定来源。
 - `save_draft_report` 成功时至少返回 `report_id` 和 `version_no`。
 - `validators` 接收 `report_id` 和 `version_no`，针对指定 draft 版本执行提交前校验。
 - `submit_report` 接收 `report_id` 和 `version_no`，针对指定 draft 版本执行提交。
@@ -53,12 +57,14 @@
 - 研报类型用于研报分类、draft 保存和报告提交流程；模板类型用于选择模板资产。
 - 研报类型与模板类型是两个独立概念，可以同名，但不互相等价。
 - `report_maker` 在取模板时使用 `template_type`，在保存 draft 和提交时使用研报类型 `report_type`。
+- 模板记录按 `template_type + report_language` 唯一确定。`upsert_template` 以这组字段作为冲突键执行新增或更新，`resolve_template` 也以这组字段唯一解析模板资产。
 
 ### 2.4 身份与会话策略
 
 - Neolyst Supabase 的登录身份由 `neolyst` 管理和复用，`save_draft_report`、`validators` 与 `submit_report` 的相关读写都使用该身份。
 - 使用 `email + password` 登录，账号、密码和登录态保存在工作目录根目录的 `/.neolyst`；只支持一个登录身份，会话失效时重新登录并更新 `/.neolyst`。
 - 提交相关的用户归属与审计字段统一使用 `connection` 当前登录的 Neolyst 用户；`resolve_analyst_by_email` 只用于确定报告分析师身份，不用于决定提交执行用户。
+- 当前阶段，报告归属给实际执行处理的人；在现阶段，这个执行处理人就是当前登录的 `admin` 用户。因此 `owner_user_id`、`changed_by`、`action_by`、`action_by_name` 以及同类审计字段都统一取当前登录的 `admin`。
 - 本 skill 不做代理执行，因为这会破坏 Neolyst 的安全性，也不符合实际业务关系。
 
 ### 2.5 技术访问方式
@@ -98,11 +104,11 @@
 
 ### 3.2 create_coverage 执行流程
 
-`create_coverage` 的输入为创建 `coverage` 所需的完整业务字段，以及初始 `coverage_analyst` 列表。创建 `coverage` 时至少写入 `ticker`、公司名称、`sector_id`、`isin`、`country_of_domicile` 等必填字段；创建完成后，再写入对应的 `coverage_analyst` 关系。
+`create_coverage` 的输入为创建 `coverage` 所需的完整业务字段，以及初始 `coverage_analyst` 列表。创建 `coverage` 时至少写入 `ticker`、`english_full_name`、`sector_id`、`isin`、`country_of_domicile` 等必填字段；如已具备中文信息，可同时写入 `chinese_short_name` 和 `traditional_chinese`。创建完成后，再写入对应的 `coverage_analyst` 关系。
 
 `create_coverage` 创建的分析师列表以报告分析师列表为基础，其中报告 `1作 analyst_id` 必须包含在新建的 `coverage_analyst` 中。新建 `coverage` 时，初始 `coverage_analyst` 与本次报告分析师列表保持一致，最多支持 8 位分析师。创建完成后返回新的 `coverage_id`，供上游写回当前 draft 并继续后续校验和提交。
 
-`create_coverage` 是显式创建接口，不由 `submit_report` 隐式触发。只有在 `resolve_coverage` 未命中现有 `coverage` 时，才进入 `create_coverage`。创建失败时直接抛出具体错误，不返回包裹态结果。
+`create_coverage` 是显式创建接口，不由 `submit_report` 隐式触发。只有在 `resolve_coverage` 未命中现有 `coverage`，且上游已经与用户确认“该 Coverage 已完成审批”后，才进入 `create_coverage`。创建失败时直接抛出具体错误，不返回包裹态结果。
 
 ### 3.3 save_draft_report 执行流程
 
@@ -141,7 +147,7 @@
 }
 ```
 
-`save_draft_report` 在首次调用时创建新的 `report_id`，并保存机器处理后的第一个 draft 版本。保存过程中，本地文件路径会先上传到 storage，再写入 draft 版本记录。后续人工修订也沿用同一个 `report_id` 继续追加版本。
+`save_draft_report` 在首次调用时创建新的 `report_id`，并保存机器处理后的第一个 draft 版本。保存过程中，本地文件路径会先上传到 storage，再写入 `report_version.word_file_path`、`report_version.pdf_file_path`、`report_version.model_file_path` 等持久化字段；后续校验和提交都以这些持久化字段为准。后续人工修订也沿用同一个 `report_id` 继续追加版本。
 
 `save_draft_report` 成功时至少返回：
 
@@ -176,6 +182,7 @@
 - `analysts` 中必须恰好存在一位 `role = 1` 的分析师，作为报告 `1作 analyst_id`
 - `analysts[].sort_order` 必须唯一
 - draft 版本中的文件字段必须已经是有效的 storage 路径或已持久化文件引用
+- 文件路径判定以 `report_version.word_file_path`、`report_version.pdf_file_path`、`report_version.model_file_path` 为准，不以 `snapshot_json` 中的冗余文件字段为准
 
 draft 可保存字段：
 
@@ -277,6 +284,12 @@ neolyst/
 
 `storage.ts` 负责模板文件和报告文件的上传，以及统一的 storage 路径生成规则。
 
+`storage.ts` 内部固定维护以下路径规则：
+
+- 模板资产：`templates/{template_type}/{report_language}/template.docx`
+- 模板 schema：`templates/{template_type}/{report_language}/schema.yaml`
+- 报告资产：`reports/{report_id}/...`
+
 `analyst.ts` 负责 `resolve_analyst_by_email`。凡是 analyst 身份解析相关的查询都放在该模块内。
 
 `template.ts` 负责 `resolve_template` 和 `upsert_template`。`upsert_template` 接收本地 Word 模板路径和本地 `schema.yaml` 路径，由 `neolyst` 负责上传到 storage 并写入模板记录；`resolve_template` 负责将运行时模板和对应的 `schema.yaml` 下载到本地可用路径并返回。
@@ -339,9 +352,12 @@ neolyst/
 
 - `ticker`
 - 报告 `1作 analyst_id`
-- 新建 `coverage` 所需字段，包括公司名称、`sector_id`、`isin`、`country_of_domicile`
+- 新建 `coverage` 所需字段，包括 `english_full_name`、`sector_id`、`isin`、`country_of_domicile`
+- 如已具备中文信息，同时准备 `chinese_short_name` 和 `traditional_chinese`
 
 新建 `coverage` 时，`report_maker` 使用本次报告分析师列表初始化 `coverage_analyst`。对已有 `coverage`，`report_maker` 不通过提交流程改写其既有 `coverage_analyst`，报告作者关系独立进入 `report_analyst`。
+
+当 `resolve_coverage` 未命中且需要进入 `create_coverage` 时，`report_maker` 先与用户对话确认“该 Coverage 已完成审批”，确认后才继续调用 `create_coverage`。
 
 ### 5.3 新增 draft 组装能力
 
@@ -448,3 +464,8 @@ draft 输入可包含以下字段：
 本地 `templates/` 目录保留为模板制作阶段的工作目录，用于编辑、验证和预览模板。模板一旦发布，`report_maker` 不再直接读取该目录中的模板文件。
 
 模板的运行时来源统一为 `neolyst.resolve_template` 返回的模板资产；本地目录不再作为运行时模板来源。
+
+## 7. 后续待做
+
+- Coverage 审批链路。当前设计允许 `create_coverage` 直接创建 Coverage，以支持现阶段的自动化链路；后续需要补上首次覆盖场景下的 Coverage 审批流程，并与 `resolve_coverage` / `create_coverage` 的调用时机重新收口。
+- 分析师自助闭环。当前设计使用单一 `/.neolyst` 登录身份执行 draft 保存与提交；后续当 skill 自动化能力足够完整时，需要补上以实际分析师身份完成自助处理、查看和提交的 owner-based 权限闭环。
