@@ -230,16 +230,84 @@ neolyst/
 - Admin username：`admin@neolyst.com`
 - Admin password：`Admin123`
 
-## 5. 对 report_maker 的新增要求
+## 5. report_maker 对接 neolyst 的改造要求
 
-为对接 `neolyst` 设计，`report_maker` 需要增加或调整以下能力：
+### 5.1 提交能力建立在报告生成完成之后
 
-- 在 `company` / `company_flash` 提交前，先调用 `resolve_coverage(ticker, first_analyst_id)` 确认 `coverage_id`
-- 在 `resolve_coverage` 未命中时，调用 `create_coverage` 创建新的 `coverage`
-- 在组装 `submission` 时，输出扁平结构，不再使用 `files` 嵌套对象
-- 将最终确认后的 `coverage_id` 写入 `submission`
-- 将报告 `1作 analyst_id` 明确传给 `resolve_coverage`，作为 coverage 解析依据
-- 当 `resolve_coverage`、`create_coverage`、`validators` 或 `submit_report` 抛出具体错误时，负责根据错误内容继续补字段、重新确认或中止流程
-- 在单 analyst 场景下，直接使用该 analyst 填充 `contact_person_id`
-- 在多 analyst 场景下，通过对话确认并填充 `contact_person_id`
-- 在提交前继续负责准备完整文件路径，包括 `report_file`、`pdf_file` 以及公司类报告所需的 `model_file`
+`report_maker` 对接 `neolyst` 时，不改变现有草稿解析、字段确认、模板渲染和输出 Word/PDF 的主流程。Neolyst 提交能力建立在报告生成完成之后，作为新的后续阶段接入。
+
+进入提交阶段的前提如下：
+
+- 已生成最终 `output.docx`
+- 已生成最终 `output.pdf`
+- 报告基础字段已确认完成
+- 分析师信息已确认完成
+
+### 5.2 新增提交字段确认能力
+
+`report_maker` 负责补齐提交所需但不属于报告渲染本身的业务字段，并在必要时通过对话确认后写入提交数据。
+
+`contact_person_id` 由 `report_maker` 负责确认和填充，规则如下：
+
+- 单 analyst 场景，直接使用该 analyst 作为 `contact_person_id`
+- 多 analyst 场景，通过对话确认后填入
+- `contact_person_id` 必须属于本次报告的 `analysts` 列表
+
+`report_maker` 需要能够明确得到以下提交所需的分析师信息：
+
+- 报告分析师列表
+- 每个分析师对应的 `analyst_id`
+- 每个分析师在本次报告中的 `role`
+- 每个分析师的 `sort_order`
+- 报告 `1作 analyst_id`
+
+对于公司类报告，`report_maker` 还负责准备以下 `coverage` 相关输入：
+
+- `ticker`
+- 报告 `1作 analyst_id`
+- 新建 `coverage` 所需字段，包括公司名称、`sector_id`、`isin`、`country_of_domicile`
+
+### 5.3 新增 submission 组装能力
+
+`report_maker` 在报告生成完成后，将内部数据显式转换为 `neolyst` 所要求的扁平 `submission`。`elements.yaml`、渲染上下文和输出目录结构不直接等价于 `submission`，需要单独映射。
+
+`submission` 至少包括以下字段：
+
+- 报告基本字段：`title`、`report_type`、`report_language`、`investment_thesis`
+- 分析师与联系人字段：`analysts`、`contact_person_id`
+- 公司类报告字段：`coverage_id`、`ticker`、`rating`、`target_price`
+- 行业类报告字段：`region_code`、`sector_id`
+- 合规字段：`certificate_confirmed`
+- 文件字段：`report_file`、`pdf_file`、`model_file`
+
+文件字段映射规则如下：
+
+- `report_file` 使用最终生成的 `output.docx`
+- `pdf_file` 使用最终生成的 `output.pdf`
+- `model_file` 仅在公司类报告提交时提供
+
+`report_maker` 需要建立报告类型到 `neolyst` 提交类型的映射。只有可映射到 `company`、`sector`、`company_flash`、`sector_flash`、`common` 的报告，才进入提交流程。
+
+### 5.4 新增提交前检查能力
+
+在 `company` / `company_flash` 提交前，`report_maker` 先根据 `ticker` 和报告 `1作 analyst_id` 调用 `resolve_coverage` 确认 `coverage_id`。命中唯一 `coverage` 时，将返回的 `coverage_id` 写入 `submission`。
+
+当 `resolve_coverage` 未命中时，`report_maker` 进入 `create_coverage` 流程，通过对话补齐创建 `coverage` 所需字段，调用 `create_coverage`，并将返回的 `coverage_id` 写入 `submission`。
+
+在 `submission` 组装完成后，`report_maker` 调用 `validators` 执行提交前校验。只有校验通过后，才进入 `submit_report`。
+
+### 5.5 新增报告提交能力
+
+`report_maker` 在提交前检查通过后，调用 `submit_report(submission)` 执行报告提交。
+
+提交成功后，`report_maker` 至少接收以下结果：
+
+- `report_id`
+- `status`
+- `version_no`
+
+### 5.6 新增提交失败处理
+
+当 `resolve_coverage`、`create_coverage`、`validators` 或 `submit_report` 抛出具体错误时，`report_maker` 负责根据错误内容继续补字段、重新确认或终止流程。
+
+字段缺失、字段歧义、联系人确认和 `coverage` 创建信息不足等问题，由 `report_maker` 继续通过对话处理。多轮补充、重新校验和重新提交都由 `report_maker` 驱动。
