@@ -261,7 +261,7 @@ neolyst/
 
 `report_maker` 在报告生成阶段也可以调用 `neolyst` 的查询能力。凡是生成报告所需的 Neolyst 数据读取，应通过 `neolyst` 提供的查询接口完成，不直接绕过 `neolyst` 访问数据库。
 
-模板选择也通过 `neolyst` 完成。`report_maker` 根据 `report_type` 和 `report_language` 调用 `resolve_template` 获取当前使用的 Word 模板，不再依赖本地目录映射决定最终模板。
+模板选择也通过 `neolyst` 完成。`report_maker` 根据 `report_type` 和 `report_language` 调用 `resolve_template` 获取当前使用的 Word 模板，不再从本地 `templates/` 目录读取模板，也不依赖本地目录映射决定最终模板。
 
 进入提交阶段的前提如下：
 
@@ -358,3 +358,30 @@ neolyst/
 字段缺失、字段歧义、联系人确认和 `coverage` 创建信息不足等问题，由 `report_maker` 继续通过对话处理。多轮补充、重新校验和重新提交都由 `report_maker` 驱动。
 
 提交失败后的重新提交沿用原 `report_id`，在原 report 下创建新版本，不创建新的 report 对象。
+
+## 6. template_maker 对接 neolyst 的改造要求
+
+### 6.1 模板资产写入 neolyst
+
+`template_maker` 不再将模板发布停留在本地 `templates/` 目录。模板创建或修改完成后，`template_maker` 负责将最终 Word 模板文件上传到 `neolyst` 的 storage，并调用 `upsert_template` 写入对应的模板记录。
+
+`upsert_template` 的输入至少包括：
+
+- `report_type`
+- `report_language`
+- `name`
+- `file_path`
+
+模板发布完成后，`neolyst` 中保存的模板记录成为 `report_maker` 后续取模板的唯一来源。
+
+### 6.2 模板映射关系写入 neolyst
+
+`template_maker` 负责维护报告类型与模板语言对应的模板关系。模板关系不再只保留在本地 `router.yaml` 或本地目录结构中，而是通过 `upsert_template` 直接写入 `neolyst`。
+
+对于同一个 `report_type + report_language`，`template_maker` 维护一条当前模板记录。后续 `report_maker` 调用 `resolve_template(report_type, report_language)` 时，直接使用这条记录返回的模板文件。
+
+### 6.3 本地模板目录的定位变化
+
+本地 `templates/` 目录保留为模板制作阶段的工作目录，用于编辑、验证和预览模板。模板一旦发布，`report_maker` 不再直接读取该目录中的模板文件。
+
+模板的运行时来源统一为 `neolyst.resolve_template` 返回的文件路径；本地目录不再作为运行时模板来源。
