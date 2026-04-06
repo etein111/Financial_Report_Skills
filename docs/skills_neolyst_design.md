@@ -58,7 +58,8 @@
 ### 2.4 身份与会话策略
 
 - Neolyst Supabase 的登录身份由 `neolyst` 管理和复用，`save_draft_report`、`validators` 与 `submit_report` 的相关读写都使用该身份。
-- 使用 `email + password` 登录，账号、密码和登录态保存在工作目录根目录的 `/.neolyst`；只支持一个登录身份，会话失效时重新登录并更新 `/.neolyst`。
+- 使用 `email + password` 登录，账号、密码和登录态保存在脚本执行时 `cwd` 根目录的 `/.neolyst`；只支持一个登录身份，会话失效时重新登录并更新 `/.neolyst`。
+- `/.neolyst` 为 JSON 文件，格式如下：`{ "email": "...", "password": "...", "access_token": "...", "refresh_token": "...", "expires_at": 1712345678 }`。`connection.ts` 启动时先用 `access_token` + `refresh_token` 恢复 session，若已过期则用 `email + password` 重新登录并回写该文件。
 - 提交相关的归属与审计字段统一使用 `connection` 当前登录的 Neolyst 用户；现阶段该执行处理人就是当前登录的 `admin`。`resolve_analyst_by_email` 只用于确定报告分析师身份，不用于决定提交执行用户。
 - 本 skill 不做代理执行，因为这会破坏 Neolyst 的安全性，也不符合实际业务关系。
 
@@ -66,6 +67,7 @@
 
 - 本 skill 直接使用 `@supabase/supabase-js` 与 Neolyst Supabase 交互，不使用 Supabase CLI 作为业务入口。
 - 本 skill 的 TypeScript 脚本通过 `pnpm` 管理和执行。
+- Storage 使用单一 bucket，不按 `templates` / `reports` 拆分 bucket。
 
 ### 2.6 Supabase URL
 
@@ -142,7 +144,7 @@
 }
 ```
 
-`save_draft_report` 在首次调用时创建新的 `report_id`，并保存机器处理后的第一个 draft 版本。保存过程中，本地文件先上传到 storage，再写入 `report_version.word_file_path`、`report_version.pdf_file_path`、`report_version.model_file_path`；后续校验和提交都以这些持久化字段为准。后续人工修订也沿用同一个 `report_id` 继续追加版本。
+`save_draft_report` 在首次调用时创建新的 `report_id`，并保存机器处理后的第一个 draft 版本。保存过程中，本地文件先上传到 storage，再写入 `report_version.word_file_path`、`report_version.pdf_file_path`、`report_version.model_file_path`；后续校验和提交都以这些持久化字段为准。同时写入 `report_analyst` 记录（与本次 `analysts` 列表保持一致）。`report_version.snapshot_json` 保存本次 draft 输入的完整快照，本地文件路径字段除外。后续人工修订也沿用同一个 `report_id` 继续追加版本。
 
 `save_draft_report` 成功时至少返回：
 
@@ -295,7 +297,7 @@ neolyst/
 
 `validators.ts` 负责提交前校验，根据 `report_id` 和 `version_no` 判断指定 draft 版本是否满足提交条件，不负责创建业务对象，也不执行提交。
 
-`submit-report.ts` 负责提交已有 draft，串联连接获取、draft 版本定位、提交前校验和状态推进动作。
+`submit-report.ts` 负责提交已有 draft，串联连接获取、draft 版本定位、提交前校验和状态推进动作。提交时写入两个操作：`UPDATE report SET status='submitted', current_version_no=version_no`，以及 `INSERT report_status_log(from_status='draft', to_status='submitted', action_by=当前登录用户id, version_no=version_no)`。
 
 模块之间的依赖关系保持单向：`draft-report` 可以调用 `connection`、`storage` 和 `coverage`；`submit-report` 可以调用 `connection` 和 `validators`；`validators` 可以调用 `analyst`、`coverage` 和 `connection`；`template` 可以调用 `connection` 和 `storage`；`coverage`、`analyst` 与 `storage` 只依赖 `connection`；`connection` 不依赖任何业务模块。
 
