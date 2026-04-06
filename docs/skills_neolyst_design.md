@@ -23,6 +23,7 @@
 - `create_coverage` 用于创建新的 `coverage` 与 `coverage_analyst` 关系。
 - `validators` 用于执行提交前校验并暴露阻断项。
 - `submit_report` 用于执行完整提交。
+- 不单独暴露 `upload file`、`save draft` 等中间接口，也不支持基于已有 draft 再提交。
 
 ### 2.2 submission 契约
 
@@ -31,6 +32,7 @@
 - `submission` 不携带执行上下文字段，例如 `workspace_root`、`trace_id`、`server_url_override`、`dry_run`。
 - 文件输入统一使用本地路径，由 `neolyst` 自行上传到 Neolyst Storage。
 - `company` / `company_flash` 的 `submission` 必须携带已经确认好的 `coverage_id`。
+- `contact_person_id` 作为 `submission` 的显式字段，由 `report_maker` 负责确认和填充；单 analyst 场景直接使用该 analyst，多 analyst 场景通过对话确认后填入 `submission`。
 
 ### 2.3 身份与会话策略
 
@@ -62,300 +64,86 @@
 
 ## 3. 实现落地
 
-### 3.1 对外接口
+### 3.1 resolve_coverage 执行流程
 
-- 对外接口包括：`resolve_coverage`、`create_coverage`、`validators`、`submit_report`
-- `resolve_coverage(ticker, first_analyst_id)` 用于 `company` / `company_flash` 在提交前确认 `coverage_id`
-- `create_coverage(payload)` 用于创建新的 `coverage` 与 `coverage_analyst` 关系，并返回 `coverage_id`
-- `validators(submission)` 用于校验输入并暴露阻断项
-- `submit_report(submission)` 接收结构化报告元数据和本地文件路径并执行提交
-- `submission` 由 `report_maker` 直接产出
-- 不单独暴露 `upload file` 和 `save draft`
-- 不支持基于已有 draft 再提交
+`resolve_coverage` 的输入为 `ticker` 和 `first_analyst_id`。执行时先按 `ticker` 查询候选 `coverage`，再关联 `coverage_analyst` 过滤出包含该 `first_analyst_id` 的记录。只要该分析师存在于某条 `coverage` 的分析师列表中，就视为命中，不要求该分析师在 `coverage_analyst` 中的 `role` 也等于 `1`。
 
-输入结构与字段说明：
+若命中唯一 `coverage`，则返回该 `coverage_id`。若命中多条 `coverage`，则直接抛出具体错误，说明同一 `ticker` 下存在多条匹配记录，无法自动确定。若未命中任何 `coverage`，则直接抛出具体错误，表示需要进入 `create_coverage` 流程。
+
+`resolve_coverage` 不修改数据库，不创建任何业务对象，只负责解析和确认 `coverage_id`。它的职责是为公司类报告提交提供稳定的 `coverage` 入口，而不是承担补数据或自动创建逻辑。
+
+### 3.2 create_coverage 执行流程
+
+`create_coverage` 的输入为创建 `coverage` 所需的完整业务字段，以及初始 `coverage_analyst` 列表。创建 `coverage` 时至少写入 `ticker`、公司名称、`sector_id`、`isin`、`country_of_domicile` 等必填字段；创建完成后，再写入对应的 `coverage_analyst` 关系。
+
+`create_coverage` 创建的分析师列表以报告分析师列表为基础，其中报告 `1作 analyst_id` 必须包含在新建的 `coverage_analyst` 中。创建完成后返回新的 `coverage_id`，供上游写回 `submission` 并继续后续校验和提交。
+
+`create_coverage` 是显式创建接口，不由 `submit_report` 隐式触发。只有在 `resolve_coverage` 未命中现有 `coverage` 时，才进入 `create_coverage`。创建失败时直接抛出具体错误，不返回包裹态结果。
+
+### 3.3 validators 执行流程
+
+`validators` 接收完整 `submission`，用于判断当前输入是否满足进入 `submit_report` 的条件。`submission` 采用顶层扁平结构，示例如下：
 
 ```json
 {
-  "title": "string",
-  "report_type": "company | sector | company_flash | sector_flash | common",
-  "coverage_id": "uuid | null",
-  "ticker": "string | null",
-  "rating": "string | null",
-  "target_price": "string | null",
-  "region_code": "string | null",
-  "sector_id": "uuid | null",
-  "report_language": "en | zh",
-  "contact_person_id": "uuid | null",
-  "investment_thesis": "string | null",
+  "title": "Vertiv: AI demand drives earnings growth",
+  "report_type": "company",
+  "coverage_id": "57ed4bf9-b4ac-485d-a3a5-5891f02d7c95",
+  "ticker": "VRT US",
+  "rating": "OUTPERFORM",
+  "target_price": 140,
+  "region_code": null,
+  "sector_id": null,
+  "report_language": "en",
+  "contact_person_id": "58020af7-0844-471d-ad19-6b66a73178b6",
+  "investment_thesis": "AI-driven demand and margin expansion support earnings growth.",
   "certificate_confirmed": true,
   "analysts": [
     {
-      "analyst_id": "uuid",
+      "analyst_id": "58020af7-0844-471d-ad19-6b66a73178b6",
       "role": 1,
       "sort_order": 1
+    },
+    {
+      "analyst_id": "431bcf7b-3108-4d1d-9b32-62616f72f1c1",
+      "role": 2,
+      "sort_order": 2
     }
   ],
-  "report_file": "/abs/or/relative/path/to/report.docx",
-  "pdf_file": "/abs/or/relative/path/to/report.pdf",
-  "model_file": "/abs/or/relative/path/to/model.xlsx"
+  "report_file": "/abs/path/report.docx",
+  "pdf_file": "/abs/path/report.pdf",
+  "model_file": "/abs/path/model.xlsx"
 }
 ```
 
-- `title`：报告标题
-- `report_type`：报告类型
-- `coverage_id`：公司类报告对应的 coverage ID
-- `ticker`：股票代码
-- `rating`：评级
-- `target_price`：目标价
-- `region_code`：地区代码
-- `sector_id`：行业 ID
-- `report_language`：`en` 或 `zh`
-- `contact_person_id`：联系人 analyst ID，属于提交元数据的一部分
-- `investment_thesis`：投资要点
-- `certificate_confirmed`：合规确认标记
-- `analysts`：分析师列表
-- `report_file`：报告主文件路径
-- `pdf_file`：可选 PDF
-- `model_file`：模型文件路径
-
-`coverage_id` 规则：
-
-- `company` / `company_flash` 在提交前必须先通过 `resolve_coverage(ticker, first_analyst_id)` 确认 `coverage_id`
-- `resolve_coverage` 先按 `ticker` 查找候选 `coverage`，再通过 `coverage_analyst` 判断报告 `1作 analyst_id` 是否属于该 `coverage` 的分析师列表
-- 只要 `1作 analyst_id` 出现在该 `coverage` 的分析师列表中，不要求它在 `coverage_analyst` 中也必须是 `role = 1`
-- 唯一命中时，将该 `coverage_id` 写入 `submission`
-- 未命中时，调用 `create_coverage` 创建新的 `coverage`，并将返回的 `coverage_id` 写入 `submission`
-- 命中多条时，直接抛出具体错误，由上游处理
-
-`contact_person_id` 规则：
-
-- `contact_person_id` 由 `report_maker` 在提交前确认后写入 `submission` 元数据
-- 当 `analysts` 只有 1 人时，可直接使用该 analyst 作为 `contact_person_id`
-- 当 `analysts` 超过 1 人时，应由 `report_maker` 通过对话交互确认
-
-返回结构：
-
-`submit_report` 成功时返回：
-
-```json
-{
-  "ok": true,
-  "report_id": "uuid",
-  "status": "submitted",
-  "version_no": 1
-}
-```
-
-失败时直接抛出具体错误，不返回包裹态错误对象。
-
-
-### 3.2 整体结构
-
-整体骨架如下：
-
-```text
-neolyst/
-  SKILL.md
-  scripts/
-    auth.ts
-    config.ts
-    client.ts
-    coverage.ts
-    submit-report.ts
-    storage.ts
-    validators.ts
-```
-
-模块分工：
-
-- `auth.ts`：登录、刷新、session 读写
-- `config.ts`：处理根目录 `/.neolyst`
-- `client.ts`：导出 `getAuthenticatedClient()`
-- `coverage.ts`：实现 `resolve_coverage` 与 `create_coverage`
-- `submit-report.ts`：实现完整提交流程
-- `storage.ts`：上传文件、构造 Storage 路径
-- `validators.ts`：输入校验、业务前置校验
-
-
-### 3.3 SKILL.md 的职责
-
-`SKILL.md` 只做以下几件事：
-
-- 说明 skill 名称为 `neolyst`，聚焦 `submit_report`
-- 说明 skill 会在工作目录根下使用 `/.neolyst`
-- 说明当 `/.neolyst` 缺失或 session 失效时，会提示输入 `email/password`
-- 说明输入应对齐 `report_maker` 输出的结构化 payload
-- 说明 skill 会自己上传文件，再创建并提交 report
-
-`SKILL.md` 不承载过多实现细节，例如：
-
-- Supabase client 创建细节
-- 具体 JSON 字段逐一解释
-- 复杂的异常分支
-
-实现细节放在 `scripts/*.ts`。
-
-### 3.4 提交流程
-
-`scripts/submit-report.ts` 负责主流程实现。
-
-职责：
-
-- 串联认证、校验、建 report、上传文件、保存内容与执行提交
-
-主流程入口：
-
-- `submitReport(payload)`
-
-内部流程：
-
-1. 获取已认证 client
-2. 校验 payload 与来源合法性
-3. 创建 report
-4. 上传文件
-5. 保存 report 内容与文件路径
-6. 执行 direct submit
-7. 返回结果
-
-失败处理：
-
-- 提交失败时，保留已创建的 report / draft 状态
-- 避免文件已上传但业务对象丢失
-
-### 3.5 配置
-
-`/.neolyst` 配置由 `scripts/config.ts` 负责。
-
-职责：
-
-- 定位工作目录根下的 `/.neolyst`
-- 读取 `/.neolyst`
-- 写入 `/.neolyst`
-- 提供一个稳定的数据结构给其他脚本使用
-
-导出：
-
-- `getNeolystConfigPath()`
-- `readNeolystConfig()`
-- `writeNeolystConfig(config)`
-
-内部数据结构：
-
-```ts
-type NeolystConfig = {
-  auth?: {
-    email?: string
-    password?: string
-  }
-  session?: Record<string, unknown> | null
-}
-```
-
-### 3.6 身份与会话
-
-- 只支持 `email + password` 登录
-- 使用 Supabase Auth 的 `signInWithPassword`
-- 不支持 magic link
-- 不支持 SSO
-- 保存明文 `email/password` 与 session，用于自动重新登录
-- 将 `/.neolyst` 加入 `.gitignore`
-
-配置结构如下：
-
-```json
-{
-  "auth": {
-    "email": "",
-    "password": ""
-  },
-  "session": {}
-}
-```
-
-公共入口：
-
-- 统一使用 `getAuthenticatedClient()`
-- 所有需要访问 Supabase 的逻辑都通过该入口获取 client
-- session 无效时，尝试恢复，失败后提示登录
-
-返回结构：
-
-```ts
-type AuthenticatedClient = {
-  client: SupabaseClient
-  session: Session
-  user: User
-}
-```
-
-`scripts/auth.ts`：
-
-职责：
-
-- 使用 `email + password` 登录 Supabase
-- 根据 `/.neolyst` 中保存的 `auth` 做自动登录
-- 当 session 不可用时，执行重新登录
-- 登录成功后回写最新 session 到 `/.neolyst`
-
-导出：
-
-- `signInWithStoredPassword()`
-- `signInWithPrompt()`
-- `refreshOrReLoginIfNeeded()`
-
-说明：
-
-- 使用 `/.neolyst.auth.email/password`
-- 不提供复杂的账户切换能力
-
-`scripts/client.ts`：
-
-职责：
-
-- 统一创建可用的 Supabase client
-- 对外提供单一公共入口：`getAuthenticatedClient()`
-
-导出：
-
-- `getAuthenticatedClient()`
-
-行为约定：
-
-- 优先使用 `/.neolyst.session`
-- 如果 session 无效，则尝试使用 `/.neolyst.auth` 自动登录
-- 如仍失败，再提示用户输入账号密码
-- 成功后统一回写 `/.neolyst`
-
-
-### 3.7 校验
-
-`scripts/validators.ts` 负责校验逻辑。
-
-职责：
-
-- 校验 `submit_report` 的输入 payload
-- 执行业务前置校验
-- 对齐 `Analyst Submit` 已实现行为
+`validators` 不补数据，不创建业务对象，也不执行提交。它的职责是校验这份 `submission` 是否已经满足提交条件。
 
 校验范围：
 
-- 基础字段非空检查
-- report type 对应字段必填关系
-- analysts 数量与唯一性校验
-- 文件路径存在性检查
-- 可选的本地文件扩展名预校验
+- 结构校验
+- 必填字段校验
+- 主数据校验
+- 公司类报告校验
+- 文件路径校验
 
-输入约束：
+结构校验：
 
-- `title` 非空
-- `report_type` 非空
-- `report_language` 非空
-- `investment_thesis` 非空
-- `analysts` 至少 1 个
-- `contact_person_id` 必须提供
+- `submission` 必须为顶层扁平对象
+- `analysts` 必须为非空列表
+- `analysts[].analyst_id`、`role`、`sort_order` 必须完整
+- 文件字段必须为本地路径字符串
+
+通用必填字段：
+
+- `title`
+- `report_type`
+- `report_language`
+- `contact_person_id`
+- `investment_thesis`
 - `certificate_confirmed = true`
-- `report_file` 已提供
+- `analysts`
+- `report_file`
+- `pdf_file`
 
 按类型要求：
 
@@ -365,66 +153,74 @@ type AuthenticatedClient = {
 - `sector_flash`：`region_code`、`sector_id`
 - `common`：`region_code`
 
-来源合法性校验：
+主数据校验：
 
-- `report_type` 必须是有效 active type
-- `region_code` 必须来自有效 region
-- `sector_id` 必须来自有效 sector
-- `analysts[].analyst_id` 必须来自 active analyst
+- `report_type` 必须对应有效启用的 report type
+- `region_code` 必须对应有效 region
+- `sector_id` 必须对应有效 sector
+- `analysts[].analyst_id` 必须对应有效 analyst
 - `contact_person_id` 必须属于 `analysts[].analyst_id`
-- 公司类报告还需满足 `coverage_id`、`ticker` 与 `coverage_analyst` 的交叉校验
-- `resolve_coverage` 使用规则为：先按 `ticker` 查询候选 `coverage`，再用报告 `1作 analyst_id` 过滤 `coverage_analyst`
-- 只要该 `1作 analyst_id` 存在于某条 `coverage` 的分析师列表中，就认定该 `coverage` 命中，不要求 `coverage_analyst.role = 1`
 
-导出：
+公司类报告校验：
 
-- `resolveCoverage(ticker, firstAnalystId)`
-- `createCoverage(payload)`
-- `validateSubmitReportPayload(payload)`
-- `assertRequiredFieldsByReportType(payload)`
-- `validateAnalystAssignments(payload)`
+- `coverage_id` 必须对应存在的 `coverage`
+- `coverage.ticker` 必须与输入 `ticker` 一致
+- 报告 `1作 analyst_id` 必须存在于该 `coverage` 的 `coverage_analyst` 列表中
 
-### 3.8 文件上传
+结果语义：
 
-- 由本 skill 自己负责上传文件
-- 允许的文件类型：
-  - 报告主文件：`.doc` / `.docx` / `.ppt` / `.pptx`
-  - PDF：`.pdf`
-  - Model：`.xls` / `.xlsx` / `.csv`
-- 不将 `chief approval screenshot` 纳入核心提交流程
+- 校验通过：不返回业务结果，只表示可以进入 `submit_report`
+- 校验失败：直接抛出具体错误，不返回包裹态结果
 
-`scripts/storage.ts`：
+### 3.4 submit_report 执行流程
 
-职责：
+`submit_report` 接收完整 `submission`，用于执行报告提交。它要求输入在进入该接口前已经完成 `resolve_coverage`、必要时的 `create_coverage` 以及 `validators` 校验。
 
-- 处理报告文件上传
-- 生成 storage 路径
-- 对齐 Neolyst 的文件命名方式
+执行顺序：
 
-导出：
+1. 获取已认证的 Neolyst 访问连接
+2. 再次执行提交前校验，确认输入仍然满足提交条件
+3. 创建或定位当前要写入的报告对象
+4. 上传 `report_file`、`pdf_file` 以及公司类报告所需的 `model_file`
+5. 写入报告基本信息、分析师关系和文件路径
+6. 执行提交动作，将报告状态推进到 `submitted`
+7. 返回提交结果
 
-- `buildReportStoragePath(params)`
-- `uploadReportFiles(client, params)`
+提交结果至少包括：
 
-`uploadReportFiles` 负责：
+- `report_id`
+- `status`
+- `version_no`
 
-- 上传 report 主文件
-- 可选上传 PDF
-- 对 `company` 类型上传 model
-- 返回上传后的路径与原始文件名
+`submit_report` 不负责隐式创建 `coverage`，也不负责补字段或做人机交互。执行失败时直接抛出具体错误，不返回包裹态结果。若失败发生在报告对象已创建之后，则保留已产生的中间结果，以便后续排查或继续处理。
 
-上传结果：
+### 3.5 模块拆分
 
-```ts
-type UploadedReportFiles = {
-  word_file_path: string | null
-  word_file_name: string | null
-  pdf_file_path: string | null
-  pdf_file_name: string | null
-  model_file_path: string | null
-  model_file_name: string | null
-}
+实现层按四个模块拆分：`connection`、`coverage`、`validators`、`submit-report`。
+
+目录结构如下：
+
+```text
+neolyst/
+  SKILL.md
+  scripts/
+    connection.ts
+    coverage.ts
+    validators.ts
+    submit-report.ts
 ```
+
+`SKILL.md` 负责声明 `resolve_coverage`、`create_coverage`、`validators`、`submit_report` 四个对外接口，说明高层输入输出约定，以及 `/.neolyst` 的使用方式。具体实现细节放在 `scripts/*.ts`，不放在 `SKILL.md`。
+
+`connection.ts` 负责连接相关能力，包括读取和写入 `/.neolyst`、创建 Supabase client、恢复 session、失效后重新登录，以及对外提供已认证的访问连接。
+
+`coverage.ts` 负责 `resolve_coverage` 和 `create_coverage`。凡是与 `coverage`、`coverage_analyst` 相关的查询和写入都放在该模块内。
+
+`validators.ts` 负责提交前校验。它只判断输入是否合法、是否满足提交条件，不负责创建业务对象，也不执行提交。
+
+`submit-report.ts` 负责完整提交流程。它串联连接获取、提交前校验、报告对象写入、文件上传和提交动作。文件上传逻辑先内聚在该模块内部，不单独拆出 `storage` 模块。
+
+模块之间的依赖关系保持单向：`submit-report` 可以调用 `connection`、`validators` 和 `coverage`；`validators` 可以调用 `coverage` 和 `connection`；`coverage` 只依赖 `connection`；`connection` 不依赖任何业务模块。
 
 ## 4. 联调与环境
 
@@ -444,5 +240,6 @@ type UploadedReportFiles = {
 - 将最终确认后的 `coverage_id` 写入 `submission`
 - 将报告 `1作 analyst_id` 明确传给 `resolve_coverage`，作为 coverage 解析依据
 - 当 `resolve_coverage`、`create_coverage`、`validators` 或 `submit_report` 抛出具体错误时，负责根据错误内容继续补字段、重新确认或中止流程
-- 在多人分析师场景下，继续负责确认 `contact_person_id`
-- 在提交前继续负责准备完整文件路径，包括 `report_file`、可选 `pdf_file` 以及公司类报告所需的 `model_file`
+- 在单 analyst 场景下，直接使用该 analyst 填充 `contact_person_id`
+- 在多 analyst 场景下，通过对话确认并填充 `contact_person_id`
+- 在提交前继续负责准备完整文件路径，包括 `report_file`、`pdf_file` 以及公司类报告所需的 `model_file`
