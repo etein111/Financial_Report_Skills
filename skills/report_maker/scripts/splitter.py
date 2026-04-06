@@ -155,6 +155,10 @@ def extract_fragment_by_markers(
 
         print(f"提取范围: 元素 {start_idx} - {end_idx}")
 
+        # 🔑 关键：在删除元素前，找到范围内的 sectPr 页边距
+        # 因为这些 sectPr 定义了内容应该使用的页边距
+        margins_to_preserve = _find_sectpr_margins_for_range(elements, start_idx, end_idx, W)
+
         # 删除范围外的元素
         elements_to_remove = []
 
@@ -178,6 +182,10 @@ def extract_fragment_by_markers(
                 body.remove(elem)
             except ValueError:
                 pass
+
+        # 🔑 关键：将保存的页边距应用到最终的 sectPr
+        if margins_to_preserve:
+            _apply_margins_to_final_sectpr(body, margins_to_preserve, W)
 
         # 保存到输出路径
         doc.save(str(out_path))

@@ -769,18 +769,23 @@ def _insert_abstract_at_paragraph(doc: Document, abstract_doc: Document, marker:
     """
     body_elem = doc.element.body
     all_elements = list(body_elem)
+    W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
 
     for i, elem in enumerate(all_elements):
         if elem.tag.endswith('}p'):
             text = ''.join(t.text for t in elem.iter() if t.text)
             if marker in text:
-                # 找到 marker 段落，删除它并在该位置插入 abstract 内容
-                insert_idx = i
-
-                # 删除 marker 段落
-                body_elem.remove(elem)
+                # 找到 marker 段落，检查其中是否有 sectPr
+                # 如果有 sectPr（分节符），需要删除它避免产生多余分页
+                pPr = elem.find(f'{W}pPr')
+                if pPr is not None:
+                    sectPr = pPr.find(f'{W}sectPr')
+                    if sectPr is not None:
+                        pPr.remove(sectPr)
+                        print(f"  已删除 marker 段落中的 sectPr 分节符")
 
                 # 在该位置插入 abstract 内容（倒序插入以保持顺序）
+                insert_idx = i
                 abstract_elements = list(abstract_doc.element.body)
                 for j, abs_elem in enumerate(reversed(abstract_elements)):
                     tag = abs_elem.tag.split('}')[-1]
@@ -791,6 +796,9 @@ def _insert_abstract_at_paragraph(doc: Document, abstract_doc: Document, marker:
                             if not para_text.strip():
                                 continue  # 跳过空段落
                         body_elem.insert(insert_idx, deepcopy(abs_elem))
+
+                # 删除 marker 段落（现在段落中已经没有 sectPr 了）
+                body_elem.remove(elem)
 
                 return True
 
@@ -925,7 +933,7 @@ def insert_body_at_marker_compose(doc_path: str, body_path: str, marker: str, ou
     """使用 docxcompose 三段式合并：在 marker 位置插入 body。
 
     将原文档拆分为 marker 之前和之后两部分，
-    然后用 docxcompose 合并：part1 + body + part3。
+    然后用 docxcompose 合并：part1 + body + sectPr + part3。
     这样可以正确处理所有图片和资源引用。
 
     Args:
@@ -940,22 +948,36 @@ def insert_body_at_marker_compose(doc_path: str, body_path: str, marker: str, ou
     try:
         from docxcompose.composer import Composer
         import shutil
+        from copy import deepcopy
+        from lxml import etree
+
+        W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
 
         # 0. 保存 body.docx 的页边距信息（合并后需要恢复）
         body_margins = _get_document_sectpr_margins(body_path)
         if body_margins:
             print(f"  body.docx 页边距: top={body_margins.get('top')}, bottom={body_margins.get('bottom')}")
 
-        # 1. 找到 marker 位置
+        # 1. 找到 marker 位置和其中的 sectPr
         doc = Document(doc_path)
         body_elem = doc.element.body
         all_elements = list(body_elem)
 
         marker_idx = None
+        marker_sectPr = None  # 保留 marker 段落中的 sectPr（分节符）
         for i, elem in enumerate(all_elements):
             text = ''.join(t.text or '' for t in elem.iter() if t.text)
             if marker in text:
                 marker_idx = i
+                # 检查 marker 段落中是否有 sectPr（分节符）
+                if elem.tag.endswith('}p'):
+                    pPr = elem.find(f'{W}pPr')
+                    if pPr is not None:
+                        sectPr = pPr.find(f'{W}sectPr')
+                        if sectPr is not None:
+                            # 提取 sectPr（深拷贝避免被删除）
+                            marker_sectPr = deepcopy(sectPr)
+                            print(f"  保留 marker 段落中的 sectPr 分节符")
                 break
 
         if marker_idx is None:
@@ -1004,12 +1026,26 @@ def insert_body_at_marker_compose(doc_path: str, body_path: str, marker: str, ou
         if has_part3_content:
             part3_doc.save(str(part3_path))
 
-        # 4. 使用 docxcompose 合并：part1 + body + part3
+        # 4. 使用 docxcompose 合并：part1 + body + sectPr(分页符) + part3
         master = Document(str(part1_path))
         composer = Composer(master)
 
         # 追加 body
         body_doc = Document(body_path)
+
+        # 如果有 marker_sectPr，在 body 末尾添加一个带有 sectPr 的段落
+        # 这样 body 和 part3（APPENDIX 1 Summary）之间就有分页符了
+        if marker_sectPr is not None and has_part3_content:
+            # 创建分页段落
+            page_break_para = body_doc.element.body.makeelement(
+                f'{W}p',
+                {}
+            )
+            pPr = etree.SubElement(page_break_para, f'{W}pPr')
+            pPr.append(deepcopy(marker_sectPr))
+            body_doc.element.body.append(page_break_para)
+            print(f"  在 body 末尾添加分页符段落")
+
         composer.append(body_doc)
 
         # 追加 part3（如果有内容）
