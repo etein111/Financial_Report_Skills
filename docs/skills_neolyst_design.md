@@ -18,7 +18,8 @@
 
 ### 2.1 接口形态
 
-- `neolyst` 对外暴露四个接口：`resolve_coverage`、`create_coverage`、`validators` 与 `submit_report`。
+- `neolyst` 对外暴露五个接口：`resolve_analyst_by_email`、`resolve_coverage`、`create_coverage`、`validators` 与 `submit_report`。
+- `resolve_analyst_by_email` 用于根据 analyst email 解析并确认 `analyst_id`。
 - `resolve_coverage` 用于解析并确认 `coverage_id`。
 - `create_coverage` 用于创建新的 `coverage` 与 `coverage_analyst` 关系。
 - `validators` 用于执行提交前校验并暴露阻断项。
@@ -31,13 +32,17 @@
 - `submission` 采用全打平结构，业务字段和文件路径字段都位于顶层。
 - `submission` 不携带执行上下文字段，例如 `workspace_root`、`trace_id`、`server_url_override`、`dry_run`。
 - 文件输入统一使用本地路径，由 `neolyst` 自行上传到 Neolyst Storage。
+- `report_id` 在首次提交时为空；提交失败后的重新提交沿用原 `report_id`，并在该 `report_id` 下创建新版本。
 - `company` / `company_flash` 的 `submission` 必须携带已经确认好的 `coverage_id`。
 - `contact_person_id` 作为 `submission` 的显式字段，由 `report_maker` 负责确认和填充；单 analyst 场景直接使用该 analyst，多 analyst 场景通过对话确认后填入 `submission`。
+- `report_language` 作为模板选择字段，由 `report_maker` 自动识别并向用户确认后写入 `submission`。
+- `certificate_confirmed` 固定写为 `true`。
 
 ### 2.3 身份与会话策略
 
 - Neolyst Supabase 的登录身份由 `neolyst` 管理和复用，`validators` 与 `submit_report` 的相关读写都使用该身份。
 - 使用 `email + password` 登录，账号、密码和登录态保存在工作目录根目录的 `/.neolyst`；只支持一个登录身份，会话失效时重新登录并更新 `/.neolyst`。
+- 提交相关的用户归属与审计字段统一使用 `connection` 当前登录的 Neolyst 用户；`resolve_analyst_by_email` 只用于确定报告分析师身份，不用于决定提交执行用户。
 - 本 skill 不做代理执行，因为这会破坏 Neolyst 的安全性，也不符合实际业务关系。
 
 ### 2.4 技术访问方式
@@ -52,6 +57,7 @@
 ### 2.6 提交流程
 
 - 提交流程采用两段式：先创建并保存 report 相关内容，再执行提交；提交失败时保留已创建的中间结果。
+- 提交失败后的重新提交沿用原 `report_id`，在原 report 下创建新版本，不创建新的 report 对象。
 - 整体行为对齐 Neolyst Web 的 `Analyst Submit`，不引入独立提交流程。
 
 ### 2.7 校验与错误语义
@@ -76,7 +82,7 @@
 
 `create_coverage` 的输入为创建 `coverage` 所需的完整业务字段，以及初始 `coverage_analyst` 列表。创建 `coverage` 时至少写入 `ticker`、公司名称、`sector_id`、`isin`、`country_of_domicile` 等必填字段；创建完成后，再写入对应的 `coverage_analyst` 关系。
 
-`create_coverage` 创建的分析师列表以报告分析师列表为基础，其中报告 `1作 analyst_id` 必须包含在新建的 `coverage_analyst` 中。创建完成后返回新的 `coverage_id`，供上游写回 `submission` 并继续后续校验和提交。
+`create_coverage` 创建的分析师列表以报告分析师列表为基础，其中报告 `1作 analyst_id` 必须包含在新建的 `coverage_analyst` 中。新建 `coverage` 时，初始 `coverage_analyst` 与本次报告分析师列表保持一致，最多支持 8 位分析师。创建完成后返回新的 `coverage_id`，供上游写回 `submission` 并继续后续校验和提交。
 
 `create_coverage` 是显式创建接口，不由 `submit_report` 隐式触发。只有在 `resolve_coverage` 未命中现有 `coverage` 时，才进入 `create_coverage`。创建失败时直接抛出具体错误，不返回包裹态结果。
 
@@ -88,6 +94,7 @@
 {
   "title": "Vertiv: AI demand drives earnings growth",
   "report_type": "company",
+  "report_id": null,
   "coverage_id": "57ed4bf9-b4ac-485d-a3a5-5891f02d7c95",
   "ticker": "VRT US",
   "rating": "OUTPERFORM",
@@ -130,7 +137,10 @@
 
 - `submission` 必须为顶层扁平对象
 - `analysts` 必须为非空列表
+- `analysts` 最多支持 8 位分析师
 - `analysts[].analyst_id`、`role`、`sort_order` 必须完整
+- `analysts` 中必须恰好存在一位 `role = 1` 的分析师，作为报告 `1作 analyst_id`
+- `analysts[].sort_order` 必须唯一
 - 文件字段必须为本地路径字符串
 
 通用必填字段：
@@ -156,6 +166,7 @@
 主数据校验：
 
 - `report_type` 必须对应有效启用的 report type
+- `report_language` 必须为有效模板语言
 - `region_code` 必须对应有效 region
 - `sector_id` 必须对应有效 sector
 - `analysts[].analyst_id` 必须对应有效 analyst
@@ -166,6 +177,7 @@
 - `coverage_id` 必须对应存在的 `coverage`
 - `coverage.ticker` 必须与输入 `ticker` 一致
 - 报告 `1作 analyst_id` 必须存在于该 `coverage` 的 `coverage_analyst` 列表中
+- 对已有 `coverage`，提交时不自动改写 `coverage_analyst`；报告分析师关系独立写入 `report_analyst`
 
 结果语义：
 
@@ -180,7 +192,7 @@
 
 1. 获取已认证的 Neolyst 访问连接
 2. 再次执行提交前校验，确认输入仍然满足提交条件
-3. 创建或定位当前要写入的报告对象
+3. 根据 `report_id` 创建或定位当前要写入的报告对象；首次提交创建新 report，重新提交沿用原 `report_id` 创建新版本
 4. 上传 `report_file`、`pdf_file` 以及公司类报告所需的 `model_file`
 5. 写入报告基本信息、分析师关系和文件路径
 6. 执行提交动作，将报告状态推进到 `submitted`
@@ -196,7 +208,7 @@
 
 ### 3.5 模块拆分
 
-实现层按四个模块拆分：`connection`、`coverage`、`validators`、`submit-report`。
+实现层按五个模块拆分：`connection`、`analyst`、`coverage`、`validators`、`submit-report`。
 
 目录结构如下：
 
@@ -205,14 +217,17 @@ neolyst/
   SKILL.md
   scripts/
     connection.ts
+    analyst.ts
     coverage.ts
     validators.ts
     submit-report.ts
 ```
 
-`SKILL.md` 负责声明 `resolve_coverage`、`create_coverage`、`validators`、`submit_report` 四个对外接口，说明高层输入输出约定，以及 `/.neolyst` 的使用方式。具体实现细节放在 `scripts/*.ts`，不放在 `SKILL.md`。
+`SKILL.md` 负责声明 `resolve_analyst_by_email`、`resolve_coverage`、`create_coverage`、`validators`、`submit_report` 五个对外接口，说明高层输入输出约定，以及 `/.neolyst` 的使用方式。具体实现细节放在 `scripts/*.ts`，不放在 `SKILL.md`。
 
 `connection.ts` 负责连接相关能力，包括读取和写入 `/.neolyst`、创建 Supabase client、恢复 session、失效后重新登录，以及对外提供已认证的访问连接。
+
+`analyst.ts` 负责 `resolve_analyst_by_email`。凡是 analyst 身份解析相关的查询都放在该模块内。
 
 `coverage.ts` 负责 `resolve_coverage` 和 `create_coverage`。凡是与 `coverage`、`coverage_analyst` 相关的查询和写入都放在该模块内。
 
@@ -220,7 +235,7 @@ neolyst/
 
 `submit-report.ts` 负责完整提交流程。它串联连接获取、提交前校验、报告对象写入、文件上传和提交动作。文件上传逻辑先内聚在该模块内部，不单独拆出 `storage` 模块。
 
-模块之间的依赖关系保持单向：`submit-report` 可以调用 `connection`、`validators` 和 `coverage`；`validators` 可以调用 `coverage` 和 `connection`；`coverage` 只依赖 `connection`；`connection` 不依赖任何业务模块。
+模块之间的依赖关系保持单向：`submit-report` 可以调用 `connection`、`validators` 和 `coverage`；`validators` 可以调用 `analyst`、`coverage` 和 `connection`；`coverage` 与 `analyst` 只依赖 `connection`；`connection` 不依赖任何业务模块。
 
 ## 4. 联调与环境
 
@@ -236,10 +251,12 @@ neolyst/
 
 `report_maker` 对接 `neolyst` 时，不改变现有草稿解析、字段确认、模板渲染和输出 Word/PDF 的主流程。Neolyst 提交能力建立在报告生成完成之后，作为新的后续阶段接入。
 
+`report_maker` 在报告生成阶段也可以调用 `neolyst` 的查询能力。凡是生成报告所需的 Neolyst 数据读取，应通过 `neolyst` 提供的查询接口完成，不直接绕过 `neolyst` 访问数据库。
+
 进入提交阶段的前提如下：
 
-- 已生成最终 `output.docx`
-- 已生成最终 `output.pdf`
+- 已生成最终 Word 文件
+- 已生成最终 PDF 文件
 - 报告基础字段已确认完成
 - 分析师信息已确认完成
 
@@ -261,11 +278,19 @@ neolyst/
 - 每个分析师的 `sort_order`
 - 报告 `1作 analyst_id`
 
+`report_maker` 通过 `resolve_analyst_by_email(email)` 将现有分析师 email 映射为 `analyst_id`。分析师列表最多支持 8 人，并与 `coverage_analyst` 保持一致。
+
+`report_language` 由 `report_maker` 自动识别，并通过对话确认后写入。该字段用于确定提交所对应的模板语言。
+
+`certificate_confirmed` 由 `report_maker` 直接写为 `true`。
+
 对于公司类报告，`report_maker` 还负责准备以下 `coverage` 相关输入：
 
 - `ticker`
 - 报告 `1作 analyst_id`
 - 新建 `coverage` 所需字段，包括公司名称、`sector_id`、`isin`、`country_of_domicile`
+
+新建 `coverage` 时，`report_maker` 使用本次报告分析师列表初始化 `coverage_analyst`。对已有 `coverage`，`report_maker` 不通过提交流程改写其既有 `coverage_analyst`，报告作者关系独立进入 `report_analyst`。
 
 ### 5.3 新增 submission 组装能力
 
@@ -273,7 +298,7 @@ neolyst/
 
 `submission` 至少包括以下字段：
 
-- 报告基本字段：`title`、`report_type`、`report_language`、`investment_thesis`
+- 报告基本字段：`title`、`report_id`、`report_type`、`report_language`、`investment_thesis`
 - 分析师与联系人字段：`analysts`、`contact_person_id`
 - 公司类报告字段：`coverage_id`、`ticker`、`rating`、`target_price`
 - 行业类报告字段：`region_code`、`sector_id`
@@ -282,11 +307,21 @@ neolyst/
 
 文件字段映射规则如下：
 
-- `report_file` 使用最终生成的 `output.docx`
-- `pdf_file` 使用最终生成的 `output.pdf`
+- `report_file` 使用最终生成的 Word 文件路径
+- `pdf_file` 使用最终生成的 PDF 文件路径
 - `model_file` 仅在公司类报告提交时提供
 
-`report_maker` 需要建立报告类型到 `neolyst` 提交类型的映射。只有可映射到 `company`、`sector`、`company_flash`、`sector_flash`、`common` 的报告，才进入提交流程。
+`report_maker` 需要建立报告类型到 `neolyst` 提交类型的映射，规则如下：
+
+- `company -> company`
+- `sector -> sector`
+- `flash -> common`
+- `company_flash -> company_flash`
+- `sector_flash -> sector_flash`
+- `macro -> common`
+- `strategy -> common`
+- `quantitative -> common`
+- `bond -> common`
 
 ### 5.4 新增提交前检查能力
 
@@ -311,3 +346,5 @@ neolyst/
 当 `resolve_coverage`、`create_coverage`、`validators` 或 `submit_report` 抛出具体错误时，`report_maker` 负责根据错误内容继续补字段、重新确认或终止流程。
 
 字段缺失、字段歧义、联系人确认和 `coverage` 创建信息不足等问题，由 `report_maker` 继续通过对话处理。多轮补充、重新校验和重新提交都由 `report_maker` 驱动。
+
+提交失败后的重新提交沿用原 `report_id`，在原 report 下创建新版本，不创建新的 report 对象。

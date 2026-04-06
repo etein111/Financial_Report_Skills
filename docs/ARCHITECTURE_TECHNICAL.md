@@ -128,7 +128,7 @@ NeoSpace 和 Neolyst 系统涉及多个核心数据实体，这些实体之间�
 
 **coverage 表**存储公司覆盖信息，是 company 和 company_flash 类型报告的核心关联表。关键字段包括 uuid 主键 id、ticker（股票代码，唯一）、english_full_name（公司英文全称，非空）、chinese_short_name（中文简称）、sector_id 外键关联行业、isin（国际证券识别码，唯一）、country_of_domicile（注册国家）、reporting_currency（报告货币）、ads_conversion_factor（ADS 转换因子）、is_duplicate/is_active 状态标志、approved_by/approved_at 审批信息以及审计字段。ticker 和 isin 都要求唯一性，并采用标准化比较。
 
-**coverage_analyst 表**实现 Coverage 与分析师的多对多关系，支持每个 Coverage 最多 4 位分析师。关键字段包括 uuid 主键 id、coverage_id 外键、analyst_id 外键、role 角色字段（1 到 4）、sort_order 排序字段以及审计字段。约束条件确保同一 Coverage 中同一分析师只出现一次，同一 Coverage 中每个排序位置唯一。
+**coverage_analyst 表**实现 Coverage 与分析师的多对多关系，支持每个 Coverage 最多 8 位分析师。关键字段包括 uuid 主键 id、coverage_id 外键、analyst_id 外键、role 角色字段（1 到 8）、sort_order 排序字段以及审计字段。约束条件确保同一 Coverage 中同一分析师只出现一次，同一 Coverage 中每个排序位置唯一。新建 Coverage 时，初始 `coverage_analyst` 与当前报告分析师列表保持一致；对已有 Coverage，单篇报告提交不自动改写其既有 `coverage_analyst`，报告作者关系独立记录在 `report_analyst` 中。
 
 **template 表**管理 Word 和 Excel 模板文件。关键字段包括 uuid 主键 id、name 模板名称、report_type 报告类型、file_type 文件类型（word 或 excel）、file_path 存储路径、version 版本号、is_active 激活状态、uploaded_by 上传者外键以及审计字段。约束规则确保同一报告类型、文件类型和版本号的组合唯一，同一报告类型和文件类型只能有一个激活版本。系统初始化应至少包含 company、sector、company_flash、sector_flash、common 五种报告类型。
 
@@ -136,7 +136,7 @@ NeoSpace 和 Neolyst 系统涉及多个核心数据实体，这些实体之间�
 
 **report_version 表**记录报告内容的版本历史，采用追加写入模式。关键字段包括 uuid 主键 id、report_id 报告外键、version_no 版本号（按报告递增）、snapshot_json JSON 格式的字段快照、word_file_path/model_file_path 文件路径、changed_by 修改人外键以及 changed_at 修改时间。约束条件确保报告和版本号的组合唯一，且采用追加模式禁止更新和删除。
 
-**report_analyst 表**维护报告与分析师的作者关系。关键字段包括 uuid 主键 id、report_id 报告外键、analyst_id 分析师外键、role 角色、sort_order 排序以及审计字段。所有者可维护自己报告的作者关系，管理员可全局维护。
+**report_analyst 表**维护报告与分析师的作者关系。关键字段包括 uuid 主键 id、report_id 报告外键、analyst_id 分析师外键、role 角色、sort_order 排序以及审计字段。该表记录单篇报告的作者列表，与 `coverage_analyst` 的长期 Coverage 团队关系分离。所有者可维护自己报告的作者关系，管理员可全局维护。
 
 **report_status_log 表**记录报告状态流转历史，采用追加写入模式。关键字段包括 uuid 主键 id、report_id 报告外键、from_status 源状态、to_status 目标状态、action_by 操作人外键、action_by_name 操作人名称、action_at 操作时间、reason 拒绝原因（reject 时必填）以及 version_no 操作发生时的版本号。约束条件确保记录完整的状态流转链，禁止更新和删除。
 
