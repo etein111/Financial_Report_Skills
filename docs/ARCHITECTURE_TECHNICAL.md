@@ -112,7 +112,7 @@ NeoSpace 和 Neolyst 系统涉及多个核心数据实体，这些实体之间�
 | 行业分类 | sector | 已实现 | 两级行业分类结构 |
 | 公司覆盖 | coverage | 已实现 | 公司覆盖信息和元数据 |
 | 覆盖分析师关系 | coverage_analyst | 已实现 | Coverage 与分析师的多对多关系 |
-| 报告模板 | template | 已实现 | Word/Excel 模板管理 |
+| 报告模板 | template | 已实现 | Word 模板管理 |
 | 报告主表 | report | 已实现 | 报告的核心数据 |
 | 报告版本 | report_version | 已实现 | 报告内容的版本历史 |
 | 报告作者关系 | report_analyst | 已实现 | 报告与作者的关系 |
@@ -130,7 +130,7 @@ NeoSpace 和 Neolyst 系统涉及多个核心数据实体，这些实体之间�
 
 **coverage_analyst 表**实现 Coverage 与分析师的多对多关系，支持每个 Coverage 最多 8 位分析师。关键字段包括 uuid 主键 id、coverage_id 外键、analyst_id 外键、role 角色字段（1 到 8）、sort_order 排序字段以及审计字段。约束条件确保同一 Coverage 中同一分析师只出现一次，同一 Coverage 中每个排序位置唯一。新建 Coverage 时，初始 `coverage_analyst` 与当前报告分析师列表保持一致；对已有 Coverage，单篇报告提交不自动改写其既有 `coverage_analyst`，报告作者关系独立记录在 `report_analyst` 中。
 
-**template 表**管理 Word 和 Excel 模板文件。关键字段包括 uuid 主键 id、name 模板名称、report_type 报告类型、file_type 文件类型（word 或 excel）、file_path 存储路径、version 版本号、is_active 激活状态、uploaded_by 上传者外键以及审计字段。约束规则确保同一报告类型、文件类型和版本号的组合唯一，同一报告类型和文件类型只能有一个激活版本。系统初始化应至少包含 company、sector、company_flash、sector_flash、common 五种报告类型。
+**template 表**管理生成报告所使用的 Word 模板。关键字段包括 uuid 主键 id、name 模板名称、report_type 报告类型、language 模板语言、file_path 存储路径、uploaded_by 上传者外键以及审计字段。约束规则确保同一 `report_type + language` 只有一条当前模板记录。模板更新采用直接更新当前记录的方式，不维护 `file_type`、`version` 或 `is_active`。系统初始化应至少包含 company、sector、company_flash、sector_flash、common 五种报告类型在中英文维度上的模板。
 
 **report 表**是报告管理的核心表，存储报告的主要信息。关键字段包括 uuid 主键 id、owner_user_id 所有者外键（非空且不可转移）、title 标题（非空）、report_type 报告类型（非空）、ticker 股票代码、rating 评级、target_price 目标价、region_id/sector_id 关联外键、report_language 报告语言（zh 或 en）、contact_person 联系人、investment_thesis 投资观点、certificate_confirmed 证书确认（布尔值，默认 false）、status 状态（draft/submitted/published/rejected）、current_version_no 当前版本号、published_by/published_at 发布快照以及审计字段。约束规则规定报告不做物理删除，submitted 状态下所有者仍可编辑，仅在 submitted 转换为 published 时更新发布快照。
 
@@ -277,7 +277,7 @@ NeoSpace 系统提供了便捷的模板制作和维护功能，允许业务人�
 
 NeoSpace 系统使用 Supabase Storage 进行文件存储，主要分为两个存储桶：模板文件存储桶和报告文件存储桶。
 
-**模板文件存储**采用独立的模板专用 bucket。存储路径遵循规范：`templates/{template_id}/{version}/...`，其中 template_id 是模板的唯一标识，version 是版本号。读取权限方面，所有已认证用户都可以读取模板文件（受路径约束）。写入权限方面，仅管理员可以上传、替换和删除模板文件。
+**模板文件存储**采用独立的模板专用 bucket。存储路径遵循规范：`templates/{report_type}/{language}/template.docx`。读取权限方面，所有已认证用户都可以读取模板文件（受路径约束）。写入权限方面，仅管理员可以上传、替换和删除模板文件。
 
 **报告文件存储**采用报告专用 bucket。存储路径遵循规范：`reports/{report_id}/`，其中 report_id 是报告的唯一标识。文件名遵循固定格式：`{report_id}_{version_no3}_{label}_{ts}.{ext}`。其中 version_no3 是三位版本号（如 001、002），label 是文件标签（report 表示报告文件，model 表示模型文件），ts 是 UTC 秒级时间戳（格式为 YYYYMMDDTHHMMSSZ），ext 是文件扩展名。
 

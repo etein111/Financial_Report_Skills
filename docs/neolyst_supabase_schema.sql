@@ -5,6 +5,7 @@
 -- Note: Defaults and NOT NULL flags are preserved when exposed by OpenAPI.
 -- Note: Foreign keys, indexes, unique constraints, check constraints, triggers, and RLS policies are not fully exposed by /rest/v1/ and are therefore omitted here unless directly inferable.
 -- Note: Alibaba Cloud / RDS / embedding-related auxiliary tables are intentionally excluded.
+-- Note: This snapshot reflects the live database as of generation time. Where current design docs have evolved beyond the live schema, keep this file as live-state truth rather than rewriting DDL to match target design.
 
 create table if not exists public.region (
   id uuid primary key not null default gen_random_uuid(),
@@ -90,6 +91,8 @@ create table if not exists public.report_type (
 );
 
 create table if not exists public.template (
+  -- Live schema still includes legacy template-management columns.
+  -- Target design in docs/skills_neolyst_design.md and docs/ARCHITECTURE_TECHNICAL.md narrows template semantics to Word-template management and no longer treats file_type/version/is_active as part of the intended future model.
   id uuid primary key not null default gen_random_uuid(),
   name text not null,
   report_type text not null,

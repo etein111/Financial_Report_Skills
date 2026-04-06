@@ -18,8 +18,10 @@
 
 ### 2.1 接口形态
 
-- `neolyst` 对外暴露五个接口：`resolve_analyst_by_email`、`resolve_coverage`、`create_coverage`、`validators` 与 `submit_report`。
+- `neolyst` 对外暴露七个接口：`resolve_analyst_by_email`、`resolve_template`、`upsert_template`、`resolve_coverage`、`create_coverage`、`validators` 与 `submit_report`。
 - `resolve_analyst_by_email` 用于根据 analyst email 解析并确认 `analyst_id`。
+- `resolve_template` 用于根据 `report_type` 和 `report_language` 查询当前使用的 Word 模板。
+- `upsert_template` 用于新增或更新当前使用的 Word 模板。
 - `resolve_coverage` 用于解析并确认 `coverage_id`。
 - `create_coverage` 用于创建新的 `coverage` 与 `coverage_analyst` 关系。
 - `validators` 用于执行提交前校验并暴露阻断项。
@@ -208,7 +210,7 @@
 
 ### 3.5 模块拆分
 
-实现层按五个模块拆分：`connection`、`analyst`、`coverage`、`validators`、`submit-report`。
+实现层按七个模块拆分：`connection`、`storage`、`analyst`、`template`、`coverage`、`validators`、`submit-report`。
 
 目录结构如下：
 
@@ -217,25 +219,31 @@ neolyst/
   SKILL.md
   scripts/
     connection.ts
+    storage.ts
     analyst.ts
+    template.ts
     coverage.ts
     validators.ts
     submit-report.ts
 ```
 
-`SKILL.md` 负责声明 `resolve_analyst_by_email`、`resolve_coverage`、`create_coverage`、`validators`、`submit_report` 五个对外接口，说明高层输入输出约定，以及 `/.neolyst` 的使用方式。具体实现细节放在 `scripts/*.ts`，不放在 `SKILL.md`。
+`SKILL.md` 负责声明 `resolve_analyst_by_email`、`resolve_template`、`upsert_template`、`resolve_coverage`、`create_coverage`、`validators`、`submit_report` 七个对外接口，说明高层输入输出约定，以及 `/.neolyst` 的使用方式。具体实现细节放在 `scripts/*.ts`，不放在 `SKILL.md`。
 
 `connection.ts` 负责连接相关能力，包括读取和写入 `/.neolyst`、创建 Supabase client、恢复 session、失效后重新登录，以及对外提供已认证的访问连接。
 
+`storage.ts` 负责模板文件和报告文件的上传，以及统一的 storage 路径生成规则。
+
 `analyst.ts` 负责 `resolve_analyst_by_email`。凡是 analyst 身份解析相关的查询都放在该模块内。
+
+`template.ts` 负责 `resolve_template` 和 `upsert_template`。凡是 Word 模板的查询、上传和记录维护都放在该模块内。
 
 `coverage.ts` 负责 `resolve_coverage` 和 `create_coverage`。凡是与 `coverage`、`coverage_analyst` 相关的查询和写入都放在该模块内。
 
 `validators.ts` 负责提交前校验。它只判断输入是否合法、是否满足提交条件，不负责创建业务对象，也不执行提交。
 
-`submit-report.ts` 负责完整提交流程。它串联连接获取、提交前校验、报告对象写入、文件上传和提交动作。文件上传逻辑先内聚在该模块内部，不单独拆出 `storage` 模块。
+`submit-report.ts` 负责完整提交流程。它串联连接获取、提交前校验、报告对象写入、文件上传和提交动作。
 
-模块之间的依赖关系保持单向：`submit-report` 可以调用 `connection`、`validators` 和 `coverage`；`validators` 可以调用 `analyst`、`coverage` 和 `connection`；`coverage` 与 `analyst` 只依赖 `connection`；`connection` 不依赖任何业务模块。
+模块之间的依赖关系保持单向：`submit-report` 可以调用 `connection`、`storage`、`validators` 和 `coverage`；`validators` 可以调用 `analyst`、`coverage` 和 `connection`；`template` 可以调用 `connection` 和 `storage`；`coverage`、`analyst` 与 `storage` 只依赖 `connection`；`connection` 不依赖任何业务模块。
 
 ## 4. 联调与环境
 
@@ -252,6 +260,8 @@ neolyst/
 `report_maker` 对接 `neolyst` 时，不改变现有草稿解析、字段确认、模板渲染和输出 Word/PDF 的主流程。Neolyst 提交能力建立在报告生成完成之后，作为新的后续阶段接入。
 
 `report_maker` 在报告生成阶段也可以调用 `neolyst` 的查询能力。凡是生成报告所需的 Neolyst 数据读取，应通过 `neolyst` 提供的查询接口完成，不直接绕过 `neolyst` 访问数据库。
+
+模板选择也通过 `neolyst` 完成。`report_maker` 根据 `report_type` 和 `report_language` 调用 `resolve_template` 获取当前使用的 Word 模板，不再依赖本地目录映射决定最终模板。
 
 进入提交阶段的前提如下：
 
