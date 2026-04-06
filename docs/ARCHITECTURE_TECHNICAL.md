@@ -120,7 +120,7 @@ NeoSpace 和 Neolyst 系统涉及多个核心数据实体，这些实体之间�
 
 ### 3.2 核心表结构详解
 
-**region 表**存储地理区域信息，是报告类型为 sector、sector_flash 和 common 的必填字段。表结构包含 uuid 类型的主键 id、唯一且非空的 name 和 code 字段，以及审计字段 created_at 和 updated_at。初始基线数据应包含 China、Hong Kong、Japan、Taiwan、Korea、India、Macau、US 等主要市场区域，并预留扩展空间。
+**region 表**存储地理区域信息，是报告类型为 sector、sector_flash、flash、macro、strategy、quantitative、bond 的必填字段。表结构包含 uuid 类型的主键 id、唯一且非空的 name 和 code 字段，以及审计字段 created_at 和 updated_at。初始基线数据应包含 China、Hong Kong、Japan、Taiwan、Korea、India、Macau、US 等主要市场区域，并预留扩展空间。
 
 **analyst 表**存储分析师的详细业务信息，与 auth.users 表解耦。关键字段包括 uuid 类型主键 id、full_name（非空文本）、chinese_name（中文名，可空）、citext 类型的唯一邮箱 email、关联 region 的外键 region_id、SFC 执照编号 sfc、是否活跃标志 is_active，以及审计字段。分析师信息与认证账号保持分离，不自动创建或删除账号，这种设计允许灵活的人员管理。
 
@@ -130,7 +130,7 @@ NeoSpace 和 Neolyst 系统涉及多个核心数据实体，这些实体之间�
 
 **coverage_analyst 表**实现 Coverage 与分析师的多对多关系，支持每个 Coverage 最多 8 位分析师。关键字段包括 uuid 主键 id、coverage_id 外键、analyst_id 外键、role 角色字段（1 到 8）、sort_order 排序字段以及审计字段。约束条件确保同一 Coverage 中同一分析师只出现一次，同一 Coverage 中每个排序位置唯一。新建 Coverage 时，初始 `coverage_analyst` 与当前报告分析师列表保持一致；对已有 Coverage，单篇报告提交不自动改写其既有 `coverage_analyst`，报告作者关系独立记录在 `report_analyst` 中。
 
-**template 表**管理生成报告所使用的模板资产。关键字段包括 uuid 主键 id、name 模板名称、report_type 模板报告类型、language 模板语言、template_file_path Word 模板存储路径、schema_file_path 对应 `schema.yaml` 存储路径、uploaded_by 上传者外键以及审计字段。`report_type` 字段保存模板报告类型，也就是 `template_report_type`，与提交阶段使用的 Neolyst `report_type` 分离。`template_file_path` 与 `schema_file_path` 共同定义一套完整模板资产，其中 `schema.yaml` 用于描述需要抽取的字段，以及这些字段在分析师原始报告中的大致位置和特征。系统初始化应至少包含 company、sector、flash、company_flash、sector_flash、macro、strategy、quantitative、bond 九种模板报告类型在中英文维度上的模板资产。
+**template 表**管理生成报告所使用的模板资产。关键字段包括 uuid 主键 id、name 模板名称、report_type 模板类型、language 模板语言、template_file_path Word 模板存储路径、schema_file_path 对应 `schema.yaml` 存储路径、uploaded_by 上传者外键以及审计字段。`report_type` 字段保存模板类型，也就是 `template_type`，与 draft 和提交阶段使用的研报类型 `report_type` 分离。`template_file_path` 与 `schema_file_path` 共同定义一套完整模板资产，其中 `schema.yaml` 用于描述需要抽取的字段，以及这些字段在分析师原始报告中的大致位置和特征。系统初始化应至少包含 company、sector、company_flash、sector_flash、common 五种模板类型在中英文维度上的模板资产。
 
 **report 表**是报告管理的核心表，存储报告的主要信息。关键字段包括 uuid 主键 id、owner_user_id 所有者外键（非空且不可转移）、title 标题（非空）、report_type 报告类型（非空）、ticker 股票代码、rating 评级、target_price 目标价、region_id/sector_id 关联外键、report_language 报告语言（zh 或 en）、contact_person_id 联系人外键、investment_thesis 投资观点、certificate_confirmed 证书确认（布尔值，默认 false）、status 状态（draft/submitted/published/rejected）、current_version_no 当前版本号、published_by/published_at 发布快照以及审计字段。约束规则规定报告不做物理删除，submitted 状态下所有者仍可编辑，仅在 submitted 转换为 published 时更新发布快照。
 
@@ -156,7 +156,7 @@ NeoSpace 系统将自动化能力划分为五大类别，每个类别包含多�
 
 **数据维护类 Skills** 负责处理分析师信息的管理和同步。Analyst Manager 是该类别的核心 Skill，功能是从 Excel 文件提取分析师信息，与 Neolyst 系统中的数据进行智能比对，在确认差异后自动更新数据库。这个 Skill 大大简化了分析师信息维护的工作量，避免了手动录入的错误。
 
-**报告检查类 Skills** 负责验证报告的完整性和合规性。Report Field Checker 检查报告类型所需的字段是否完整，根据报告类型（company、sector、company_flash、sector_flash、common）验证必填字段。File Completeness Checker 检查 Word 文件、Model 文件、审批截图等必要文件是否齐全。File Similarity Checker 使用莱文斯坦距离算法计算文件相似度，与上一版本的最新文件进行比对，相似度低于 60% 时发出警告，防止提交错误版本。SFC Signature Validator 核对分析师与 SFC 署名，从 SFC 官方网站查询牌照信息并自动填充到报告中。
+**报告检查类 Skills** 负责验证报告的完整性和合规性。Report Field Checker 检查研报类型所需的字段是否完整，根据研报类型（company、sector、flash、company_flash、sector_flash、macro、strategy、quantitative、bond）验证必填字段。File Completeness Checker 检查 Word 文件、Model 文件、审批截图等必要文件是否齐全。File Similarity Checker 使用莱文斯坦距离算法计算文件相似度，与上一版本的最新文件进行比对，相似度低于 60% 时发出警告，防止提交错误版本。SFC Signature Validator 核对分析师与 SFC 署名，从 SFC 官方网站查询牌照信息并自动填充到报告中。
 
 **审批流程类 Skills** 负责处理各种审批场景。Coverage Approval Handler 检查 Coverage 是否存在，处理首次覆盖的审批邮件。Chief Approval Handler 处理报告提交前的首席审批流程。RQC Approval Handler 判断是否触发 RQC（研究质量委员会）审批，触发条件包括首次覆盖、评级调整、目标价变动超过 30%，并处理主管确认邮件。
 
@@ -168,21 +168,21 @@ NeoSpace 系统将自动化能力划分为五大类别，每个类别包含多�
 
 不同类型的报告在提交时有不同的必填字段要求，以下矩阵详细说明了各类报告的字段要求。
 
-| 字段名称 | company | sector | company_flash | sector_flash | common |
-|----------|:-------:|:------:|:-------------:|:------------:|:------:|
-| Ticker | ✅ | | ✅ | | |
-| Rating | ✅ | | | | |
-| Target price | ✅ | | | | |
-| Region | | ✅ | | ✅ | ✅ |
-| Sector | | ✅ | | ✅ | |
-| Report language | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Report title | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Analyst | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Contact Person | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Investment thesis | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Certificate | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 字段名称 | company | sector | flash | company_flash | sector_flash | macro | strategy | quantitative | bond |
+|----------|:-------:|:------:|:-----:|:-------------:|:------------:|:-----:|:--------:|:------------:|:----:|
+| Ticker | ✅ | | | ✅ | | | | | |
+| Rating | ✅ | | | | | | | | |
+| Target price | ✅ | | | | | | | | |
+| Region | | ✅ | ✅ | | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Sector | | ✅ | | | ✅ | | | | |
+| Report language | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Report title | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Analyst | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Contact Person | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Investment thesis | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Certificate | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 
-对于 company 和 company_flash 类型，必须提供合法的 ticker；其中 company 类型额外需要提供 rating 和 target_price。对于 sector 和 sector_flash 类型，必须提供合法的 region 和 sector。对于 common 类型，必须提供合法的 region。
+对于 company 和 company_flash 类型，必须提供合法的 ticker；其中 company 类型额外需要提供 rating 和 target_price。对于 sector 和 sector_flash 类型，必须提供合法的 region 和 sector。对于 flash、macro、strategy、quantitative、bond 类型，必须提供合法的 region。
 
 ### 4.3 报告标题生成规则
 
@@ -277,7 +277,7 @@ NeoSpace 系统提供了便捷的模板制作和维护功能，允许业务人�
 
 NeoSpace 系统使用 Supabase Storage 进行文件存储，主要分为两个存储桶：模板文件存储桶和报告文件存储桶。
 
-**模板文件存储**采用独立的模板专用 bucket。存储路径遵循规范：`templates/{template_report_type}/{language}/template.docx` 与 `templates/{template_report_type}/{language}/schema.yaml`。读取权限方面，所有已认证用户都可以读取模板文件（受路径约束）。写入权限方面，仅管理员可以上传、替换和删除模板文件。
+**模板文件存储**采用独立的模板专用 bucket。存储路径遵循规范：`templates/{template_type}/{language}/template.docx` 与 `templates/{template_type}/{language}/schema.yaml`。读取权限方面，所有已认证用户都可以读取模板文件（受路径约束）。写入权限方面，仅管理员可以上传、替换和删除模板文件。
 
 **报告文件存储**采用报告专用 bucket。存储路径遵循规范：`reports/{report_id}/`，其中 report_id 是报告的唯一标识。文件名遵循固定格式：`{report_id}_{version_no3}_{label}_{ts}.{ext}`。其中 version_no3 是三位版本号（如 001、002），label 是文件标签（report 表示报告文件，model 表示模型文件），ts 是 UTC 秒级时间戳（格式为 YYYYMMDDTHHMMSSZ），ext 是文件扩展名。
 

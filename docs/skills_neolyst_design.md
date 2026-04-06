@@ -20,7 +20,7 @@
 
 - `neolyst` 对外暴露八个接口：`resolve_analyst_by_email`、`resolve_template`、`upsert_template`、`resolve_coverage`、`create_coverage`、`save_draft_report`、`validators` 与 `submit_report`。
 - `resolve_analyst_by_email` 用于根据 analyst email 解析并确认 `analyst_id`。
-- `resolve_template` 用于根据模板报告类型和模板语言查询当前使用的模板资产。
+- `resolve_template` 用于根据模板类型和模板语言查询当前使用的模板资产。
 - `upsert_template` 用于新增或更新当前使用的模板资产。
 - `resolve_coverage` 用于解析并确认 `coverage_id`。
 - `create_coverage` 用于创建新的 `coverage` 与 `coverage_analyst` 关系。
@@ -46,11 +46,13 @@
 - `validators` 接收 `report_id` 和 `version_no`，针对指定 draft 版本执行提交前校验。
 - `submit_report` 接收 `report_id` 和 `version_no`，针对指定 draft 版本执行提交。
 
-### 2.3 report_type 与模板类型
+### 2.3 研报类型与模板类型
 
-- 模板接口使用 `template_report_type`，其取值沿用 `report_maker` 的源报告类型：`company`、`sector`、`flash`、`company_flash`、`sector_flash`、`macro`、`strategy`、`quantitative`、`bond`。
-- draft 与提交接口使用 Neolyst `report_type`，其取值为：`company`、`sector`、`company_flash`、`sector_flash`、`common`。
-- `report_maker` 在取模板时使用 `template_report_type`，在保存 draft 和提交时使用 Neolyst `report_type`。
+- 模板接口使用 `template_type`，其取值为：`company`、`sector`、`company_flash`、`sector_flash`、`common`。
+- draft 与提交接口使用研报类型 `report_type`，其取值为：`company`、`sector`、`flash`、`company_flash`、`sector_flash`、`macro`、`strategy`、`quantitative`、`bond`。
+- 研报类型用于研报分类、draft 保存和报告提交流程；模板类型用于选择模板资产。
+- 研报类型与模板类型是两个独立概念，可以同名，但不互相等价。
+- `report_maker` 在取模板时使用 `template_type`，在保存 draft 和提交时使用研报类型 `report_type`。
 
 ### 2.4 身份与会话策略
 
@@ -202,7 +204,11 @@ draft 可保存字段：
 - `company_flash`：`coverage_id`、`ticker`
 - `sector`：`region_code`、`sector_id`
 - `sector_flash`：`region_code`、`sector_id`
-- `common`：`region_code`
+- `flash`：`region_code`
+- `macro`：`region_code`
+- `strategy`：`region_code`
+- `quantitative`：`region_code`
+- `bond`：`region_code`
 
 主数据校验：
 
@@ -301,7 +307,7 @@ neolyst/
 
 `report_maker` 在报告生成阶段也可以调用 `neolyst` 的查询能力。凡是生成报告所需的 Neolyst 数据读取，应通过 `neolyst` 提供的查询接口完成，不直接绕过 `neolyst` 访问数据库。
 
-模板选择也通过 `neolyst` 完成。`report_maker` 根据 `template_report_type` 和 `report_language` 调用 `resolve_template` 获取当前使用的模板资产，不再从本地 `templates/` 目录读取模板，也不依赖本地目录映射决定最终模板。运行时使用的 Word 模板和对应 `schema.yaml` 都以 `neolyst` 中保存的模板记录为准。
+模板选择也通过 `neolyst` 完成。`report_maker` 根据 `template_type` 和 `report_language` 调用 `resolve_template` 获取当前使用的模板资产，不再从本地 `templates/` 目录读取模板，也不依赖本地目录映射决定最终模板。运行时使用的 Word 模板和对应 `schema.yaml` 都以 `neolyst` 中保存的模板记录为准。
 
 机器处理并生成 Word/PDF 后，`report_maker` 调用 `save_draft_report` 将机器处理结果保存为第一个 draft 版本。进入人工确认前，Neolyst 中已经存在该 `report_id` 下可查看的 draft 版本。
 
@@ -344,7 +350,7 @@ neolyst/
 draft 输入按两层组装：
 
 - 保存 draft 时的最小字段：`title`、`report_type`、`report_language`、`analysts`、`report_file`、`pdf_file`
-- 提交前补齐字段：`contact_person_id`、`investment_thesis`、`certificate_confirmed`，以及按报告类型要求的 `coverage_id`、`ticker`、`rating`、`target_price`、`region_code`、`sector_id`、`model_file`
+- 提交前补齐字段：`contact_person_id`、`investment_thesis`、`certificate_confirmed`，以及按研报类型要求的 `coverage_id`、`ticker`、`rating`、`target_price`、`region_code`、`sector_id`、`model_file`
 
 draft 输入可包含以下字段：
 
@@ -361,21 +367,9 @@ draft 输入可包含以下字段：
 - draft 使用最终生成的 PDF 文件路径作为 `pdf_file`
 - `model_file` 仅在公司类报告提交时提供
 
-`report_maker` 需要同时维护模板报告类型和 Neolyst 提交类型两套映射。
+`report_maker` 需要同时确定模板类型和研报类型。
 
-模板报告类型保持原始报告类型不变：
-
-- `company -> company`
-- `sector -> sector`
-- `flash -> flash`
-- `company_flash -> company_flash`
-- `sector_flash -> sector_flash`
-- `macro -> macro`
-- `strategy -> strategy`
-- `quantitative -> quantitative`
-- `bond -> bond`
-
-Neolyst 提交类型映射规则如下：
+模板类型映射规则如下：
 
 - `company -> company`
 - `sector -> sector`
@@ -386,6 +380,18 @@ Neolyst 提交类型映射规则如下：
 - `strategy -> common`
 - `quantitative -> common`
 - `bond -> common`
+
+研报类型映射规则如下：
+
+- `company -> company`
+- `sector -> sector`
+- `flash -> flash`
+- `company_flash -> company_flash`
+- `sector_flash -> sector_flash`
+- `macro -> macro`
+- `strategy -> strategy`
+- `quantitative -> quantitative`
+- `bond -> bond`
 
 ### 5.4 机器处理后的 draft 供人工在 neolyst 查看
 
@@ -421,7 +427,7 @@ Neolyst 提交类型映射规则如下：
 
 `upsert_template` 的输入至少包括：
 
-- `template_report_type`
+- `template_type`
 - `report_language`
 - `name`
 - `template_file_path`
@@ -433,9 +439,9 @@ Neolyst 提交类型映射规则如下：
 
 ### 6.2 模板映射关系写入 neolyst
 
-`template_maker` 负责维护报告类型与模板语言对应的模板关系。模板关系不再只保留在本地 `router.yaml` 或本地目录结构中，而是通过 `upsert_template` 直接写入 `neolyst`。
+`template_maker` 负责维护模板类型与模板语言对应的模板关系。模板关系不再只保留在本地 `router.yaml` 或本地目录结构中，而是通过 `upsert_template` 直接写入 `neolyst`。
 
-对于同一个 `template_report_type + report_language`，`template_maker` 维护对应的模板记录。后续 `report_maker` 调用 `resolve_template(template_report_type, report_language)` 时，直接使用这条记录返回的本地 Word 模板路径和本地 `schema.yaml` 路径。
+对于同一个 `template_type + report_language`，`template_maker` 维护对应的模板记录。后续 `report_maker` 调用 `resolve_template(template_type, report_language)` 时，直接使用这条记录返回的本地 Word 模板路径和本地 `schema.yaml` 路径。
 
 ### 6.3 本地模板目录的定位变化
 
