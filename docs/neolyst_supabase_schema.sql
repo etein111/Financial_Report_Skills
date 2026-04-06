@@ -91,19 +91,16 @@ create table if not exists public.report_type (
 );
 
 create table if not exists public.template (
-  -- Live schema still includes legacy template-management columns.
-  -- Target design in docs/skills_neolyst_design.md and docs/ARCHITECTURE_TECHNICAL.md narrows template semantics to Word-template management and no longer treats file_type/version/is_active as part of the intended future model.
+  -- Live schema: template assets are defined by the Word template file and its paired schema.yaml.
   id uuid primary key not null default gen_random_uuid(),
   name text not null,
   report_type text not null,
-  file_type text not null,
-  file_path text not null,
-  version integer not null,
-  is_active boolean not null default false,
+  template_file_path text not null,
   uploaded_by uuid,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  language text not null default 'en'
+  language text not null default 'en',
+  schema_file_path text
 );
 
 create table if not exists public.report (

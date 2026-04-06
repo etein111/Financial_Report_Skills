@@ -130,9 +130,9 @@ NeoSpace 和 Neolyst 系统涉及多个核心数据实体，这些实体之间�
 
 **coverage_analyst 表**实现 Coverage 与分析师的多对多关系，支持每个 Coverage 最多 8 位分析师。关键字段包括 uuid 主键 id、coverage_id 外键、analyst_id 外键、role 角色字段（1 到 8）、sort_order 排序字段以及审计字段。约束条件确保同一 Coverage 中同一分析师只出现一次，同一 Coverage 中每个排序位置唯一。新建 Coverage 时，初始 `coverage_analyst` 与当前报告分析师列表保持一致；对已有 Coverage，单篇报告提交不自动改写其既有 `coverage_analyst`，报告作者关系独立记录在 `report_analyst` 中。
 
-**template 表**管理生成报告所使用的 Word 模板。关键字段包括 uuid 主键 id、name 模板名称、report_type 报告类型、language 模板语言、file_path 存储路径、uploaded_by 上传者外键以及审计字段。约束规则确保同一 `report_type + language` 只有一条当前模板记录。模板更新采用直接更新当前记录的方式，不维护 `file_type`、`version` 或 `is_active`。系统初始化应至少包含 company、sector、company_flash、sector_flash、common 五种报告类型在中英文维度上的模板。
+**template 表**管理生成报告所使用的模板资产。关键字段包括 uuid 主键 id、name 模板名称、report_type 模板报告类型、language 模板语言、template_file_path Word 模板存储路径、schema_file_path 对应 `schema.yaml` 存储路径、uploaded_by 上传者外键以及审计字段。`report_type` 字段保存模板报告类型，也就是 `template_report_type`，与提交阶段使用的 Neolyst `report_type` 分离。`template_file_path` 与 `schema_file_path` 共同定义一套完整模板资产，其中 `schema.yaml` 用于描述需要抽取的字段，以及这些字段在分析师原始报告中的大致位置和特征。系统初始化应至少包含 company、sector、flash、company_flash、sector_flash、macro、strategy、quantitative、bond 九种模板报告类型在中英文维度上的模板资产。
 
-**report 表**是报告管理的核心表，存储报告的主要信息。关键字段包括 uuid 主键 id、owner_user_id 所有者外键（非空且不可转移）、title 标题（非空）、report_type 报告类型（非空）、ticker 股票代码、rating 评级、target_price 目标价、region_id/sector_id 关联外键、report_language 报告语言（zh 或 en）、contact_person 联系人、investment_thesis 投资观点、certificate_confirmed 证书确认（布尔值，默认 false）、status 状态（draft/submitted/published/rejected）、current_version_no 当前版本号、published_by/published_at 发布快照以及审计字段。约束规则规定报告不做物理删除，submitted 状态下所有者仍可编辑，仅在 submitted 转换为 published 时更新发布快照。
+**report 表**是报告管理的核心表，存储报告的主要信息。关键字段包括 uuid 主键 id、owner_user_id 所有者外键（非空且不可转移）、title 标题（非空）、report_type 报告类型（非空）、ticker 股票代码、rating 评级、target_price 目标价、region_id/sector_id 关联外键、report_language 报告语言（zh 或 en）、contact_person_id 联系人外键、investment_thesis 投资观点、certificate_confirmed 证书确认（布尔值，默认 false）、status 状态（draft/submitted/published/rejected）、current_version_no 当前版本号、published_by/published_at 发布快照以及审计字段。约束规则规定报告不做物理删除，submitted 状态下所有者仍可编辑，仅在 submitted 转换为 published 时更新发布快照。
 
 **report_version 表**记录报告内容的版本历史，采用追加写入模式。关键字段包括 uuid 主键 id、report_id 报告外键、version_no 版本号（按报告递增）、snapshot_json JSON 格式的字段快照、word_file_path/model_file_path 文件路径、changed_by 修改人外键以及 changed_at 修改时间。约束条件确保报告和版本号的组合唯一，且采用追加模式禁止更新和删除。
 
@@ -277,7 +277,7 @@ NeoSpace 系统提供了便捷的模板制作和维护功能，允许业务人�
 
 NeoSpace 系统使用 Supabase Storage 进行文件存储，主要分为两个存储桶：模板文件存储桶和报告文件存储桶。
 
-**模板文件存储**采用独立的模板专用 bucket。存储路径遵循规范：`templates/{report_type}/{language}/template.docx`。读取权限方面，所有已认证用户都可以读取模板文件（受路径约束）。写入权限方面，仅管理员可以上传、替换和删除模板文件。
+**模板文件存储**采用独立的模板专用 bucket。存储路径遵循规范：`templates/{template_report_type}/{language}/template.docx` 与 `templates/{template_report_type}/{language}/schema.yaml`。读取权限方面，所有已认证用户都可以读取模板文件（受路径约束）。写入权限方面，仅管理员可以上传、替换和删除模板文件。
 
 **报告文件存储**采用报告专用 bucket。存储路径遵循规范：`reports/{report_id}/`，其中 report_id 是报告的唯一标识。文件名遵循固定格式：`{report_id}_{version_no3}_{label}_{ts}.{ext}`。其中 version_no3 是三位版本号（如 001、002），label 是文件标签（report 表示报告文件，model 表示模型文件），ts 是 UTC 秒级时间戳（格式为 YYYYMMDDTHHMMSSZ），ext 是文件扩展名。
 
