@@ -49,7 +49,7 @@
 
 ### 2.3 研报类型与模板记录
 
-- draft、提交和模板接口统一使用研报类型 `report_type`，其取值为：`company`、`sector`、`flash`、`company_flash`、`sector_flash`、`macro`、`strategy`、`quantitative`、`bond`。
+- draft、提交和模板接口统一使用研报类型 `report_type`，其取值为：`company`、`sector`、`company_flash`、`sector_flash`、`macro`、`strategy`、`quantitative`、`bond`。
 - 模板接口以 `report_type + language` 作为业务定位键。`resolve_template` 以这组字段解析模板资产；`upsert_template` 与 `reuse_template` 的幂等写入、一致性约束和目标记录确定由 Supabase 侧模板接口负责保证。
 - `template.report_type` 就是报告类型本身，不引入单独的 `template_type` 概念。
 - 多个 `report_type` 可以共用同一套模板资产；发布时先上传一次主模板，再让其他 `report_type` 复用该主模板对应的 `template_file_path` 与 `schema_file_path`。
@@ -226,7 +226,6 @@ draft 版本需已持久化的核心内容：
 - `company_flash`：`coverage_id`、`ticker`
 - `sector`：`region_code`、`sector_id`
 - `sector_flash`：`region_code`、`sector_id`
-- `flash`：`region_code`
 - `macro`：`region_code`
 - `strategy`：`region_code`
 - `quantitative`：`region_code`
@@ -318,7 +317,7 @@ neolyst/
 
 `submit_report.py` 负责提交已有 draft，串联连接获取、draft 版本定位、提交前校验和调用 Supabase 侧提交接口。`submit_report` 的职责聚焦于状态推进与提交审计；`report` 主表当前态字段和 `current_version_no` 已由 `save_draft_report` 在保存 draft 时同步更新。
 
-模块之间的依赖关系保持单向：`draft_report` 可以调用 `connection`、`storage` 和 `coverage`；`submit_report` 可以调用 `connection` 和 `validators`；`validators` 可以调用 `analyst`、`coverage` 和 `connection`；`template` 可以调用 `connection` 和 `storage`；`coverage`、`analyst` 与 `storage` 只依赖 `connection`；`connection` 不依赖任何业务模块。
+模块之间的依赖关系保持单向：`draft_report` 可以调用 `connection` 和 `storage`；`submit_report` 可以调用 `connection` 和 `validators`；`validators` 可以调用 `analyst`、`coverage` 和 `connection`；`template` 可以调用 `connection` 和 `storage`；`coverage`、`analyst` 与 `storage` 只依赖 `connection`；`connection` 不依赖任何业务模块。
 
 ## 4. 联调与环境
 
