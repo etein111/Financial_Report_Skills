@@ -34,6 +34,15 @@ except ImportError as e:
 
 import common
 
+# 尝试导入分页优化模块
+try:
+    from pagination import optimize_pagination, optimize_pagination_xml
+    PAGINATION_AVAILABLE = True
+except ImportError:
+    PAGINATION_AVAILABLE = False
+    optimize_pagination = None
+    optimize_pagination_xml = None
+
 # 占位符标记（用于避免 docxtpl 破坏文档结构）
 ABSTRACT_MARKER = '###ABSTRACT_MARKER###'
 BODY_MARKER = '###BODY_MARKER###'
@@ -1854,7 +1863,9 @@ def render_report(
     abstract_path: str,
     body_path: str,
     output_path: str,
-    english_summary_path: str = None
+    english_summary_path: str = None,
+    optimize_pagination_enabled: bool = False,
+    pagination_min_lines: int = 3
 ) -> bool:
     """渲染报告，正确处理分析师字段、abstract、body 和 english_summary。
 
@@ -1870,6 +1881,8 @@ def render_report(
         body_path: 正文文件路径
         output_path: 输出文件路径
         english_summary_path: 英文摘要文件路径（可选）
+        optimize_pagination_enabled: 是否启用分页优化（默认 False）
+        pagination_min_lines: 段落分页的最小行数阈值（默认 3）
 
     Returns:
         是否成功
@@ -2029,6 +2042,38 @@ def render_report(
 
         # 8. 清理临时文件
         temp_path.unlink(missing_ok=True)
+
+        # 8.5 分页优化（可选）
+        if optimize_pagination_enabled:
+            print("\n正在优化分页...")
+            if PAGINATION_AVAILABLE:
+                # 优先使用 LibreOffice UNO API（精确）
+                pagination_result = optimize_pagination(
+                    input_path=output_path,
+                    output_path=output_path,
+                    optimize_paragraphs=True,
+                    optimize_headings=True,
+                    optimize_figures=True,
+                    min_lines=pagination_min_lines
+                )
+
+                if pagination_result["success"]:
+                    total_modified = (
+                        pagination_result["paragraphs_modified"] +
+                        pagination_result["headings_modified"] +
+                        pagination_result["figures_modified"]
+                    )
+                    print(f"  ✅ 分页优化完成: 修改 {total_modified} 处")
+                else:
+                    # UNO 失败，回退到 XML 方案
+                    print(f"  UNO 方案失败，使用 XML 备用方案...")
+                    xml_result = optimize_pagination_xml(output_path, output_path)
+                    if xml_result["success"]:
+                        print(f"  ✅ XML 分页优化完成")
+                    else:
+                        print(f"  ⚠️ 分页优化失败: {xml_result.get('error', '未知错误')}")
+            else:
+                print("  ⚠️ 分页优化模块不可用，跳过")
 
         # 9. 验证输出
         final_doc = Document(output_path)
