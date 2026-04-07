@@ -269,4 +269,4 @@ skills/neolyst/
 2. **幂等设计**：`upsert_template` 和 `save_draft_report` 多次调用不产生副作用
 3. **本地缓存**：`resolve_template` 下载后缓存到本地，避免重复下载
 4. **不存储敏感信息**：access_token 只读写 `.neolyst` 文件，不写入代码或日志
-5. **测试使用真实联调环境**：测试连接联调环境 `http://47.57.213.88:80`（admin@neolyst.com / Admin123），不使用 mock
+5. **测试使用真实联调环境**：测试连接联调 Supabase，凭据从环境变量读取（`NEOLYST_TEST_URL`、`NEOLYST_TEST_EMAIL`、`NEOLYST_TEST_PASSWORD`），不使用 mock
