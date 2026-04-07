@@ -135,13 +135,14 @@ def _extract_cell_data(cell_elem, cell_idx: int) -> Dict[str, Any]:
     }
 
 
-def flatten_table_text(tables: List[Dict[str, Any]]) -> List[str]:
+def flatten_table_text(tables: List[Dict[str, Any]], paragraphs: List[str] = None) -> List[str]:
     """扁平化表格数据为文本列表。
 
     用于快速搜索和匹配字段。
 
     Args:
         tables: 表格数据列表
+        paragraphs: 段落文本列表（可选，用于同时包含段落文本）
 
     Returns:
         文本行列表
@@ -173,6 +174,10 @@ def flatten_table_text(tables: List[Dict[str, Any]]) -> List[str]:
     # 处理所有表格
     for table in tables:
         _flatten_node(table)
+
+    # 添加段落文本（如果有）
+    if paragraphs:
+        lines.extend(paragraphs)
 
     return lines
 

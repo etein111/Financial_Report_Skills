@@ -207,10 +207,17 @@ templates/
 
 ```python
 from skills.report_maker.scripts import docx_reader
+from docx import Document
 
 # 提取所有表格（包括嵌套表格）的完整内容
 tables = docx_reader.read_docx_tables(draft_path)
-all_text_lines = docx_reader.flatten_table_text(tables)
+
+# 提取段落文本（LLM 需要看到正文中的标题，如 "Summary"）
+doc = Document(draft_path)
+paragraphs = [p.text.strip() for p in doc.paragraphs if p.text.strip()]
+
+# 合并表格文本和段落文本
+all_text_lines = docx_reader.flatten_table_text(tables, paragraphs)
 full_document_text = '\n'.join(all_text_lines)
 
 # 将 full_document_text 提供给 LLM 进行字段提取
