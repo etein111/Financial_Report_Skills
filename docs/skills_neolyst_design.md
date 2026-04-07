@@ -95,7 +95,7 @@
   - 源模板记录必须存在
   - 复用只能发生在同一 `language` 内
   - `report_type` 不能与 `same_as_report_type` 相同
-- `reuse_template` 失败时直接抛出具体错误，至少覆盖：源模板不存在、语言不一致、试图复用自己、主模板已更新但目标记录尚未重新复用。
+- `reuse_template` 失败时直接抛出具体错误，至少覆盖：源模板不存在、语言不一致、试图复用自己。
 - `resolve_coverage` 按 `ticker` 查询候选 `coverage`，再通过 `coverage_analyst` 判断报告 `1作 analyst_id` 是否属于该 `coverage` 的分析师列表；只要求该分析师出现在列表中，不要求其在 `coverage_analyst` 中也为 `role = 1`。
 - `resolve_coverage` 命中唯一 `coverage` 时返回 `coverage_id`；命中多条或未命中时直接抛出具体错误。
 - `create_coverage` 创建成功时返回新的 `coverage_id`；创建失败时直接抛出具体错误。
@@ -464,7 +464,6 @@ draft 输入可包含以下字段：
 - 源模板未发布
 - `language` 不一致
 - `report_type` 复用自己
-- 主模板已更新但目标记录尚未重新复用
 
 ### 6.3 本地模板目录的定位变化
 
