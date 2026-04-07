@@ -1042,9 +1042,17 @@ def insert_body_at_marker_compose(doc_path: str, body_path: str, marker: str, ou
                 {}
             )
             pPr = etree.SubElement(page_break_para, f'{W}pPr')
-            pPr.append(deepcopy(marker_sectPr))
+            new_sectPr = deepcopy(marker_sectPr)
+
+            # 确保 sectPr 类型为 nextPage（强制分页）
+            sectType = new_sectPr.find(f'{W}type')
+            if sectType is None:
+                sectType = etree.SubElement(new_sectPr, f'{W}type')
+            sectType.set(f'{W}val', 'nextPage')
+
+            pPr.append(new_sectPr)
             body_doc.element.body.append(page_break_para)
-            print(f"  在 body 末尾添加分页符段落")
+            print(f"  在 body 末尾添加分页符段落（nextPage）")
 
         composer.append(body_doc)
 
@@ -1310,12 +1318,12 @@ def _apply_english_summary_margins(docx_path: str, es_margins: Dict[str, str]) -
                 pgMar.set(f'{W}{attr}', val)
             print(f"  english_summary: 已更新分节符页边距: top={es_margins.get('top')}, bottom={es_margins.get('bottom')}, left={es_margins.get('left')}")
         else:
-            # 创建新的 sectPr（连续分节符）
+            # 创建新的 sectPr（换页分节符）
             sectPr = etree.SubElement(pPr, f'{W}sectPr')
 
-            # 设置分节类型为连续（continuous）
+            # 设置分节类型为 nextPage（强制分页）
             sectType = etree.SubElement(sectPr, f'{W}type')
-            sectType.set(f'{W}val', 'continuous')
+            sectType.set(f'{W}val', 'nextPage')
 
             # 设置页边距
             pgMar = etree.SubElement(sectPr, f'{W}pgMar')
