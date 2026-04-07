@@ -1130,14 +1130,6 @@ def _fix_docxcompose_sectpr_margins(docx_path: str, body_margins: Dict[str, str]
                     ppr_sectprs.append(sectPr)
 
         # 修复这些 sectPr 的页边距
-        # 第一个 sectPr（part1 和 body 之间）：应用 body 的页边距
-        # 因为这个 sectPr 定义的是它之前内容（part1/首页）的格式
-        # 所以我们可能不应该修改它...
-        #
-        # 实际上，Word 的 sectPr 定义的是它之前内容的格式：
-        # - 段落内的 sectPr（连续分节符）定义它之前段落的格式
-        # - body 末尾的 sectPr 定义整个文档最后一节的格式
-        #
         # docxcompose 在合并时：
         # 1. 在 part1 末尾插入一个 sectPr（定义 part1 的格式）
         # 2. 追加 body 的内容
@@ -1147,14 +1139,28 @@ def _fix_docxcompose_sectpr_margins(docx_path: str, body_margins: Dict[str, str]
         # 问题是：docxcompose 插入的 sectPr 使用默认页边距，而不是 body 的页边距
         #
         # 解决方案：
-        # - 第一个 pPr/sectPr（part1 末尾）：保持原样（定义首页格式）
+        # - 第一个 pPr/sectPr（part1 和 body 之间）：使用 body 的页边距（因为 body 内容继承此 sectPr）
         # - 第二个 pPr/sectPr（body 末尾）：使用 body 的页边距
         # - body/sectPr（文档末尾）：保持原样（定义附录格式）
 
         if len(ppr_sectprs) >= 1 and body_margins:
-            # 修复第一个 sectPr（如果它使用默认页边距）
-            # 这个 sectPr 定义的是它之前内容（首页模板）的格式，不应该修改
-            pass
+            # 修复第一个 sectPr（part1 和 body 之间）
+            # 这个 sectPr 的页边距会影响 body 内容的左边距，必须修复
+            sectPr = ppr_sectprs[0]
+            pgMar = sectPr.find(f'{W}pgMar')
+            if pgMar is not None:
+                needs_fix = False
+                for attr, val in body_margins.items():
+                    current_val = pgMar.get(f'{W}{attr}', '')
+                    if current_val != val:
+                        needs_fix = True
+                        break
+
+                if needs_fix:
+                    for attr, val in body_margins.items():
+                        pgMar.set(f'{W}{attr}', val)
+                    fixed_count += 1
+                    print(f"  已修复第一个 sectPr（part1/body之间）页边距: left={body_margins.get('left')}, right={body_margins.get('right')}")
 
         if len(ppr_sectprs) >= 2 and body_margins:
             # 修复第二个 sectPr（body 末尾）
