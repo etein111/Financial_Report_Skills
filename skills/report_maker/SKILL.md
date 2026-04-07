@@ -84,18 +84,36 @@ pip3 install --break-system-packages "docxtpl>=0.20.0" docxcompose
 
 **步骤 2/4：自动扫描草稿文件**
 
-**在 `inbox/samples/{报告类型}/` 目录下**扫描草稿文件和对应的 elements.yaml：
+**⚠️ 必须实际执行扫描命令，禁止使用硬编码示例！**
 
-```
-您的选择: company
+**必须执行以下 Python 命令扫描目录**：
 
-正在扫描 inbox/samples/company/ 目录...
-找到以下草稿文档：
-  1. 西锐飞机首次覆盖报告（中文）提交版.docx
-  2. Bloom Energy Corporation 1231.docx
-  3. EN-Vistra Corp20260104.docx
+```python
+from pathlib import Path
 
-请选择要处理的草稿文档（输入编号）:
+def scan_draft_files(report_type: str):
+    """扫描 inbox/samples/{report_type}/ 目录下的草稿文件"""
+    scan_dir = Path(f"inbox/samples/{report_type}/")
+    if not scan_dir.exists():
+        print(f"目录不存在: {scan_dir}")
+        return []
+
+    # 扫描 .docx 文件，排除临时文件和自动刷新文件
+    files = []
+    for f in scan_dir.glob("*.docx"):
+        if f.name.startswith("~$"):
+            continue
+        if "_AutoRefresh" in f.name:
+            continue
+        files.append(f)
+
+    return sorted(files)
+
+# 示例调用
+files = scan_draft_files("company")
+print(f"找到 {len(files)} 个草稿文档:")
+for i, f in enumerate(files, 1):
+    print(f"  {i}. {f.name}")
 ```
 
 **扫描目录规则**：
