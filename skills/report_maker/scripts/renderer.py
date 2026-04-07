@@ -843,6 +843,96 @@ def _get_document_sectpr_margins(doc_path: str) -> Dict[str, str]:
     return margins
 
 
+def _get_template_english_summary_margins(template_path: str) -> Dict[str, str]:
+    """从模板的 ENGLISH_SUMMARY_MARKER 位置获取页边距。
+
+    模板中的 "APPENDIX 1 Summary" 部分有自己的页边距设置，
+    这个函数提取该位置的 sectPr 页边距，用于渲染时的格式化。
+
+    Args:
+        template_path: 模板文件路径
+
+    Returns:
+        页边距字典 {'top': '...', 'bottom': '...', 'left': '...', 'right': '...', ...}
+    """
+    import zipfile
+    from lxml import etree
+
+    W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
+    margins = {}
+
+    try:
+        with zipfile.ZipFile(template_path, 'r') as z:
+            with z.open('word/document.xml') as f:
+                tree = etree.parse(f)
+
+        body = tree.getroot().find(f'.//{W}body')
+        if body is None:
+            return margins
+
+        # 找到 ENGLISH_SUMMARY_MARKER 的位置
+        all_elements = list(body)
+        marker_idx = None
+        for idx, elem in enumerate(all_elements):
+            text = ''.join(t.text or '' for t in elem.iter(f'{W}t'))
+            if ENGLISH_SUMMARY_MARKER in text:
+                marker_idx = idx
+                print(f"  找到 ENGLISH_SUMMARY_MARKER 在元素 {idx}")
+                break
+
+        if marker_idx is None:
+            print(f"  未找到 ENGLISH_SUMMARY_MARKER")
+            return margins
+
+        # 在 marker 位置附近查找 sectPr
+        # 通常 sectPr 会在 marker 之前或之后几个元素的位置
+        for offset in [0, -1, -2, 1, 2]:
+            check_idx = marker_idx + offset
+            if 0 <= check_idx < len(all_elements):
+                elem = all_elements[check_idx]
+                tag = elem.tag.split('}')[-1]
+
+                if tag == 'p':
+                    pPr = elem.find(f'{W}pPr')
+                    if pPr is not None:
+                        sectPr = pPr.find(f'{W}sectPr')
+                        if sectPr is not None:
+                            pgMar = sectPr.find(f'{W}pgMar')
+                            if pgMar is not None:
+                                for attr in ['top', 'bottom', 'left', 'right', 'header', 'footer', 'gutter']:
+                                    val = pgMar.get(f'{W}{attr}')
+                                    if val:
+                                        margins[attr] = val
+                                if margins:
+                                    print(f"  从模板 ENGLISH_SUMMARY_MARKER 位置获取页边距: {margins}")
+                                return margins
+
+        # 如果在附近没找到，查找 marker 之前的最后一个 sectPr
+        for i in range(marker_idx - 1, -1, -1):
+            elem = all_elements[i]
+            tag = elem.tag.split('}')[-1]
+
+            if tag == 'p':
+                pPr = elem.find(f'{W}pPr')
+                if pPr is not None:
+                    sectPr = pPr.find(f'{W}sectPr')
+                    if sectPr is not None:
+                        pgMar = sectPr.find(f'{W}pgMar')
+                        if pgMar is not None:
+                            for attr in ['top', 'bottom', 'left', 'right', 'header', 'footer', 'gutter']:
+                                val = pgMar.get(f'{W}{attr}')
+                                if val:
+                                    margins[attr] = val
+                            if margins:
+                                print(f"  从模板 marker 之前获取页边距: {margins}")
+                            return margins
+
+    except Exception as e:
+        print(f"  读取模板 english_summary 页边距失败: {e}")
+
+    return margins
+
+
 def _apply_margins_to_sectpr(docx_path: str, margins: Dict[str, str], target_sectpr_index: int = -1) -> bool:
     """将页边距应用到文档中的 sectPr。
 
@@ -1980,10 +2070,11 @@ def render_report(
 
         # 6.5 处理 ENGLISH_SUMMARY_MARKER - 在标记位置插入 english_summary 内容
         if english_summary_path and Path(english_summary_path).exists() and Path(english_summary_path).stat().st_size > 0:
-            # 保存 english_summary 的页边距
-            es_margins = _get_document_sectpr_margins(english_summary_path)
+            # 从模板获取 english_summary 的页边距（而不是从草稿提取的文档）
+            # 模板中的 "APPENDIX 1 Summary" 部分有自己的页边距设置
+            es_margins = _get_template_english_summary_margins(str(fixed_template_path))
             if es_margins:
-                print(f"  english_summary.docx 页边距: top={es_margins.get('top')}, bottom={es_margins.get('bottom')}")
+                print(f"  模板 ENGLISH_SUMMARY 页边距: top={es_margins.get('top')}, bottom={es_margins.get('bottom')}, left={es_margins.get('left')}")
 
             doc = Document(output_path)
             english_summary_doc = Document(english_summary_path)
