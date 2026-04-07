@@ -140,7 +140,7 @@ from skills.neolyst.scripts import coverage
 
 coverage_id = coverage.resolve_coverage(client, ticker, first_analyst_id)
 # 返回：str（coverage.id）
-# 找不到时：返回 None
+# 未命中或命中多条时：抛出 ValueError（含具体错误信息）
 ```
 
 ---
@@ -199,9 +199,9 @@ result = draft_report.save_draft_report(client, draft_input)
 校验报告是否满足提交条件。
 
 ```python
-from skills.neolyst.scripts import validators
+from skills.neolyst.scripts.validators import validators
 
-result = validators.validate(client, report_id, version_no)
+result = validators(client, report_id, version_no)
 # 返回：{"report_id": "...", "version_no": 1}
 # 校验失败时：抛出 ValueError，包含失败原因
 ```
@@ -219,9 +219,9 @@ result = validators.validate(client, report_id, version_no)
 提交报告进入审批流程。
 
 ```python
-from skills.neolyst.scripts import submit_report
+from skills.neolyst.scripts.submit_report import submit_report
 
-result = submit_report.submit(client, report_id, version_no)
+result = submit_report(client, report_id, version_no)
 # 返回：{"report_id": "...", "status": "submitted", "version_no": 1}
 # 提交前会自动调用 validators，校验失败则抛出异常
 ```
@@ -269,4 +269,4 @@ skills/neolyst/
 2. **幂等设计**：`upsert_template` 和 `save_draft_report` 多次调用不产生副作用
 3. **本地缓存**：`resolve_template` 下载后缓存到本地，避免重复下载
 4. **不存储敏感信息**：access_token 只读写 `.neolyst` 文件，不写入代码或日志
-5. **测试时使用 mock**：正式测试不得连接生产 Supabase，使用 `unittest.mock` 模拟客户端
+5. **测试使用真实联调环境**：测试连接联调环境 `http://47.57.213.88:80`（admin@neolyst.com / Admin123），不使用 mock
