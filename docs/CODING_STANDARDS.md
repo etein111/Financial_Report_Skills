@@ -77,3 +77,8 @@
 
 - `SKILL.md` 必须包含最基本的元数据，至少保证 `name` 和 `description` 可用
 - skill 结构调整后，必须同步更新相关脚本入口、说明文档和测试引用
+
+### 4. 创建或修改 SKILL.md 时必须调用 skill-creator
+
+- 新建 skill 或修改已有 `SKILL.md` 时，通过 `skill-creator` 操作，不得手动编写
+- 详见 `docs/SKILL_STANDARD.md`
