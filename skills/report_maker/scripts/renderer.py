@@ -3146,13 +3146,16 @@ def _copy_headers_footers_between_docs(body_path: str, output_path: str) -> Dict
                 # 检查输出文档是否已有该文件
                 if target in output_hf_targets:
                     # 文件已存在，复用现有关系
+                    # 但需要用 body.docx 的内容覆盖，因为模板中的 header/footer 可能是空的或不正确的
                     # 找到输出文档中指向该 target 的 rId
                     for rel in output_rels_tree.findall('r:Relationship', ns):
                         if rel.get('Target') == target:
                             output_rId = rel.get('Id')
                             rId_mapping[body_rId] = output_rId
                             file_type_mapping[body_rId] = output_rId
-                            print(f"  复用输出文档已有 {file_type}: {target} -> {output_rId}")
+                            # 用 body.docx 的内容覆盖输出文档中的文件
+                            output_files[f'word/{target}'] = content
+                            print(f"  覆盖更新输出文档已有 {file_type}: {target} -> {output_rId}")
                             break
                 else:
                     # 文件不存在，需要复制
