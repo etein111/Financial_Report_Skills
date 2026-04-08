@@ -1952,120 +1952,6 @@ def replace_all_placeholders_in_xml(
     return docx_path
 
 
-def _render_template_preserving_structure(
-    template_path: str,
-    output_path: str,
-    context: Dict[str, Any],
-    elements: Dict[str, Any]
-) -> bool:
-    """渲染模板但不破坏表格结构。
-
-    docxtpl 的 render() 方法会破坏封面表格的网格结构
-    （第6列被删除，列宽被重新分配）。
-
-    这个函数通过 XML 直接操作来渲染模板，保持表格结构完整。
-
-    Args:
-        template_path: 模板文件路径
-        output_path: 输出文件路径
-        context: Jinja2 渲染上下文
-        elements: 原始要素字典
-
-    Returns:
-        是否成功
-    """
-    import zipfile
-    import os
-    import shutil
-    from jinja2 import Template
-
-    try:
-        # 1. 复制模板到输出路径（保持原始结构）
-        shutil.copy2(template_path, output_path)
-
-        # 2. 解压 docx
-        docx_dir = os.path.dirname(output_path)
-        temp_dir = os.path.join(docx_dir, '_temp_render_docx')
-        if os.path.exists(temp_dir):
-            shutil.rmtree(temp_dir)
-
-        with zipfile.ZipFile(output_path, 'r') as z:
-            z.extractall(temp_dir)
-
-        # 3. 读取 document.xml
-        doc_xml_path = os.path.join(temp_dir, 'word', 'document.xml')
-        with open(doc_xml_path, 'r', encoding='utf-8') as f:
-            xml_content = f.read()
-
-        # 4. 处理 Jinja2 条件语法（{% if %} ... {% endif %}）
-        # 使用 Jinja2 引擎渲染 XML 文本，但保持 XML 结构完整
-        # 由于 Jinja2 会处理 {% if %} 语法，我们需要小心处理
-
-        # 先处理简单的 {{ }} 占位符替换（保留 XML 结构）
-        # 构建替换映射
-        replacements = {}
-
-        # 添加分析师占位符
-        analyst_suffixes = ['cn', 'en', 'sfc', 'email']
-        for i in range(1, 9):
-            for suffix in analyst_suffixes:
-                key = f'a{i}_{suffix}'
-                value = context.get(key, '') or ''
-                replacements[f'{{{{ {key} }}}}'] = str(value)
-                replacements[f'{{{{{key}}}}}'] = str(value)
-
-        # 添加普通字段占位符
-        skip_fields = {'abstract', 'body', 'analysts', '_analysts_with_data', '_abstract_file', '_body_file'}
-        analyst_prefixes = tuple(f'a{i}_' for i in range(1, 9))
-        for field, value in context.items():
-            if field in skip_fields or field.startswith('_'):
-                continue
-            if field.startswith(analyst_prefixes):
-                continue
-            str_value = str(value) if value else ''
-            replacements[f'{{{{ {field} }}}}'] = str_value
-            replacements[f'{{{{{field}}}}}'] = str_value
-
-        # 添加 abstract/body MARKER
-        replacements['{{ abstract }}'] = ABSTRACT_MARKER
-        replacements['{{abstract}}'] = ABSTRACT_MARKER
-        replacements['{{ body }}'] = BODY_MARKER
-        replacements['{{body}}'] = BODY_MARKER
-        replacements['{{ english_summary }}'] = ENGLISH_SUMMARY_MARKER
-        replacements['{{english_summary}}'] = ENGLISH_SUMMARY_MARKER
-
-        # 5. 执行替换（按长度降序排列，避免部分匹配问题）
-        sorted_placeholders = sorted(replacements.keys(), key=len, reverse=True)
-        for placeholder in sorted_placeholders:
-            value = replacements[placeholder]
-            if placeholder in xml_content:
-                xml_content = xml_content.replace(placeholder, value)
-
-        # 6. 写回 document.xml
-        with open(doc_xml_path, 'w', encoding='utf-8') as f:
-            f.write(xml_content)
-
-        # 7. 重新打包为 docx
-        os.remove(output_path)
-        with zipfile.ZipFile(output_path, 'w', zipfile.ZIP_DEFLATED) as z:
-            for root, dirs, files in os.walk(temp_dir):
-                for file in files:
-                    file_path = os.path.join(root, file)
-                    arcname = os.path.relpath(file_path, temp_dir)
-                    z.write(file_path, arcname)
-
-        # 8. 清理临时目录
-        shutil.rmtree(temp_dir)
-
-        return True
-
-    except Exception as e:
-        print(f"  渲染模板时出错: {e}")
-        import traceback
-        traceback.print_exc()
-        return False
-
-
 def _escape_jinja_in_charts(docx_path: str) -> Dict[str, str]:
     """转义图表 XML 中的 Jinja2 语法，防止 docxtpl 解析错误。
 
@@ -2239,20 +2125,10 @@ def render_report(
         if expanded_analysts > 0:
             print(f"  已扩展分析师认证声明（新增 {expanded_analysts} 个分析师）")
 
-        # 4. 使用 XML 直接操作渲染模板（避免 docxtpl 破坏表格结构）
-        # docxtpl 的 render() 会破坏封面表格的网格结构
-        render_success = _render_template_preserving_structure(
-            str(fixed_template_path),
-            str(temp_path),
-            context,
-            elements
-        )
-
-        if not render_success:
-            print(f"  ⚠️ XML 渲染失败，尝试使用 docxtpl")
-            template = DocxTemplate(str(fixed_template_path))
-            template.render(context)
-            template.save(str(temp_path))
+        # 4. 使用 docxtpl 渲染修复后的模板（支持 {% if %} 语法）
+        template = DocxTemplate(str(fixed_template_path))
+        template.render(context)
+        template.save(str(temp_path))
 
         # 清理修复后的临时模板
         fixed_template_path.unlink(missing_ok=True)
