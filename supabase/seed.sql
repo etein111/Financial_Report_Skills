@@ -1,0 +1,2 @@
+-- Legacy entrypoint kept for compatibility.
+-- Primary seed file is supabase/seeds/init_seed.sql.
