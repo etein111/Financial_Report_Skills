@@ -748,8 +748,18 @@ def insert_abstract_to_cell(doc: Document, abstract_doc: Document, marker: str) 
     tc = find_marker_in_cells(body)
 
     if tc is not None:
-        # 删除所有段落元素
-        for p in list(tc.findall(f'{W}p')):
+        # 找到 marker 段落及其位置
+        marker_para_idx = None
+        all_paras = list(tc.findall(f'{W}p'))
+
+        for idx, p in enumerate(all_paras):
+            para_text = ''.join(t.text or '' for t in p.iter(f'{W}t'))
+            if marker in para_text:
+                marker_para_idx = idx
+                break
+
+        # 删除 marker 段落及其之后的所有段落（保留 marker 之前的段落，如提示文本）
+        for p in all_paras[marker_para_idx:]:
             tc.remove(p)
 
         # 插入 abstract 内容（使用 deepcopy 完整保留格式）
