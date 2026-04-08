@@ -221,7 +221,7 @@ templates/
 
 **问题**：Claude 直接读取 .docx 文件时，可能无法正确解析嵌套表格内容，导致丢失关键字段。
 
-**解决方案**：在 LLM 提取前，先用脚本提取完整的文档结构：
+**⚠️ 关键改进**：必须提供**带位置信息的文本**，而不是扁平化的文本流！
 
 ```python
 from skills.report_maker.scripts import docx_reader
@@ -230,15 +230,27 @@ from docx import Document
 # 提取所有表格（包括嵌套表格）的完整内容
 tables = docx_reader.read_docx_tables(draft_path)
 
-# 提取段落文本（LLM 需要看到正文中的标题，如 "Summary"）
+# 提取段落文本（带位置索引）
 doc = Document(draft_path)
-paragraphs = [p.text.strip() for p in doc.paragraphs if p.text.strip()]
+paragraphs = [(i, p.text.strip()) for i, p in enumerate(doc.paragraphs) if p.text.strip()]
 
-# 合并表格文本和段落文本
-all_text_lines = docx_reader.flatten_table_text(tables, paragraphs)
-full_document_text = '\n'.join(all_text_lines)
+# 1. 先输出表格内容
+table_text = docx_reader.flatten_table_text(tables)
+print("=== 表格内容 ===")
+for line in table_text:
+    print(line)
 
-# 将 full_document_text 提供给 LLM 进行字段提取
+# 2. 再输出段落内容（带索引，用于定位）
+print("\n=== 段落内容（带索引）===")
+total_paras = len(paragraphs)
+for idx, text in paragraphs:
+    print(f"[P{idx}/{total_paras}] {text}")
+
+# 3. 特别标注最后 50 个段落（英文摘要通常在这里）
+print("\n=== 最后 50 个段落（重点搜索 Summary）===")
+last_50 = paragraphs[-50:] if len(paragraphs) > 50 else paragraphs
+for idx, text in last_50:
+    print(f"[P{idx}] {text}")
 ```
 
 **⚠️ 执行方式要求**：
@@ -247,10 +259,24 @@ full_document_text = '\n'.join(all_text_lines)
 - ❌ 禁止创建临时 Python 脚本文件到 `/temp/` 或其他系统目录
 - ❌ 禁止将文档内容写入临时文件
 
-**为什么必须这样做**：
-- Word 文档的嵌套表格在 XML 结构中是层层嵌套的
-- 普通的文档读取工具（如 python-docx 的 cell.text）会漏掉嵌套表格内容
-- `docx_reader.py` 使用 lxml 直接解析 XML，确保所有层级的内容都能提取
+**为什么必须提供位置信息**：
+- 扁平化文本流丢失了"文档后半部分"的位置信息
+- 英文摘要的 "Summary" 标题在段落中，不在表格里
+- 带 `[P{idx}]` 的索引可以让 LLM 精确定位最后 50 个段落
+- 英文摘要通常在 `[P{total-50}]` 到 `[P{total}]` 之间
+
+**位置线索示例输出**：
+```
+=== 最后 50 个段落（重点搜索 Summary）===
+[P280] 投资亮点
+[P281] 1. 公司是国内智能电表龙头...
+[P282] 2. 配网改造带来增量需求...
+...
+[P330] 附录APPENDIX
+[P331] 重要信息披露
+```
+
+通过 `[P330]` 索引，LLM 可以知道英文摘要在 P280-P329 之间。
 
 #### 4.2 LLM 提取
 
@@ -354,13 +380,13 @@ full_document_text = '\n'.join(all_text_lines)
 1. has_body: true/false
 2. body_scope: "位置描述"
 3. **重要**：请提供正文的**精确起始和结束标记文本**：
-   - body_start_marker: 正文开始的标记文本（如目录标题、第一章标题的前15-30个字符），不是第一页
+   - body_start_marker: 正文开始的标记文本（如目录标题、第一章标题的前15-30个字符）
    - body_end_marker: 正文结束的标记文本（正文最后一段的文本，**不包含**后续的 english_summary 或附录）
 
 **⚠️ body 的结束边界规则**：
 - **如果有 english_summary**：body_end_marker 应该是 english_summary 标题之前的最后一段内容
 - **如果没有 english_summary**：body_end_marker 应该是附录/法律披露（"附录APPENDIX"、"IMPORTANT DISCLOSURES"）之前的最后一段内容
-- body_end_marker 必须是正文内容本身，不能是 english_summary 或附录的标题，必须是文档中实际存在的完整段落，不能是简短标题
+- body_end_marker 必须是正文内容本身，不能是 english_summary 或附录的标题
 
 **示例**：
 - ✅ 正确：`body_start_marker: "目录"` 或 `body_start_marker: "1 公司概况"`
@@ -383,18 +409,32 @@ full_document_text = '\n'.join(all_text_lines)
 - 预处理时必须同时提取**段落文本**，否则 LLM 无法看到 "Summary" 标题
 - 如果只提供表格文本，LLM 会遗漏英文摘要
 
+**⚠️ 必须使用位置索引搜索**：
+- 预处理提供了段落索引 `[P{idx}]`
+- 英文摘要在最后 50 个段落内，即 `[P{total-50}]` 到 `[P{total}]` 之间
+- 搜索模式：
+  1. 先在最后 50 个段落中找 `Summary`、`APPENDIX 1` 等标题
+  2. 找到标题后，该标题的**下一个**或**后续**段落就是英文摘要内容
+  3. 标题本身（如 `[P305] Summary`）不是内容，下一段才是
+
 **常见位置**：
 - 通常在正文最后、法律附录（"附录APPENDIX"）之前
 - 可能是独立的一页
 - 位于文档的后半部分（通常在最后 50-100 个段落内）
 - 标题可能在段落中，内容在后续段落
 
-⚠️ 强制检查步骤：
-1. 从文档末尾向前搜索所有段落（约最后 100-150 个段落）
-2. 搜索关键词：Summary、APPENDIX 1、Executive Summary、English Summary
-3. 如果找到 "Summary" 标题，立即检查其后续 5-10 个段落是否为英文内容
-4. 英文摘要的正文内容第一句通常以 "We initiate coverage"、"Initial Coverage"、"We expect" 等开头
+**常见标题形式**（任一形式都算有英文摘要）：
+- `Summary`（最常见，单独一行，在段落中）
+- `APPENDIX 1`（后面跟着英文内容）
+- `APPENDIX 1 Summary`
+- `Executive Summary`
+- `English Summary`
 
+**识别方法**：
+1. **必须同时搜索表格和段落文本**
+2. 从文档末尾向前搜索，找到 "Summary" 或 "APPENDIX 1" 等标题（可能在段落中）
+3. 检查该标题后面是否跟着**英文段落**（而不是中文）
+4. 如果有英文段落，则 has_english_summary = true
 
 **⚠️ 注意区分**：
 - ❌ 法律附录的 "附录APPENDIX" 不是英文摘要（这是中英双语的法律披露部分）
@@ -403,7 +443,7 @@ full_document_text = '\n'.join(all_text_lines)
 **示例**：
 - ❌ 错误：`english_summary_content_start: "Summary"` （这是标题，不是内容）
 - ❌ 错误：`english_summary_content_start: "APPENDIX 1"` （这是标题，不是内容）
-- ✅ 正确：`english_summary_content_start: "Initial Coverage on Wasion Holdings"` （这是正文第一句）
+- ✅ 正确：`english_summary_content_start: "Initial Coverage on Wasion Holdings"` （这是正文第一句，如 `[P306] Initial Coverage on Wasion Holdings...`）
 - ✅ 正确：`english_summary_content_start: "We initiate coverage on XXX"` （这是正文第一句）
 
 ## 输出格式
@@ -417,18 +457,19 @@ ticker: "..."
 
 # 摘要信息
 has_abstract: true/false
-abstract_scope: "位置描述"
+abstract_scope: "首页右侧表格第X行，包含'投资亮点'标题下的6个段落"
 
 # 正文信息
 has_body: true/false
-body_scope: "位置描述"
-body_start_marker: "正文起始标记文本"  # 如 "目录" 或 "1 公司概况"
-body_end_marker: "正文结束标记文本"    # english_summary 标题前的最后一段
+body_scope: "目录（P10）到英文摘要（P305）之间"
+body_start_marker: "目录"  # 在带索引段落中的精确文本
+body_end_marker: "资料来源：公司公告"    # english_summary 标题前的最后一段
 
 # 英文摘要信息
 has_english_summary: true/false
-english_summary_scope: "位置描述"
-english_summary_content_start: "正文内容起始文本"  # 不是标题，是实际内容的第一句
+english_summary_scope: "P306-P327，最后50个段落中"
+english_summary_start_marker: "Summary"  # 标题标记（用于定位）
+english_summary_content_start: "Initial Coverage on Wasion Holdings"  # 不是标题，是实际内容的第一句
 ```
 ```
 
