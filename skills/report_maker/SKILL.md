@@ -84,18 +84,36 @@ pip3 install --break-system-packages "docxtpl>=0.20.0" docxcompose
 
 **步骤 2/4：自动扫描草稿文件**
 
-**在 `inbox/samples/{报告类型}/` 目录下**扫描草稿文件和对应的 elements.yaml：
+**⚠️ 必须实际执行扫描命令，禁止使用硬编码示例！**
 
-```
-您的选择: company
+**必须执行以下 Python 命令扫描目录**：
 
-正在扫描 inbox/samples/company/ 目录...
-找到以下草稿文档：
-  1. 西锐飞机首次覆盖报告（中文）提交版.docx
-  2. Bloom Energy Corporation 1231.docx
-  3. EN-Vistra Corp20260104.docx
+```python
+from pathlib import Path
 
-请选择要处理的草稿文档（输入编号）:
+def scan_draft_files(report_type: str):
+    """扫描 inbox/samples/{report_type}/ 目录下的草稿文件"""
+    scan_dir = Path(f"inbox/samples/{report_type}/")
+    if not scan_dir.exists():
+        print(f"目录不存在: {scan_dir}")
+        return []
+
+    # 扫描 .docx 文件，排除临时文件和自动刷新文件
+    files = []
+    for f in scan_dir.glob("*.docx"):
+        if f.name.startswith("~$"):
+            continue
+        if "_AutoRefresh" in f.name:
+            continue
+        files.append(f)
+
+    return sorted(files)
+
+# 示例调用
+files = scan_draft_files("company")
+print(f"找到 {len(files)} 个草稿文档:")
+for i, f in enumerate(files, 1):
+    print(f"  {i}. {f.name}")
 ```
 
 **扫描目录规则**：
@@ -203,7 +221,7 @@ templates/
 
 **问题**：Claude 直接读取 .docx 文件时，可能无法正确解析嵌套表格内容，导致丢失关键字段。
 
-**解决方案**：在 LLM 提取前，先用脚本提取完整的文档结构：
+**⚠️ 关键改进**：必须提供**带位置信息的文本**，而不是扁平化的文本流！
 
 ```python
 from skills.report_maker.scripts import docx_reader
@@ -212,15 +230,27 @@ from docx import Document
 # 提取所有表格（包括嵌套表格）的完整内容
 tables = docx_reader.read_docx_tables(draft_path)
 
-# 提取段落文本（LLM 需要看到正文中的标题，如 "Summary"）
+# 提取段落文本（带位置索引）
 doc = Document(draft_path)
-paragraphs = [p.text.strip() for p in doc.paragraphs if p.text.strip()]
+paragraphs = [(i, p.text.strip()) for i, p in enumerate(doc.paragraphs) if p.text.strip()]
 
-# 合并表格文本和段落文本
-all_text_lines = docx_reader.flatten_table_text(tables, paragraphs)
-full_document_text = '\n'.join(all_text_lines)
+# 1. 先输出表格内容
+table_text = docx_reader.flatten_table_text(tables)
+print("=== 表格内容 ===")
+for line in table_text:
+    print(line)
 
-# 将 full_document_text 提供给 LLM 进行字段提取
+# 2. 再输出段落内容（带索引，用于定位）
+print("\n=== 段落内容（带索引）===")
+total_paras = len(paragraphs)
+for idx, text in paragraphs:
+    print(f"[P{idx}/{total_paras}] {text}")
+
+# 3. 特别标注最后 50 个段落（英文摘要通常在这里）
+print("\n=== 最后 50 个段落（重点搜索 Summary）===")
+last_50 = paragraphs[-50:] if len(paragraphs) > 50 else paragraphs
+for idx, text in last_50:
+    print(f"[P{idx}] {text}")
 ```
 
 **⚠️ 执行方式要求**：
@@ -229,10 +259,24 @@ full_document_text = '\n'.join(all_text_lines)
 - ❌ 禁止创建临时 Python 脚本文件到 `/temp/` 或其他系统目录
 - ❌ 禁止将文档内容写入临时文件
 
-**为什么必须这样做**：
-- Word 文档的嵌套表格在 XML 结构中是层层嵌套的
-- 普通的文档读取工具（如 python-docx 的 cell.text）会漏掉嵌套表格内容
-- `docx_reader.py` 使用 lxml 直接解析 XML，确保所有层级的内容都能提取
+**为什么必须提供位置信息**：
+- 扁平化文本流丢失了"文档后半部分"的位置信息
+- 英文摘要的 "Summary" 标题在段落中，不在表格里
+- 带 `[P{idx}]` 的索引可以让 LLM 精确定位最后 50 个段落
+- 英文摘要通常在 `[P{total-50}]` 到 `[P{total}]` 之间
+
+**位置线索示例输出**：
+```
+=== 最后 50 个段落（重点搜索 Summary）===
+[P280] 投资亮点
+[P281] 1. 公司是国内智能电表龙头...
+[P282] 2. 配网改造带来增量需求...
+...
+[P330] 附录APPENDIX
+[P331] 重要信息披露
+```
+
+通过 `[P330]` 索引，LLM 可以知道英文摘要在 P280-P329 之间。
 
 #### 4.2 LLM 提取
 
@@ -287,17 +331,55 @@ full_document_text = '\n'.join(all_text_lines)
 - ✅ 如果某字段确实不存在，在返回结果中说明"未找到"
 
 ## 第二部分：摘要提取
-1. 是否有摘要部分？（摘要通常是首页右侧的投资亮点、核心观点区域）
-2. 如果有摘要，请指出摘要的精确位置（如"首页右侧表格的第X行第Y列单元格"）
-3. has_abstract: true/false
-4. abstract_scope: "位置描述"
+
+**⚠️ 摘要识别规则（必须严格遵守）**：
+
+**摘要特征**：
+- 位置：首页表格或嵌套表格内，通常位于封面右侧或底部区域
+- 内容：包含多个完整段落（通常3-6段），每段有独立的语义内容
+- 格式：与单行简短数据不同，摘要是大段文本，可能跨多个单元格
+- 内容类型：通常是分析业绩表现、估值分析、风险提示、局势分析完整段落
+
+**⚠️ 识别陷阱**：
+- ❌ 不要把单行数据（如"目标价：40元"）误认为摘要
+- ❌ 不要把表格中的单个单元格内容当作摘要
+- ❌ 不要把目录、章节标题当作摘要
+- ✅ 摘要必须是多段落、有完整语义的内容块
+
+**识别方法**：
+1. 可能包含"(Please see APPENDIX 1 for English summary)"等标题的单元格
+2. 检查该单元格右侧或下方是否有连续多行文本段落
+3. 确认是"多个完整段落"而非单行数据
+
+**输出格式**：
+1. has_abstract: true/false
+2. abstract_scope: "精确位置描述，如：首页右侧表格的第X行，包含'投资亮点'标题下的6个段落"
+3. 如果 has_abstract=false，说明理由（如"未找到多段落摘要内容"）
 
 ## 第三部分：正文提取
-1. 是否有正文部分？（正文是报告的主要分析内容，从目录或第一章开始）
-2. 如果有正文，请指出正文的起始和结束位置
-3. has_body: true/false
-4. body_scope: "位置描述"
-5. **重要**：请提供正文的**精确起始和结束标记文本**：
+
+**⚠️ body 起始位置规则（必须严格遵守）**：
+
+**body 起始特征**：
+- **body 不从第一页开始**：第一页是封面，包含公司信息、评级、目标价等元数据
+- **body 是段落的继续**：正文从第二页开始，是封面表格下方或之后的段落延续
+- **起始标记通常是"目录"或"第一章标题"**：
+  - "目录"（Table of Contents）
+  - "1 公司概况" / "1. 公司概况"
+  - "1 投资亮点" / "1. 投资亮点"
+
+**⚠️ 识别陷阱**：
+- ❌ 不要把封面表格当作 body 的一部分
+- ❌ 不要把首页的标题当作 body 起始
+- ✅ body 一定是"目录"或第一个section开始
+- ✅ body 是封面之后、英文摘要之前的分析内容
+
+注意：body一定要提取完整，包含所有section以及section里面的内容
+
+**输出要求**：
+1. has_body: true/false
+2. body_scope: "位置描述"
+3. **重要**：请提供正文的**精确起始和结束标记文本**：
    - body_start_marker: 正文开始的标记文本（如目录标题、第一章标题的前15-30个字符）
    - body_end_marker: 正文结束的标记文本（正文最后一段的文本，**不包含**后续的 english_summary 或附录）
 
@@ -322,22 +404,37 @@ full_document_text = '\n'.join(all_text_lines)
 
 **🔴 英文摘要识别指南（必须仔细搜索）**：
 
+**⚠️ 关键提醒：英文摘要可能在段落中，不仅仅是表格！**
+- 英文摘要的 "Summary" 标题通常在**段落**中，不是在表格里
+- 预处理时必须同时提取**段落文本**，否则 LLM 无法看到 "Summary" 标题
+- 如果只提供表格文本，LLM 会遗漏英文摘要
+
+**⚠️ 必须使用位置索引搜索**：
+- 预处理提供了段落索引 `[P{idx}]`
+- 英文摘要在最后 50 个段落内，即 `[P{total-50}]` 到 `[P{total}]` 之间
+- 搜索模式：
+  1. 先在最后 50 个段落中找 `Summary`、`APPENDIX 1` 等标题
+  2. 找到标题后，该标题的**下一个**或**后续**段落就是英文摘要内容
+  3. 标题本身（如 `[P305] Summary`）不是内容，下一段才是
+
 **常见位置**：
 - 通常在正文最后、法律附录（"附录APPENDIX"）之前
 - 可能是独立的一页
 - 位于文档的后半部分（通常在最后 50-100 个段落内）
+- 标题可能在段落中，内容在后续段落
 
 **常见标题形式**（任一形式都算有英文摘要）：
-- `Summary`（最常见，单独一行）
+- `Summary`（最常见，单独一行，在段落中）
 - `APPENDIX 1`（后面跟着英文内容）
 - `APPENDIX 1 Summary`
 - `Executive Summary`
 - `English Summary`
 
 **识别方法**：
-1. 从文档末尾向前搜索，找到 "Summary" 或 "APPENDIX 1" 等标题
-2. 检查该标题后面是否跟着**英文段落**（而不是中文）
-3. 如果有英文段落，则 has_english_summary = true
+1. **必须同时搜索表格和段落文本**
+2. 从文档末尾向前搜索，找到 "Summary" 或 "APPENDIX 1" 等标题（可能在段落中）
+3. 检查该标题后面是否跟着**英文段落**（而不是中文）
+4. 如果有英文段落，则 has_english_summary = true
 
 **⚠️ 注意区分**：
 - ❌ 法律附录的 "附录APPENDIX" 不是英文摘要（这是中英双语的法律披露部分）
@@ -346,7 +443,7 @@ full_document_text = '\n'.join(all_text_lines)
 **示例**：
 - ❌ 错误：`english_summary_content_start: "Summary"` （这是标题，不是内容）
 - ❌ 错误：`english_summary_content_start: "APPENDIX 1"` （这是标题，不是内容）
-- ✅ 正确：`english_summary_content_start: "Initial Coverage on Wasion Holdings"` （这是正文第一句）
+- ✅ 正确：`english_summary_content_start: "Initial Coverage on Wasion Holdings"` （这是正文第一句，如 `[P306] Initial Coverage on Wasion Holdings...`）
 - ✅ 正确：`english_summary_content_start: "We initiate coverage on XXX"` （这是正文第一句）
 
 ## 输出格式
@@ -360,18 +457,19 @@ ticker: "..."
 
 # 摘要信息
 has_abstract: true/false
-abstract_scope: "位置描述"
+abstract_scope: "首页右侧表格第X行，包含'投资亮点'标题下的6个段落"
 
 # 正文信息
 has_body: true/false
-body_scope: "位置描述"
-body_start_marker: "正文起始标记文本"  # 如 "目录" 或 "1 公司概况"
-body_end_marker: "正文结束标记文本"    # english_summary 标题前的最后一段
+body_scope: "目录（P10）到英文摘要（P305）之间"
+body_start_marker: "目录"  # 在带索引段落中的精确文本
+body_end_marker: "资料来源：公司公告"    # english_summary 标题前的最后一段
 
 # 英文摘要信息
 has_english_summary: true/false
-english_summary_scope: "位置描述"
-english_summary_content_start: "正文内容起始文本"  # 不是标题，是实际内容的第一句
+english_summary_scope: "P306-P327，最后50个段落中"
+english_summary_start_marker: "Summary"  # 标题标记（用于定位）
+english_summary_content_start: "Initial Coverage on Wasion Holdings"  # 不是标题，是实际内容的第一句
 ```
 ```
 

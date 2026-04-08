@@ -34,6 +34,15 @@ except ImportError as e:
 
 import common
 
+# 尝试导入分页优化模块
+try:
+    from pagination import optimize_pagination, optimize_pagination_xml
+    PAGINATION_AVAILABLE = True
+except ImportError:
+    PAGINATION_AVAILABLE = False
+    optimize_pagination = None
+    optimize_pagination_xml = None
+
 # 占位符标记（用于避免 docxtpl 破坏文档结构）
 ABSTRACT_MARKER = '###ABSTRACT_MARKER###'
 BODY_MARKER = '###BODY_MARKER###'
@@ -839,6 +848,96 @@ def _get_document_sectpr_margins(doc_path: str) -> Dict[str, str]:
 
     except Exception as e:
         print(f"  读取文档页边距失败: {e}")
+
+    return margins
+
+
+def _get_template_english_summary_margins(template_path: str) -> Dict[str, str]:
+    """从模板的 ENGLISH_SUMMARY_MARKER 位置获取页边距。
+
+    模板中的 "APPENDIX 1 Summary" 部分有自己的页边距设置，
+    这个函数提取该位置的 sectPr 页边距，用于渲染时的格式化。
+
+    Args:
+        template_path: 模板文件路径
+
+    Returns:
+        页边距字典 {'top': '...', 'bottom': '...', 'left': '...', 'right': '...', ...}
+    """
+    import zipfile
+    from lxml import etree
+
+    W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
+    margins = {}
+
+    try:
+        with zipfile.ZipFile(template_path, 'r') as z:
+            with z.open('word/document.xml') as f:
+                tree = etree.parse(f)
+
+        body = tree.getroot().find(f'.//{W}body')
+        if body is None:
+            return margins
+
+        # 找到 ENGLISH_SUMMARY_MARKER 的位置
+        all_elements = list(body)
+        marker_idx = None
+        for idx, elem in enumerate(all_elements):
+            text = ''.join(t.text or '' for t in elem.iter(f'{W}t'))
+            if ENGLISH_SUMMARY_MARKER in text:
+                marker_idx = idx
+                print(f"  找到 ENGLISH_SUMMARY_MARKER 在元素 {idx}")
+                break
+
+        if marker_idx is None:
+            print(f"  未找到 ENGLISH_SUMMARY_MARKER")
+            return margins
+
+        # 在 marker 位置附近查找 sectPr
+        # 通常 sectPr 会在 marker 之前或之后几个元素的位置
+        for offset in [0, -1, -2, 1, 2]:
+            check_idx = marker_idx + offset
+            if 0 <= check_idx < len(all_elements):
+                elem = all_elements[check_idx]
+                tag = elem.tag.split('}')[-1]
+
+                if tag == 'p':
+                    pPr = elem.find(f'{W}pPr')
+                    if pPr is not None:
+                        sectPr = pPr.find(f'{W}sectPr')
+                        if sectPr is not None:
+                            pgMar = sectPr.find(f'{W}pgMar')
+                            if pgMar is not None:
+                                for attr in ['top', 'bottom', 'left', 'right', 'header', 'footer', 'gutter']:
+                                    val = pgMar.get(f'{W}{attr}')
+                                    if val:
+                                        margins[attr] = val
+                                if margins:
+                                    print(f"  从模板 ENGLISH_SUMMARY_MARKER 位置获取页边距: {margins}")
+                                return margins
+
+        # 如果在附近没找到，查找 marker 之前的最后一个 sectPr
+        for i in range(marker_idx - 1, -1, -1):
+            elem = all_elements[i]
+            tag = elem.tag.split('}')[-1]
+
+            if tag == 'p':
+                pPr = elem.find(f'{W}pPr')
+                if pPr is not None:
+                    sectPr = pPr.find(f'{W}sectPr')
+                    if sectPr is not None:
+                        pgMar = sectPr.find(f'{W}pgMar')
+                        if pgMar is not None:
+                            for attr in ['top', 'bottom', 'left', 'right', 'header', 'footer', 'gutter']:
+                                val = pgMar.get(f'{W}{attr}')
+                                if val:
+                                    margins[attr] = val
+                            if margins:
+                                print(f"  从模板 marker 之前获取页边距: {margins}")
+                            return margins
+
+    except Exception as e:
+        print(f"  读取模板 english_summary 页边距失败: {e}")
 
     return margins
 
@@ -1854,7 +1953,9 @@ def render_report(
     abstract_path: str,
     body_path: str,
     output_path: str,
-    english_summary_path: str = None
+    english_summary_path: str = None,
+    optimize_pagination_enabled: bool = True,
+    pagination_min_lines: int = 3
 ) -> bool:
     """渲染报告，正确处理分析师字段、abstract、body 和 english_summary。
 
@@ -1870,6 +1971,8 @@ def render_report(
         body_path: 正文文件路径
         output_path: 输出文件路径
         english_summary_path: 英文摘要文件路径（可选）
+        optimize_pagination_enabled: 是否启用分页优化（默认 False）
+        pagination_min_lines: 段落分页的最小行数阈值（默认 3）
 
     Returns:
         是否成功
@@ -1980,10 +2083,11 @@ def render_report(
 
         # 6.5 处理 ENGLISH_SUMMARY_MARKER - 在标记位置插入 english_summary 内容
         if english_summary_path and Path(english_summary_path).exists() and Path(english_summary_path).stat().st_size > 0:
-            # 保存 english_summary 的页边距
-            es_margins = _get_document_sectpr_margins(english_summary_path)
+            # 从模板获取 english_summary 的页边距（而不是从草稿提取的文档）
+            # 模板中的 "APPENDIX 1 Summary" 部分有自己的页边距设置
+            es_margins = _get_template_english_summary_margins(str(fixed_template_path))
             if es_margins:
-                print(f"  english_summary.docx 页边距: top={es_margins.get('top')}, bottom={es_margins.get('bottom')}")
+                print(f"  模板 ENGLISH_SUMMARY 页边距: top={es_margins.get('top')}, bottom={es_margins.get('bottom')}, left={es_margins.get('left')}")
 
             doc = Document(output_path)
             english_summary_doc = Document(english_summary_path)
@@ -2029,6 +2133,38 @@ def render_report(
 
         # 8. 清理临时文件
         temp_path.unlink(missing_ok=True)
+
+        # 8.5 分页优化（可选）
+        if optimize_pagination_enabled:
+            print("\n正在优化分页...")
+            if PAGINATION_AVAILABLE:
+                # 优先使用 LibreOffice UNO API（精确）
+                pagination_result = optimize_pagination(
+                    input_path=output_path,
+                    output_path=output_path,
+                    optimize_paragraphs=True,
+                    optimize_headings=True,
+                    optimize_figures=True,
+                    min_lines=pagination_min_lines
+                )
+
+                if pagination_result["success"]:
+                    total_modified = (
+                        pagination_result["paragraphs_modified"] +
+                        pagination_result["headings_modified"] +
+                        pagination_result["figures_modified"]
+                    )
+                    print(f"  ✅ 分页优化完成: 修改 {total_modified} 处")
+                else:
+                    # UNO 失败，回退到 XML 方案
+                    print(f"  UNO 方案失败，使用 XML 备用方案...")
+                    xml_result = optimize_pagination_xml(output_path, output_path)
+                    if xml_result["success"]:
+                        print(f"  ✅ XML 分页优化完成")
+                    else:
+                        print(f"  ⚠️ 分页优化失败: {xml_result.get('error', '未知错误')}")
+            else:
+                print("  ⚠️ 分页优化模块不可用，跳过")
 
         # 9. 验证输出
         final_doc = Document(output_path)
