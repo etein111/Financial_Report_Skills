@@ -1240,36 +1240,17 @@ def _fix_docxcompose_sectpr_margins(docx_path: str, body_margins: Dict[str, str]
 
         # 修复这些 sectPr 的页边距
         # docxcompose 在合并时：
-        # 1. 在 part1 末尾插入一个 sectPr（定义 part1 的格式）
-        # 2. 追加 body 的内容
+        # 1. 在 part1 末尾原本就有一个 sectPr（封面模板原有的）- 保持原样
+        # 2. 追加 body 的内容时，docxcompose 在 part1 和 body 之间插入一个 sectPr（使用默认页边距）
         # 3. 在 body 末尾插入一个 sectPr（定义 body 的格式）
         # 4. 追加 part3 的内容
         #
         # 问题是：docxcompose 插入的 sectPr 使用默认页边距，而不是 body 的页边距
         #
         # 解决方案：
-        # - 第一个 pPr/sectPr（part1 和 body 之间）：使用 body 的页边距（因为 body 内容继承此 sectPr）
-        # - 第二个 pPr/sectPr（body 末尾）：使用 body 的页边距
-        # - body/sectPr（文档末尾）：保持原样（定义附录格式）
-
-        if len(ppr_sectprs) >= 1 and body_margins:
-            # 修复第一个 sectPr（part1 和 body 之间）
-            # 这个 sectPr 的页边距会影响 body 内容的左边距，必须修复
-            sectPr = ppr_sectprs[0]
-            pgMar = sectPr.find(f'{W}pgMar')
-            if pgMar is not None:
-                needs_fix = False
-                for attr, val in body_margins.items():
-                    current_val = pgMar.get(f'{W}{attr}', '')
-                    if current_val != val:
-                        needs_fix = True
-                        break
-
-                if needs_fix:
-                    for attr, val in body_margins.items():
-                        pgMar.set(f'{W}{attr}', val)
-                    fixed_count += 1
-                    print(f"  已修复第一个 sectPr（part1/body之间）页边距: left={body_margins.get('left')}, right={body_margins.get('right')}")
+        # - 第一个 pPr/sectPr（part1 末尾原有的）- 保持原样
+        # - 第二个 pPr/sectPr（docxcompose 插入的，body 末尾）- 使用 body 的页边距
+        # - body/sectPr（文档末尾）- 保持原样（定义附录格式）
 
         if len(ppr_sectprs) >= 2 and body_margins:
             # 修复第二个 sectPr（body 末尾）
