@@ -865,7 +865,8 @@ def _get_document_sectpr_margins(doc_path: str) -> Dict[str, str]:
 def _get_document_header_footer_refs(doc_path: str) -> Dict[str, str]:
     """读取文档的 header/footer 引用信息。
 
-    从文档末尾的 sectPr 中提取 headerReference 和 footerReference。
+    从文档的 sectPr 中提取 headerReference 和 footerReference。
+    注意：headerReference/footerReference 的 @id 属性在 r 命名空间，不在 w 命名空间。
 
     Args:
         doc_path: 文档路径
@@ -877,6 +878,7 @@ def _get_document_header_footer_refs(doc_path: str) -> Dict[str, str]:
     from lxml import etree
 
     W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
+    R = '{http://schemas.openxmlformats.org/officeDocument/2006/relationships}'
     refs = {}
 
     try:
@@ -884,25 +886,56 @@ def _get_document_header_footer_refs(doc_path: str) -> Dict[str, str]:
             with z.open('word/document.xml') as f:
                 tree = etree.parse(f)
 
-        # 查找文档末尾的 sectPr
+        # 查找所有 sectPr
         body = tree.getroot().find(f'.//{W}body')
         if body is not None:
+            # 先检查 body 末尾的 sectPr
             sectPr = body.find(f'{W}sectPr')
             if sectPr is not None:
-                # 获取 headerReference
-                header_ref = sectPr.find(f'{W}headerReference')
-                if header_ref is not None:
-                    refs['header'] = header_ref.get(f'{W}id', '')
+                _extract_hf_refs(sectPr, W, R, refs)
 
-                # 获取 footerReference
-                footer_ref = sectPr.find(f'{W}footerReference')
-                if footer_ref is not None:
-                    refs['footer'] = footer_ref.get(f'{W}id', '')
+            # 再检查段落内的 sectPr
+            for p in body.findall(f'.//{W}p'):
+                pPr = p.find(f'{W}pPr')
+                if pPr is not None:
+                    p_sectPr = pPr.find(f'{W}sectPr')
+                    if p_sectPr is not None:
+                        _extract_hf_refs(p_sectPr, W, R, refs)
 
     except Exception as e:
         print(f"  读取文档 header/footer 引用失败: {e}")
 
     return refs
+
+
+def _extract_hf_refs(sectPr, W, R, refs):
+    """从 sectPr 中提取 header/footer 引用。
+
+    Args:
+        sectPr: sectPr 元素
+        W: w 命名空间
+        R: r 命名空间
+        refs: 引用字典（会被修改）
+    """
+    # 获取 headerReference - 注意 @id 在 r 命名空间
+    for header_ref in sectPr.findall(f'{W}headerReference'):
+        ref_type = header_ref.get(f'{W}type', 'default')
+        ref_id = header_ref.get(f'{R}id', '')
+        if ref_id:
+            if ref_type == 'default' and 'header' not in refs:
+                refs['header'] = ref_id
+            elif ref_type == 'first' and 'first_header' not in refs:
+                refs['first_header'] = ref_id
+
+    # 获取 footerReference - 注意 @id 在 r 命名空间
+    for footer_ref in sectPr.findall(f'{W}footerReference'):
+        ref_type = footer_ref.get(f'{W}type', 'default')
+        ref_id = footer_ref.get(f'{R}id', '')
+        if ref_id:
+            if ref_type == 'default' and 'footer' not in refs:
+                refs['footer'] = ref_id
+            elif ref_type == 'first' and 'first_footer' not in refs:
+                refs['first_footer'] = ref_id
 
 
 def _get_template_english_summary_margins(template_path: str) -> Dict[str, str]:
@@ -1220,14 +1253,27 @@ def insert_body_at_marker_compose(doc_path: str, body_path: str, marker: str, ou
         # 保存最终文档
         composer.save(output_path)
 
-        # 5. 恢复 body 的页边距（修复 docxcompose 覆盖页边距的问题）
+        # 5. 复制 body 的 header/footer 文件到输出文档（docxcompose 不会自动复制）
+        # 并获取 body 原始 rId -> 输出文档新 rId 的映射
+        hf_rid_mapping = _copy_headers_footers_between_docs(body_path, output_path)
+
+        # 更新 body_header_footer_refs，使用输出文档中的新 rId
+        if hf_rid_mapping and body_header_footer_refs:
+            for ref_type in ['header', 'footer']:
+                if ref_type in hf_rid_mapping and ref_type in body_header_footer_refs:
+                    body_orig_rId = body_header_footer_refs.get(ref_type, '')
+                    if body_orig_rId in hf_rid_mapping[ref_type]:
+                        body_header_footer_refs[ref_type] = hf_rid_mapping[ref_type][body_orig_rId]
+                        print(f"  更新 body_header_footer_refs[{ref_type}]: {body_orig_rId} -> {body_header_footer_refs[ref_type]}")
+
+        # 6. 恢复 body 的页边距（修复 docxcompose 覆盖页边距的问题）
         if body_margins:
             # docxcompose 会在 part1 和 body 之间插入一个 sectPr（分节符）
             # 这个 sectPr 应该使用 body 的页边距和 header/footer
             # 找到并修复这个 sectPr
             _fix_docxcompose_sectpr_margins(output_path, body_margins, has_part3_content, body_header_footer_refs)
 
-        # 6. 清理临时文件
+        # 7. 清理临时文件
         part1_path.unlink(missing_ok=True)
         if has_part3_content:
             part3_path.unlink(missing_ok=True)
@@ -2259,6 +2305,18 @@ def render_report(
                 composer.append(Document(body_path))
                 composer.save(output_path)
 
+                # 复制 body 的 header/footer 文件到输出文档（docxcompose 不会自动复制）
+                hf_rid_mapping = _copy_headers_footers_between_docs(body_path, output_path)
+
+                # 更新 body_header_footer_refs，使用输出文档中的新 rId
+                if hf_rid_mapping and body_header_footer_refs:
+                    for ref_type in ['header', 'footer']:
+                        if ref_type in hf_rid_mapping and ref_type in body_header_footer_refs:
+                            body_orig_rId = body_header_footer_refs.get(ref_type, '')
+                            if body_orig_rId in hf_rid_mapping[ref_type]:
+                                body_header_footer_refs[ref_type] = hf_rid_mapping[ref_type][body_orig_rId]
+                                print(f"  更新 body_header_footer_refs[{ref_type}]: {body_orig_rId} -> {body_header_footer_refs[ref_type]}")
+
                 # 修复 docxcompose 插入的分节符页边距和 header/footer
                 if body_margins:
                     _fix_docxcompose_sectpr_margins(output_path, body_margins, False, body_header_footer_refs)
@@ -2974,6 +3032,172 @@ def _fix_docxcompose_image_rels(body_path: str, output_path: str) -> int:
         traceback.print_exc()
 
     return fixed_count
+
+
+def _copy_headers_footers_between_docs(body_path: str, output_path: str) -> Dict[str, str]:
+    """从 body.docx 复制 header 和 footer 文件到输出文档，并修复 rId 映射。
+
+    当 docxcompose 合并时，body.docx 的 sectPr 中引用的 rId（如 rId9）
+    在输出文档中可能指向了封面的 header 文件，而不是正文应有的 header。
+
+    本函数：
+    1. 从 body.docx 读取 header 和 footer 文件
+    2. 复制这些文件到输出文档
+    3. 更新输出文档的 rels，添加新的关系
+    4. 返回 body 原始 rId -> 输出文档新 rId 的映射
+
+    Args:
+        body_path: body.docx 文件路径
+        output_path: 合并后的输出 docx 文件路径
+
+    Returns:
+        rId 映射 dict，格式：{'header': {'body_rId': 'output_rId'}, 'footer': {...}}
+        如果失败返回空 dict
+    """
+    import zipfile
+    import re
+    import os
+    from lxml import etree
+
+    result = {'header': {}, 'footer': {}}
+
+    def get_next_rid(rels_tree, ns):
+        """生成下一个可用的 rId"""
+        existing_nums = []
+        for rel in rels_tree.findall('r:Relationship', ns):
+            match = re.search(r'rId(\d+)', rel.get('Id', ''))
+            if match:
+                existing_nums.append(int(match.group(1)))
+        return f'rId{max(existing_nums) + 1}' if existing_nums else 'rId1'
+
+    try:
+        # 1. 从 body.docx 读取 header 和 footer 文件及其 rId 映射
+        body_hf_files = {}  # {file_type: {rId: (target, content)}}
+        body_rid_to_target = {}  # {rId: target} - body 中原始 rId 到 target 的映射
+
+        with zipfile.ZipFile(body_path, 'r') as z:
+            if 'word/_rels/document.xml.rels' not in z.namelist():
+                return result
+
+            rels_xml = z.read('word/_rels/document.xml.rels')
+            rels_tree = etree.fromstring(rels_xml)
+            ns = {'r': 'http://schemas.openxmlformats.org/package/2006/relationships'}
+
+            for rel in rels_tree.findall('r:Relationship', ns):
+                rel_id = rel.get('Id')
+                target = rel.get('Target')
+                rel_type = rel.get('Type')
+
+                if not target:
+                    continue
+
+                # 判断是 header 还是 footer
+                file_type = None
+                if 'header' in target.lower():
+                    file_type = 'header'
+                elif 'footer' in target.lower():
+                    file_type = 'footer'
+
+                if file_type and ('header' in rel_type or 'footer' in rel_type):
+                    # 读取文件内容
+                    file_path = f'word/{target}'
+                    if file_path in z.namelist():
+                        content = z.read(file_path)
+                        body_hf_files.setdefault(file_type, {})[rel_id] = (target, content)
+                        body_rid_to_target[rel_id] = target
+
+        if not body_hf_files:
+            print(f"  body.docx 中没有找到 header/footer 文件")
+            return result
+
+        # 2. 读取输出文档的 rels 和文件列表
+        output_files = {}
+        output_rels_tree = None
+        output_hf_targets = set()  # 输出文档中已有的 header/footer target
+
+        with zipfile.ZipFile(output_path, 'r') as z:
+            for name in z.namelist():
+                output_files[name] = z.read(name)
+
+            if 'word/_rels/document.xml.rels' in z.namelist():
+                rels_xml = z.read('word/_rels/document.xml.rels')
+                output_rels_tree = etree.fromstring(rels_xml)
+
+                for rel in output_rels_tree.findall('r:Relationship', ns):
+                    target = rel.get('Target')
+                    rel_type = rel.get('Type')
+                    if target and ('header' in rel_type or 'footer' in rel_type):
+                        output_hf_targets.add(target)
+
+        if output_rels_tree is None:
+            print(f"  输出文档中没有 rels 文件")
+            return result
+
+        # 3. 复制 body 的 header/footer 文件到输出文档，并建立 rId 映射
+        rId_mapping = {}  # {body_rId: output_rId}
+
+        for file_type in ['header', 'footer']:
+            if file_type not in body_hf_files:
+                continue
+
+            file_type_mapping = {}  # 该 file_type 的 rId 映射
+
+            for body_rId, (target, content) in body_hf_files[file_type].items():
+                # 检查输出文档是否已有该文件
+                if target in output_hf_targets:
+                    # 文件已存在，复用现有关系
+                    # 找到输出文档中指向该 target 的 rId
+                    for rel in output_rels_tree.findall('r:Relationship', ns):
+                        if rel.get('Target') == target:
+                            output_rId = rel.get('Id')
+                            rId_mapping[body_rId] = output_rId
+                            file_type_mapping[body_rId] = output_rId
+                            print(f"  复用输出文档已有 {file_type}: {target} -> {output_rId}")
+                            break
+                else:
+                    # 文件不存在，需要复制
+                    # 生成新的 rId
+                    output_rId = get_next_rid(output_rels_tree, ns)
+
+                    # 添加关系
+                    rel_type = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/header' if file_type == 'header' else 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer'
+                    new_rel = etree.SubElement(output_rels_tree, '{http://schemas.openxmlformats.org/package/2006/relationships}Relationship')
+                    new_rel.set('Id', output_rId)
+                    new_rel.set('Type', rel_type)
+                    new_rel.set('Target', target)
+
+                    # 复制文件
+                    output_files[f'word/{target}'] = content
+                    output_hf_targets.add(target)
+                    rId_mapping[body_rId] = output_rId
+                    file_type_mapping[body_rId] = output_rId
+
+                    print(f"  已复制 {file_type} 文件: {target} -> {output_rId}")
+
+            # 保存该 file_type 的映射
+            result[file_type] = file_type_mapping
+
+        # 4. 更新输出文档
+        if rId_mapping:
+            # 更新 rels 文件
+            output_files['word/_rels/document.xml.rels'] = etree.tostring(
+                output_rels_tree, xml_declaration=True, encoding='UTF-8', standalone=True
+            )
+
+            # 重新写入目标文档
+            os.remove(output_path)
+            with zipfile.ZipFile(output_path, 'w', zipfile.ZIP_DEFLATED) as z:
+                for name, content in output_files.items():
+                    z.writestr(name, content)
+
+            print(f"  已处理 {len(rId_mapping)} 个 header/footer 文件")
+
+    except Exception as e:
+        print(f"  复制 header/footer 时出错: {e}")
+        import traceback
+        traceback.print_exc()
+
+    return result
 
 
 def _ensure_final_sectPr(body_element, final_sectPr) -> None:
