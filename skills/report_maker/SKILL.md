@@ -354,13 +354,13 @@ full_document_text = '\n'.join(all_text_lines)
 1. has_body: true/false
 2. body_scope: "位置描述"
 3. **重要**：请提供正文的**精确起始和结束标记文本**：
-   - body_start_marker: 正文开始的标记文本（如目录标题、第一章标题的前15-30个字符）
+   - body_start_marker: 正文开始的标记文本（如目录标题、第一章标题的前15-30个字符），不是第一页
    - body_end_marker: 正文结束的标记文本（正文最后一段的文本，**不包含**后续的 english_summary 或附录）
 
 **⚠️ body 的结束边界规则**：
 - **如果有 english_summary**：body_end_marker 应该是 english_summary 标题之前的最后一段内容
 - **如果没有 english_summary**：body_end_marker 应该是附录/法律披露（"附录APPENDIX"、"IMPORTANT DISCLOSURES"）之前的最后一段内容
-- body_end_marker 必须是正文内容本身，不能是 english_summary 或附录的标题
+- body_end_marker 必须是正文内容本身，不能是 english_summary 或附录的标题，必须是文档中实际存在的完整段落，不能是简短标题
 
 **示例**：
 - ✅ 正确：`body_start_marker: "目录"` 或 `body_start_marker: "1 公司概况"`
@@ -389,18 +389,12 @@ full_document_text = '\n'.join(all_text_lines)
 - 位于文档的后半部分（通常在最后 50-100 个段落内）
 - 标题可能在段落中，内容在后续段落
 
-**常见标题形式**（任一形式都算有英文摘要）：
-- `Summary`（最常见，单独一行，在段落中）
-- `APPENDIX 1`（后面跟着英文内容）
-- `APPENDIX 1 Summary`
-- `Executive Summary`
-- `English Summary`
+⚠️ 强制检查步骤：
+1. 从文档末尾向前搜索所有段落（约最后 100-150 个段落）
+2. 搜索关键词：Summary、APPENDIX 1、Executive Summary、English Summary
+3. 如果找到 "Summary" 标题，立即检查其后续 5-10 个段落是否为英文内容
+4. 英文摘要的正文内容第一句通常以 "We initiate coverage"、"Initial Coverage"、"We expect" 等开头
 
-**识别方法**：
-1. **必须同时搜索表格和段落文本**
-2. 从文档末尾向前搜索，找到 "Summary" 或 "APPENDIX 1" 等标题（可能在段落中）
-3. 检查该标题后面是否跟着**英文段落**（而不是中文）
-4. 如果有英文段落，则 has_english_summary = true
 
 **⚠️ 注意区分**：
 - ❌ 法律附录的 "附录APPENDIX" 不是英文摘要（这是中英双语的法律披露部分）
