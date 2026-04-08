@@ -406,7 +406,13 @@ def _find_sectpr_margins_for_range(elements: list, start_idx: int, end_idx: int,
 
 
 def _apply_margins_to_final_sectpr(body, margins: Dict[str, str], W: str) -> bool:
-    """将页边距应用到文档末尾的 sectPr。
+    """将页边距应用到文档末尾的 sectPr，并清除 header/footer 引用。
+
+    清除 header/footer 引用很重要，因为 body.docx 的 sectPr 可能包含封面 section
+    的 header 引用（如 rId14 -> header8.xml 有 logo），而不是正文 section 的
+    header 引用（rId9 -> header4.xml 无 logo）。
+
+    清除后，body 内容会继承模板中对应位置的 header/footer 设置。
 
     Args:
         body: document.xml 的 body 元素
@@ -421,6 +427,15 @@ def _apply_margins_to_final_sectpr(body, margins: Dict[str, str], W: str) -> boo
     for elem in reversed(elements):
         tag = elem.tag.split('}')[-1]
         if tag == 'sectPr':
+            # 清除 headerReference 和 footerReference
+            # 因为 body.docx 的 sectPr 可能包含封面 section 的 header 引用
+            for ref_tag in ['headerReference', 'footerReference']:
+                ref = elem.find(f'{W}{ref_tag}')
+                if ref is not None:
+                    elem.remove(ref)
+                    print(f"  已清除 sectPr 中的 {ref_tag}")
+
+            # 应用页边距
             pgMar = elem.find(f'{W}pgMar')
             if pgMar is not None:
                 for attr, val in margins.items():

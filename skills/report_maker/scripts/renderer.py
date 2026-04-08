@@ -862,6 +862,49 @@ def _get_document_sectpr_margins(doc_path: str) -> Dict[str, str]:
     return margins
 
 
+def _get_document_header_footer_refs(doc_path: str) -> Dict[str, str]:
+    """读取文档的 header/footer 引用信息。
+
+    从文档末尾的 sectPr 中提取 headerReference 和 footerReference。
+
+    Args:
+        doc_path: 文档路径
+
+    Returns:
+        header/footer 引用字典 {'header': 'rId1', 'footer': 'rId2'}
+    """
+    import zipfile
+    from lxml import etree
+
+    W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
+    refs = {}
+
+    try:
+        with zipfile.ZipFile(doc_path, 'r') as z:
+            with z.open('word/document.xml') as f:
+                tree = etree.parse(f)
+
+        # 查找文档末尾的 sectPr
+        body = tree.getroot().find(f'.//{W}body')
+        if body is not None:
+            sectPr = body.find(f'{W}sectPr')
+            if sectPr is not None:
+                # 获取 headerReference
+                header_ref = sectPr.find(f'{W}headerReference')
+                if header_ref is not None:
+                    refs['header'] = header_ref.get(f'{W}id', '')
+
+                # 获取 footerReference
+                footer_ref = sectPr.find(f'{W}footerReference')
+                if footer_ref is not None:
+                    refs['footer'] = footer_ref.get(f'{W}id', '')
+
+    except Exception as e:
+        print(f"  读取文档 header/footer 引用失败: {e}")
+
+    return refs
+
+
 def _get_template_english_summary_margins(template_path: str) -> Dict[str, str]:
     """从模板的 ENGLISH_SUMMARY_MARKER 位置获取页边距。
 
@@ -1062,10 +1105,14 @@ def insert_body_at_marker_compose(doc_path: str, body_path: str, marker: str, ou
 
         W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
 
-        # 0. 保存 body.docx 的页边距信息（合并后需要恢复）
+        # 0. 保存 body.docx 的页边距和 header/footer 引用信息（合并后需要恢复）
         body_margins = _get_document_sectpr_margins(body_path)
         if body_margins:
             print(f"  body.docx 页边距: top={body_margins.get('top')}, bottom={body_margins.get('bottom')}")
+
+        body_header_footer_refs = _get_document_header_footer_refs(body_path)
+        if body_header_footer_refs:
+            print(f"  body.docx header/footer 引用: {body_header_footer_refs}")
 
         # 1. 找到 marker 位置和其中的 sectPr
         doc = Document(doc_path)
@@ -1176,9 +1223,9 @@ def insert_body_at_marker_compose(doc_path: str, body_path: str, marker: str, ou
         # 5. 恢复 body 的页边距（修复 docxcompose 覆盖页边距的问题）
         if body_margins:
             # docxcompose 会在 part1 和 body 之间插入一个 sectPr（分节符）
-            # 这个 sectPr 应该使用 body 的页边距
+            # 这个 sectPr 应该使用 body 的页边距和 header/footer
             # 找到并修复这个 sectPr
-            _fix_docxcompose_sectpr_margins(output_path, body_margins, has_part3_content)
+            _fix_docxcompose_sectpr_margins(output_path, body_margins, has_part3_content, body_header_footer_refs)
 
         # 6. 清理临时文件
         part1_path.unlink(missing_ok=True)
@@ -1194,18 +1241,22 @@ def insert_body_at_marker_compose(doc_path: str, body_path: str, marker: str, ou
         return False
 
 
-def _fix_docxcompose_sectpr_margins(docx_path: str, body_margins: Dict[str, str], has_part3: bool) -> int:
-    """修复 docxcompose 合并时插入的 sectPr 页边距。
+def _fix_docxcompose_sectpr_margins(docx_path: str, body_margins: Dict[str, str], has_part3: bool,
+                                    body_header_footer_refs: Dict[str, str] = None) -> int:
+    """修复 docxcompose 合并时插入的 sectPr 页边距和页眉页脚引用。
 
     docxcompose 在 append() 时会在合并点插入分节符（pPr/sectPr），
     这些分节符通常使用默认页边距（1英寸 = 1440 twips）。
 
-    本函数将这些分节符的页边距修改为 body.docx 的原始页边距。
+    本函数将这些分节符的页边距修改为 body.docx 的原始页边距，
+    并复制 headerReference 和 footerReference。
 
     Args:
         docx_path: docx 文件路径
         body_margins: body.docx 的页边距
         has_part3: 是否有 part3（附录）
+        body_header_footer_refs: body.docx 的 header/footer 引用 dict，格式：
+            {'header': 'rId1', 'footer': 'rId2', 'default_header': 'rId1', 'default_footer': 'rId2'}
 
     Returns:
         修复的 sectPr 数量
@@ -1254,7 +1305,7 @@ def _fix_docxcompose_sectpr_margins(docx_path: str, body_margins: Dict[str, str]
 
         if len(ppr_sectprs) >= 2 and body_margins:
             # 修复第二个 sectPr（body 末尾）
-            # 这个 sectPr 定义的是 body 的格式，应该使用 body 的页边距
+            # 这个 sectPr 定义的是 body 的格式，应该使用 body 的页边距和 header/footer
             sectPr = ppr_sectprs[1]
             pgMar = sectPr.find(f'{W}pgMar')
             if pgMar is not None:
@@ -1271,6 +1322,21 @@ def _fix_docxcompose_sectpr_margins(docx_path: str, body_margins: Dict[str, str]
                         pgMar.set(f'{W}{attr}', val)
                     fixed_count += 1
                     print(f"  已修复 body 分节符页边距: top={body_margins.get('top')}, bottom={body_margins.get('bottom')}, left={body_margins.get('left')}, right={body_margins.get('right')}")
+
+            # 复制 headerReference 和 footerReference
+            if body_header_footer_refs:
+                for ref_type in ['header', 'footer']:
+                    ref_key = ref_type
+                    if ref_key in body_header_footer_refs:
+                        rId = body_header_footer_refs[ref_key]
+                        # 检查是否已有该类型的引用
+                        existing_ref = sectPr.find(f'{W}{ref_type}Reference')
+                        if existing_ref is None:
+                            # 创建新的引用
+                            ref_elem = etree.SubElement(sectPr, f'{W}{ref_type}Reference')
+                            ref_elem.set(f'{W}type', 'default')
+                            ref_elem.set(f'{W}id', rId)
+                            print(f"  已添加 body sectPr {ref_type}Reference: {rId}")
 
         # 如果只有一个 pPr/sectPr，它就是 body 的分节符
         if len(ppr_sectprs) == 1 and body_margins:
@@ -1290,6 +1356,19 @@ def _fix_docxcompose_sectpr_margins(docx_path: str, body_margins: Dict[str, str]
                         pgMar.set(f'{W}{attr}', val)
                     fixed_count += 1
                     print(f"  已修复 body 分节符页边距: top={body_margins.get('top')}, bottom={body_margins.get('bottom')}, left={body_margins.get('left')}, right={body_margins.get('right')}")
+
+            # 复制 headerReference 和 footerReference
+            if body_header_footer_refs:
+                for ref_type in ['header', 'footer']:
+                    ref_key = ref_type
+                    if ref_key in body_header_footer_refs:
+                        rId = body_header_footer_refs[ref_key]
+                        existing_ref = sectPr.find(f'{W}{ref_type}Reference')
+                        if existing_ref is None:
+                            ref_elem = etree.SubElement(sectPr, f'{W}{ref_type}Reference')
+                            ref_elem.set(f'{W}type', 'default')
+                            ref_elem.set(f'{W}id', rId)
+                            print(f"  已添加 body sectPr {ref_type}Reference: {rId}")
 
         if fixed_count > 0:
             # 保存修改后的文档
@@ -2043,17 +2122,18 @@ def render_report(
             else:
                 # 如果没找到 marker，使用 docxcompose 追加到末尾
                 print(f"  ⚠️ 未找到 BODY_MARKER，使用 docxcompose 追加 body")
-                # 保存 body 的页边距
+                # 保存 body 的页边距和 header/footer 引用
                 body_margins = _get_document_sectpr_margins(body_path)
+                body_header_footer_refs = _get_document_header_footer_refs(body_path)
 
                 doc = Document(str(temp_path))
                 composer = Composer(doc)
                 composer.append(Document(body_path))
                 composer.save(output_path)
 
-                # 修复 docxcompose 插入的分节符页边距
+                # 修复 docxcompose 插入的分节符页边距和 header/footer
                 if body_margins:
-                    _fix_docxcompose_sectpr_margins(output_path, body_margins, False)
+                    _fix_docxcompose_sectpr_margins(output_path, body_margins, False, body_header_footer_refs)
 
                 # 补救：确保 body 中的图片被正确复制
                 copied_count = _copy_media_between_docx(body_path, output_path)
