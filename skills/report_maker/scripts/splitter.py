@@ -427,13 +427,15 @@ def _apply_margins_to_final_sectpr(body, margins: Dict[str, str], W: str) -> boo
     for elem in reversed(elements):
         tag = elem.tag.split('}')[-1]
         if tag == 'sectPr':
-            # 清除 headerReference 和 footerReference
+            # 清除所有 headerReference 和 footerReference
             # 因为 body.docx 的 sectPr 可能包含封面 section 的 header 引用
+            # 注意：使用 findall() 获取所有引用（first、default、even 类型），逐一删除
             for ref_tag in ['headerReference', 'footerReference']:
-                ref = elem.find(f'{W}{ref_tag}')
-                if ref is not None:
+                refs = elem.findall(f'{W}{ref_tag}')
+                for ref in refs:
                     elem.remove(ref)
-                    print(f"  已清除 sectPr 中的 {ref_tag}")
+                    ref_type = ref.get(f'{W}type', 'unknown')
+                    print(f"  已清除 sectPr 中的 {ref_tag} (type={ref_type})")
 
             # 应用页边距
             pgMar = elem.find(f'{W}pgMar')
