@@ -1964,7 +1964,7 @@ def render_report(
     body_path: str,
     output_path: str,
     english_summary_path: str = None,
-    optimize_pagination_enabled: bool = False,
+    optimize_pagination_enabled: bool = True,
     pagination_min_lines: int = 3
 ) -> bool:
     """渲染报告，正确处理分析师字段、abstract、body 和 english_summary。
