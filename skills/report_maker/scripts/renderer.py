@@ -2243,6 +2243,10 @@ def render_report(
                 copied_count = _copy_media_between_docx(body_path, output_path)
                 if copied_count > 0:
                     print(f"  已补充复制 {copied_count} 张图片（修复 docxcompose 图片丢失）")
+                # 修复 docxcompose 合并后图片 rId 映射错误
+                fixed_rid_count = _fix_docxcompose_image_rels(body_path, output_path)
+                if fixed_rid_count > 0:
+                    print(f"  已修复 {fixed_rid_count} 处图片 rId 映射错误")
             else:
                 # 如果没找到 marker，使用 docxcompose 追加到末尾
                 print(f"  ⚠️ 未找到 BODY_MARKER，使用 docxcompose 追加 body")
@@ -2263,6 +2267,10 @@ def render_report(
                 copied_count = _copy_media_between_docx(body_path, output_path)
                 if copied_count > 0:
                     print(f"  已补充复制 {copied_count} 张图片（修复 docxcompose 图片丢失）")
+                # 修复 docxcompose 合并后图片 rId 映射错误
+                fixed_rid_count = _fix_docxcompose_image_rels(body_path, output_path)
+                if fixed_rid_count > 0:
+                    print(f"  已修复 {fixed_rid_count} 处图片 rId 映射错误")
 
         else:
             # 没有 body 文件，删除 BODY_MARKER 段落并保存
@@ -2768,6 +2776,204 @@ def _copy_media_between_docx(source_path: str, target_path: str) -> int:
         traceback.print_exc()
 
     return copied_count
+
+
+def _fix_docxcompose_image_rels(body_path: str, output_path: str) -> int:
+    """修复 docxcompose 合并后图片 rId 的错误映射。
+
+    docxcompose.append() 在合并文档时会重新映射 rId，但映射过程中可能出错：
+    - body.docx 中 rId20~rId48 指向 image3~image31
+    - docxcompose 映射到 rId26~rId51，但跳过了前几张图片
+    - 结果：rId26 本应指向 image3.png (333686 bytes)，实际指向了 image5.png (30422 bytes)
+
+    本函数通过内容 hash 匹配来修复错误的 rId 映射。
+
+    修复逻辑：
+    1. 按 body 中图片的原始顺序（rId 的数字顺序）建立 body 期望的 hash 序列
+    2. 检查 output 中相同位置（按 rId 数字顺序）的图片内容是否匹配
+    3. 如果不匹配，在 output 中找到正确内容的 rId 并修复 document.xml
+
+    Args:
+        body_path: 源 body.docx 文件路径
+        output_path: 合并后的输出 docx 文件路径
+
+    Returns:
+        修复的图片引用数量
+    """
+    import zipfile
+    import hashlib
+    import re
+    from lxml import etree
+
+    fixed_count = 0
+
+    def extract_rid_number(rid):
+        """从 rId 字符串中提取数字，如 'rId20' -> 20"""
+        match = re.search(r'\d+', rid)
+        return int(match.group()) if match else 0
+
+    try:
+        # 1. 构建 body.docx 中按顺序排列的图片列表
+        body_images_ordered = []  # [(index, rId, media_name, content_hash)]
+
+        with zipfile.ZipFile(body_path, 'r') as z:
+            if 'word/_rels/document.xml.rels' not in z.namelist():
+                return 0
+
+            rels_xml = z.read('word/_rels/document.xml.rels')
+            rels_tree = etree.fromstring(rels_xml)
+            ns = {'r': 'http://schemas.openxmlformats.org/package/2006/relationships'}
+
+            for rel in rels_tree.findall('r:Relationship', ns):
+                rel_id = rel.get('Id')
+                target = rel.get('Target')
+                rel_type = rel.get('Type')
+                if target and target.startswith('media/') and 'image' in rel_type:
+                    media_name = target
+                    if f'word/{media_name}' in z.namelist():
+                        media_bytes = z.read(f'word/{media_name}')
+                        media_hash = hashlib.md5(media_bytes).hexdigest()
+                        rid_num = extract_rid_number(rel_id)
+                        body_images_ordered.append((rid_num, rel_id, media_name, media_hash))
+
+        # 按 rId 数字排序
+        body_images_ordered.sort(key=lambda x: x[0])
+
+        if not body_images_ordered:
+            return 0
+
+        # 2. 构建 output.docx 中的各种映射
+        output_rid_to_media = {}  # {rId: media_name}
+        output_media_name_to_hash = {}  # {media_name: content_hash}
+        output_files = {}
+
+        with zipfile.ZipFile(output_path, 'r') as z:
+            for name in z.namelist():
+                output_files[name] = z.read(name)
+                if name.startswith('word/media/'):
+                    media_bytes = z.read(name)
+                    media_hash = hashlib.md5(media_bytes).hexdigest()
+                    media_name = name[5:]  # 去掉 'word/' 前缀
+                    output_media_name_to_hash[media_name] = media_hash
+
+            # 读取 output.docx 的关系文件
+            if 'word/_rels/document.xml.rels' in z.namelist():
+                rels_xml = z.read('word/_rels/document.xml.rels')
+                rels_tree = etree.fromstring(rels_xml)
+                for rel in rels_tree.findall('r:Relationship', ns):
+                    rel_id = rel.get('Id')
+                    target = rel.get('Target')
+                    rel_type = rel.get('Type')
+                    if target and target.startswith('media/') and 'image' in rel_type:
+                        output_rid_to_media[rel_id] = target
+
+        # 3. 构建 output 中每个 content hash 对应的 rId 列表（可能有多个 rId 指向同一内容）
+        output_hash_to_rids = {}  # {content_hash: [rId1, rId2, ...]}
+        for out_rid, out_media in output_rid_to_media.items():
+            if out_media in output_media_name_to_hash:
+                h = output_media_name_to_hash[out_media]
+                if h not in output_hash_to_rids:
+                    output_hash_to_rids[h] = []
+                output_hash_to_rids[h].append(out_rid)
+
+        # 4. 建立 body 期望的 hash 序列（按顺序）
+        body_expected_sequence = [img[3] for img in body_images_ordered]  # hash 序列
+
+        # 5. 找出 output 中按 rId 数字顺序排列的图片序列
+        output_rid_ordered = sorted(output_rid_to_media.keys(), key=extract_rid_number)
+        output_actual_sequence = []
+        for out_rid in output_rid_ordered:
+            out_media = output_rid_to_media[out_rid]
+            if out_media in output_media_name_to_hash:
+                output_actual_sequence.append((out_rid, output_media_name_to_hash[out_media]))
+
+        R = '{http://schemas.openxmlformats.org/officeDocument/2006/relationships}'
+
+        # 读取 document.xml
+        doc_xml = output_files.get('word/document.xml')
+        if not doc_xml:
+            return 0
+
+        doc_tree = etree.fromstring(doc_xml)
+
+        corrections = []  # [(elem, attr_name, old_rid, correct_rid)]
+
+        for elem in doc_tree.iter():
+            for attr_name in [f'{R}embed', f'{R}id']:
+                if attr_name not in elem.attrib:
+                    continue
+
+                old_rid = elem.attrib[attr_name]
+
+                if old_rid not in output_rid_to_media:
+                    continue
+
+                current_media = output_rid_to_media[old_rid]
+                if current_media not in output_media_name_to_hash:
+                    continue
+
+                current_hash = output_media_name_to_hash[current_media]
+
+                # 在 body 序列中找到相同 content hash 的位置
+                # body_expected_sequence 中第 i 个 hash 期望对应 output 中第 i 个位置（如果没跳过）
+                # 但如果跳过了，我们需要找到 body 中期望这个 hash 的位置
+
+                for body_idx, (body_rid_num, body_rid, body_media, body_hash) in enumerate(body_images_ordered):
+                    if body_hash == current_hash:
+                        # body 期望这个位置显示 body_hash 对应的图片
+                        # 检查当前 rId 指向的 media 在 body 中的原始位置是否一致
+                        # 如果不一致，说明 docxcompose 搞混了
+
+                        # 获取当前 rId 在 output 序列中的位置
+                        out_rid_num = extract_rid_number(old_rid)
+                        out_pos = -1
+                        for pos, (orid, ohash) in enumerate(output_actual_sequence):
+                            if orid == old_rid:
+                                out_pos = pos
+                                break
+
+                        if out_pos != body_idx and out_pos >= 0 and body_idx >= 0:
+                            # 位置不匹配！需要修复
+                            # 找到 output 中指向正确内容 (body_hash) 的 rId
+                            if body_hash in output_hash_to_rids:
+                                correct_rid = output_hash_to_rids[body_hash][0]
+                                if correct_rid != old_rid:
+                                    corrections.append((elem, attr_name, old_rid, correct_rid))
+
+        # 去重
+        seen = set()
+        unique_corrections = []
+        for elem, attr, old_rid, new_rid in corrections:
+            key = (id(elem), attr, old_rid, new_rid)
+            if key not in seen:
+                seen.add(key)
+                unique_corrections.append((elem, attr, old_rid, new_rid))
+
+        # 应用修复
+        for elem, attr, old_rid, new_rid in unique_corrections:
+            elem.attrib[attr] = new_rid
+            fixed_count += 1
+
+        # 6. 如果有修复，更新 document.xml
+        if fixed_count > 0:
+            output_files['word/document.xml'] = etree.tostring(
+                doc_tree, xml_declaration=True, encoding='UTF-8', standalone=True
+            )
+
+            # 重新写入目标文档
+            os.remove(output_path)
+            with zipfile.ZipFile(output_path, 'w', zipfile.ZIP_DEFLATED) as z:
+                for name, content in output_files.items():
+                    z.writestr(name, content)
+
+            print(f"  已修复 {fixed_count} 处图片 rId 映射错误")
+
+    except Exception as e:
+        print(f"  修复图片 rId 映射时出错: {e}")
+        import traceback
+        traceback.print_exc()
+
+    return fixed_count
 
 
 def _ensure_final_sectPr(body_element, final_sectPr) -> None:
