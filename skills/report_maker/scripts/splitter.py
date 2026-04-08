@@ -219,7 +219,8 @@ def extract_fragment_by_markers(
 
 
 def extract_abstract(draft_path: str, scope: str, output_path: Optional[str] = None,
-                     start_marker: Optional[str] = None, end_marker: Optional[str] = None) -> Path:
+                     start_marker: Optional[str] = None, end_marker: Optional[str] = None,
+                     appendix_notice: Optional[str] = None) -> Path:
     """提取摘要片段，保留完整格式。
 
     优先使用 LLM 提供的 start_marker 和 end_marker。
@@ -231,6 +232,7 @@ def extract_abstract(draft_path: str, scope: str, output_path: Optional[str] = N
         output_path: 输出路径（可选）
         start_marker: 开始标记文本（LLM 从草稿中识别）
         end_marker: 结束标记文本（LLM 从草稿中识别）
+        appendix_notice: 摘要前的提示文本（如 "Please see APPENDIX 1 for English summary"）
 
     Returns:
         abstract.docx 文件路径
@@ -240,7 +242,13 @@ def extract_abstract(draft_path: str, scope: str, output_path: Optional[str] = N
     # 如果提供了 start_marker 和 end_marker，使用通用函数
     if start_marker and end_marker:
         print(f"使用 LLM 提供的标记提取摘要: '{start_marker}' -> '{end_marker}'")
-        return extract_fragment_by_markers(draft_path, start_marker, end_marker, str(out_path))
+        result_path = extract_fragment_by_markers(draft_path, start_marker, end_marker, str(out_path))
+
+        # 如果有 appendix_notice，需要添加到 abstract 内容之前
+        if appendix_notice:
+            _prepend_abstract_notice(str(result_path), appendix_notice)
+
+        return result_path
 
     # 备用逻辑：使用启发式规则
     print("使用启发式规则提取摘要（未提供 LLM 标记）")
@@ -398,7 +406,13 @@ def _find_sectpr_margins_for_range(elements: list, start_idx: int, end_idx: int,
 
 
 def _apply_margins_to_final_sectpr(body, margins: Dict[str, str], W: str) -> bool:
-    """将页边距应用到文档末尾的 sectPr。
+    """将页边距应用到文档末尾的 sectPr，并清除 header/footer 引用。
+
+    清除 header/footer 引用很重要，因为 body.docx 的 sectPr 可能包含封面 section
+    的 header 引用（如 rId14 -> header8.xml 有 logo），而不是正文 section 的
+    header 引用（rId9 -> header4.xml 无 logo）。
+
+    清除后，body 内容会继承模板中对应位置的 header/footer 设置。
 
     Args:
         body: document.xml 的 body 元素
@@ -413,6 +427,17 @@ def _apply_margins_to_final_sectpr(body, margins: Dict[str, str], W: str) -> boo
     for elem in reversed(elements):
         tag = elem.tag.split('}')[-1]
         if tag == 'sectPr':
+            # 清除所有 headerReference 和 footerReference
+            # 因为 body.docx 的 sectPr 可能包含封面 section 的 header 引用
+            # 注意：使用 findall() 获取所有引用（first、default、even 类型），逐一删除
+            for ref_tag in ['headerReference', 'footerReference']:
+                refs = elem.findall(f'{W}{ref_tag}')
+                for ref in refs:
+                    elem.remove(ref)
+                    ref_type = ref.get(f'{W}type', 'unknown')
+                    print(f"  已清除 sectPr 中的 {ref_tag} (type={ref_type})")
+
+            # 应用页边距
             pgMar = elem.find(f'{W}pgMar')
             if pgMar is not None:
                 for attr, val in margins.items():
@@ -420,6 +445,57 @@ def _apply_margins_to_final_sectpr(body, margins: Dict[str, str], W: str) -> boo
                 print(f"已将页边距应用到最终 sectPr: {margins}")
                 return True
     return False
+
+
+def _prepend_abstract_notice(docx_path: str, notice_text: str) -> bool:
+    """在 abstract.docx 内容之前插入提示文本。
+
+    用于保留 "(Please see APPENDIX 1 for English summary)" 等提示文本。
+
+    Args:
+        docx_path: abstract.docx 文件路径
+        notice_text: 要插入的提示文本
+
+    Returns:
+        是否成功
+    """
+    try:
+        doc = Document(docx_path)
+        body = doc.element.body
+
+        # 创建提示段落
+        from docx.oxml import OxmlElement
+        from docx.oxml.ns import qn
+
+        # 创建段落元素 <w:p>
+        notice_para = OxmlElement('w:p')
+
+        # 创建 run 元素 <w:r>
+        r = OxmlElement('w:r')
+        notice_para.append(r)
+
+        # 创建文本内容 <w:t>
+        t = OxmlElement('w:t')
+        t.set(qn('xml:space'), 'preserve')
+        t.text = notice_text
+        r.append(t)
+
+        # 在 body 第一个段落之前插入提示段落
+        first_child = list(body)[0] if len(list(body)) > 0 else None
+        if first_child is not None:
+            body.insert(0, notice_para)
+        else:
+            body.append(notice_para)
+
+        doc.save(docx_path)
+        print(f"  已在 abstract.docx 开头添加提示文本: {notice_text[:50]}...")
+        return True
+
+    except Exception as e:
+        print(f"  添加 abstract 提示文本失败: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
 
 
 def _clear_paragraph_indents(docx_path: str) -> bool:

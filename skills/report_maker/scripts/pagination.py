@@ -67,6 +67,7 @@ class LibreOfficeConnection:
 
         if system == "Windows":
             possible_paths = [
+                r"D:\Program\program\soffice.exe",
                 r"C:\Program Files\LibreOffice\program\soffice.exe",
                 r"C:\Program Files (x86)\LibreOffice\program\soffice.exe",
                 r"C:\Program Files\LibreOffice 7\program\soffice.exe",

@@ -354,7 +354,8 @@ for idx, text in last_50:
 **输出格式**：
 1. has_abstract: true/false
 2. abstract_scope: "精确位置描述，如：首页右侧表格的第X行，包含'投资亮点'标题下的6个段落"
-3. 如果 has_abstract=false，说明理由（如"未找到多段落摘要内容"）
+3. **abstract_notice**: "摘要前的提示文本（如 '(Please see APPENDIX 1 for English summary)'，如果没有则留空）"
+4. 如果 has_abstract=false，说明理由（如"未找到多段落摘要内容"）
 
 ## 第三部分：正文提取
 
@@ -458,6 +459,7 @@ ticker: "..."
 # 摘要信息
 has_abstract: true/false
 abstract_scope: "首页右侧表格第X行，包含'投资亮点'标题下的6个段落"
+abstract_notice: "(Please see APPENDIX 1 for English summary)"  # 摘要前的提示文本，如果没有则留空
 
 # 正文信息
 has_body: true/false
@@ -531,7 +533,8 @@ if llm_result['has_abstract']:
     splitter.extract_abstract(
         draft_path,
         llm_result['abstract_scope'],
-        output_path=f"{output_dir}/abstract.docx"
+        output_path=f"{output_dir}/abstract.docx",
+        appendix_notice=llm_result.get('abstract_notice', '')  # "Please see APPENDIX 1..." 等提示文本
     )
 
 if llm_result['has_body']:
