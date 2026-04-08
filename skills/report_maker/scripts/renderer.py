@@ -2152,7 +2152,37 @@ def render_report(
         # 保存处理 abstract 后的文档
         doc.save(str(temp_path))
 
-        # 6. 处理 BODY_MARKER - 使用 docxcompose 三段式合并
+        # 6. 分页优化（仅针对 body.docx）- 在合并前单独处理，避免 LibreOffice 破坏封面表格
+        body_pagination_done = False
+        if optimize_pagination_enabled and PAGINATION_AVAILABLE and Path(body_path).exists():
+            print("\n正在优化 body.docx 分页（仅处理正文，不影响封面）...")
+            pagination_result = optimize_pagination(
+                input_path=body_path,
+                output_path=body_path,
+                optimize_paragraphs=True,
+                optimize_headings=True,
+                optimize_figures=True,
+                min_lines=pagination_min_lines
+            )
+            if pagination_result["success"]:
+                body_pagination_done = True
+                total_modified = (
+                    pagination_result["paragraphs_modified"] +
+                    pagination_result["headings_modified"] +
+                    pagination_result["figures_modified"]
+                )
+                print(f"  ✅ body.docx 分页优化完成: 修改 {total_modified} 处")
+            else:
+                # 回退到 XML 方案
+                print(f"  LibreOffice 方案失败，使用 XML 备用方案...")
+                xml_result = optimize_pagination_xml(body_path, body_path)
+                if xml_result["success"]:
+                    body_pagination_done = True
+                    print(f"  ✅ body.docx XML 分页优化完成")
+                else:
+                    print(f"  ⚠️ body.docx 分页优化失败，继续使用未优化的 body")
+
+        # 7. 处理 BODY_MARKER - 使用 docxcompose 三段式合并
         if Path(body_path).exists() and Path(body_path).stat().st_size > 0:
             # 使用三段式合并：part1 + body + part3
             body_inserted = insert_body_at_marker_compose(
@@ -2271,9 +2301,10 @@ def render_report(
         # 8. 清理临时文件
         temp_path.unlink(missing_ok=True)
 
-        # 8.5 分页优化（可选）
-        if optimize_pagination_enabled:
-            print("\n正在优化分页...")
+        # 8.5 分页优化（仅在未对 body 预优化时执行）
+        # 注意：如果 body.docx 已在上一步(步骤6)进行过分页优化，则跳过此步骤避免重复处理
+        if optimize_pagination_enabled and not body_pagination_done:
+            print("\n正在优化最终输出分页...")
             if PAGINATION_AVAILABLE:
                 # 优先使用 LibreOffice UNO API（精确）
                 pagination_result = optimize_pagination(
@@ -2302,6 +2333,8 @@ def render_report(
                         print(f"  ⚠️ 分页优化失败: {xml_result.get('error', '未知错误')}")
             else:
                 print("  ⚠️ 分页优化模块不可用，跳过")
+        elif body_pagination_done:
+            print("\n跳过最终输出分页优化（body.docx 已预优化）")
 
         # 9. 验证输出
         final_doc = Document(output_path)

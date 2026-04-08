@@ -65,7 +65,10 @@
       "Bash(powershell -Command \"cd ''D:\\\\yechuan\\\\work\\\\Finance_AI\\\\neoskills''; & ''.venv\\\\Scripts\\\\python.exe'' -c \"\"\nfrom docx import Document\ndoc = Document\\(r''templates\\\\macro\\\\template.docx''\\)\n\nprint\\(''总段落数:'', len\\(doc.paragraphs\\)\\)\nprint\\(\\)\n\nfor i, p in enumerate\\(doc.paragraphs\\):\n    if p.text.strip\\(\\):\n        print\\(f''{i}: {p.text[:80]}''\\)\n\"\"\")",
       "Bash(\".venv\\\\Scripts\\\\python.exe\" -c \"\nimport yaml\n\nwith open\\(''reports/西锐飞机首次覆盖报告/elements.yaml'', ''r'', encoding=''utf-8''\\) as f:\n    elements = yaml.safe_load\\(f\\)\n\nprint\\(''所有 elements.yaml 字段:''\\)\nfor k, v in elements.items\\(\\):\n    if v:  # 只打印非空值\n        print\\(f''  {k}: {repr\\(v\\)[:80]}''\\)\n    else:\n        print\\(f''  {k}: \\(空\\)''\\)\n\")",
       "Bash(.venvScriptspython.exe skills/template_maker/scripts/invoke.py --name macro --word \"samples/macro/0317斯卡吉特河水电项目重新许可：和解达成的里程碑与ESG三方博弈的深度透视_AutoRefresh.docx\" --elements \"samples/macro/0317斯卡吉特河水电项目重新许可：和解达成的里程碑与ESG三方博弈的深度透视_AutoRefresh elements.yaml\" --no-abstract --body-scope \"从首页开始\" --auto-confirm)",
-      "Bash(D:/yechuan/work/Finance_AI/neoskills/.venv/Scripts/python.exe:*)"
+      "Bash(D:/yechuan/work/Finance_AI/neoskills/.venv/Scripts/python.exe:*)",
+      "Bash(\"D:\\\\Program\\\\program\\\\soffice.exe\" --version)",
+      "Bash(\"D:\\\\Program\\\\program\\\\soffice.exe\" --headless --version)",
+      "Bash(grep -n \"_extract_cover_region_xml\\\\|_restore_cover_region_xml\" skills/report_maker/scripts/*.py)"
     ]
   }
 }
