@@ -1243,12 +1243,12 @@ def insert_body_at_marker_compose(doc_path: str, body_path: str, marker: str, ou
             body_doc.element.body.append(page_break_para)
             print(f"  在 body 末尾添加分页符段落（nextPage）")
 
-        composer.append(body_doc)
+        composer.append(body_doc, remove_property_fields=False)
 
         # 追加 part3（如果有内容）
         if has_part3_content:
             part3_for_merge = Document(str(part3_path))
-            composer.append(part3_for_merge)
+            composer.append(part3_for_merge, remove_property_fields=False)
 
         # 保存最终文档
         composer.save(output_path)
@@ -2208,7 +2208,7 @@ def render_report(
 
                 doc = Document(str(temp_path))
                 composer = Composer(doc)
-                composer.append(Document(body_path))
+                composer.append(Document(body_path), remove_property_fields=False)
                 composer.save(output_path)
 
                 # 复制 body 的 header/footer 文件到输出文档（docxcompose 不会自动复制）
