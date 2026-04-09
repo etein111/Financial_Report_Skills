@@ -60,9 +60,9 @@ client = connection.get_client(cwd)
 ```python
 from skills.neolyst.scripts import analyst
 
-analyst_id = analyst.resolve_analyst_by_email(client, email)
-# 返回：str（analyst.id）
-# 找不到时：抛出 ValueError
+record = analyst.resolve_analyst_by_email(client, email)
+# 返回：dict（analyst 记录，含 email, english_name, chinese_name, suffix, sfc, region_code, is_active 等）
+# 找不到或已停用时：抛出 ValueError
 ```
 
 ---
