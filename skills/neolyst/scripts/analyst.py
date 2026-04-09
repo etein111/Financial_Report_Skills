@@ -29,6 +29,6 @@ def resolve_analyst_by_email(client: Client, email: str) -> dict:
         raise ValueError(str(e)) from e
 
     if not resp.data:
-        raise ValueError(f"Analyst not found: {email!r}")
+        raise ValueError(f"找不到分析师：{email!r}")
 
     return resp.data
