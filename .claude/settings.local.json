@@ -98,7 +98,17 @@
       "Bash(NEOLYST_URL=http://127.0.0.1:54321 uv run --with pytest pytest skills/neolyst/tests/ -v)",
       "Bash(supabase db:*)",
       "Bash(NEOLYST_URL=http://127.0.0.1:54321 uv run:*)",
-      "mcp__web-search-prime__web_search_prime"
+      "mcp__web-search-prime__web_search_prime",
+      "mcp__zread__get_repo_structure",
+      "mcp__zread__read_file",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d.get\\('skills', d.get\\('skillsPath', 'not found'\\)\\), indent=2\\)\\)\")",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d, indent=2\\)\\)\")",
+      "Bash(claude --version)",
+      "Bash(cat ~/.claude/plugins/data/*.json)",
+      "Bash(cat ~/.claude/plugins/marketplaces/superpowers-marketplace/*.json)",
+      "Bash(echo \"\")",
+      "Bash(echo \"# Claude Code - skip permission prompts\")",
+      "Bash(echo \"alias cc='claude --dangerously-skip-permissions'\")"
     ]
   }
 }
