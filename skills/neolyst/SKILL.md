@@ -220,33 +220,33 @@ result = draft_report.save_draft_report(client, {
 
 ---
 
-### 8. validators 🔲 待实现
+### 8. validate_draft ✅ 已实现
 
-校验指定 draft 版本是否满足提交条件。
+校验指定 draft 版本是否满足提交条件。全量收集所有错误后一次性抛出。
 
 ```python
-from skills.neolyst.scripts import validators
+from skills.neolyst.scripts.validators import validate_draft
 
-result = validators.validators(client, report_id="uuid", version_no=1)
+result = validate_draft(client, report_id="uuid", version_no=1)
 # 通过：返回 {"report_id": "uuid", "version_no": 1}
-# 失败：抛出 ValueError（含具体失败原因，足以让上游 LLM 或人工据此补字段）
+# 失败：抛出 ValueError（消息以"；"分隔所有失败项，足以让调用方据此补字段）
 ```
 
-**校验内容：** 结构完整性、必填字段、主数据存在性（analyst/coverage/sector/region）、文件路径有效性、公司类报告的 coverage 一致性。
+**校验内容：** report 存在且状态为 draft/rejected、版本存在、word/pdf 文件路径非空、必填字段（title/report_type/report_language/investment_thesis/contact_person）、分析师列表非空且 contact_person 在内、每个分析师存在且 is_active、company 类型必须有 coverage_id 且存在、sector_id/region_code 有值时验证存在性。
 
 ---
 
-### 9. submit_report 🔲 待实现
+### 9. submit_report ✅ 已实现
 
-将已校验的 draft 版本提交为 `submitted` 状态。
+将已校验的 draft/rejected 版本提交为 `submitted` 状态。
 
 ```python
 from skills.neolyst.scripts import submit_report
 
 result = submit_report.submit_report(client, report_id="uuid", version_no=1)
 # 返回：{"report_id": "uuid", "status": "submitted", "version_no": 1}
-# 内部会再次执行 validators，校验失败则抛出异常
-# 不隐式创建 coverage，不补字段，不做人机交互
+# 内部先调用 validate_draft，校验失败则抛出异常
+# 成功后原子更新 report.status 并写入 report_status_log
 ```
 
 ---

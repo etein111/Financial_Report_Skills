@@ -158,6 +158,15 @@ set
     sort = excluded.sort,
     is_active = excluded.is_active;
 
+-- 初始管理员分析师档案（对应上面的 auth.users）
+insert into public.analyst (english_name, chinese_name, email, region_code, is_active)
+values ('Xue Yang', '杨雪', 'yangxue@opendelp.com', 'HK', true)
+on conflict (email) do update set
+    english_name = excluded.english_name,
+    chinese_name = excluded.chinese_name,
+    region_code  = excluded.region_code,
+    is_active    = excluded.is_active;
+
 -- 初始模板占位记录
 insert into public.report_template (id, report_type, language, template_file_path, schema_file_path)
 values
