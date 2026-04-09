@@ -97,7 +97,7 @@ begin
     end if;
 
     -- 全量替换 report_analyst
-    delete from public.report_analyst where report_id = v_report_id;
+    delete from public.report_analyst ra where ra.report_id = v_report_id;
 
     for v_analyst in select * from jsonb_array_elements(p_draft->'analysts')
     loop
