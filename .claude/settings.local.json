@@ -94,7 +94,11 @@
       "Bash(curl -s http://47.57.213.88:80/rest/v1/ -H 'apikey: ***REMOVED-JWT***')",
       "Bash(\".venv/Scripts/python\" stock_chart_compare.py)",
       "Bash(supabase status:*)",
-      "Bash(printf:*)"
+      "Bash(printf:*)",
+      "Bash(NEOLYST_URL=http://127.0.0.1:54321 uv run --with pytest pytest skills/neolyst/tests/ -v)",
+      "Bash(supabase db:*)",
+      "Bash(NEOLYST_URL=http://127.0.0.1:54321 uv run:*)",
+      "mcp__web-search-prime__web_search_prime"
     ]
   }
 }
