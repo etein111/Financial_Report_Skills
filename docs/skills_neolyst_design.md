@@ -84,7 +84,7 @@
   - `templates`：所有已认证用户可下载；仅 `admin` 角色可上传/更新/删除
   - `reports`：`admin` 可读写全部；`analyst` 可读写自己 `draft`/`submitted` 状态的报告文件；`sa` 可读 `submitted`/`published`/`rejected` 状态的报告文件
 - 模板 bucket 路径规则：`{report_type}/{language}/template.docx` 和 `{report_type}/{language}/schema.yaml`。路径由 `storage.py` 按此规则生成，`template_file_path` / `schema_file_path` 字段存储的即是该路径。
-- 报告 bucket 路径规则：`{report_id}/`（具体文件名由 `storage.py` 统一维护）。
+- 报告 bucket 路径规则：`{report_id}/v{version_no}/{原始文件名}`。路径由 `draft_report.py` 在 `commit_draft_version` 前生成，文件名保留调用方传入的原始文件名（`Path(local_path).name`），版本间文件存储在独立目录下互不覆盖。
 - `resolve_template` 将模板文件下载到当前工作目录的 `templates/{report_type}/{language}/` 下，文件名与 bucket 中一致（`template.docx`、`schema.yaml`）。
 
 ### 2.7 Supabase 连接配置

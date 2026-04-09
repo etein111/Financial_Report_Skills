@@ -182,7 +182,7 @@ coverage_id = coverage.create_coverage(
 
 ---
 
-### 7. save_draft_report 🔲 待实现
+### 7. save_draft_report ✅ 已实现
 
 保存机器处理后的 draft 版本。上传本地文件到 Storage，写入 `report` / `report_version` / `report_analyst`。
 
@@ -211,6 +211,8 @@ result = draft_report.save_draft_report(client, {
 # 返回：{"report_id": "uuid", "version_no": 1, "status": "draft"}
 # 不要求当前版本满足最终提交条件
 ```
+
+报告文件存储路径：`reports/{report_id}/v{version_no}/{原始文件名}`，各版本独立目录，不互相覆盖。
 
 **字段分层：**
 - 保存 draft 最小字段：`title`、`report_type`、`report_language`、`analysts`、`report_file`、`pdf_file`
