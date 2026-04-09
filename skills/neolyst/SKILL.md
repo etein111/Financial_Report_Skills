@@ -26,7 +26,7 @@ client = connection.get_client()
 `skills/neolyst/neolyst.yaml` — Supabase 连接配置：
 
 ```yaml
-supabase_url: "http://47.57.213.88:80"   # Supabase 服务地址
+supabase_url: "http://127.0.0.1:54321"   # 本地 Supabase 服务地址
 anon_key: "eyJhbG..."                     # Supabase anon/publishable key（非密钥）
 ```
 
