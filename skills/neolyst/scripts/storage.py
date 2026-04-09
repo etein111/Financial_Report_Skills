@@ -37,14 +37,16 @@ def _upload(client: Client, bucket: str, storage_path: str, local_path: str) -> 
     if not local.exists():
         raise FileNotFoundError(f"Local file not found: {local_path}")
     data = local.read_bytes()
+    path = storage_path.removeprefix(f"{bucket}/")
     try:
-        client.storage.from_(bucket).upload(storage_path, data)
+        client.storage.from_(bucket).upload(path, data)
     except Exception:
-        client.storage.from_(bucket).update(storage_path, data)
+        client.storage.from_(bucket).update(path, data)
 
 
 def _download(client: Client, bucket: str, storage_path: str, local_path: str) -> None:
     local = Path(local_path)
     local.parent.mkdir(parents=True, exist_ok=True)
-    data = client.storage.from_(bucket).download(storage_path)
+    path = storage_path.removeprefix(f"{bucket}/")
+    data = client.storage.from_(bucket).download(path)
     local.write_bytes(data)

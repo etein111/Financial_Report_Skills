@@ -45,7 +45,8 @@ def uploaded_template(neolyst_client, tmp_template_files):
         paths = resp.data[0]
         for p in [paths["template_file_path"], paths["schema_file_path"]]:
             try:
-                neolyst_client.storage.from_("templates").remove([p])
+                # storage_path 含 bucket 前缀，调用 API 前去掉
+                neolyst_client.storage.from_("templates").remove([p.removeprefix("templates/")])
             except Exception:
                 pass
     neolyst_client.table("report_template").delete().eq("id", TEMPLATE_ID).execute()
@@ -56,8 +57,8 @@ class TestUpsertTemplate:
         resp = neolyst_client.table("report_template").select("*").eq("id", TEMPLATE_ID).execute()
         assert resp.data
         record = resp.data[0]
-        assert record["template_file_path"] == f"{TEST_REPORT_TYPE}/{TEST_LANGUAGE}/template.docx"
-        assert record["schema_file_path"] == f"{TEST_REPORT_TYPE}/{TEST_LANGUAGE}/schema.yaml"
+        assert record["template_file_path"] == f"templates/{TEST_REPORT_TYPE}/{TEST_LANGUAGE}/template.docx"
+        assert record["schema_file_path"] == f"templates/{TEST_REPORT_TYPE}/{TEST_LANGUAGE}/schema.yaml"
 
     def test_upsert_is_idempotent(self, neolyst_client, uploaded_template, tmp_template_files):
         from skills.neolyst.scripts import template
@@ -81,7 +82,7 @@ class TestReuseTemplate:
             template.reuse_template(neolyst_client, reuse_type, TEST_LANGUAGE, TEST_REPORT_TYPE)
             resp = neolyst_client.table("report_template").select("*").eq("id", reuse_id).execute()
             assert resp.data
-            assert resp.data[0]["template_file_path"] == f"{TEST_REPORT_TYPE}/{TEST_LANGUAGE}/template.docx"
+            assert resp.data[0]["template_file_path"] == f"templates/{TEST_REPORT_TYPE}/{TEST_LANGUAGE}/template.docx"
         finally:
             neolyst_client.table("report_template").delete().eq("id", reuse_id).execute()
 
