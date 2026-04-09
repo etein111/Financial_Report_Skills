@@ -1,0 +1,130 @@
+"""
+test_coverage.py — coverage 接口集成测试。
+"""
+import uuid
+import pytest
+
+_SUFFIX = uuid.uuid4().hex[:8]
+TEST_TICKER = f"TEST{_SUFFIX[:4].upper()}"
+TEST_ISIN = f"US{_SUFFIX.upper()[:10]}"
+TEST_ANALYST = "yangxue@opendelp.com"
+
+
+@pytest.fixture(scope="module")
+def test_sector_id(neolyst_client):
+    """获取第一个可用的 sector id（测试用）。"""
+    resp = neolyst_client.table("sector").select("id").eq("is_active", True).limit(1).execute()
+    assert resp.data, "需要至少一条 sector 记录，请先运行 supabase db reset"
+    return resp.data[0]["id"]
+
+
+@pytest.fixture(scope="module")
+def created_coverage_id(neolyst_client, test_sector_id):
+    """
+    创建测试用 coverage，模块结束后删除（coverage_analyst 随 coverage 级联删除）。
+    """
+    from skills.neolyst.scripts import coverage as cov
+    coverage_id = cov.create_coverage(
+        neolyst_client,
+        ticker=TEST_TICKER,
+        english_name="Test Coverage Company",
+        sector_id=test_sector_id,
+        isin=TEST_ISIN,
+        country_of_domicile="China",
+        analysts=[{"analyst_email": TEST_ANALYST, "author_order": 1}],
+    )
+    yield coverage_id
+    neolyst_client.table("coverage").delete().eq("id", coverage_id).execute()
+
+
+class TestCreateCoverage:
+    def test_create_success_returns_uuid(self, neolyst_client, created_coverage_id):
+        """create_coverage 返回非空的 coverage_id uuid 字符串。"""
+        assert created_coverage_id
+        uuid.UUID(created_coverage_id)  # 格式校验：合法 UUID 不抛异常
+
+    def test_create_coverage_record_exists(self, neolyst_client, created_coverage_id):
+        """coverage 表中有对应记录，核心字段正确。"""
+        resp = (
+            neolyst_client.table("coverage")
+            .select("*")
+            .eq("id", created_coverage_id)
+            .execute()
+        )
+        assert resp.data
+        record = resp.data[0]
+        assert record["english_name"] == "Test Coverage Company"
+        assert record["country_of_domicile"] == "China"
+        assert record["isin"] == TEST_ISIN.upper()
+
+    def test_create_coverage_analyst_record_exists(self, neolyst_client, created_coverage_id):
+        """coverage_analyst 表中有对应分析师记录，author_order=1。"""
+        resp = (
+            neolyst_client.table("coverage_analyst")
+            .select("*")
+            .eq("coverage_id", created_coverage_id)
+            .execute()
+        )
+        assert len(resp.data) == 1
+        assert resp.data[0]["analyst_email"] == TEST_ANALYST
+        assert resp.data[0]["author_order"] == 1
+
+    def test_create_duplicate_ticker_raises(self, neolyst_client, test_sector_id, created_coverage_id):
+        """ticker 重复时抛出含"已存在"的 ValueError。"""
+        from skills.neolyst.scripts import coverage as cov
+        with pytest.raises(ValueError, match="已存在"):
+            cov.create_coverage(
+                neolyst_client,
+                ticker=TEST_TICKER,
+                english_name="Duplicate Ticker Company",
+                sector_id=test_sector_id,
+                isin=f"US{uuid.uuid4().hex[:10].upper()}",
+                country_of_domicile="China",
+                analysts=[{"analyst_email": TEST_ANALYST, "author_order": 1}],
+            )
+
+    def test_create_duplicate_isin_raises(self, neolyst_client, test_sector_id, created_coverage_id):
+        """ISIN 重复时抛出含"已存在"的 ValueError。"""
+        from skills.neolyst.scripts import coverage as cov
+        with pytest.raises(ValueError, match="已存在"):
+            cov.create_coverage(
+                neolyst_client,
+                ticker=f"DUP{uuid.uuid4().hex[:4].upper()}",
+                english_name="Duplicate ISIN Company",
+                sector_id=test_sector_id,
+                isin=TEST_ISIN,
+                country_of_domicile="China",
+                analysts=[{"analyst_email": TEST_ANALYST, "author_order": 1}],
+            )
+
+
+class TestResolveCoverage:
+    def test_resolve_found(self, neolyst_client, created_coverage_id):
+        """ticker + 分析师匹配时返回正确的 coverage_id。"""
+        from skills.neolyst.scripts import coverage as cov
+        result = cov.resolve_coverage(neolyst_client, TEST_TICKER, TEST_ANALYST)
+        assert result == created_coverage_id
+
+    def test_resolve_case_insensitive_ticker(self, neolyst_client, created_coverage_id):
+        """ticker 大小写不敏感，小写 ticker 同样命中。"""
+        from skills.neolyst.scripts import coverage as cov
+        result = cov.resolve_coverage(neolyst_client, TEST_TICKER.lower(), TEST_ANALYST)
+        assert result == created_coverage_id
+
+    def test_resolve_case_insensitive_email(self, neolyst_client, created_coverage_id):
+        """analyst_email 大小写不敏感，大写 email 同样命中。"""
+        from skills.neolyst.scripts import coverage as cov
+        result = cov.resolve_coverage(neolyst_client, TEST_TICKER, TEST_ANALYST.upper())
+        assert result == created_coverage_id
+
+    def test_resolve_not_found_ticker_raises(self, neolyst_client):
+        """ticker 不存在时抛出含"未找到"的 ValueError。"""
+        from skills.neolyst.scripts import coverage as cov
+        with pytest.raises(ValueError, match="未找到"):
+            cov.resolve_coverage(neolyst_client, "GHOST_TICKER_99", TEST_ANALYST)
+
+    def test_resolve_analyst_not_in_coverage_raises(self, neolyst_client, created_coverage_id):
+        """ticker 存在但分析师不在 coverage_analyst 列表中时抛出含"未找到"的 ValueError。"""
+        from skills.neolyst.scripts import coverage as cov
+        with pytest.raises(ValueError, match="未找到"):
+            cov.resolve_coverage(neolyst_client, TEST_TICKER, "nobody@example.com")
