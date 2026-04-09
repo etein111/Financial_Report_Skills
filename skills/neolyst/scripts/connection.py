@@ -141,7 +141,13 @@ def get_client(
             "Pass email+password, or ensure user.json has valid credentials."
         )
 
-    resp = client.auth.sign_in_with_password({"email": _email, "password": _password})
+    try:
+        resp = client.auth.sign_in_with_password({"email": _email, "password": _password})
+    except Exception as e:
+        raise ValueError(
+            f"Authentication failed for {_email!r}: {e}. "
+            "Please call get_client(email=..., password=...) with valid credentials."
+        ) from e
     session = resp.session
     _save_neolyst(neolyst_dir, {
         "email": _email,

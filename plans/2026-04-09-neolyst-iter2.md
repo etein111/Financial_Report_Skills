@@ -602,7 +602,12 @@ git commit -m "docs: mark iter2 complete, update SKILL.md template interfaces"
 - 新增 `supabase/migrations/20260409000550_045_analyst_functions.sql`：添加 `resolve_analyst_by_email(p_email text)` RPC，在服务端做 lowercase/trim、not found 和 is_active=false 的校验，失败时 raise exception
 - 重写 `analyst.py`：只调用 RPC，不再在 Python 侧做任何业务判断
 
-**补丁 2：Storage RLS 策略**
+**补丁 3：connection.py 密码登录失败未捕获**
+
+`get_client` 在 refresh 失败后用存储的 email+password 重新登录时，若密码本身无效（如本地测试账号连远程服务器），`sign_in_with_password` 抛出的原始 401 直接传播，调用方看不到明确提示。
+
+- 修复：在 `sign_in_with_password` 调用处加 try/except，失败时抛出清晰 `ValueError`，提示调用方向用户索取新凭据
+- 更新 SKILL.md 认证说明：说明 token 有效期约 1 小时，以及所有 fallback 失败后必须向用户索取凭据
 
 bucket 创建后无 RLS 策略，导致 authenticated 用户无法上传模板文件。
 

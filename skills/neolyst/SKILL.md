@@ -65,8 +65,10 @@ client = connection.get_client(email="user@neolyst.com", password="your_password
 `get_client` 的完整认证顺序：
 1. 读取 `user.json`，用 `access_token` 恢复 session
 2. token 过期时自动用 `refresh_token` 刷新，回写文件
-3. refresh 失败时用 `email + password` 重新登录，回写文件
-4. 无可用 session 也无凭据 → 抛出 `ValueError`，需要执行首次登录流程
+3. refresh 失败时用文件里存的 `email + password` 重新登录，回写文件
+4. 以上均失败（凭据无效、账号不存在等）→ 抛出 `ValueError`，**此时必须向用户索取邮箱和密码**，再调用 `get_client(email=..., password=...)`
+
+**access token 有效期约 1 小时**，refresh token 随之轮换。长时间不用后需要重新登录属于正常现象。
 
 ---
 
@@ -133,6 +135,7 @@ template.reuse_template(
     same_as_report_type="macro",
 )
 # 返回：None
+# 注意：必须先通过 upsert_template 发布源模板，才能调用 reuse_template
 # 失败场景（直接抛出 ValueError）：源模板不存在、language 不一致、report_type 复用自己
 ```
 
