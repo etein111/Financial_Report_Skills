@@ -643,6 +643,72 @@ def validate_template(template_path: str) -> Dict[str, Any]:
         return {"valid": False, "error": str(e)}
 
 
+def enrich_company_names_with_yfinance(elements: Dict[str, Any]) -> Dict[str, Any]:
+    """使用 yfinance 补全公司中英文名称。
+
+    逻辑：
+    - 如果 company_en 已存在且不为空，跳过
+    - 如果 company_en 不存在或为空，但 ticker 存在，用 yfinance 查询补充
+    - 如果 company_cn 已存在且不为空，跳过
+    - 如果 company_cn 不存在或为空，但 ticker 存在，尝试用 yfinance 查询补充
+
+    Args:
+        elements: 原始要素字典
+
+    Returns:
+        补全后的要素字典
+    """
+    import yfinance as yf
+
+    # 复制一份，避免修改原字典
+    elements = elements.copy()
+
+    ticker = elements.get('ticker', '').strip() if elements.get('ticker') else ''
+
+    # 如果没有 ticker，无法查询
+    if not ticker:
+        return elements
+
+    # 判断是否需要查询英文名（company_en 不存在或为空）
+    need_english = not elements.get('company_en') or not elements.get('company_en').strip()
+
+    # 判断是否需要查询中文名（company_cn 不存在或为空）
+    need_chinese = not elements.get('company_cn') or not elements.get('company_cn').strip()
+
+    # 如果都不需要查询，直接返回
+    if not need_english and not need_chinese:
+        return elements
+
+    try:
+        stock = yf.Ticker(ticker)
+        info = stock.info
+
+        # 获取英文名（优先 longName，其次 shortName）
+        if need_english:
+            english_name = info.get('longName') or info.get('shortName')
+            if english_name:
+                elements['company_en'] = english_name
+                print(f"  [yfinance] 通过 {ticker} 查询到英文名: {english_name}")
+
+        # 中文名：yfinance 通常不直接提供中文名，但部分港股/A股有中文名
+        # 可以尝试从 quoteType 或其他字段获取
+        if need_chinese:
+            # 部分股票在 quoteType 中有中文名称
+            chinese_name = info.get('quoteType', {}).get('longName') if isinstance(info.get('quoteType'), dict) else None
+            # 或者尝试从 businessSummary 中提取（但通常没有）
+            if not chinese_name:
+                # 尝试直接获取 longName 作为中文名（极少情况）
+                pass
+            if chinese_name:
+                elements['company_cn'] = chinese_name
+                print(f"  [yfinance] 通过 {ticker} 查询到中文名: {chinese_name}")
+
+    except Exception as e:
+        print(f"  [yfinance] 通过 {ticker} 查询公司信息失败: {e}")
+
+    return elements
+
+
 def prepare_context_with_analysts(elements: Dict[str, Any]) -> Dict[str, Any]:
     """准备渲染上下文，展平分析师字段。
 
@@ -2286,6 +2352,9 @@ def render_report(
 
     try:
         from docxcompose.composer import Composer
+
+        # 0. 补全公司中英文名称（如有需要）
+        elements = enrich_company_names_with_yfinance(elements)
 
         # 1. 准备渲染上下文
         context = prepare_context_with_analysts(elements)
