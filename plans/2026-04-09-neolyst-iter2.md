@@ -614,3 +614,12 @@ bucket 创建后无 RLS 策略，导致 authenticated 用户无法上传模板�
 - 新增 `supabase/migrations/20260409000610_055_storage_policies.sql`：
   - `templates` bucket：所有 authenticated 用户可读，仅 admin 可写
   - `reports` bucket：admin 可读写所有；analyst 可读写自己 draft/submitted 状态的报告文件；sa 可读 submitted/published/rejected 的报告文件
+
+**补丁 4：neolyst.yaml 默认 URL 错误 + 测试多余环境变量**
+
+`neolyst.yaml` 的 `supabase_url` 一直指向远程服务器 `http://47.57.213.88:80`，测试通过 `NEOLYST_URL` 环境变量绕过，导致 Codex 等不设该变量的调用方连接到错误服务器。
+
+- `neolyst.yaml`：`supabase_url` 改为 `http://127.0.0.1:54321`
+- `SKILL.md`：示例中的 URL 同步更新
+- `conftest.py`：删除 `os.environ.setdefault("NEOLYST_URL", ...)` 覆盖行，测试直接读 yaml 配置
+- `docs/skills_neolyst_design.md`：删除远程服务器地址和 admin 账号记录，环境说明仅保留本地
