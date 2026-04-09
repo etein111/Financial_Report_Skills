@@ -108,7 +108,8 @@
       "Bash(cat ~/.claude/plugins/marketplaces/superpowers-marketplace/*.json)",
       "Bash(echo \"\")",
       "Bash(echo \"# Claude Code - skip permission prompts\")",
-      "Bash(echo \"alias cc='claude --dangerously-skip-permissions'\")"
+      "Bash(echo \"alias cc='claude --dangerously-skip-permissions'\")",
+      "Bash(supabase migration:*)"
     ]
   }
 }
