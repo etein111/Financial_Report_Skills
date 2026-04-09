@@ -87,7 +87,7 @@ record = analyst.resolve_analyst_by_email(client, "alice@neolyst.com")
 ```
 
 - 邮箱大小写不敏感，内部统一 lowercase
-- `is_active=False` 的分析师会抛出 `ValueError: Analyst is inactive`
+- `is_active=False` 的分析师会抛出 `ValueError: 分析师已停用`
 - 业务主键是 `email`，无 `id` 字段
 
 ---
@@ -141,7 +141,7 @@ template.reuse_template(
 
 ---
 
-### 5. resolve_coverage 🔲 待实现
+### 5. resolve_coverage ✅ 已实现
 
 按 `ticker` 查询 coverage，并验证 `first_analyst_email` 在该 coverage 的分析师列表中。
 
@@ -156,7 +156,7 @@ coverage_id = coverage.resolve_coverage(client, ticker="VRT US", first_analyst_e
 
 ---
 
-### 6. create_coverage 🔲 待实现
+### 6. create_coverage ✅ 已实现
 
 创建新的 coverage 记录及初始 `coverage_analyst` 关系。
 
@@ -256,9 +256,10 @@ result = submit_report.submit_report(client, report_id="uuid", version_no=1)
 | 场景 | 异常类型 |
 |------|---------|
 | 记录不存在 | `ValueError`，含缺失的标识符 |
-| 分析师已停用 | `ValueError: Analyst is inactive` |
+| 分析师已停用 | `ValueError: 分析师已停用` |
 | 模板数据异常（重复记录） | `ValueError`，说明重复情况 |
-| Coverage 命中多条 | `ValueError: ambiguous coverage` |
+| Coverage 未命中 | `ValueError`，含"未找到匹配的 Coverage"，提示创建 |
+| Coverage ticker/isin 重复 | `ValueError`，含"Coverage 已存在" |
 | 提交前校验失败 | `ValueError`，列出所有失败字段 |
 | 文件不存在 | `FileNotFoundError` |
 | token 过期 | 自动处理（refresh → re-login），对调用方透明 |
