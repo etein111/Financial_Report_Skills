@@ -65,7 +65,7 @@ class TestResolveAnalystByEmail:
     def test_not_found_raises_value_error(self, neolyst_client):
         from skills.neolyst.scripts import analyst
 
-        with pytest.raises(ValueError, match="not found"):
+        with pytest.raises(ValueError, match="找不到分析师"):
             analyst.resolve_analyst_by_email(
                 neolyst_client, f"nonexistent.{_SUFFIX}@neolyst-test.com"
             )
