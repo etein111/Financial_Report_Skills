@@ -623,3 +623,14 @@ bucket 创建后无 RLS 策略，导致 authenticated 用户无法上传模板�
 - `SKILL.md`：示例中的 URL 同步更新
 - `conftest.py`：删除 `os.environ.setdefault("NEOLYST_URL", ...)` 覆盖行，测试直接读 yaml 配置
 - `docs/skills_neolyst_design.md`：删除远程服务器地址和 admin 账号记录，环境说明仅保留本地
+
+**补丁 5：template_file_path 缺少 bucket 前缀**
+
+`report_template.template_file_path` 存储的路径不含 bucket 名称（如 `company/zh/template.docx`），导致路径不自包含，其他客户端无法直接使用。
+
+- 新增迁移 `20260409000620_056_template_path_prefix.sql`：更新 `get_template_storage_paths` 和 `upsert_template_record` 两个 RPC，路径加 `templates/` 前缀；UPDATE 存量记录补前缀
+- `seed.sql`：所有 16 条占位记录填入完整路径（`templates/{report_type}/{language}/template.docx` + `schema.yaml`）
+- `storage.py`：重构为通用 `upload(client, storage_path, local_path)` 和 `download(client, storage_path, local_path)`，bucket 从路径首段 `_split()` 自动解析，删除四个语义化包装函数
+- `template.py`：调用改为 `storage.upload` / `storage.download`
+- `test_template.py`：路径断言和 teardown 的 storage remove 同步更新
+- **路径规范确立**：数据库中所有 Storage 路径必须含 bucket 前缀，report 相关字段（Iter 4）同样适用

@@ -316,12 +316,12 @@ neolyst/
 
 `connection.py` 负责连接相关能力，包括读取和写入 `/.neolyst`、创建 Supabase client、恢复 session、失效后重新登录，以及对外提供已认证的访问连接。
 
-`storage.py` 负责模板文件和报告文件上传/下载。对外暴露语义化函数（`upload_template`、`download_template`、`upload_report`、`download_report`），bucket 名称是实现细节，不暴露给调用方。路径由调用方传入（来自 Supabase RPC），`storage.py` 不拼路径字符串。
+`storage.py` 负责模板文件和报告文件上传/下载。对外暴露两个通用函数 `upload(client, storage_path, local_path)` 和 `download(client, storage_path, local_path)`，bucket 从路径首段自动解析，不需要调用方指定。路径由调用方传入（来自 Supabase RPC），`storage.py` 不拼路径字符串。
 
-`storage.py` 内部固定维护以下 bucket 与路径规则：
+**路径规范：** 数据库中存储的所有 Storage 路径必须包含 bucket 前缀，格式为 `{bucket}/{path}`：
 
-- 模板 bucket（`templates`）：路径固定为 `{report_type}/{language}/template.docx` 和 `{report_type}/{language}/schema.yaml`（规则定义在 Supabase 函数 `get_template_storage_paths` 和 `upsert_template_record` 中）
-- 报告 bucket（`reports`）：路径固定为 `{report_id}/`（规则定义在 Supabase 函数中，Iter 4 实现）
+- 模板文件：`templates/{report_type}/{language}/template.docx`、`templates/{report_type}/{language}/schema.yaml`（规则定义在 Supabase 函数 `get_template_storage_paths` 和 `upsert_template_record` 中）
+- 报告文件：`reports/{path}`（规则定义在 Supabase 函数中，Iter 4 实现）
 
 `analyst.py` 负责 `resolve_analyst_by_email`。凡是 analyst 身份解析相关的查询都放在该模块内。
 
