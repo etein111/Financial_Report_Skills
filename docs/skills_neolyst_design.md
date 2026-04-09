@@ -77,8 +77,12 @@
 
 - 本 skill 使用 Python `supabase-py` 与 Neolyst Supabase 交互，并通过 `uv` 管理依赖与执行环境。
 - 数据库结构真相以本地 Supabase 实例和 `supabase/migrations/*.sql` 为准；本设计文档需要与它们保持同步。
-- Storage 使用两个独立 bucket：模板 bucket 与报告 bucket。
-- 模板 bucket 仅承载模板资产，路径以 `template_file_path` / `schema_file_path` 为准；报告 bucket 仅承载报告版本资产，bucket 内路径规则为 `{report_id}/...`。
+- Storage 使用两个独立 bucket：
+  - 模板 bucket：`templates`，存放模板资产
+  - 报告 bucket：`reports`，存放报告版本资产
+- 模板 bucket 路径规则：`{report_type}/{language}/template.docx` 和 `{report_type}/{language}/schema.yaml`。路径由 `storage.py` 按此规则生成，`template_file_path` / `schema_file_path` 字段存储的即是该路径。
+- 报告 bucket 路径规则：`{report_id}/`（具体文件名由 `storage.py` 统一维护）。
+- `resolve_template` 将模板文件下载到当前工作目录的 `templates/{report_type}/{language}/` 下，文件名与 bucket 中一致（`template.docx`、`schema.yaml`）。
 
 ### 2.7 Supabase 连接配置
 
@@ -313,8 +317,8 @@ neolyst/
 
 `storage.py` 内部固定维护以下 bucket 与路径规则：
 
-- 模板 bucket：模板对象路径以 `template_file_path` / `schema_file_path` 为准，不由 `report_type` 公式推导
-- 报告 bucket：存放 `{report_id}/...`
+- 模板 bucket（`templates`）：路径固定为 `{report_type}/{language}/template.docx` 和 `{report_type}/{language}/schema.yaml`
+- 报告 bucket（`reports`）：路径固定为 `{report_id}/`（文件名由 `storage.py` 统一命名）
 
 `analyst.py` 负责 `resolve_analyst_by_email`。凡是 analyst 身份解析相关的查询都放在该模块内。
 
