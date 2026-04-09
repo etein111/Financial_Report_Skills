@@ -58,10 +58,11 @@
 ### 2.4 身份与会话策略
 
 - Neolyst Supabase 的登录身份由 `neolyst` 管理和复用，`save_draft_report`、`validators` 与 `submit_report` 的相关读写都使用该身份。
-- 使用 `email + password` 登录，账号、密码和登录态保存在脚本执行时 `cwd` 根目录的 `/.neolyst`；只支持一个登录身份，会话失效时重新登录并更新 `/.neolyst`。
-- `/.neolyst` 为 JSON 文件，格式如下：`{ "email": "...", "password": "...", "access_token": "...", "refresh_token": "...", "expires_at": 1712345678 }`。`connection.py` 启动时先用 `access_token` + `refresh_token` 恢复 session，若已过期则用 `email + password` 重新登录并回写该文件。
+- 使用 `email + password` 登录，账号、密码和登录态保存在 skill 根目录（`skills/neolyst/`）的 `.neolyst` 文件；只支持一个登录身份，会话失效时重新登录并更新该文件。该文件不提交到版本库。
+- `.neolyst` 为 JSON 文件，格式如下：`{ “email”: “...”, “password”: “...”, “access_token”: “...”, “refresh_token”: “...”, “expires_at”: 1712345678 }`。`connection.py` 启动时先用 `access_token` + `refresh_token` 恢复 session，若已过期则用 `email + password` 重新登录并回写该文件。
+- `.neolyst` 不存在时，调用方（Claude）需向用户索取邮箱和密码，使用 `get_client(email=..., password=...)` 完成首次登录后自动写入，后续不再需要手动输入。
 - 当前库的 RLS 通过 `current_app_role()` 读取 `auth.jwt().app_metadata.role`，按 `admin`、`sa`、`analyst` 做权限控制；skill 设计必须与该角色模型兼容。
-- 报告所有者与执行审计均以当前登录身份为准。`owner_user_id`、`report_version.created_by`、`report_status_log.action_by` 等字段遵循“谁保存/提交，系统就记谁”；`resolve_analyst_by_email` 只用于确定报告分析师身份，不用于决定执行审计用户。
+- 报告所有者与执行审计均以当前登录身份为准。`owner_user_id`、`report_version.created_by`、`report_status_log.action_by` 等字段遵循”谁保存/提交，系统就记谁”；`resolve_analyst_by_email` 只用于确定报告分析师身份，不用于决定执行审计用户。
 - 本 skill 不做代理执行，因为这会破坏 Neolyst 的安全性，也不符合实际业务关系。
 
 ### 2.5 业务逻辑落点
@@ -79,9 +80,11 @@
 - Storage 使用两个独立 bucket：模板 bucket 与报告 bucket。
 - 模板 bucket 仅承载模板资产，路径以 `template_file_path` / `schema_file_path` 为准；报告 bucket 仅承载报告版本资产，bucket 内路径规则为 `{report_id}/...`。
 
-### 2.7 Supabase URL
+### 2.7 Supabase 连接配置
 
-- Supabase URL 由 skill 负责确定；skill 内置默认 Supabase URL，`/.neolyst.server.url` 可作为覆盖项。
+- Supabase URL 和 anon key 由 skill 负责确定，写在 `skills/neolyst/neolyst.yaml` 中，随 skill 一起提交到版本库。anon key 是公开的客户端 key，不是密钥，可以安全提交。
+- `neolyst.yaml` 格式：`supabase_url: "..."` 和 `anon_key: "..."`。
+- 测试时可通过 `NEOLYST_URL` 和 `NEOLYST_ANON_KEY` 环境变量覆盖 yaml 中的值（例如指向本地 Supabase 实例）。
 
 ### 2.8 提交流程
 
@@ -289,6 +292,8 @@ draft 版本需已持久化的核心内容：
 ```text
 neolyst/
   SKILL.md
+  neolyst.yaml       ← Supabase 连接配置（URL + anon_key），随 skill 发布
+  .neolyst           ← 本地凭据（email/password/token），不提交
   scripts/
     connection.py
     storage.py
@@ -329,9 +334,12 @@ neolyst/
 
 ### 4.1 联调测试环境
 
-- URL：`http://47.57.213.88:80`
-- Admin username：`admin@neolyst.com`
-- Admin password：`Admin123`
+- 远程服务器 URL：`http://47.57.213.88:80`
+- 远程 Admin 账号：`admin@neolyst.com` / `Admin123`（仅远程服务器）
+- 本地 Supabase URL：`http://127.0.0.1:54321`（通过 `NEOLYST_URL` 环境变量覆盖）
+- 本地测试账号：`yangxue@opendelp.com` / `Admin123`（seed.sql 内置，`admin` 角色）
+
+> 注意：`admin@neolyst.com` 只存在于远程服务器，本地 Supabase 不含该账号，本地集成测试使用 `yangxue@opendelp.com`。
 
 ## 5. report_maker 对接 neolyst 的改造要求
 

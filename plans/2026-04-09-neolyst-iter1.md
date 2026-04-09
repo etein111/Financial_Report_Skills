@@ -287,8 +287,25 @@ git commit -m "docs: fix analyst interface description in SKILL.md"
 
 ## 自检
 
-- [ ] `analyst.py` 实现：normalize email，查询，检查 is_active，返回 dict，ValueError on miss/inactive
-- [ ] `conftest.py`：session 级 `neolyst_client` fixture，读取 env vars，写 `.neolyst.server.url`
-- [ ] `test_analyst.py`：4 个集成测试（found / case-insensitive / not-found / inactive），module 级 setup/teardown
-- [ ] `SKILL.md`：analyst 接口返回类型已修正
-- [ ] 全部现有测试（test_connection.py）仍然通过
+- [x] `analyst.py` 实现：normalize email，查询，检查 is_active，返回 dict，ValueError on miss/inactive
+- [x] `conftest.py`：session 级 `neolyst_client` fixture，读取 env vars，写 `.neolyst.server.url`
+- [x] `test_analyst.py`：4 个集成测试（found / case-insensitive / not-found / inactive），module 级 setup/teardown
+- [x] `SKILL.md`：analyst 接口返回类型已修正
+- [x] 全部现有测试（test_connection.py）仍然通过
+
+---
+
+## Post-iter1 补丁（同次 session 完成）
+
+iter1 计划执行完毕后，根据用户反馈对认证配置做了重构：
+
+**变更内容：**
+- 新增 `skills/neolyst/neolyst.yaml`：将 Supabase URL 和 anon key 从硬编码迁移到此文件，随 skill 发布。
+- 重构 `connection.py`：
+  - URL / anon key 从 `neolyst.yaml` 读取（通过 `NEOLYST_URL` / `NEOLYST_ANON_KEY` 环境变量覆盖，用于测试）
+  - `.neolyst` 凭据文件默认存放在 skill 根目录（`skills/neolyst/`），不再依赖调用方的 cwd
+  - `set_session` 加了 try/except，防止跨服务器 token 导致崩溃
+- 更新 `conftest.py`：改用 `os.environ.setdefault("NEOLYST_URL", ...)` 替代写 `.neolyst.server.url` 文件。
+- 更新 `SKILL.md`：认证配置说明完整化，补充首次使用流程（让 Claude 向用户询问凭据）。
+- 更新 `.gitignore`：加入 `.neolyst` 和 `skills/neolyst/.neolyst`。
+- 更新设计文档 `docs/skills_neolyst_design.md`：2.4、2.7、3.6、4.1 节同步对齐。

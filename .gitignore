@@ -222,3 +222,7 @@ __marimo__/
 .supabase/
 supabase/.temp/
 skills/neolyst/tests/output/
+
+# Neolyst 本地凭据（包含 token，不提交）
+.neolyst
+skills/neolyst/.neolyst
