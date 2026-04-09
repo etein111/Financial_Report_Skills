@@ -115,23 +115,24 @@ def get_client(
         if not _is_expired(data.get("expires_at", 0)):
             try:
                 client.auth.set_session(data["access_token"], data["refresh_token"])
+                client.auth.get_user()  # 验证 token 对当前服务器是否有效
                 return client
             except Exception:
                 pass  # token 对当前服务器无效，继续尝试 refresh/re-login
-        else:
-            try:
-                resp = client.auth.refresh_session(data["refresh_token"])
-                session = resp.session
-                _save_neolyst(neolyst_dir, {
-                    "email": data.get("email", ""),
-                    "password": data.get("password", ""),
-                    "access_token": session.access_token,
-                    "refresh_token": session.refresh_token,
-                    "expires_at": session.expires_at,
-                })
-                return client
-            except Exception:
-                pass  # refresh 失败，继续尝试 password 登录
+        # token 过期或无效，尝试 refresh
+        try:
+            resp = client.auth.refresh_session(data["refresh_token"])
+            session = resp.session
+            _save_neolyst(neolyst_dir, {
+                "email": data.get("email", ""),
+                "password": data.get("password", ""),
+                "access_token": session.access_token,
+                "refresh_token": session.refresh_token,
+                "expires_at": session.expires_at,
+            })
+            return client
+        except Exception:
+            pass  # refresh 失败，继续尝试 password 登录
 
     _email = email or (data.get("email") if data else None)
     _password = password or (data.get("password") if data else None)
