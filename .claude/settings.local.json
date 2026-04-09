@@ -109,7 +109,11 @@
       "Bash(echo \"\")",
       "Bash(echo \"# Claude Code - skip permission prompts\")",
       "Bash(echo \"alias cc='claude --dangerously-skip-permissions'\")",
-      "Bash(supabase migration:*)"
+      "Bash(supabase migration:*)",
+      "Bash(grep -n \"create table.*analyst\\\\|analyst\" /mnt/c/_code/neoskills/supabase/migrations/*.sql)",
+      "Bash(npx supabase:*)",
+      "Bash(python3:*)",
+      "Bash(poetry run:*)"
     ]
   }
 }
