@@ -75,6 +75,19 @@ AI 编程助手的统一指导文件。Claude Code 和 Codex 共享此配置。
 - 只写看了就能上手的内容，深度细节交给资料链接
 - 一眼能看懂，太长没人看
 
+## 迭代执行工作流
+
+每次开始一个新迭代时，**必须按以下顺序执行**，每步都通过 superpowers skill 完成：
+
+1. 读取 `plans/2026-04-07-neolyst-skill-roadmap.md` 了解当前进度
+2. 读取上一迭代的计划文件（`plans/` 目录）
+3. 向用户提出所有不确定的问题，等待确认后再动笔
+4. **调用 `superpowers:writing-plans` skill 写本迭代计划**，保存到 `plans/` 目录
+5. **调用 `superpowers:subagent-driven-development`（推荐）或 `superpowers:executing-plans` skill 执行计划**
+6. 完成后更新 roadmap 状态和相关文档
+
+> **重要**：计划撰写和计划执行都必须通过 superpowers skill 完成，不允许自行用 Plan Mode 写计划或自行逐步实现。
+
 ## 临时文件位置规则
 
 - 不要在项目根目录下创建任何临时目录或文件。
