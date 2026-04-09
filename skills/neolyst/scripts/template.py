@@ -39,10 +39,10 @@ def upsert_template(
     tmpl_storage_path = paths["template_file_path"]
     schema_storage_path = paths["schema_file_path"]
 
-    storage.upload_template(client, tmpl_storage_path, template_local_path)
+    storage.upload(client, tmpl_storage_path, template_local_path)
 
     if schema_local_path:
-        storage.upload_template(client, schema_storage_path, schema_local_path)
+        storage.upload(client, schema_storage_path, schema_local_path)
 
     client.rpc("upsert_template_record", {
         "p_report_type": report_type,
@@ -102,7 +102,7 @@ def resolve_template(
 
     local_dir = Path(dest_dir) / "templates" / report_type / language
 
-    storage.download_template(
+    storage.download(
         client,
         record["template_file_path"],
         str(local_dir / "template.docx"),
@@ -112,7 +112,7 @@ def resolve_template(
     if record.get("schema_file_path"):
         try:
             schema_local = local_dir / "schema.yaml"
-            storage.download_template(
+            storage.download(
                 client,
                 record["schema_file_path"],
                 str(schema_local),
