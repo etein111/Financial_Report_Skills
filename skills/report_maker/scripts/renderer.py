@@ -1115,13 +1115,11 @@ def _apply_margins_to_sectpr(docx_path: str, margins: Dict[str, str], target_sec
 
 
 def insert_body_at_marker_compose(doc_path: str, body_path: str, marker: str, output_path: str) -> bool:
-    """在 marker 位置替换插入 body：删除 marker 所在页，插入 body.docx。
+    """使用 docxcompose 三段式合并：在 marker 位置插入 body。
 
-    新逻辑：
-    1. 找到 marker 位置
-    2. 删除 marker 所在页的内容（到 sectPr 之前）
-    3. 在删除位置直接插入 body.docx 的全部内容
-    4. body.docx 的 sectPr 会自动生效，页眉页脚和图片不会出现问题
+    将原文档拆分为 marker 之前和之后两部分，
+    然后用 docxcompose 合并：part1 + body + sectPr + part3。
+    这样可以正确处理所有图片和资源引用。
 
     Args:
         doc_path: 渲染后的模板路径
@@ -1133,107 +1131,157 @@ def insert_body_at_marker_compose(doc_path: str, body_path: str, marker: str, ou
         是否成功插入
     """
     try:
-        import zipfile
+        from docxcompose.composer import Composer
         import shutil
         from copy import deepcopy
         from lxml import etree
 
         W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
 
-        # 1. 读取模板文档，找到 marker 位置和 sectPr
+        # 0. 保存 body.docx 的页边距和 header/footer 引用信息（合并后需要恢复）
+        body_margins = _get_document_sectpr_margins(body_path)
+        if body_margins:
+            print(f"  body.docx 页边距: top={body_margins.get('top')}, bottom={body_margins.get('bottom')}")
+
+        body_header_footer_refs = _get_document_header_footer_refs(body_path)
+        if body_header_footer_refs:
+            print(f"  body.docx header/footer 引用: {body_header_footer_refs}")
+
+        # 1. 找到 marker 位置和其中的 sectPr
         doc = Document(doc_path)
         body_elem = doc.element.body
         all_elements = list(body_elem)
 
         marker_idx = None
-        marker_sectPr = None  # marker 所在页的 sectPr（分节符）
+        marker_sectPr = None  # 保留 marker 段落中的 sectPr（分节符）
         for i, elem in enumerate(all_elements):
             text = ''.join(t.text or '' for t in elem.iter() if t.text)
             if marker in text:
                 marker_idx = i
-                # 检查 marker 段落中是否有 sectPr
+                # 检查 marker 段落中是否有 sectPr（分节符）
                 if elem.tag.endswith('}p'):
                     pPr = elem.find(f'{W}pPr')
                     if pPr is not None:
                         sectPr = pPr.find(f'{W}sectPr')
                         if sectPr is not None:
+                            # 提取 sectPr（深拷贝避免被删除）
                             marker_sectPr = deepcopy(sectPr)
-                            print(f"  找到 marker 的 sectPr 分节符")
+                            print(f"  保留 marker 段落中的 sectPr 分节符")
                 break
 
         if marker_idx is None:
-            print(f"  未找到 marker: {marker}")
             return False
 
-        # 2. 找到 marker 所在页的结束位置（下一个 sectPr 或文档末尾）
-        # sectPr 有两种：
-        #   - 段落内的 sectPr (pPr/sectPr)：控制该段落之前的页面
-        #   - body 末尾的 sectPr (body/sectPr)：控制整个文档最后一页
-        page_end_idx = len(all_elements)  # 默认到文档末尾
-        for i in range(marker_idx + 1, len(all_elements)):
-            elem = all_elements[i]
-            if elem.tag.endswith('}p'):
-                pPr = elem.find(f'{W}pPr')
-                if pPr is not None:
-                    sectPr = pPr.find(f'{W}sectPr')
-                    if sectPr is not None:
-                        # 找到了段落内的 sectPr，说明这是 marker 所在页的结束
-                        page_end_idx = i
-                        break
-            elif elem.tag.endswith('}sectPr'):
-                # body 末尾的 sectPr
-                page_end_idx = i
-                break
+        # 2. 创建 part1（marker 之前的内容）
+        part1_path = Path(output_path).parent / "temp_part1.docx"
+        shutil.copy(doc_path, str(part1_path))
 
-        print(f"  marker 位置: {marker_idx}, 页面结束位置: {page_end_idx}")
+        part1_doc = Document(str(part1_path))
+        part1_body = part1_doc.element.body
+        part1_elements = list(part1_body)
 
-        # 3. 删除 marker 及 marker 所在页的内容
-        # 但保留 marker 页面末尾的 sectPr（作为 part3 的起始分节符）
-        elements_to_remove = []
-        for i in range(marker_idx, page_end_idx):
-            elements_to_remove.append(all_elements[i])
+        # 删除 marker 及之后的所有元素
+        for elem in part1_elements[marker_idx:]:
+            tag = elem.tag.split('}')[-1]
+            if tag != 'sectPr':  # 保留 sectPr（页面设置）
+                part1_body.remove(elem)
 
-        for elem in elements_to_remove:
-            body_elem.remove(elem)
+        part1_doc.save(str(part1_path))
 
-        # 如果 marker 所在页有 sectPr（段落内分节符），要删除它
-        # 因为 body.docx 有自己的 sectPr
-        if marker_sectPr is not None:
-            # marker_sectPr 是段落内的 sectPr，已经在上面的循环中被删除了
-            # 如果 page_end_idx 指向的是 body 末尾的 sectPr，则保留
-            pass
+        # 3. 创建 part3（marker 之后的内容）
+        part3_path = Path(output_path).parent / "temp_part3.docx"
+        shutil.copy(doc_path, str(part3_path))
 
-        # 4. 读取 body.docx 的所有元素
+        part3_doc = Document(str(part3_path))
+        part3_body = part3_doc.element.body
+        part3_elements = list(part3_body)
+
+        # 删除 marker 及之前的所有元素
+        has_part3_content = False
+        for elem in part3_elements[:marker_idx + 1]:
+            tag = elem.tag.split('}')[-1]
+            if tag != 'sectPr':
+                part3_body.remove(elem)
+
+        # 检查 part3 是否有实际内容
+        for elem in part3_body:
+            tag = elem.tag.split('}')[-1]
+            if tag in ['p', 'tbl', 'sdt']:
+                text = ''.join(t.text or '' for t in elem.iter() if t.text)
+                if text.strip():
+                    has_part3_content = True
+                    break
+
+        if has_part3_content:
+            part3_doc.save(str(part3_path))
+
+        # 4. 使用 docxcompose 合并：part1 + body + sectPr(分页符) + part3
+        master = Document(str(part1_path))
+        composer = Composer(master)
+
+        # 追加 body
         body_doc = Document(body_path)
-        body_elements = list(body_doc.element.body)
 
-        # 找到 body.docx 的 sectPr（应该在末尾）
-        body_sectPr = None
-        body_last_content_idx = len(body_elements)
-        for i, elem in enumerate(body_elements):
-            if elem.tag.endswith('}sectPr'):
-                body_sectPr = deepcopy(elem)
-                body_last_content_idx = i
-                break
+        # 如果有 marker_sectPr，在 body 末尾添加一个带有 sectPr 的段落
+        # 这样 body 和 part3（APPENDIX 1 Summary）之间就有分页符了
+        if marker_sectPr is not None and has_part3_content:
+            # 创建分页段落
+            page_break_para = body_doc.element.body.makeelement(
+                f'{W}p',
+                {}
+            )
+            pPr = etree.SubElement(page_break_para, f'{W}pPr')
+            new_sectPr = deepcopy(marker_sectPr)
 
-        # 取 body.docx 中 sectPr 之前的所有内容
-        body_content_elements = body_elements[:body_last_content_idx]
+            # 确保 sectPr 类型为 nextPage（强制分页）
+            sectType = new_sectPr.find(f'{W}type')
+            if sectType is None:
+                sectType = etree.SubElement(new_sectPr, f'{W}type')
+            sectType.set(f'{W}val', 'nextPage')
 
-        print(f"  body.docx 内容元素数量: {len(body_content_elements)}")
+            pPr.append(new_sectPr)
+            body_doc.element.body.append(page_break_para)
+            print(f"  在 body 末尾添加分页符段落（nextPage）")
 
-        # 5. 在 marker_idx 位置插入 body 内容
-        insert_idx = marker_idx
-        for i, elem in enumerate(body_content_elements):
-            body_elem.insert(insert_idx + i, deepcopy(elem))
+        composer.append(body_doc, remove_property_fields=False)
 
-        # 6. 保存结果
-        doc.save(output_path)
+        # 追加 part3（如果有内容）
+        if has_part3_content:
+            part3_for_merge = Document(str(part3_path))
+            composer.append(part3_for_merge, remove_property_fields=False)
 
-        print(f"  已将 body.docx 插入到 marker 位置，输出到: {output_path}")
+        # 保存最终文档
+        composer.save(output_path)
+
+        # 5. 复制 body 的 header/footer 文件到输出文档（docxcompose 不会自动复制）
+        # 并获取 body 原始 rId -> 输出文档新 rId 的映射
+        hf_rid_mapping = _copy_headers_footers_between_docs(body_path, output_path)
+
+        # 更新 body_header_footer_refs，使用输出文档中的新 rId
+        if hf_rid_mapping and body_header_footer_refs:
+            for ref_type in ['header', 'footer']:
+                if ref_type in hf_rid_mapping and ref_type in body_header_footer_refs:
+                    body_orig_rId = body_header_footer_refs.get(ref_type, '')
+                    if body_orig_rId in hf_rid_mapping[ref_type]:
+                        body_header_footer_refs[ref_type] = hf_rid_mapping[ref_type][body_orig_rId]
+                        print(f"  更新 body_header_footer_refs[{ref_type}]: {body_orig_rId} -> {body_header_footer_refs[ref_type]}")
+
+        # 6. 恢复 body 的页边距（修复 docxcompose 覆盖页边距的问题）
+        if body_margins:
+            # docxcompose 会在 part1 和 body 之间插入一个 sectPr（分节符）
+            # 这个 sectPr 应该使用 body 的页边距和 header/footer
+            # 找到并修复这个 sectPr
+            _fix_docxcompose_sectpr_margins(output_path, body_margins, has_part3_content, body_header_footer_refs)
+
+        # 7. 清理临时文件
+        part1_path.unlink(missing_ok=True)
+        if has_part3_content:
+            part3_path.unlink(missing_ok=True)
+
         return True
 
     except Exception as e:
-        print(f"  插入 body 失败: {e}")
+        print(f"  docxcompose 三段式合并失败: {e}")
         import traceback
         traceback.print_exc()
         return False

@@ -91,7 +91,8 @@
       "Bash(curl -s \"http://47.57.213.88:80/auth/v1/admin/config\")",
       "Bash(curl -s --max-time 3 \"http://47.57.213.88:9999/settings\")",
       "Bash(curl -s http://47.57.213.88:80/rest/v1/ -H 'apikey: ***REMOVED-JWT***' -H 'Authorization: Bearer ***REMOVED-JWT***')",
-      "Bash(curl -s http://47.57.213.88:80/rest/v1/ -H 'apikey: ***REMOVED-JWT***')"
+      "Bash(curl -s http://47.57.213.88:80/rest/v1/ -H 'apikey: ***REMOVED-JWT***')",
+      "Bash(\".venv/Scripts/python\" stock_chart_compare.py)"
     ]
   }
 }
