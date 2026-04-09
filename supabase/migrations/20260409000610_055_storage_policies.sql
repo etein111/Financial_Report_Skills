@@ -6,6 +6,7 @@
 -- -------------------------------------------------------------------
 
 -- 所有已认证用户可读取模板文件（用于生成报告）
+drop policy if exists templates_select on storage.objects;
 create policy templates_select
 on storage.objects
 for select
@@ -13,6 +14,7 @@ to authenticated
 using (bucket_id = 'templates');
 
 -- 仅 admin 可上传/更新/删除模板文件
+drop policy if exists templates_insert on storage.objects;
 create policy templates_insert
 on storage.objects
 for insert
@@ -22,6 +24,7 @@ with check (
     and public.current_app_role() = 'admin'
 );
 
+drop policy if exists templates_update on storage.objects;
 create policy templates_update
 on storage.objects
 for update
@@ -31,6 +34,7 @@ using (
     and public.current_app_role() = 'admin'
 );
 
+drop policy if exists templates_delete on storage.objects;
 create policy templates_delete
 on storage.objects
 for delete
@@ -45,6 +49,7 @@ using (
 -- -------------------------------------------------------------------
 
 -- admin 可读取所有报告文件；analyst 可读取自己的；sa 可读取 submitted/published/rejected
+drop policy if exists reports_select on storage.objects;
 create policy reports_select
 on storage.objects
 for select
@@ -71,6 +76,7 @@ using (
 );
 
 -- admin 可上传/更新所有报告文件；analyst 可上传自己 draft 的文件
+drop policy if exists reports_insert on storage.objects;
 create policy reports_insert
 on storage.objects
 for insert
@@ -91,6 +97,7 @@ with check (
     )
 );
 
+drop policy if exists reports_update on storage.objects;
 create policy reports_update
 on storage.objects
 for update
@@ -111,6 +118,7 @@ using (
     )
 );
 
+drop policy if exists reports_delete on storage.objects;
 create policy reports_delete
 on storage.objects
 for delete
