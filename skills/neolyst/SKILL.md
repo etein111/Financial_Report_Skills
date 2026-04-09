@@ -34,7 +34,7 @@ anon key 是公开的客户端 key，不是敏感信息，可以安全提交到�
 
 ### 凭据文件（本地保存，不提交）
 
-`skills/neolyst/.neolyst` — 用户登录凭据及 session token：
+`skills/neolyst/user.json` — 用户登录凭据及 session token：
 
 ```json
 {
@@ -48,12 +48,12 @@ anon key 是公开的客户端 key，不是敏感信息，可以安全提交到�
 
 ### 首次使用：询问并记录凭据
 
-**如果 `skills/neolyst/.neolyst` 文件不存在**，说明用户尚未登录过。此时必须：
+**如果 `skills/neolyst/user.json` 文件不存在**，说明用户尚未登录过。此时必须：
 
 1. 告知用户需要 Neolyst 账号凭据（邮箱 + 密码）
 2. 向用户请求邮箱和密码
 3. 调用 `get_client(email=..., password=...)` 完成首次登录
-4. 登录成功后凭据自动保存到 `skills/neolyst/.neolyst`，后续调用无需再次输入
+4. 登录成功后凭据自动保存到 `skills/neolyst/user.json`，后续调用无需再次输入
 
 ```python
 # 首次登录示例
@@ -63,7 +63,7 @@ client = connection.get_client(email="user@neolyst.com", password="your_password
 ### Session 自动管理
 
 `get_client` 的完整认证顺序：
-1. 读取 `.neolyst`，用 `access_token` 恢复 session
+1. 读取 `user.json`，用 `access_token` 恢复 session
 2. token 过期时自动用 `refresh_token` 刷新，回写文件
 3. refresh 失败时用 `email + password` 重新登录，回写文件
 4. 无可用 session 也无凭据 → 抛出 `ValueError`，需要执行首次登录流程
@@ -90,7 +90,7 @@ record = analyst.resolve_analyst_by_email(client, "alice@neolyst.com")
 
 ---
 
-### 2. resolve_template 🔲 待实现
+### 2. resolve_template ✅ 已实现
 
 按 `report_type + language` 查询模板记录，将模板文件和 schema 下载到本地并返回路径。
 
@@ -104,7 +104,7 @@ result = template.resolve_template(client, report_type="company", language="en")
 
 ---
 
-### 3. upsert_template 🔲 待实现
+### 3. upsert_template ✅ 已实现
 
 上传本地模板文件到 Storage，并写入/更新对应的 `report_template` 记录。
 
@@ -121,7 +121,7 @@ template.upsert_template(
 
 ---
 
-### 4. reuse_template 🔲 待实现
+### 4. reuse_template ✅ 已实现
 
 让某个 `report_type` 的模板记录静态复制另一个 `report_type` 的文件路径（共用模板资产）。
 

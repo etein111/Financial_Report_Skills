@@ -58,9 +58,9 @@
 ### 2.4 身份与会话策略
 
 - Neolyst Supabase 的登录身份由 `neolyst` 管理和复用，`save_draft_report`、`validators` 与 `submit_report` 的相关读写都使用该身份。
-- 使用 `email + password` 登录，账号、密码和登录态保存在 skill 根目录（`skills/neolyst/`）的 `.neolyst` 文件；只支持一个登录身份，会话失效时重新登录并更新该文件。该文件不提交到版本库。
-- `.neolyst` 为 JSON 文件，格式如下：`{ “email”: “...”, “password”: “...”, “access_token”: “...”, “refresh_token”: “...”, “expires_at”: 1712345678 }`。`connection.py` 启动时先用 `access_token` + `refresh_token` 恢复 session，若已过期则用 `email + password` 重新登录并回写该文件。
-- `.neolyst` 不存在时，调用方（Claude）需向用户索取邮箱和密码，使用 `get_client(email=..., password=...)` 完成首次登录后自动写入，后续不再需要手动输入。
+- 使用 `email + password` 登录，账号、密码和登录态保存在 skill 根目录（`skills/neolyst/`）的 `user.json` 文件；只支持一个登录身份，会话失效时重新登录并更新该文件。该文件不提交到版本库。
+- `user.json` 为 JSON 文件，格式如下：`{ “email”: “...”, “password”: “...”, “access_token”: “...”, “refresh_token”: “...”, “expires_at”: 1712345678 }`。`connection.py` 启动时先用 `access_token` + `refresh_token` 恢复 session，若已过期则用 `email + password` 重新登录并回写该文件。
+- `user.json` 不存在时，调用方（Claude）需向用户索取邮箱和密码，使用 `get_client(email=..., password=...)` 完成首次登录后自动写入，后续不再需要手动输入。
 - 当前库的 RLS 通过 `current_app_role()` 读取 `auth.jwt().app_metadata.role`，按 `admin`、`sa`、`analyst` 做权限控制；skill 设计必须与该角色模型兼容。
 - 报告所有者与执行审计均以当前登录身份为准。`owner_user_id`、`report_version.created_by`、`report_status_log.action_by` 等字段遵循”谁保存/提交，系统就记谁”；`resolve_analyst_by_email` 只用于确定报告分析师身份，不用于决定执行审计用户。
 - 本 skill 不做代理执行，因为这会破坏 Neolyst 的安全性，也不符合实际业务关系。
@@ -80,6 +80,9 @@
 - Storage 使用两个独立 bucket：
   - 模板 bucket：`templates`，存放模板资产
   - 报告 bucket：`reports`，存放报告版本资产
+- Storage RLS 策略：
+  - `templates`：所有已认证用户可下载；仅 `admin` 角色可上传/更新/删除
+  - `reports`：`admin` 可读写全部；`analyst` 可读写自己 `draft`/`submitted` 状态的报告文件；`sa` 可读 `submitted`/`published`/`rejected` 状态的报告文件
 - 模板 bucket 路径规则：`{report_type}/{language}/template.docx` 和 `{report_type}/{language}/schema.yaml`。路径由 `storage.py` 按此规则生成，`template_file_path` / `schema_file_path` 字段存储的即是该路径。
 - 报告 bucket 路径规则：`{report_id}/`（具体文件名由 `storage.py` 统一维护）。
 - `resolve_template` 将模板文件下载到当前工作目录的 `templates/{report_type}/{language}/` 下，文件名与 bucket 中一致（`template.docx`、`schema.yaml`）。
@@ -313,16 +316,23 @@ neolyst/
 
 `connection.py` 负责连接相关能力，包括读取和写入 `/.neolyst`、创建 Supabase client、恢复 session、失效后重新登录，以及对外提供已认证的访问连接。
 
-`storage.py` 负责模板文件和报告文件上传，以及统一的 storage 路径生成规则。
+`storage.py` 负责模板文件和报告文件上传/下载。对外暴露语义化函数（`upload_template`、`download_template`、`upload_report`、`download_report`），bucket 名称是实现细节，不暴露给调用方。路径由调用方传入（来自 Supabase RPC），`storage.py` 不拼路径字符串。
 
 `storage.py` 内部固定维护以下 bucket 与路径规则：
 
-- 模板 bucket（`templates`）：路径固定为 `{report_type}/{language}/template.docx` 和 `{report_type}/{language}/schema.yaml`
-- 报告 bucket（`reports`）：路径固定为 `{report_id}/`（文件名由 `storage.py` 统一命名）
+- 模板 bucket（`templates`）：路径固定为 `{report_type}/{language}/template.docx` 和 `{report_type}/{language}/schema.yaml`（规则定义在 Supabase 函数 `get_template_storage_paths` 和 `upsert_template_record` 中）
+- 报告 bucket（`reports`）：路径固定为 `{report_id}/`（规则定义在 Supabase 函数中，Iter 4 实现）
 
 `analyst.py` 负责 `resolve_analyst_by_email`。凡是 analyst 身份解析相关的查询都放在该模块内。
 
-`template.py` 负责 `resolve_template`、`upsert_template` 与 `reuse_template`。`upsert_template` 接收本地 Word 模板路径 `template_local_path` 和本地 `schema.yaml` 路径 `schema_local_path`，由 `neolyst` 上传到 storage 后调用 Supabase 侧模板 RPC / 稳定接口写入主模板记录；`reuse_template` 接收目标 `report_type + language` 与源 `same_as_report_type`，调用 Supabase 侧共享模板接口，把源记录当前已有的 `template_file_path` 与 `schema_file_path` 静态复制到目标模板记录；`resolve_template` 负责通过 Supabase 侧稳定接口解析目标模板记录，再将运行时模板和对应的 `schema.yaml` 下载到本地可用路径并返回。
+`template.py` 负责 `resolve_template`、`upsert_template` 与 `reuse_template`。
+
+- `upsert_template` 的执行顺序：
+  1. 调用 RPC `get_template_storage_paths(report_type, language)` 获取 Storage 目标路径（路径规则在服务端定义，skill 不拼路径）
+  2. 将本地文件上传到返回的路径
+  3. 调用 RPC `upsert_template_record(report_type, language)` 让服务端以相同规则生成路径并 upsert `report_template` 记录
+- `reuse_template` 直接调用 RPC `reuse_template(report_type, language, same_as_report_type)`，服务端负责路径复制和合法性校验（源模板存在且已发布、不能自引用）
+- `resolve_template` 直接查询 `report_template` 表读取 `template_file_path` / `schema_file_path`（无业务逻辑，不需要 RPC），再将文件下载到本地 `templates/{report_type}/{language}/` 目录
 
 `coverage.py` 负责 `resolve_coverage` 和 `create_coverage`。凡是与 `coverage`、`coverage_analyst` 相关的查询和写入都通过该模块调用 Supabase 侧对应 RPC / 稳定接口完成。
 

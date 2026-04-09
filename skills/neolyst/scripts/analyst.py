@@ -10,6 +10,7 @@ def resolve_analyst_by_email(client: Client, email: str) -> dict:
     根据邮箱查询并返回标准化的 analyst 记录。
 
     业务主键为 analyst_email（表中强制小写存储）。
+    is_active 校验在 Supabase RPC 侧执行。
 
     Args:
         client: 已认证的 Supabase client
@@ -22,14 +23,12 @@ def resolve_analyst_by_email(client: Client, email: str) -> dict:
     Raises:
         ValueError: 找不到对应的 analyst，或 analyst 已停用（is_active=False）
     """
-    normalized = email.strip().lower()
-    resp = client.table("analyst").select("*").eq("email", normalized).execute()
+    try:
+        resp = client.rpc("resolve_analyst_by_email", {"p_email": email}).execute()
+    except Exception as e:
+        raise ValueError(str(e)) from e
 
     if not resp.data:
         raise ValueError(f"Analyst not found: {email!r}")
 
-    record = resp.data[0]
-    if not record.get("is_active", True):
-        raise ValueError(f"Analyst is inactive: {email!r}")
-
-    return record
+    return resp.data

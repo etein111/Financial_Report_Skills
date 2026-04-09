@@ -303,9 +303,10 @@ iter1 计划执行完毕后，根据用户反馈对认证配置做了重构：
 - 新增 `skills/neolyst/neolyst.yaml`：将 Supabase URL 和 anon key 从硬编码迁移到此文件，随 skill 发布。
 - 重构 `connection.py`：
   - URL / anon key 从 `neolyst.yaml` 读取（通过 `NEOLYST_URL` / `NEOLYST_ANON_KEY` 环境变量覆盖，用于测试）
-  - `.neolyst` 凭据文件默认存放在 skill 根目录（`skills/neolyst/`），不再依赖调用方的 cwd
+  - 凭据文件改名为 `user.json`（原 `.neolyst`），默认存放在 skill 根目录（`skills/neolyst/`），不再依赖调用方的 cwd
   - `set_session` 加了 try/except，防止跨服务器 token 导致崩溃
 - 更新 `conftest.py`：改用 `os.environ.setdefault("NEOLYST_URL", ...)` 替代写 `.neolyst.server.url` 文件。
+- 更新 `test_connection.py`：文件名从 `.neolyst` 改为 `user.json`，移除已失效的 `.neolyst.server.url` 写文件逻辑。
 - 更新 `SKILL.md`：认证配置说明完整化，补充首次使用流程（让 Claude 向用户询问凭据）。
-- 更新 `.gitignore`：加入 `.neolyst` 和 `skills/neolyst/.neolyst`。
-- 更新设计文档 `docs/skills_neolyst_design.md`：2.4、2.7、3.6、4.1 节同步对齐。
+- 更新 `.gitignore`：改为 `skills/neolyst/user.json`。
+- 更新设计文档 `docs/skills_neolyst_design.md`：2.4、2.6（bucket名称/路径规则）、2.7、3.6、4.1 节同步对齐。

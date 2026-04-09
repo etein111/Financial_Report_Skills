@@ -29,3 +29,13 @@ def neolyst_client():
         email=NEOLYST_TEST_EMAIL,
         password=NEOLYST_TEST_PASSWORD,
     )
+
+
+@pytest.fixture(scope="session", autouse=True)
+def ensure_buckets(neolyst_client):
+    """确保 templates 和 reports bucket 存在（幂等）。"""
+    for bucket in ("templates", "reports"):
+        try:
+            neolyst_client.storage.create_bucket(bucket, options={"public": False})
+        except Exception:
+            pass  # 已存在则忽略

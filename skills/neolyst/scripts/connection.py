@@ -5,7 +5,7 @@ connection.py — Neolyst Supabase 认证与 client 管理。
   skills/neolyst/neolyst.yaml  →  supabase_url, anon_key
 
 凭据文件（本地，不提交）：
-  skills/neolyst/.neolyst  →  { email, password, access_token, refresh_token, expires_at }
+  skills/neolyst/user.json  →  { email, password, access_token, refresh_token, expires_at }
 
 测试覆盖（通过环境变量）：
   NEOLYST_URL       →  覆盖 supabase_url
@@ -20,9 +20,9 @@ from pathlib import Path
 import yaml
 from supabase import create_client, Client
 
-# skill 根目录（skills/neolyst/），neolyst.yaml 和 .neolyst 默认存放于此
+# skill 根目录（skills/neolyst/），neolyst.yaml 和 user.json 默认存放于此
 SKILL_ROOT = Path(__file__).parent.parent
-NEOLYST_FILE = ".neolyst"
+NEOLYST_FILE = "user.json"
 CONFIG_FILE = "neolyst.yaml"
 
 
@@ -59,20 +59,20 @@ def _anon_key() -> str:
     return key
 
 
-def _neolyst_path(neolyst_dir: str | None) -> Path:
+def _user_json_path(neolyst_dir: str | None) -> Path:
     base = Path(neolyst_dir) if neolyst_dir else SKILL_ROOT
     return base / NEOLYST_FILE
 
 
 def _load_neolyst(neolyst_dir: str | None) -> dict | None:
-    p = _neolyst_path(neolyst_dir)
+    p = _user_json_path(neolyst_dir)
     if not p.exists():
         return None
     return json.loads(p.read_text())
 
 
 def _save_neolyst(neolyst_dir: str | None, data: dict) -> None:
-    p = _neolyst_path(neolyst_dir)
+    p = _user_json_path(neolyst_dir)
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(json.dumps(data, indent=2))
 
@@ -90,15 +90,15 @@ def get_client(
     返回已认证的 Supabase client。
 
     URL 和 anon_key 从 neolyst.yaml 读取（可通过环境变量覆盖）。
-    用户凭据从 .neolyst 文件读取（默认位于 skill 根目录）。
+    用户凭据从 user.json 文件读取（默认位于 skill 根目录）。
 
     优先顺序：
-    1. 从 .neolyst 恢复 session（token 过期则 refresh）
+    1. 从 user.json 恢复 session（token 过期则 refresh）
     2. 用传入的 email+password 登录
     3. 若均无，抛出 ValueError（调用方应提示用户输入凭据）
 
     Args:
-        neolyst_dir: .neolyst 文件所在目录。None = 使用 skill 根目录（推荐）。
+        neolyst_dir: user.json 文件所在目录。None = 使用 skill 根目录（推荐）。
                      测试时可传入临时目录。
         email: 可选，仅在无可用 session 时使用
         password: 可选，仅在无可用 session 时使用
@@ -117,7 +117,7 @@ def get_client(
                 client.auth.set_session(data["access_token"], data["refresh_token"])
                 return client
             except Exception:
-                pass  # token 对当前服务器无效（如切换了 URL），继续尝试 refresh/re-login
+                pass  # token 对当前服务器无效，继续尝试 refresh/re-login
         else:
             try:
                 resp = client.auth.refresh_session(data["refresh_token"])
@@ -138,7 +138,7 @@ def get_client(
     if not _email or not _password:
         raise ValueError(
             "No valid session and no credentials provided. "
-            "Pass email+password, or ensure .neolyst has valid credentials."
+            "Pass email+password, or ensure user.json has valid credentials."
         )
 
     resp = client.auth.sign_in_with_password({"email": _email, "password": _password})
