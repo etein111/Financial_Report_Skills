@@ -35,10 +35,17 @@ def validate_draft(client: Client, report_id: str, version_no: int) -> dict:
     errors: list[str] = []
 
     # 1. report 存在性与状态
-    report_resp = client.table("report").select("*").eq("id", report_id).execute()
+    report_resp = (
+        client.table("report")
+        .select("id, status, title, report_type, report_language, "
+                "investment_thesis, contact_person, coverage_id, sector_id, region_code")
+        .eq("id", report_id)
+        .execute()
+    )
     if not report_resp.data:
         raise ValueError(f"报告不存在: {report_id}")
     report = report_resp.data[0]
+    report_type = report.get("report_type")
 
     if report["status"] not in ("draft", "rejected"):
         errors.append(f"报告状态为 {report['status']}，仅 draft/rejected 可提交")
@@ -92,21 +99,23 @@ def validate_draft(client: Client, report_id: str, version_no: int) -> dict:
     if contact and analyst_emails and contact.lower() not in analyst_emails:
         errors.append(f"contact_person（{contact}）不在本报告分析师列表中")
 
-    # 7. 每个分析师必须存在且 is_active
-    for email in analyst_emails:
+    # 7. 每个分析师必须存在且 is_active（批量查询，避免 N+1）
+    if analyst_emails:
         a_resp = (
             client.table("analyst")
-            .select("is_active")
-            .eq("email", email)
+            .select("email, is_active")
+            .in_("email", analyst_emails)
             .execute()
         )
-        if not a_resp.data:
-            errors.append(f"分析师不存在：{email}")
-        elif not a_resp.data[0]["is_active"]:
-            errors.append(f"分析师已停用：{email}")
+        found = {row["email"]: row["is_active"] for row in a_resp.data}
+        for email in analyst_emails:
+            if email not in found:
+                errors.append(f"分析师不存在：{email}")
+            elif not found[email]:
+                errors.append(f"分析师已停用：{email}")
 
     # 8. company 类型：coverage_id 必填且存在
-    if report.get("report_type") == "company":
+    if report_type == "company":
         coverage_id = report.get("coverage_id")
         if not coverage_id:
             errors.append("公司类报告（company）必须关联 coverage_id")

@@ -17,7 +17,9 @@ def upload(client: Client, storage_path: str, local_path: str) -> None:
     data = local.read_bytes()
     try:
         client.storage.from_(bucket).upload(path, data)
-    except Exception:
+    except Exception as e:
+        if "already exists" not in str(e).lower():
+            raise
         client.storage.from_(bucket).update(path, data)
 
 

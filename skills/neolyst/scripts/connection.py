@@ -35,24 +35,22 @@ def _load_config() -> dict:
     return {}
 
 
-def _supabase_url() -> str:
+def _supabase_url(config: dict) -> str:
     """URL 优先级：NEOLYST_URL 环境变量 > neolyst.yaml。"""
     env = os.environ.get("NEOLYST_URL")
     if env:
         return env.strip()
-    config = _load_config()
     url = config.get("supabase_url", "")
     if not url:
         raise ValueError("supabase_url not found. Check skills/neolyst/neolyst.yaml.")
     return url
 
 
-def _anon_key() -> str:
+def _anon_key(config: dict) -> str:
     """anon key 优先级：NEOLYST_ANON_KEY 环境变量 > neolyst.yaml。"""
     env = os.environ.get("NEOLYST_ANON_KEY")
     if env:
         return env.strip()
-    config = _load_config()
     key = config.get("anon_key", "")
     if not key:
         raise ValueError("anon_key not found. Check skills/neolyst/neolyst.yaml.")
@@ -106,8 +104,9 @@ def get_client(
     Returns:
         已认证的 supabase Client
     """
-    url = _supabase_url()
-    key = _anon_key()
+    config = _load_config()
+    url = _supabase_url(config)
+    key = _anon_key(config)
     client = create_client(url, key)
     data = _load_neolyst(neolyst_dir)
 
