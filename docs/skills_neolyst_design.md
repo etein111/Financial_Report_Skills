@@ -348,12 +348,8 @@ neolyst/
 
 ### 4.1 联调测试环境
 
-- 远程服务器 URL：`http://47.57.213.88:80`
-- 远程 Admin 账号：`admin@neolyst.com` / `Admin123`（仅远程服务器）
-- 本地 Supabase URL：`http://127.0.0.1:54321`（通过 `NEOLYST_URL` 环境变量覆盖）
+- 本地 Supabase URL：`http://127.0.0.1:54321`（`neolyst.yaml` 默认值）
 - 本地测试账号：`yangxue@opendelp.com` / `Admin123`（seed.sql 内置，`admin` 角色）
-
-> 注意：`admin@neolyst.com` 只存在于远程服务器，本地 Supabase 不含该账号，本地集成测试使用 `yangxue@opendelp.com`。
 
 ## 5. report_maker 对接 neolyst 的改造要求
 

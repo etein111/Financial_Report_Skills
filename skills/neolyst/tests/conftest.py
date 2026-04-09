@@ -13,9 +13,6 @@ NEOLYST_TEST_DIR = Path(os.environ.get("NEOLYST_TEST_DIR", Path.home() / "tmp" /
 NEOLYST_TEST_EMAIL = os.environ.get("NEOLYST_TEST_EMAIL", "yangxue@opendelp.com")
 NEOLYST_TEST_PASSWORD = os.environ.get("NEOLYST_TEST_PASSWORD", "Admin123")
 
-# 本地 Supabase URL：通过环境变量覆盖 neolyst.yaml 中的远程 URL
-os.environ.setdefault("NEOLYST_URL", os.environ.get("NEOLYST_TEST_URL", "http://127.0.0.1:54321"))
-
 
 @pytest.fixture(scope="session")
 def neolyst_client():
