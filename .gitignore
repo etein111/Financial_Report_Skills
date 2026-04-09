@@ -219,4 +219,6 @@ __marimo__/
 .claude/skills
 .claude/memory/
 .codex
+.supabase/
+supabase/.temp/
 skills/neolyst/tests/output/
