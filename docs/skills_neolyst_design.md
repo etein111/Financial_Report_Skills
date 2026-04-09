@@ -42,7 +42,6 @@
 - `company` / `company_flash` 在 draft 阶段允许暂时缺少 `coverage_id`，提交前必须补齐。
 - `contact_person` 在 draft 阶段允许暂时缺少；该字段存储 analyst email，提交前必须由 `report_maker` 负责确认和填充。
 - `report_language` 作为模板选择字段，由 `report_maker` 自动识别并向用户确认后写入 draft。
-- `certificate_confirmed` 固定写为 `true`。
 - `analysts` 列表与 `coverage_analyst` / `report_analyst` 统一以 `analyst_email` 作为业务键，排序字段统一使用 `author_order`；不再引入 `analyst_id`、`role`、`sort_order` 三套并存的表示。
 - `save_draft_report` 输入中的 `report_file`、`pdf_file`、`model_file` 仅用于上传前定位本地文件；文件路径的唯一准源是 `report_version.word_file_path`、`report_version.pdf_file_path`、`report_version.model_file_path`。`snapshot_json` 如保留文件字段，只作为版本快照，不作为校验和提交的判定来源。
 - `save_draft_report` 成功时至少返回 `report_id` 和 `version_no`。
@@ -51,7 +50,7 @@
 ### 2.3 研报类型与模板记录
 
 - draft、提交和模板接口统一使用研报类型 `report_type`，其取值为：`company`、`sector`、`company_flash`、`sector_flash`、`macro`、`strategy`、`quantitative`、`bond`。
-- 模板接口以 `report_type + language` 作为业务定位键。`resolve_template` 以这组字段解析模板资产；`report_template.id` 采用 `{report_type}_{language}` 文本主键，seed 已预置全部占位记录，因此 `upsert_template` 与 `reuse_template` 默认以更新现有记录为主，而不是假设首次插入。
+- 模板接口在业务语义上使用 `report_type + language` 做定位；当前数据库层只有 `report_template.id` 主键，以及 `(report_type, language)` 普通索引，没有这组字段的唯一约束。实现上应以 `{report_type}_{language}` 对应的 `report_template.id` 锁定目标记录；若出现同一 `report_type + language` 的重复记录，应视为数据异常。
 - `report_template.report_type` 就是报告类型本身，不引入单独的 `template_type` 概念。
 - 多个 `report_type` 可以共用同一套模板资产；发布时先上传一次主模板，再让其他 `report_type` 复用该主模板对应的 `template_file_path` 与 `schema_file_path`。
 - `reuse_template` 的复用是静态复制当前路径，不是动态引用；若主模板后续重新上传并变更路径，需要重新执行一次 `reuse_template` 才能同步到复用方。
@@ -68,8 +67,10 @@
 ### 2.5 业务逻辑落点
 
 - 凡涉及业务数据一致性、状态流转、关系维护、主表/版本表同步的逻辑，均优先在 Supabase 侧实现为稳定接口。
+- 凡涉及复杂读操作或复杂写操作，均默认在 Supabase 侧封装为 RPC / 稳定接口，而不是在 skill 侧拼接多次底层表操作。这里的“复杂”包括但不限于：需要按固定规则确定模板或报告文件路径、需要同时维护多张表、需要做跨表一致性判断、需要把业务校验与写入合并为一个原子操作。
 - `neolyst` skill 主要负责认证、文件上传、参数整理以及调用 Supabase 暴露的接口/函数，不在 skill 侧重复实现核心业务一致性规则。
-- 适合下沉到 Supabase 侧的逻辑包括：模板发布与复用、coverage 解析与创建、draft 保存、提交前校验、提交状态流转，以及 `report` / `report_version` / `report_analyst` 之间的一致性维护。
+- 适合下沉到 Supabase 侧的逻辑包括：模板发布与复用、模板解析、coverage 解析与创建、draft 保存、提交前校验、提交状态流转，以及 `report` / `report_version` / `report_analyst` 之间的一致性维护。
+- 典型例子：`upsert_template` / `reuse_template` 由 Supabase 侧负责锁定目标模板记录并落库；`save_draft_report` 由 Supabase 侧负责在一次业务接口调用中同步维护 `report`、`report_version`、`report_analyst`；`validators` 和 `submit_report` 也应优先以 RPC 形式提供。
 
 ### 2.6 技术访问方式
 
@@ -103,6 +104,11 @@
 - `create_coverage` 创建成功时返回新的 `coverage_id`；创建失败时直接抛出具体错误。
 - `save_draft_report`、`validators` 和 `submit_report` 在失败时都直接抛出具体错误；错误信息必须足够明确，让上游 LLM 或人工据此补字段、重新确认或中止流程。
 
+### 2.10 Supabase 侧实现原则
+
+- 复杂读写默认走 Supabase 侧 RPC / 稳定接口。
+- 原则上尽量不用外键，跨表一致性由 RPC 负责。
+
 ## 3. 实现落地
 
 ### 3.1 resolve_coverage 执行流程
@@ -113,7 +119,7 @@
 
 `resolve_coverage` 只负责解析和确认 `coverage_id`，不修改数据库，也不承担补数据或自动创建逻辑。
 
-`resolve_coverage` 的候选查询、分析师关联过滤和唯一性判定优先在 Supabase 侧实现；skill 侧负责组织输入并调用该接口。
+`resolve_coverage` 的候选查询、分析师关联过滤和唯一性判定优先在 Supabase 侧通过 RPC / 稳定接口实现；skill 侧负责组织输入并调用该接口。
 
 ### 3.2 create_coverage 执行流程
 
@@ -123,7 +129,7 @@
 
 `create_coverage` 是显式创建接口，不由 `submit_report` 隐式触发。只有在 `resolve_coverage` 未命中，且上游已经与用户确认“该 Coverage 已完成审批”后，才进入 `create_coverage`。失败时直接抛出具体错误。
 
-`create_coverage` 的主数据写入、一致性校验和 `coverage_analyst` 关系创建优先在 Supabase 侧实现；skill 侧负责参数整理并调用该接口。
+`create_coverage` 的主数据写入、一致性校验和 `coverage_analyst` 关系创建优先在 Supabase 侧通过 RPC / 稳定接口实现；skill 侧负责参数整理并调用该接口。
 
 ### 3.3 save_draft_report 执行流程
 
@@ -143,7 +149,6 @@
   "report_language": "en",
   "contact_person": "alice.analyst@neolyst.com",
   "investment_thesis": "AI-driven demand and margin expansion support earnings growth.",
-  "certificate_confirmed": true,
   "analysts": [
     {
       "analyst_email": "alice.analyst@neolyst.com",
@@ -162,7 +167,7 @@
 
 `save_draft_report` 在首次调用时创建新的 `report_id`，并保存机器处理后的第一个 draft 版本。保存过程中，本地文件先上传到 storage，再写入 `report_version.word_file_path`、`report_version.pdf_file_path`、`report_version.model_file_path`；后续校验和提交都以这些持久化字段为准。同时同步更新 `report` 主表的当前态字段，并将 `current_version_no` 更新为本次版本号；`report_analyst` 按当前 `analysts` 列表刷新为报告最新作者关系。`report_version.snapshot_json` 保存本次 draft 输入的完整快照，本地文件路径字段除外。后续人工修订也沿用同一个 `report_id` 继续追加版本。
 
-`save_draft_report` 的主要写入逻辑优先在 Supabase 侧实现为稳定接口；skill 侧负责准备参数、上传文件并调用该接口。
+`save_draft_report` 的主要写入逻辑优先在 Supabase 侧实现为 RPC / 稳定接口；skill 侧负责准备参数、上传文件并调用该接口。
 
 `save_draft_report` 成功时至少返回：
 
@@ -190,6 +195,8 @@
 
 结构校验：
 
+以下规则属于 `validators` 这层业务校验要求，默认通过 Supabase 侧 RPC 实现；它们不要求全部下沉为当前裸表 schema 的 CHECK / FK 约束。
+
 - 指定的 draft 版本必须存在
 - `analysts` 必须为非空列表
 - `analysts` 最多支持 8 位分析师
@@ -215,7 +222,6 @@ draft 版本需已持久化的核心内容：
 - `report_language`
 - `contact_person`
 - `investment_thesis`
-- `certificate_confirmed = true`
 - `analysts`
 - `report_version.word_file_path`
 - `report_version.pdf_file_path`
@@ -233,7 +239,7 @@ draft 版本需已持久化的核心内容：
 
 主数据校验：
 
-- `report_type` 必须对应有效启用的 report type
+- `report_type` 必须对应存在的 report type
 - `report_language` 必须为有效模板语言
 - `region_code` 必须对应有效 region
 - `sector_id` 必须对应有效 sector
@@ -252,7 +258,7 @@ draft 版本需已持久化的核心内容：
 - 校验通过：返回被校验通过的 `report_id` 和 `version_no`
 - 校验失败：直接抛出具体错误
 
-`validators` 的字段完整性判断、主数据校验和版本一致性校验优先在 Supabase 侧实现；skill 侧负责调用并透传错误。
+`validators` 的字段完整性判断、主数据校验和版本一致性校验优先在 Supabase 侧通过 RPC / 稳定接口实现；skill 侧负责调用并透传错误。
 
 ### 3.5 submit_report 执行流程
 
@@ -307,15 +313,15 @@ neolyst/
 
 `analyst.py` 负责 `resolve_analyst_by_email`。凡是 analyst 身份解析相关的查询都放在该模块内。
 
-`template.py` 负责 `resolve_template`、`upsert_template` 与 `reuse_template`。`upsert_template` 接收本地 Word 模板路径 `template_local_path` 和本地 `schema.yaml` 路径 `schema_local_path`，由 `neolyst` 上传到 storage 后调用 Supabase 侧模板发布接口写入主模板记录；`reuse_template` 接收目标 `report_type + language` 与源 `same_as_report_type`，调用 Supabase 侧共享模板接口，把源记录当前已有的 `template_file_path` 与 `schema_file_path` 静态复制到目标模板记录；`resolve_template` 负责将运行时模板和对应的 `schema.yaml` 下载到本地可用路径并返回。
+`template.py` 负责 `resolve_template`、`upsert_template` 与 `reuse_template`。`upsert_template` 接收本地 Word 模板路径 `template_local_path` 和本地 `schema.yaml` 路径 `schema_local_path`，由 `neolyst` 上传到 storage 后调用 Supabase 侧模板 RPC / 稳定接口写入主模板记录；`reuse_template` 接收目标 `report_type + language` 与源 `same_as_report_type`，调用 Supabase 侧共享模板接口，把源记录当前已有的 `template_file_path` 与 `schema_file_path` 静态复制到目标模板记录；`resolve_template` 负责通过 Supabase 侧稳定接口解析目标模板记录，再将运行时模板和对应的 `schema.yaml` 下载到本地可用路径并返回。
 
-`coverage.py` 负责 `resolve_coverage` 和 `create_coverage`。凡是与 `coverage`、`coverage_analyst` 相关的查询和写入都通过该模块调用 Supabase 侧对应接口完成。
+`coverage.py` 负责 `resolve_coverage` 和 `create_coverage`。凡是与 `coverage`、`coverage_analyst` 相关的查询和写入都通过该模块调用 Supabase 侧对应 RPC / 稳定接口完成。
 
-`draft_report.py` 负责 `save_draft_report`，处理 draft 版本创建、文件上传和调用 Supabase 侧 draft 保存接口。
+`draft_report.py` 负责 `save_draft_report`，处理 draft 版本创建、文件上传和调用 Supabase 侧 draft 保存 RPC。
 
-`validators.py` 负责提交前校验，根据 `report_id` 和 `version_no` 调用 Supabase 侧校验接口判断指定 draft 版本是否满足提交条件，不负责创建业务对象，也不执行提交。
+`validators.py` 负责提交前校验，根据 `report_id` 和 `version_no` 调用 Supabase 侧校验 RPC 判断指定 draft 版本是否满足提交条件，不负责创建业务对象，也不执行提交。
 
-`submit_report.py` 负责提交已有 draft，串联连接获取、draft 版本定位、提交前校验和调用 Supabase 侧提交接口。`submit_report` 的职责聚焦于状态推进与提交审计；`report` 主表当前态字段和 `current_version_no` 已由 `save_draft_report` 在保存 draft 时同步更新。
+`submit_report.py` 负责提交已有 draft，串联连接获取、draft 版本定位、提交前校验和调用 Supabase 侧提交 RPC。`submit_report` 的职责聚焦于状态推进与提交审计；`report` 主表当前态字段和 `current_version_no` 已由 `save_draft_report` 在保存 draft 时同步更新。
 
 模块之间的依赖关系保持单向：`draft_report` 可以调用 `connection` 和 `storage`；`submit_report` 可以调用 `connection` 和 `validators`；`validators` 可以调用 `analyst`、`coverage` 和 `connection`；`template` 可以调用 `connection` 和 `storage`；`coverage`、`analyst` 与 `storage` 只依赖 `connection`；`connection` 不依赖任何业务模块。
 
@@ -358,8 +364,6 @@ neolyst/
 
 `report_language` 由 `report_maker` 自动识别，并通过对话确认后写入。该字段用于确定提交所对应的模板语言。
 
-`certificate_confirmed` 由 `report_maker` 写为 `true`。
-
 对于公司类报告，`report_maker` 还负责准备以下 `coverage` 相关输入：
 
 - `ticker`
@@ -378,7 +382,7 @@ neolyst/
 draft 输入分两层：
 
 - 保存 draft 时的最小字段：`title`、`report_type`、`report_language`、`analysts`、`report_file`、`pdf_file`
-- 提交前补齐字段：`contact_person`、`investment_thesis`、`certificate_confirmed`，以及按研报类型要求的 `coverage_id`、`ticker`、`rating`、`target_price`、`region_code`、`sector_id`、`model_file`
+- 提交前补齐字段：`contact_person`、`investment_thesis`，以及按研报类型要求的 `coverage_id`、`ticker`、`rating`、`target_price`、`region_code`、`sector_id`、`model_file`
 
 draft 输入可包含以下字段：
 
@@ -386,7 +390,6 @@ draft 输入可包含以下字段：
 - 分析师与联系人字段：`analysts`、`contact_person`
 - 公司类报告字段：`coverage_id`、`ticker`、`rating`、`target_price`
 - 行业类报告字段：`region_code`、`sector_id`
-- 合规字段：`certificate_confirmed`
 - 文件字段：`report_file`、`pdf_file`、`model_file`
 
 文件字段映射：
@@ -397,7 +400,7 @@ draft 输入可包含以下字段：
 
 模板解析规则：
 
-- `resolve_template` 直接按 `report_type + language` 查询 `report_template` 记录
+- `resolve_template` 以 `report_type + language` 解析目标模板，但最终应落到唯一的 `report_template.id = {report_type}_{language}` 记录；若数据库中出现重复组合，应直接报数据异常
 - 若多个 `report_type` 共用同一模板资产，则这些 `report_type` 最终解析到同一组 `template_file_path` 与 `schema_file_path`
 - `report_maker` 不再维护额外的“报告类型 -> 模板类型”映射表
 
