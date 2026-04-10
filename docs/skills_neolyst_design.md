@@ -18,12 +18,13 @@
 
 ### 2.1 接口形态
 
-- `neolyst` 对外只暴露业务接口：`resolve_analyst_by_email`、`resolve_template`、`upsert_template`、`reuse_template`、`resolve_coverage`、`create_coverage`、`save_draft_report`、`validators`、`submit_report`。
+- `neolyst` 对外只暴露业务接口：`resolve_analyst_by_email`、`resolve_template`、`upsert_template`、`reuse_template`、`resolve_coverage`、`create_coverage`、`list_coverage_history`、`save_draft_report`、`validators`、`submit_report`。
 - `resolve_analyst_by_email` 校验并返回标准化后的 analyst 记录，业务主键为 `analyst_email`。
 - `resolve_template` 解析模板资产。
 - `upsert_template` 发布主模板。
 - `reuse_template` 发布共享模板关系。
 - `resolve_coverage`、`create_coverage` 负责 `coverage` 解析与创建。
+- `list_coverage_history` 查询 coverage 下的已发布历史报告。
 - `save_draft_report` 保存 draft。
 - `validators` 校验指定 draft 版本是否可提交。
 - `submit_report` 提交指定 draft 版本。
