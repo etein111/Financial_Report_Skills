@@ -19,4 +19,5 @@
 | Iter 4 | draft_report | 已完成 | [2026-04-09-neolyst-iter4.md](2026-04-09-neolyst-iter4.md) |
 | Iter 5 | validators + submit | 已完成 | [2026-04-10-neolyst-iter5.md](2026-04-10-neolyst-iter5.md) |
 | Iter 6 | coverage history | 已完成 | [2026-04-10-neolyst-iter6.md](2026-04-10-neolyst-iter6.md) |
-| Iter 7 | 收尾 | 核对前面迭代不在design中的工作| — |
+| Iter 7 | 契约与文档对齐 | 待开始 | [2026-04-11-neolyst-iter7.md](2026-04-11-neolyst-iter7.md) |
+| Iter 8 | report_maker + template_maker 接入 | 待开始 | [2026-04-11-neolyst-iter8.md](2026-04-11-neolyst-iter8.md) |
