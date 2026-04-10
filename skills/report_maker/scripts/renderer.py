@@ -1182,13 +1182,12 @@ def _apply_margins_to_sectpr(docx_path: str, margins: Dict[str, str], target_sec
 
 def insert_body_at_marker_compose(doc_path: str, body_path: str, marker: str, output_path: str,
                                    sections: Dict[str, Dict[str, str]] = None) -> bool:
-    """在 marker 位置替换插入 body：删除 marker 所在页，插入 body.docx。
+    """在 marker 位置替换插入 body：三段拼接逻辑。
 
-    新逻辑：
-    1. 找到 marker 位置
-    2. 删除 marker 所在页的内容（到 sectPr 之前）
-    3. 在删除位置直接插入 body.docx 的全部内容
-    4. body.docx 的 sectPr 会自动生效，页眉页脚和图片不会出现问题
+    逻辑：
+    1. 第一段：template 开头到 body 占位符页之前
+    2. 第二段：body.docx 的全部内容（包括 sectPr）
+    3. 第三段：template body 占位符页之后到结尾
 
     Args:
         doc_path: 渲染后的模板路径
@@ -1206,33 +1205,40 @@ def insert_body_at_marker_compose(doc_path: str, body_path: str, marker: str, ou
 
         W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
 
-        # 1. 读取模板文档，找到 marker 位置和 sectPr
+        # 1. 读取模板文档
         doc = Document(doc_path)
         body_elem = doc.element.body
         all_elements = list(body_elem)
 
+        # 2. 找到 marker 所在页的起始位置和结束位置
         marker_idx = None
-        marker_sectPr = None  # marker 所在页的 sectPr（分节符）
         for i, elem in enumerate(all_elements):
             text = ''.join(t.text or '' for t in elem.iter() if t.text)
             if marker in text:
                 marker_idx = i
-                # 检查 marker 段落中是否有 sectPr
-                if elem.tag.endswith('}p'):
-                    pPr = elem.find(f'{W}pPr')
-                    if pPr is not None:
-                        sectPr = pPr.find(f'{W}sectPr')
-                        if sectPr is not None:
-                            marker_sectPr = deepcopy(sectPr)
-                            print(f"  找到 marker 的 sectPr 分节符")
                 break
 
         if marker_idx is None:
             print(f"  未找到 marker: {marker}")
             return False
 
-        # 2. 找到 marker 所在页的结束位置（下一个 sectPr 或文档末尾）
-        page_end_idx = len(all_elements)  # 默认到文档末尾
+        # 找到 marker 所在页的起始位置（往前找上一个 sectPr 或文档开头）
+        page_start_idx = 0
+        for i in range(marker_idx - 1, -1, -1):
+            elem = all_elements[i]
+            if elem.tag.endswith('}p'):
+                pPr = elem.find(f'{W}pPr')
+                if pPr is not None:
+                    sectPr = pPr.find(f'{W}sectPr')
+                    if sectPr is not None:
+                        page_start_idx = i + 1
+                        break
+            elif elem.tag.endswith('}sectPr'):
+                page_start_idx = i + 1
+                break
+
+        # 找到 marker 所在页的结束位置（下一个 sectPr 或文档末尾）
+        page_end_idx = len(all_elements)
         for i in range(marker_idx + 1, len(all_elements)):
             elem = all_elements[i]
             if elem.tag.endswith('}p'):
@@ -1246,43 +1252,42 @@ def insert_body_at_marker_compose(doc_path: str, body_path: str, marker: str, ou
                 page_end_idx = i
                 break
 
-        print(f"  marker 位置: {marker_idx}, 页面结束位置: {page_end_idx}")
+        print(f"  body 占位符页: 起始={page_start_idx}, 结束={page_end_idx}")
 
-        # 3. 删除 marker 及 marker 所在页的内容
-        elements_to_remove = []
-        for i in range(marker_idx, page_end_idx):
-            elements_to_remove.append(all_elements[i])
+        # 3. 构建三段内容
+        # 第一段：template 开头到 body 占位符页之前
+        part1 = all_elements[:page_start_idx]
 
-        for elem in elements_to_remove:
-            body_elem.remove(elem)
-
-        # 4. 读取 body.docx 的所有元素
+        # 第二段：body.docx 的全部内容（包括 sectPr）
         body_doc = Document(body_path)
         body_elements = list(body_doc.element.body)
+        part2 = body_elements  # 包含 sectPr
 
-        # 找到 body.docx 的 sectPr（应该在末尾）
-        body_sectPr = None
-        body_last_content_idx = len(body_elements)
-        for i, elem in enumerate(body_elements):
-            if elem.tag.endswith('}sectPr'):
-                body_sectPr = deepcopy(elem)
-                body_last_content_idx = i
-                break
+        # 第三段：template body 占位符页之后到结尾
+        part3 = all_elements[page_end_idx + 1:]
 
-        # 取 body.docx 中 sectPr 之前的所有内容
-        body_content_elements = body_elements[:body_last_content_idx]
+        print(f"  第一段元素: {len(part1)}, 第二段(body): {len(part2)}, 第三段元素: {len(part3)}")
 
-        print(f"  body.docx 内容元素数量: {len(body_content_elements)}")
+        # 4. 清空 body_elem 并重新组装
+        for elem in list(body_elem):
+            body_elem.remove(elem)
 
-        # 5. 在 marker_idx 位置插入 body 内容
-        insert_idx = marker_idx
-        for i, elem in enumerate(body_content_elements):
-            body_elem.insert(insert_idx + i, deepcopy(elem))
+        # 插入第一段
+        for elem in part1:
+            body_elem.append(deepcopy(elem))
 
-        # 6. 保存结果
+        # 插入第二段（body.docx 全部内容）
+        for elem in part2:
+            body_elem.append(deepcopy(elem))
+
+        # 插入第三段
+        for elem in part3:
+            body_elem.append(deepcopy(elem))
+
+        # 5. 保存结果
         doc.save(output_path)
 
-        print(f"  已将 body.docx 插入到 marker 位置，输出到: {output_path}")
+        print(f"  三段拼接完成，输出到: {output_path}")
         return True
 
     except Exception as e:
