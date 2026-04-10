@@ -218,6 +218,7 @@ __marimo__/
 # Project-specific
 .claude/skills
 .claude/memory/
+.worktrees/
 .codex
 .supabase/
 supabase/.temp/

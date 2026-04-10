@@ -18,7 +18,7 @@
 
 ### 2.1 接口形态
 
-- `neolyst` 对外只暴露业务接口：`resolve_analyst_by_email`、`resolve_template`、`upsert_template`、`reuse_template`、`resolve_coverage`、`create_coverage`、`list_coverage_history`、`save_draft_report`、`validators`、`submit_report`。
+- `neolyst` 对外只暴露业务接口：`resolve_analyst_by_email`、`resolve_template`、`upsert_template`、`reuse_template`、`resolve_coverage`、`create_coverage`、`list_coverage_history`、`save_draft_report`、`validate_draft`、`submit_report`。
 - `resolve_analyst_by_email` 校验并返回标准化后的 analyst 记录，业务主键为 `analyst_email`。
 - `resolve_template` 解析模板资产。
 - `upsert_template` 发布主模板。
@@ -26,7 +26,7 @@
 - `resolve_coverage`、`create_coverage` 负责 `coverage` 解析与创建。
 - `list_coverage_history` 查询 coverage 下的已发布历史报告。
 - `save_draft_report` 保存 draft。
-- `validators` 校验指定 draft 版本是否可提交。
+- `validate_draft` 校验指定 draft 版本是否可提交。
 - `submit_report` 提交指定 draft 版本。
 - 不暴露 `upload_file` 之类的底层中间接口。
 
@@ -46,7 +46,7 @@
 - `analysts` 列表与 `coverage_analyst` / `report_analyst` 统一以 `analyst_email` 作为业务键，排序字段统一使用 `author_order`；不再引入 `analyst_id`、`role`、`sort_order` 三套并存的表示。
 - `save_draft_report` 输入中的 `report_file`、`pdf_file`、`model_file` 仅用于上传前定位本地文件；文件路径的唯一准源是 `report_version.word_file_path`、`report_version.pdf_file_path`、`report_version.model_file_path`。`snapshot_json` 如保留文件字段，只作为版本快照，不作为校验和提交的判定来源。
 - `save_draft_report` 成功时至少返回 `report_id` 和 `version_no`。
-- `validators` 与 `submit_report` 都以 `report_id + version_no` 为输入。
+- `validate_draft` 与 `submit_report` 都以 `report_id + version_no` 为输入。
 
 ### 2.3 研报类型与模板记录
 
@@ -58,10 +58,10 @@
 
 ### 2.4 身份与会话策略
 
-- Neolyst Supabase 的登录身份由 `neolyst` 管理和复用，`save_draft_report`、`validators` 与 `submit_report` 的相关读写都使用该身份。
-- 使用 `email + password` 登录，账号、密码和登录态保存在 skill 根目录（`skills/neolyst/`）的 `user.json` 文件；只支持一个登录身份，会话失效时重新登录并更新该文件。该文件不提交到版本库。
-- `user.json` 为 JSON 文件，格式如下：`{ “email”: “...”, “password”: “...”, “access_token”: “...”, “refresh_token”: “...”, “expires_at”: 1712345678 }`。`connection.py` 启动时先用 `access_token` + `refresh_token` 恢复 session，若已过期则用 `email + password` 重新登录并回写该文件。
-- `user.json` 不存在时，调用方（Claude）需向用户索取邮箱和密码，使用 `get_client(email=..., password=...)` 完成首次登录后自动写入，后续不再需要手动输入。
+- Neolyst Supabase 的登录身份由 `neolyst` 管理和复用，`save_draft_report`、`validate_draft` 与 `submit_report` 的相关读写都使用该身份。
+- 使用 `email + password` 登录。账号和密码保存在 skill 根目录（`skills/neolyst/`）的 `user.json`；登录态保存在同目录的 `session.json`。两者都不提交到版本库。
+- `connection.py` 启动时先尝试用 `session.json` 中的 `access_token` + `refresh_token` 恢复 session；若已过期或失效，则回退到 `user.json` 中的 `email + password` 重新登录，并只回写 `session.json`。
+- `user.json` 不存在时，调用方需向用户索取邮箱和密码，使用 `get_client(email=..., password=...)` 完成首次登录。成功后自动写入 `user.json` 与 `session.json`，后续无需再次手动输入。
 - 当前库的 RLS 通过 `current_app_role()` 读取 `auth.jwt().app_metadata.role`，按 `admin`、`sa`、`analyst` 做权限控制；skill 设计必须与该角色模型兼容。
 - 报告所有者与执行审计均以当前登录身份为准。`owner_user_id`、`report_version.created_by`、`report_status_log.action_by` 等字段遵循”谁保存/提交，系统就记谁”；`resolve_analyst_by_email` 只用于确定报告分析师身份，不用于决定执行审计用户。
 - 本 skill 不做代理执行，因为这会破坏 Neolyst 的安全性，也不符合实际业务关系。
@@ -71,8 +71,8 @@
 - 凡涉及业务数据一致性、状态流转、关系维护、主表/版本表同步的逻辑，均优先在 Supabase 侧实现为稳定接口。
 - 凡涉及复杂读操作或复杂写操作，均默认在 Supabase 侧封装为 RPC / 稳定接口，而不是在 skill 侧拼接多次底层表操作。这里的“复杂”包括但不限于：需要按固定规则确定模板或报告文件路径、需要同时维护多张表、需要做跨表一致性判断、需要把业务校验与写入合并为一个原子操作。
 - `neolyst` skill 主要负责认证、文件上传、参数整理以及调用 Supabase 暴露的接口/函数，不在 skill 侧重复实现核心业务一致性规则。
-- 适合下沉到 Supabase 侧的逻辑包括：模板发布与复用、模板解析、coverage 解析与创建、draft 保存、提交前校验、提交状态流转，以及 `report` / `report_version` / `report_analyst` 之间的一致性维护。
-- 典型例子：`upsert_template` / `reuse_template` 由 Supabase 侧负责锁定目标模板记录并落库；`save_draft_report` 由 Supabase 侧负责在一次业务接口调用中同步维护 `report`、`report_version`、`report_analyst`；`validators` 和 `submit_report` 也应优先以 RPC 形式提供。
+- 适合下沉到 Supabase 侧的逻辑包括：模板发布与复用、模板解析、coverage 解析与创建、draft 保存、提交状态流转，以及 `report` / `report_version` / `report_analyst` 之间的一致性维护。
+- 当前实现边界：`upsert_template` / `reuse_template` 由 Supabase 侧负责锁定目标模板记录并落库；`save_draft_report` 由 Supabase 侧负责在一次业务接口调用中同步维护 `report`、`report_version`、`report_analyst`；`submit_report` 继续通过 RPC 完成状态流转；`validate_draft` 暂时保留在 Python 侧，以 SELECT 查询完成提交前校验，不下沉为 RPC。
 
 ### 2.6 技术访问方式
 
@@ -92,7 +92,8 @@
 
 - Supabase URL 和 anon key 由 skill 负责确定，写在 `skills/neolyst/neolyst.yaml` 中，随 skill 一起提交到版本库。anon key 是公开的客户端 key，不是密钥，可以安全提交。
 - `neolyst.yaml` 格式：`supabase_url: "..."` 和 `anon_key: "..."`。
-- 测试时可通过 `NEOLYST_URL` 和 `NEOLYST_ANON_KEY` 环境变量覆盖 yaml 中的值（例如指向本地 Supabase 实例）。
+- `neolyst.yaml` 是运行时默认配置，当前仓库版本可以指向 staging，不能视为本地测试默认环境。
+- 本地测试必须通过 `NEOLYST_URL` 和 `NEOLYST_ANON_KEY` 环境变量覆盖 yaml 中的值；测试入口再由 `NEOLYST_TEST_URL` / `NEOLYST_TEST_ANON_KEY` 映射过去，禁止回落到 yaml 默认值。
 
 ### 2.8 提交流程
 
@@ -104,7 +105,7 @@
 
 ### 2.9 校验与错误语义
 
-- 提交前校验由 `neolyst` 负责，`validators(report_id, version_no)` 用于校验指定 draft 版本是否满足提交条件。
+- 提交前校验由 `neolyst` 负责，`validate_draft(report_id, version_no)` 用于校验指定 draft 版本是否满足提交条件。
 - `reuse_template(report_type, language, same_as_report_type)` 约束如下：
   - 源模板记录必须存在
   - 复用只能发生在同一 `language` 内
@@ -113,7 +114,7 @@
 - `resolve_coverage` 按 `ticker` 查询候选 `coverage`，再通过 `coverage_analyst` 判断报告 `1作 analyst_email` 是否属于该 `coverage` 的分析师列表；只要求该分析师出现在列表中，不要求其在 `coverage_analyst` 中单独维护额外角色字段。
 - `resolve_coverage` 命中唯一 `coverage` 时返回 `coverage_id`；命中多条或未命中时直接抛出具体错误。
 - `create_coverage` 创建成功时返回新的 `coverage_id`；创建失败时直接抛出具体错误。
-- `save_draft_report`、`validators` 和 `submit_report` 在失败时都直接抛出具体错误；错误信息必须足够明确，让上游 LLM 或人工据此补字段、重新确认或中止流程。
+- `save_draft_report`、`validate_draft` 和 `submit_report` 在失败时都直接抛出具体错误；错误信息必须足够明确，让上游 LLM 或人工据此补字段、重新确认或中止流程。
 
 ### 2.10 Supabase 侧实现原则
 
@@ -192,9 +193,9 @@
 
 `save_draft_report` 不要求当前版本已经满足最终提交条件。它的职责是把机器处理结果保存到 Neolyst，供人工直接查看和继续处理。
 
-### 3.4 validators 执行流程
+### 3.4 validate_draft 执行流程
 
-`validators` 接收 `report_id` 和 `version_no`，用于判断该 draft 版本是否满足进入 `submit_report` 的条件。
+`validate_draft` 接收 `report_id` 和 `version_no`，用于判断该 draft 版本是否满足进入 `submit_report` 的条件。
 
 校验范围：
 
@@ -206,7 +207,7 @@
 
 结构校验：
 
-以下规则属于 `validators` 这层业务校验要求，默认通过 Supabase 侧 RPC 实现；它们不要求全部下沉为当前裸表 schema 的 CHECK / FK 约束。
+以下规则属于 `validate_draft` 这层业务校验要求。当前实现保留在 Python 侧，通过只读 SELECT 查询完成；它们不要求全部下沉为当前裸表 schema 的 CHECK / FK 约束。
 
 - 指定的 draft 版本必须存在
 - `analysts` 必须为非空列表
@@ -269,11 +270,11 @@ draft 版本需已持久化的核心内容：
 - 校验通过：返回被校验通过的 `report_id` 和 `version_no`
 - 校验失败：直接抛出具体错误
 
-`validators` 的字段完整性判断、主数据校验和版本一致性校验优先在 Supabase 侧通过 RPC / 稳定接口实现；skill 侧负责调用并透传错误。
+`validate_draft` 当前由 `skills/neolyst/scripts/validators.py` 提供实现。它负责字段完整性判断、主数据校验和版本一致性校验，但不负责状态流转，也不负责写库。
 
 ### 3.5 submit_report 执行流程
 
-`submit_report` 接收 `report_id` 和 `version_no`，用于提交该 draft 版本。对应 draft 在进入该接口前必须已经完成必要的 `resolve_coverage`、`create_coverage` 补充以及 `validators` 校验。
+`submit_report` 接收 `report_id` 和 `version_no`，用于提交该 draft 版本。对应 draft 在进入该接口前必须已经完成必要的 `resolve_coverage`、`create_coverage` 补充以及 `validate_draft` 校验。
 
 执行顺序：
 
@@ -300,8 +301,9 @@ draft 版本需已持久化的核心内容：
 ```text
 neolyst/
   SKILL.md
-  neolyst.yaml       ← Supabase 连接配置（URL + anon_key），随 skill 发布
-  .neolyst           ← 本地凭据（email/password/token），不提交
+  neolyst.yaml       ← 运行时默认 Supabase 连接配置（URL + anon_key），随 skill 发布
+  user.json          ← 本地用户凭据（email/password），不提交
+  session.json       ← 本地登录态（token），不提交
   scripts/
     connection.py
     storage.py
@@ -313,9 +315,9 @@ neolyst/
     submit_report.py
 ```
 
-`SKILL.md` 负责声明对外业务接口，说明高层输入输出约定，以及 `/.neolyst` 的使用方式。具体实现细节放在 `scripts/*.py`。
+`SKILL.md` 负责声明对外业务接口，说明高层输入输出约定，以及 `user.json` / `session.json` 的使用方式。具体实现细节放在 `scripts/*.py`。
 
-`connection.py` 负责连接相关能力，包括读取和写入 `/.neolyst`、创建 Supabase client、恢复 session、失效后重新登录，以及对外提供已认证的访问连接。
+`connection.py` 负责连接相关能力，包括读取和写入 `user.json` / `session.json`、创建 Supabase client、恢复 session、失效后重新登录，以及对外提供已认证的访问连接。
 
 `storage.py` 负责模板文件和报告文件上传/下载。对外暴露两个通用函数 `upload(client, storage_path, local_path)` 和 `download(client, storage_path, local_path)`，bucket 从路径首段自动解析，不需要调用方指定。路径由调用方传入（来自 Supabase RPC），`storage.py` 不拼路径字符串。
 
@@ -339,18 +341,19 @@ neolyst/
 
 `draft_report.py` 负责 `save_draft_report`，处理 draft 版本创建、文件上传和调用 Supabase 侧 draft 保存 RPC。
 
-`validators.py` 负责提交前校验，根据 `report_id` 和 `version_no` 调用 Supabase 侧校验 RPC 判断指定 draft 版本是否满足提交条件，不负责创建业务对象，也不执行提交。
+`validators.py` 模块对外暴露的业务接口名是 `validate_draft`。当前实现直接查询 `report`、`report_version`、`report_analyst`、`analyst`、`coverage`、`sector`、`region` 等表完成提交前校验，不调用 RPC，也不执行提交。
 
 `submit_report.py` 负责提交已有 draft，串联连接获取、draft 版本定位、提交前校验和调用 Supabase 侧提交 RPC。`submit_report` 的职责聚焦于状态推进与提交审计；`report` 主表当前态字段和 `current_version_no` 已由 `save_draft_report` 在保存 draft 时同步更新。
 
-模块之间的依赖关系保持单向：`draft_report` 可以调用 `connection` 和 `storage`；`submit_report` 可以调用 `connection` 和 `validators`；`validators` 可以调用 `analyst`、`coverage` 和 `connection`；`template` 可以调用 `connection` 和 `storage`；`coverage`、`analyst` 与 `storage` 只依赖 `connection`；`connection` 不依赖任何业务模块。
+模块之间的依赖关系保持单向：`draft_report` 可以调用 `connection` 和 `storage`；`submit_report` 可以调用 `connection` 和 `validators`；`validators` 可以调用 `connection` 并直接查询相关表；`template` 可以调用 `connection` 和 `storage`；`coverage`、`analyst` 与 `storage` 只依赖 `connection`；`connection` 不依赖任何业务模块。
 
 ## 4. 联调与环境
 
 ### 4.1 联调测试环境
 
-- 本地 Supabase URL：`http://127.0.0.1:54321`（`neolyst.yaml` 默认值）
-- 本地测试账号：`yangxue@opendelp.com` / `Admin123`（seed.sql 内置，`admin` 角色）
+- `neolyst.yaml` 仅作为运行时默认连接配置，当前仓库版本可指向 staging
+- 本地测试必须显式提供 `NEOLYST_TEST_URL`、`NEOLYST_TEST_ANON_KEY`、`NEOLYST_TEST_EMAIL`、`NEOLYST_TEST_PASSWORD`
+- pytest 启动时会把 `NEOLYST_TEST_URL` / `NEOLYST_TEST_ANON_KEY` 映射到 `NEOLYST_URL` / `NEOLYST_ANON_KEY`，确保测试不会回落到 `neolyst.yaml`
 
 ## 5. report_maker 对接 neolyst 的改造要求
 
@@ -429,7 +432,7 @@ draft 输入可包含以下字段：
 
 ### 5.5 提交前校验
 
-在人工确认提交前，Neolyst 或其他上层流程根据 `report_id` 和 `version_no` 调用 `validators(report_id, version_no)` 对指定 draft 版本执行提交前校验。
+在人工确认提交前，Neolyst 或其他上层流程根据 `report_id` 和 `version_no` 调用 `validate_draft(report_id, version_no)` 对指定 draft 版本执行提交前校验。
 
 对于公司类报告，提交前仍需要完成 `resolve_coverage`、必要时的 `create_coverage`、`contact_person` 确认以及其他提交必填字段补齐。只有该 draft 版本满足提交条件后，才允许进入 `submit_report`。
 
@@ -441,7 +444,7 @@ draft 输入可包含以下字段：
 
 ### 5.7 失败处理
 
-当 `save_draft_report`、`resolve_coverage`、`create_coverage`、`validators` 或 `submit_report` 抛出具体错误时，`report_maker` 或人工流程负责根据错误内容继续补字段、重新确认或终止流程。
+当 `save_draft_report`、`resolve_coverage`、`create_coverage`、`validate_draft` 或 `submit_report` 抛出具体错误时，`report_maker` 或人工流程负责根据错误内容继续补字段、重新确认或终止流程。
 
 字段缺失、字段歧义、联系人确认和 `coverage` 创建信息不足等问题，由 `report_maker` 继续通过对话处理。多轮补充、重新保存 draft、重新校验和重新提交都围绕同一个 `report_id` 进行。
 
