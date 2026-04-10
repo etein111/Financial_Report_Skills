@@ -122,5 +122,7 @@
       "Bash(\".venv/Scripts/python\" scripts/charts/recommendation_chart.py)",
       "Skill(report_maker)"
     ]
-  }
+  },
+  "prefersReducedMotion": true,
+  "outputStyle": "Explanatory"
 }
