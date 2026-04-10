@@ -251,6 +251,36 @@ result = submit_report.submit_report(client, report_id="uuid", version_no=1)
 
 ---
 
+### 10. list_coverage_history ✅ 已实现
+
+按 `ticker + first_analyst_email` 定位唯一 coverage，返回该 coverage 下所有已发布历史报告。
+
+```python
+from skills.neolyst.scripts import coverage
+
+rows = coverage.list_coverage_history(
+    client,
+    ticker="VRT US",
+    first_analyst_email="alice@neolyst.com",
+)
+# 返回：
+# [
+#   {
+#     "report_id": "uuid",
+#     "title": "Vertiv: AI demand drives earnings growth",
+#     "rating": "OUTPERFORM",
+#     "target_price": 140,
+#     "published_at": "2026-04-09T08:00:00+00:00",
+#   },
+#   ...
+# ]
+# 按 published_at desc 排序
+# coverage 找不到：抛出 ValueError（含"未找到匹配的 Coverage"）
+# coverage 找到但没有已发布历史：返回 []
+```
+
+---
+
 ## 错误处理
 
 所有接口在失败时直接抛出具体异常，错误信息必须足够明确，让调用方知道如何处置：
