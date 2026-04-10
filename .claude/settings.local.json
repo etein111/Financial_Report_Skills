@@ -113,7 +113,13 @@
       "Bash(grep -n \"create table.*analyst\\\\|analyst\" /mnt/c/_code/neoskills/supabase/migrations/*.sql)",
       "Bash(npx supabase:*)",
       "Bash(python3:*)",
-      "Bash(poetry run:*)"
+      "Bash(poetry run:*)",
+      "Bash(\".venv/Scripts/python\" -c \"\nfrom docx import Document\ndoc = Document\\(''templates/company/template.docx''\\)\nfor i, para in enumerate\\(doc.paragraphs\\):\n    if ''{{'' in para.text:\n        print\\(f''{i}: {para.text}''\\)\nfor i, table in enumerate\\(doc.tables\\):\n    for j, row in enumerate\\(table.rows\\):\n        for k, cell in enumerate\\(row.cells\\):\n            if ''{{'' in cell.text:\n                print\\(f''Table {i}, Row {j}, Cell {k}: {cell.text}''\\)\n\")",
+      "Bash(\".venv/Scripts/python\" -c \"\nfrom docx import Document\ndoc = Document\\(''templates/company/template.docx''\\)\n# 搜索所有包含占位符的文本\nfor i, para in enumerate\\(doc.paragraphs\\):\n    if ''chart'' in para.text.lower\\(\\) or ''compare'' in para.text.lower\\(\\) or ''volume'' in para.text.lower\\(\\) or ''recommendation'' in para.text.lower\\(\\):\n        print\\(f''Para {i}: {para.text}''\\)\n# 搜索表格\nfor i, table in enumerate\\(doc.tables\\):\n    for j, row in enumerate\\(table.rows\\):\n        for k, cell in enumerate\\(row.cells\\):\n            text = cell.text.lower\\(\\)\n            if ''chart'' in text or ''compare'' in text or ''volume'' in text or ''recommendation'' in text:\n                print\\(f''Table {i}, Row {j}, Cell {k}: {cell.text}''\\)\n\")",
+      "Bash(\".venv/Scripts/python\" recommendation_chart.py)",
+      "Bash(\".venv/Scripts/python\" -c \"\nfrom docx import Document\ndoc = Document\\(''templates/company/template.docx''\\)\nprint\\(''=== Tables ===''\\)\nfor i, table in enumerate\\(doc.tables\\):\n    print\\(f''Table {i}:''\\)\n    for j, row in enumerate\\(table.rows\\):\n        row_texts = [cell.text[:40] for cell in row.cells]\n        print\\(f''  Row {j}: {row_texts}''\\)\n\")",
+      "Bash(\".venv/Scripts/python\" -c \"\nfrom docx import Document\n\ndoc = Document\\(''templates/company/template.docx''\\)\n\n# 搜索所有包含 chart 或 placeholder 的内容\nfor i, para in enumerate\\(doc.paragraphs\\):\n    text = para.text.strip\\(\\)\n    if text and \\(''chart'' in text.lower\\(\\) or ''{{'' in text\\):\n        print\\(f''Para {i}: {repr\\(text\\)}''\\)\n\nfor i, table in enumerate\\(doc.tables\\):\n    for j, row in enumerate\\(table.rows\\):\n        for k, cell in enumerate\\(row.cells\\):\n            text = cell.text.strip\\(\\)\n            if text and \\(''chart'' in text.lower\\(\\) or ''{{'' in text\\):\n                print\\(f''Table {i}, Row {j}, Cell {k}: {repr\\(text[:50]\\)}''\\)\n\")",
+      "Bash(\".venv/Scripts/python\" scripts/charts/recommendation_chart.py)"
     ]
   }
 }
