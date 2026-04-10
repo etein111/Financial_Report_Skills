@@ -1,6 +1,6 @@
 ---
 name: neolyst
-description: "Neolyst Supabase 数据访问层。当你需要操作 Neolyst 平台数据库时——无论是查询分析师信息、解析或上传模板、管理 coverage、保存报告草稿、校验或提交报告——必须使用此 skill，绝不能自行构造原始 Supabase 查询。触发场景包括但不限于：调用方提到 analyst 邮箱查询、模板同步、coverage 创建、draft 保存、报告提交、或任何需要读写 Neolyst 数据库的操作。"
+description: "Neolyst Supabase 数据访问层。当你需要操作 Neolyst 平台数据库时——无论是查询分析师信息、解析或上传模板、管理 coverage、保存报告草稿、校验或提交报告——必须使用此 skill，绝不能自行构造原始 Supabase 查询。触发场景包括但不限于：调用方提到 analyst 邮箱查询、模板同步、coverage 创建、coverage 历史报告查询、draft 保存、报告提交、或任何需要读写 Neolyst 数据库的操作。"
 ---
 
 # neolyst
