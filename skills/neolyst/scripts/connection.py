@@ -104,15 +104,15 @@ def get_client(
     返回已认证的 Supabase client。
 
     URL 和 anon_key 从 neolyst.yaml 读取（可通过环境变量覆盖）。
-    用户凭据从 user.json 文件读取（默认位于 skill 根目录）。
+    用户凭据从 user.json 读取，登录态从 session.json 读取（默认位于 skill 根目录）。
 
     优先顺序：
-    1. 从 user.json 恢复 session（token 过期则 refresh）
-    2. 用传入的 email+password 登录
+    1. 从 session.json 恢复 session（token 过期或无效则 refresh）
+    2. refresh 失败后，用传入的 email+password 或 user.json 中的凭据登录
     3. 若均无，抛出 ValueError（调用方应提示用户输入凭据）
 
     Args:
-        neolyst_dir: user.json 文件所在目录。None = 使用 skill 根目录（推荐）。
+        neolyst_dir: user.json / session.json 所在目录。None = 使用 skill 根目录（推荐）。
                      测试时可传入临时目录。
         email: 可选，仅在无可用 session 时使用
         password: 可选，仅在无可用 session 时使用
