@@ -95,8 +95,6 @@
       "Bash(\".venv/Scripts/python\" stock_chart_compare.py)",
       "Bash(supabase status:*)",
       "Bash(printf:*)"
-      "Bash(\".venv/Scripts/python\" stock_chart_compare.py)",
-      "Bash(\".venv/Scripts/python\" recommendation_chart.py)"
     ]
   }
 }

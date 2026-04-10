@@ -1180,181 +1180,121 @@ def _apply_margins_to_sectpr(docx_path: str, margins: Dict[str, str], target_sec
         return False
 
 
-def insert_body_at_marker_compose(doc_path: str, body_path: str, marker: str, output_path: str) -> bool:
-    """使用 docxcompose 三段式合并：在 marker 位置插入 body。
+def insert_body_at_marker_compose(doc_path: str, body_path: str, marker: str, output_path: str,
+                                   sections: Dict[str, Dict[str, str]] = None) -> bool:
+    """在 marker 位置替换插入 body：删除 marker 所在页，插入 body.docx。
 
-    将原文档拆分为 marker 之前和之后两部分，
-    然后用 docxcompose 合并：part1 + body + sectPr + part3。
-    这样可以正确处理所有图片和资源引用。
+    新逻辑：
+    1. 找到 marker 位置
+    2. 删除 marker 所在页的内容（到 sectPr 之前）
+    3. 在删除位置直接插入 body.docx 的全部内容
+    4. body.docx 的 sectPr 会自动生效，页眉页脚和图片不会出现问题
 
     Args:
         doc_path: 渲染后的模板路径
         body_path: body 文档路径
         marker: 占位符标记
         output_path: 输出路径
+        sections: 页眉页脚配置字典
 
     Returns:
         是否成功插入
     """
     try:
-        from docxcompose.composer import Composer
-        import shutil
         from copy import deepcopy
         from lxml import etree
 
         W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
 
-        # 0. 保存 body.docx 的页边距和 header/footer 引用信息（合并后需要恢复）
-        body_margins = _get_document_sectpr_margins(body_path)
-        if body_margins:
-            print(f"  body.docx 页边距: top={body_margins.get('top')}, bottom={body_margins.get('bottom')}")
-
-        body_header_footer_refs = _get_document_header_footer_refs(body_path)
-        if body_header_footer_refs:
-            print(f"  body.docx header/footer 引用: {body_header_footer_refs}")
-
-        # 1. 找到 marker 位置和其中的 sectPr
+        # 1. 读取模板文档，找到 marker 位置和 sectPr
         doc = Document(doc_path)
         body_elem = doc.element.body
         all_elements = list(body_elem)
 
         marker_idx = None
-        marker_sectPr = None  # 保留 marker 段落中的 sectPr（分节符）
+        marker_sectPr = None  # marker 所在页的 sectPr（分节符）
         for i, elem in enumerate(all_elements):
             text = ''.join(t.text or '' for t in elem.iter() if t.text)
             if marker in text:
                 marker_idx = i
-                # 检查 marker 段落中是否有 sectPr（分节符）
+                # 检查 marker 段落中是否有 sectPr
                 if elem.tag.endswith('}p'):
                     pPr = elem.find(f'{W}pPr')
                     if pPr is not None:
                         sectPr = pPr.find(f'{W}sectPr')
                         if sectPr is not None:
-                            # 提取 sectPr（深拷贝避免被删除）
                             marker_sectPr = deepcopy(sectPr)
-                            print(f"  保留 marker 段落中的 sectPr 分节符")
+                            print(f"  找到 marker 的 sectPr 分节符")
                 break
 
         if marker_idx is None:
+            print(f"  未找到 marker: {marker}")
             return False
 
-        # 2. 创建 part1（marker 之前的内容）
-        part1_path = Path(output_path).parent / "temp_part1.docx"
-        shutil.copy(doc_path, str(part1_path))
+        # 2. 找到 marker 所在页的结束位置（下一个 sectPr 或文档末尾）
+        page_end_idx = len(all_elements)  # 默认到文档末尾
+        for i in range(marker_idx + 1, len(all_elements)):
+            elem = all_elements[i]
+            if elem.tag.endswith('}p'):
+                pPr = elem.find(f'{W}pPr')
+                if pPr is not None:
+                    sectPr = pPr.find(f'{W}sectPr')
+                    if sectPr is not None:
+                        page_end_idx = i
+                        break
+            elif elem.tag.endswith('}sectPr'):
+                page_end_idx = i
+                break
 
-        part1_doc = Document(str(part1_path))
-        part1_body = part1_doc.element.body
-        part1_elements = list(part1_body)
+        print(f"  marker 位置: {marker_idx}, 页面结束位置: {page_end_idx}")
 
-        # 删除 marker 及之后的所有元素
-        for elem in part1_elements[marker_idx:]:
-            tag = elem.tag.split('}')[-1]
-            if tag != 'sectPr':  # 保留 sectPr（页面设置）
-                part1_body.remove(elem)
+        # 3. 删除 marker 及 marker 所在页的内容
+        elements_to_remove = []
+        for i in range(marker_idx, page_end_idx):
+            elements_to_remove.append(all_elements[i])
 
-        part1_doc.save(str(part1_path))
+        for elem in elements_to_remove:
+            body_elem.remove(elem)
 
-        # 3. 创建 part3（marker 之后的内容）
-        part3_path = Path(output_path).parent / "temp_part3.docx"
-        shutil.copy(doc_path, str(part3_path))
-
-        part3_doc = Document(str(part3_path))
-        part3_body = part3_doc.element.body
-        part3_elements = list(part3_body)
-
-        # 删除 marker 及之前的所有元素
-        has_part3_content = False
-        for elem in part3_elements[:marker_idx + 1]:
-            tag = elem.tag.split('}')[-1]
-            if tag != 'sectPr':
-                part3_body.remove(elem)
-
-        # 检查 part3 是否有实际内容
-        for elem in part3_body:
-            tag = elem.tag.split('}')[-1]
-            if tag in ['p', 'tbl', 'sdt']:
-                text = ''.join(t.text or '' for t in elem.iter() if t.text)
-                if text.strip():
-                    has_part3_content = True
-                    break
-
-        if has_part3_content:
-            part3_doc.save(str(part3_path))
-
-        # 4. 使用 docxcompose 合并：part1 + body + sectPr(分页符) + part3
-        master = Document(str(part1_path))
-        composer = Composer(master)
-
-        # 追加 body
+        # 4. 读取 body.docx 的所有元素
         body_doc = Document(body_path)
+        body_elements = list(body_doc.element.body)
 
-        # 如果有 marker_sectPr，在 body 末尾添加一个带有 sectPr 的段落
-        # 这样 body 和 part3（APPENDIX 1 Summary）之间就有分页符了
-        if marker_sectPr is not None and has_part3_content:
-            # 创建分页段落
-            page_break_para = body_doc.element.body.makeelement(
-                f'{W}p',
-                {}
-            )
-            pPr = etree.SubElement(page_break_para, f'{W}pPr')
-            new_sectPr = deepcopy(marker_sectPr)
+        # 找到 body.docx 的 sectPr（应该在末尾）
+        body_sectPr = None
+        body_last_content_idx = len(body_elements)
+        for i, elem in enumerate(body_elements):
+            if elem.tag.endswith('}sectPr'):
+                body_sectPr = deepcopy(elem)
+                body_last_content_idx = i
+                break
 
-            # 确保 sectPr 类型为 nextPage（强制分页）
-            sectType = new_sectPr.find(f'{W}type')
-            if sectType is None:
-                sectType = etree.SubElement(new_sectPr, f'{W}type')
-            sectType.set(f'{W}val', 'nextPage')
+        # 取 body.docx 中 sectPr 之前的所有内容
+        body_content_elements = body_elements[:body_last_content_idx]
 
-            pPr.append(new_sectPr)
-            body_doc.element.body.append(page_break_para)
-            print(f"  在 body 末尾添加分页符段落（nextPage）")
+        print(f"  body.docx 内容元素数量: {len(body_content_elements)}")
 
-        composer.append(body_doc, remove_property_fields=False)
+        # 5. 在 marker_idx 位置插入 body 内容
+        insert_idx = marker_idx
+        for i, elem in enumerate(body_content_elements):
+            body_elem.insert(insert_idx + i, deepcopy(elem))
 
-        # 追加 part3（如果有内容）
-        if has_part3_content:
-            part3_for_merge = Document(str(part3_path))
-            composer.append(part3_for_merge, remove_property_fields=False)
+        # 6. 保存结果
+        doc.save(output_path)
 
-        # 保存最终文档
-        composer.save(output_path)
-
-        # 5. 复制 body 的 header/footer 文件到输出文档（docxcompose 不会自动复制）
-        # 并获取 body 原始 rId -> 输出文档新 rId 的映射
-        hf_rid_mapping = _copy_headers_footers_between_docs(body_path, output_path)
-
-        # 更新 body_header_footer_refs，使用输出文档中的新 rId
-        if hf_rid_mapping and body_header_footer_refs:
-            for ref_type in ['header', 'footer']:
-                if ref_type in hf_rid_mapping and ref_type in body_header_footer_refs:
-                    body_orig_rId = body_header_footer_refs.get(ref_type, '')
-                    if body_orig_rId in hf_rid_mapping[ref_type]:
-                        body_header_footer_refs[ref_type] = hf_rid_mapping[ref_type][body_orig_rId]
-                        print(f"  更新 body_header_footer_refs[{ref_type}]: {body_orig_rId} -> {body_header_footer_refs[ref_type]}")
-
-        # 6. 恢复 body 的页边距（修复 docxcompose 覆盖页边距的问题）
-        if body_margins:
-            # docxcompose 会在 part1 和 body 之间插入一个 sectPr（分节符）
-            # 这个 sectPr 应该使用 body 的页边距和 header/footer
-            # 找到并修复这个 sectPr
-            _fix_docxcompose_sectpr_margins(output_path, body_margins, has_part3_content, body_header_footer_refs)
-
-        # 7. 清理临时文件
-        part1_path.unlink(missing_ok=True)
-        if has_part3_content:
-            part3_path.unlink(missing_ok=True)
-
+        print(f"  已将 body.docx 插入到 marker 位置，输出到: {output_path}")
         return True
 
     except Exception as e:
-        print(f"  docxcompose 三段式合并失败: {e}")
+        print(f"  插入 body 失败: {e}")
         import traceback
         traceback.print_exc()
         return False
 
 
 def _fix_docxcompose_sectpr_margins(docx_path: str, body_margins: Dict[str, str], has_part3: bool,
-                                    body_header_footer_refs: Dict[str, str] = None) -> int:
+                                    body_header_footer_refs: Dict[str, str] = None,
+                                    sections: Dict[str, Dict[str, str]] = None) -> int:
     """修复 docxcompose 合并时插入的 sectPr 页边距和页眉页脚引用。
 
     docxcompose 在 append() 时会在合并点插入分节符（pPr/sectPr），
@@ -1365,9 +1305,9 @@ def _fix_docxcompose_sectpr_margins(docx_path: str, body_margins: Dict[str, str]
 
     页面结构：
     - 封面：使用封面模板的 header/footer（保持不变）
-    - body：使用 footer5.xml（日期+页码），不使用 header
-    - english summary：使用 header4.xml 和 footer4.xml
-    - 法律附录：保持独立
+    - body：使用 header5.xml（公司名称+评级调整, tblInd=-3099）和 footer2.xml（日期+页码）
+    - english summary：使用 header5.xml 和 footer3.xml
+    - 法律附录：不使用 header，使用 footer6.xml
 
     Args:
         docx_path: docx 文件路径
@@ -1413,17 +1353,34 @@ def _fix_docxcompose_sectpr_margins(docx_path: str, body_margins: Dict[str, str]
                     template_hf_rids[target] = rel_id
 
         # 各种 section 应该使用的 header/footer
-        # body: header6 (蓝色, tblInd=0), footer2
-        body_header_rid = template_hf_rids.get('header6.xml', '')
-        body_footer_rid = template_hf_rids.get('footer2.xml', '')
-        # english summary: header6 (蓝色, tblInd=0), footer3
-        es_header_rid = template_hf_rids.get('header6.xml', '')
-        es_footer_rid = template_hf_rids.get('footer3.xml', '')
-        
-        print(f"  body header (header6.xml, 蓝色, tblInd=0): rId={body_header_rid}")
-        print(f"  body footer (footer2.xml): rId={body_footer_rid}")
-        print(f"  english summary header (header6.xml, 蓝色, tblInd=0): rId={es_header_rid}")
-        print(f"  english summary footer (footer3.xml): rId={es_footer_rid}")
+        # 从 sections 配置读取，如果没有配置则使用默认值
+        default_sections = {
+            'cover': {'header': 'header1.xml', 'footer': 'footer1.xml'},
+            'transition': {'header': 'header5.xml', 'footer': 'footer2.xml'},
+            'body': {'header': 'header5.xml', 'footer': 'footer2.xml'},
+            'english_summary': {'header': 'header6.xml', 'footer': 'footer3.xml'},
+            'appendix': {'header': 'header4.xml', 'footer': 'footer6.xml'},
+        }
+        if sections is None:
+            sections = default_sections
+
+        # 获取各 section 的 header/footer rId
+        body_header_file = sections.get('body', {}).get('header', 'header5.xml')
+        body_footer_file = sections.get('body', {}).get('footer', 'footer2.xml')
+        es_header_file = sections.get('english_summary', {}).get('header', 'header6.xml')
+        es_footer_file = sections.get('english_summary', {}).get('footer', 'footer3.xml')
+        appendix_header_file = sections.get('appendix', {}).get('header', 'header4.xml')
+        appendix_footer_file = sections.get('appendix', {}).get('footer', 'footer6.xml')
+
+        body_header_rid = template_hf_rids.get(body_header_file, '')
+        body_footer_rid = template_hf_rids.get(body_footer_file, '')
+        es_header_rid = template_hf_rids.get(es_header_file, '')
+        es_footer_rid = template_hf_rids.get(es_footer_file, '')
+
+        print(f"  body header ({body_header_file}): rId={body_header_rid}")
+        print(f"  body footer ({body_footer_file}): rId={body_footer_rid}")
+        print(f"  english summary header ({es_header_file}): rId={es_header_rid}")
+        print(f"  english summary footer ({es_footer_file}): rId={es_footer_rid}")
 
         # 收集所有段落内 sectPr 及其上下文信息
         all_elements = list(body)
@@ -1455,27 +1412,85 @@ def _fix_docxcompose_sectpr_margins(docx_path: str, body_margins: Dict[str, str]
         print(f"  找到 {len(ppr_sectprs_with_context)} 个段落内 sectPr")
 
         # 遍历所有 sectPr，根据上下文判断类型并修复
+        # ⚠️ Word 的 sectPr 定义的是它之前的 Section 的格式
+        # python-docx 的 Section N 的格式来自第 N 个 sectPr（按文档顺序）
         for sectPr, prev_text, next_text, idx in ppr_sectprs_with_context:
             prev_text_lower = prev_text.lower()
             next_text_lower = next_text.lower()
             
-            # 判断 sectPr 类型
-            # 封面：prev="[TABLE]" 和 next=""，是文档开头的封面表格之后
+            # 封面：prev="[TABLE]"，是封面表格之后
             is_cover = prev_text == '[TABLE]' and next_text == ''
             
-            # body sectPr：next="1 威胜控股..." 或 idx == 9
-            is_body = (prev_text == '' and '威胜控股' in next_text) or idx == 9
+            # 正文 sectPr：prev 包含正文结尾内容（如"风险"），next="APPENDIX 1"
+            # 这个 sectPr 定义的是正文 Section（它之前的所有正文内容）
+            is_body = (next_text == 'APPENDIX 1' and 
+                       ('风险' in prev_text or prev_text == ''))
             
-            # english summary sectPr：next="APPENDIX 1"
-            # APPENDIX 1 是 english summary 的开始
-            is_es = next_text == 'APPENDIX 1'
+            # 英文摘要 sectPr：prev 包含英文摘要结尾（Risk Warnings 等），next=附录APPENDIX
+            # 这个 sectPr 定义的是英文摘要 Section
+            is_es = (('附录APPENDIX' in next_text or 'Table_disclaimer' in next_text) and
+                     not is_body and not is_cover)
+            
+            # 过渡 sectPr：prev=""，next=正文标题（目录区域）
+            # 这个 sectPr 定义的是封面过渡区域
+            is_transition = (not is_cover and not is_body and not is_es and
+                            prev_text == '' and next_text != 'APPENDIX 1')
             
             print(f"  sectPr {idx}: prev=\"{prev_text[:30]}\" next=\"{next_text[:30]}\"")
-            print(f"    -> is_cover={is_cover}, is_body={is_body}, is_es={is_es}")
+            print(f"    -> is_cover={is_cover}, is_transition={is_transition}, is_body={is_body}, is_es={is_es}")
             
             if is_cover:
                 # 封面 sectPr：保持不变
                 print(f"    保持封面 sectPr 不变")
+                continue
+            
+            if is_transition:
+                # 过渡 sectPr：它之后的 Section 包含目录+正文
+                # 需要 body 的 header (header5) 和页边距 (left=3600)
+                
+                # 修复 pgSz：统一为 template 标准尺寸 (11910x16840)
+                pgSz = sectPr.find(f'{W}pgSz')
+                if pgSz is not None:
+                    pgSz.set(f'{W}w', '11910')
+                    pgSz.set(f'{W}h', '16840')
+                
+                # 修复 pgMar：正文页边距
+                pgMar = sectPr.find(f'{W}pgMar')
+                if pgMar is not None and body_margins:
+                    for attr, val in body_margins.items():
+                        pgMar.set(f'{W}{attr}', val)
+                    print(f"    已修复过渡 sectPr 页边距")
+                
+                # 确保 header default 存在
+                has_default_header = False
+                for ref in sectPr.findall(f'{W}headerReference'):
+                    if ref.get(f'{W}type', '') == 'default':
+                        has_default_header = True
+                        ref.set(f'{R}id', body_header_rid)
+                        print(f"    已修复过渡 sectPr header default: rId={body_header_rid} (header5.xml)")
+                        fixed_count += 1
+                        break
+                if not has_default_header and body_header_rid:
+                    ref_elem = etree.SubElement(sectPr, f'{W}headerReference')
+                    ref_elem.set(f'{W}type', 'default')
+                    ref_elem.set(f'{R}id', body_header_rid)
+                    print(f"    已添加过渡 sectPr header default: rId={body_header_rid} (header5.xml)")
+                    fixed_count += 1
+                
+                # 确保 footer default 存在
+                has_default_footer = False
+                for ref in sectPr.findall(f'{W}footerReference'):
+                    if ref.get(f'{W}type', '') == 'default':
+                        has_default_footer = True
+                        break
+                if not has_default_footer and body_footer_rid:
+                    ref_elem = etree.SubElement(sectPr, f'{W}footerReference')
+                    ref_elem.set(f'{W}type', 'default')
+                    ref_elem.set(f'{R}id', body_footer_rid)
+                    print(f"    已添加过渡 sectPr footer default: rId={body_footer_rid} (footer2.xml)")
+                    fixed_count += 1
+                
+                print(f"    已修复过渡 sectPr (目录+正文)")
                 continue
             
             # 修复页边距（如果需要）
@@ -1495,23 +1510,28 @@ def _fix_docxcompose_sectpr_margins(docx_path: str, body_margins: Dict[str, str]
             
             # 设置 header/footer
             if is_body:
-                # body sectPr：添加 header2 和 footer2
-                # 注意：body sectPr 的 type 应该保持 nextPage，确保 body 和 english summary 之间有分页
+                # body sectPr：所有页都用 header5 (tblInd=-3099)
                 
-                # 添加 header2
+                # 移除现有的 header 引用
+                for ref in sectPr.findall(f'{W}headerReference'):
+                    sectPr.remove(ref)
+                
+                # 添加 header (header5, 所有页)
                 if body_header_rid:
-                    # 移除现有的 header 引用
-                    for ref in sectPr.findall(f'{W}headerReference'):
-                        sectPr.remove(ref)
                     ref_elem = etree.SubElement(sectPr, f'{W}headerReference')
                     ref_elem.set(f'{W}type', 'default')
                     ref_elem.set(f'{R}id', body_header_rid)
-                    print(f"    已添加 body sectPr header: rId={body_header_rid} (header2.xml)")
+                    print(f"    已添加 body sectPr header: rId={body_header_rid} (header5.xml)")
                     fixed_count += 1
                 
-                # 添加 footer2
+                # 移除 titlePg（不使用首页不同）
+                titlePg = sectPr.find(f'{W}titlePg')
+                if titlePg is not None:
+                    sectPr.remove(titlePg)
+                    print(f"    已移除 titlePg")
+                
+                # 添加 footer
                 if body_footer_rid:
-                    # 移除现有的 footer 引用
                     for ref in sectPr.findall(f'{W}footerReference'):
                         sectPr.remove(ref)
                     ref_elem = etree.SubElement(sectPr, f'{W}footerReference')
@@ -1521,16 +1541,35 @@ def _fix_docxcompose_sectpr_margins(docx_path: str, body_margins: Dict[str, str]
                     fixed_count += 1
                     
             elif is_es:
-                # english summary sectPr：添加 header3 和 footer3
-                if es_header_rid:
-                    for ref in sectPr.findall(f'{W}headerReference'):
-                        sectPr.remove(ref)
+                # english summary sectPr：无页眉, pgMar left=567, footer3
+                # 移除现有 header 引用，替换为空 header
+                for ref in sectPr.findall(f'{W}headerReference'):
+                    sectPr.remove(ref)
+                empty_header_rid = template_hf_rids.get('header4.xml', '')
+                if empty_header_rid:
                     ref_elem = etree.SubElement(sectPr, f'{W}headerReference')
                     ref_elem.set(f'{W}type', 'default')
-                    ref_elem.set(f'{R}id', es_header_rid)
-                    print(f"    已添加 english summary sectPr header: rId={es_header_rid} (header3.xml)")
+                    ref_elem.set(f'{R}id', empty_header_rid)
+                    ref_elem = etree.SubElement(sectPr, f'{W}headerReference')
+                    ref_elem.set(f'{W}type', 'first')
+                    ref_elem.set(f'{R}id', empty_header_rid)
+                    print(f"    已添加 english summary sectPr 空header (header4.xml)")
                     fixed_count += 1
                 
+                # 修复 pgMar：english summary 用标准页边距 left=567
+                pgMar = sectPr.find(f'{W}pgMar')
+                if pgMar is not None:
+                    pgMar.set(f'{W}top', '567')
+                    pgMar.set(f'{W}right', '567')
+                    pgMar.set(f'{W}bottom', '1021')
+                    pgMar.set(f'{W}left', '567')
+                    pgMar.set(f'{W}header', '567')
+                    pgMar.set(f'{W}footer', '919')
+                    pgMar.set(f'{W}gutter', '0')
+                    print(f"    已修复 english summary sectPr 页边距 (left=567)")
+                    fixed_count += 1
+                
+                # 添加 footer3
                 if es_footer_rid:
                     for ref in sectPr.findall(f'{W}footerReference'):
                         sectPr.remove(ref)
@@ -1540,8 +1579,68 @@ def _fix_docxcompose_sectpr_margins(docx_path: str, body_margins: Dict[str, str]
                     print(f"    已添加 english summary sectPr footer: rId={es_footer_rid} (footer3.xml)")
                     fixed_count += 1
         
+        # 检查是否存在过渡 sectPr（控制目录+正文 section 的格式）
+        # 如果 docxcompose 合并时移除了过渡 sectPr，需要手动创建
+        has_transition_sectpr = any(
+            (prev_text == '' and next_text != 'APPENDIX 1' 
+             and '附录APPENDIX' not in next_text and 'Table_disclaimer' not in next_text
+             and prev_text != '[TABLE]')
+            for _, prev_text, next_text, _ in ppr_sectprs_with_context
+        )
+        
+        if not has_transition_sectpr:
+            # 找到正文开始的段落（包含 "1 威胜控股" 或类似标题）
+            body_start_idx = None
+            for idx, elem in enumerate(all_elements):
+                if elem.tag == f'{W}p':
+                    text = ''.join(t.text or '' for t in elem.iter(f'{W}t')).strip()
+                    if text and not text.startswith('['):
+                        # 第一个有内容的段落就是正文开始
+                        body_start_idx = idx
+                        print(f"  找到正文开始段落 [{idx}]: {text[:40]}")
+                        break
+            
+            if body_start_idx is not None and body_start_idx > 0:
+                body_start_elem = all_elements[body_start_idx]
+                
+                # 在正文开始段落前插入一个带 sectPr 的段落
+                new_para = etree.Element(f'{W}p')
+                pPr = etree.SubElement(new_para, f'{W}pPr')
+                new_sectPr = etree.SubElement(pPr, f'{W}sectPr')
+                
+                # 设置 type 为 nextPage（确保正文从新页开始）
+                sectType = etree.SubElement(new_sectPr, f'{W}type')
+                sectType.set(f'{W}val', 'nextPage')
+                
+                # 设置页面大小
+                pgSz = etree.SubElement(new_sectPr, f'{W}pgSz')
+                pgSz.set(f'{W}w', '11910')
+                pgSz.set(f'{W}h', '16840')
+                
+                # 设置正文页边距
+                if body_margins:
+                    pgMar = etree.SubElement(new_sectPr, f'{W}pgMar')
+                    for attr, val in body_margins.items():
+                        pgMar.set(f'{W}{attr}', val)
+                
+                # 设置 header (header5, tblInd=-3099)
+                if body_header_rid:
+                    ref_elem = etree.SubElement(new_sectPr, f'{W}headerReference')
+                    ref_elem.set(f'{W}type', 'default')
+                    ref_elem.set(f'{R}id', body_header_rid)
+                
+                # 设置 footer (footer2)
+                if body_footer_rid:
+                    ref_elem = etree.SubElement(new_sectPr, f'{W}footerReference')
+                    ref_elem.set(f'{W}type', 'default')
+                    ref_elem.set(f'{R}id', body_footer_rid)
+                
+                body.insert(body_start_idx, new_para)
+                print(f"    已在正文开始前 (位置 {body_start_idx}) 创建 body sectPr (header5/footer2)")
+                fixed_count += 1
+        
         # 检查是否需要在 "APPENDIX 1" 段落之前创建 english summary sectPr
-        # 因为 APPENDIX 1 应该从新页开始，并使用 header3/footer3
+        # 因为 APPENDIX 1 应该从新页开始，并使用 header4(空)/footer3
         appendix1_has_sectpr = False
         for sectPr, prev_text, next_text, idx in ppr_sectprs_with_context:
             if next_text == 'APPENDIX 1':
@@ -1569,12 +1668,12 @@ def _fix_docxcompose_sectpr_margins(docx_path: str, body_margins: Dict[str, str]
                 sectType = etree.SubElement(new_sectPr, f'{W}type')
                 sectType.set(f'{W}val', 'nextPage')
                 
-                # 添加 header3 (english summary)
+                # 添加 header4 (english summary, 空 - 无页眉)
                 if es_header_rid:
                     ref_elem = etree.SubElement(new_sectPr, f'{W}headerReference')
                     ref_elem.set(f'{W}type', 'default')
                     ref_elem.set(f'{R}id', es_header_rid)
-                    print(f"    添加 header3: rId={es_header_rid}")
+                    print(f"    添加 header4 (空): rId={es_header_rid}")
                 
                 # 添加 footer3 (english summary)
                 if es_footer_rid:
@@ -1590,11 +1689,11 @@ def _fix_docxcompose_sectpr_margins(docx_path: str, body_margins: Dict[str, str]
                         pPr = etree.Element(f'{W}pPr')
                         appendix1_elem.insert(0, pPr)
                     pPr.append(new_sectPr)
-                    print(f"    已在 APPENDIX 1 段落 (位置 {appendix1_idx}) 创建新的 english summary sectPr (type=nextPage, header3/footer3)")
+                    print(f"    已在 APPENDIX 1 段落 (位置 {appendix1_idx}) 创建新的 english summary sectPr (type=nextPage, header4/footer3)")
                     fixed_count += 1
 
         # 检查是否需要在 "附录APPENDIX" 表格之前创建法律附录 sectPr
-        # 因为 "附录APPENDIX" 表格应该使用 header7/footer7
+        # 因为 "附录APPENDIX" 表格不需要页眉，使用 footer6
         appendix_claim_has_sectpr = False
         for sectPr, prev_text, next_text, idx in ppr_sectprs_with_context:
             if '附录APPENDIX' in prev_text or 'Table_disclaimer' in prev_text:
@@ -1613,12 +1712,9 @@ def _fix_docxcompose_sectpr_margins(docx_path: str, body_margins: Dict[str, str]
             
             if appendix_claim_idx is not None and appendix_claim_idx > 0:
                 # 在 "附录APPENDIX" 表格之前创建一个新的 sectPr
+                # ⚠️ Word 的 sectPr 定义的是它之前的 section 的格式
+                # 所以这个 sectPr 定义的是英文摘要区域，不是法律披露
                 appendix_claim_elem = all_elements[appendix_claim_idx]
-                
-                # 获取法律附录的 header/footer rId
-                appendix_header_rid = template_hf_rids.get('header7.xml', '')
-                appendix_footer_rid1 = template_hf_rids.get('footer7.xml', '')
-                appendix_footer_rid2 = template_hf_rids.get('footer6.xml', '')
                 
                 # 创建一个新的 sectPr
                 new_sectPr = etree.Element(f'{W}sectPr')
@@ -1627,25 +1723,32 @@ def _fix_docxcompose_sectpr_margins(docx_path: str, body_margins: Dict[str, str]
                 sectType = etree.SubElement(new_sectPr, f'{W}type')
                 sectType.set(f'{W}val', 'nextPage')
                 
-                # 添加 header7 (法律附录)
-                if appendix_header_rid:
+                # 添加 pgSz 和 pgMar（英文摘要区域使用标准页边距 left=567）
+                pgSz = etree.SubElement(new_sectPr, f'{W}pgSz')
+                pgSz.set(f'{W}w', '11910')
+                pgSz.set(f'{W}h', '16840')
+                pgMar = etree.SubElement(new_sectPr, f'{W}pgMar')
+                pgMar.set(f'{W}top', '567')
+                pgMar.set(f'{W}right', '567')
+                pgMar.set(f'{W}bottom', '1021')
+                pgMar.set(f'{W}left', '567')
+                pgMar.set(f'{W}header', '567')
+                pgMar.set(f'{W}footer', '919')
+                pgMar.set(f'{W}gutter', '0')
+                
+                # 英文摘要页眉：header6 (tblInd=0, 公司/评级)
+                if es_header_rid:
                     ref_elem = etree.SubElement(new_sectPr, f'{W}headerReference')
-                    ref_elem.set(f'{W}type', 'first')
-                    ref_elem.set(f'{R}id', appendix_header_rid)
-                    print(f"    添加 header7 (法律附录): rId={appendix_header_rid}")
+                    ref_elem.set(f'{W}type', 'default')
+                    ref_elem.set(f'{R}id', es_header_rid)
+                    print(f"    添加英文摘要 header (header6.xml): rId={es_header_rid}")
                 
-                # 添加 footer7 (法律附录)
-                if appendix_footer_rid1:
-                    ref_elem = etree.SubElement(new_sectPr, f'{W}footerReference')
-                    ref_elem.set(f'{W}type', 'first')
-                    ref_elem.set(f'{R}id', appendix_footer_rid1)
-                
-                # 添加 footer6 (法律附录)
-                if appendix_footer_rid2:
+                # 英文摘要 footer：footer3
+                if es_footer_rid:
                     ref_elem = etree.SubElement(new_sectPr, f'{W}footerReference')
                     ref_elem.set(f'{W}type', 'default')
-                    ref_elem.set(f'{R}id', appendix_footer_rid2)
-                    print(f"    添加 footer6/7 (法律附录): rId={appendix_footer_rid2}")
+                    ref_elem.set(f'{R}id', es_footer_rid)
+                    print(f"    添加英文摘要 footer (footer3.xml): rId={es_footer_rid}")
                 
                 # 将 sectPr 添加到 "附录APPENDIX" 表格的 pPr 中
                 if appendix_claim_elem.tag == f'{W}tbl':
@@ -1655,7 +1758,7 @@ def _fix_docxcompose_sectpr_margins(docx_path: str, body_margins: Dict[str, str]
                     pPr = etree.SubElement(new_para, f'{W}pPr')
                     pPr.append(new_sectPr)
                     body.insert(appendix_claim_idx, new_para)
-                    print(f"    已在附录APPENDIX表格 (位置 {appendix_claim_idx}) 之前创建法律附录 sectPr (type=nextPage, header7/footer6/7)")
+                    print(f"    已在附录APPENDIX表格 (位置 {appendix_claim_idx}) 之前创建英文摘要 sectPr (type=nextPage, header6/footer3)")
                     fixed_count += 1
                 else:
                     pPr = appendix_claim_elem.find(f'{W}pPr')
@@ -1663,8 +1766,32 @@ def _fix_docxcompose_sectpr_margins(docx_path: str, body_margins: Dict[str, str]
                         pPr = etree.Element(f'{W}pPr')
                         appendix_claim_elem.insert(0, pPr)
                     pPr.append(new_sectPr)
-                    print(f"    已在附录APPENDIX表格 (位置 {appendix_claim_idx}) 创建法律附录 sectPr (type=nextPage, header7/footer6/7)")
+                    print(f"    已在附录APPENDIX表格 (位置 {appendix_claim_idx}) 创建英文摘要 sectPr (type=nextPage, header6/footer3)")
                     fixed_count += 1
+
+        # 清理文档末尾 sectPr 中的 header 引用，替换为空 header（断开 linked_to_previous）
+        # 文档末尾的最后一个 sectPr 控制最后一节的格式（法律披露）
+        last_sectPr = body.find(f'{W}sectPr')
+        if last_sectPr is not None:
+            header_refs = last_sectPr.findall(f'{W}headerReference')
+            existing_header_rids = [ref.get(f'{R}id', '') for ref in header_refs]
+            
+            # 移除所有现有 header 引用
+            for ref in header_refs:
+                last_sectPr.remove(ref)
+                print(f"    已移除文档末尾 sectPr 的 headerReference: {ref.get(f'{R}id', '')}")
+            
+            # 添加空 header（断开 linked_to_previous）
+            empty_header_rid = template_hf_rids.get('header4.xml', '')
+            if empty_header_rid:
+                ref_elem = etree.SubElement(last_sectPr, f'{W}headerReference')
+                ref_elem.set(f'{W}type', 'default')
+                ref_elem.set(f'{R}id', empty_header_rid)
+                ref_elem = etree.SubElement(last_sectPr, f'{W}headerReference')
+                ref_elem.set(f'{W}type', 'first')
+                ref_elem.set(f'{R}id', empty_header_rid)
+                print(f"    已添加空 header (header4.xml) 到文档末尾 sectPr")
+            fixed_count += 1
 
         if fixed_count > 0:
             # 保存修改后的文档
@@ -2353,7 +2480,21 @@ def render_report(
     try:
         from docxcompose.composer import Composer
 
-        # 0. 补全公司中英文名称（如有需要）
+        # 0. 加载 schema 中的 sections 配置（页眉页脚）
+        sections = None
+        schema_path = Path(template_path).parent / "schema.yaml"
+        if schema_path.exists():
+            try:
+                import yaml
+                with open(schema_path, 'r', encoding='utf-8') as f:
+                    schema = yaml.safe_load(f)
+                sections = schema.get('sections', None)
+                if sections:
+                    print(f"  已加载 schema sections 配置: {list(sections.keys())}")
+            except Exception as e:
+                print(f"  加载 schema sections 失败: {e}")
+
+        # 0.5 补全公司中英文名称（如有需要）
         elements = enrich_company_names_with_yfinance(elements)
 
         # 1. 准备渲染上下文
@@ -2438,23 +2579,15 @@ def render_report(
                 else:
                     print(f"  ⚠️ body.docx 分页优化失败，继续使用未优化的 body")
 
-        # 7. 处理 BODY_MARKER - 使用 docxcompose 三段式合并
+        # 7. 处理 BODY_MARKER - 使用新逻辑：删除 marker 所在页，插入 body.docx
         if Path(body_path).exists() and Path(body_path).stat().st_size > 0:
-            # 使用三段式合并：part1 + body + part3
+            # 新逻辑：直接替换 marker 所在页为 body.docx 内容
             body_inserted = insert_body_at_marker_compose(
-                str(temp_path), body_path, BODY_MARKER, output_path
+                str(temp_path), body_path, BODY_MARKER, output_path, sections
             )
 
             if body_inserted:
-                print(f"  已使用 docxcompose 三段式合并插入 body（保留图表和格式）")
-                # 补救：确保 body 中的图片被正确复制（docxcompose 可能丢失部分图片关系）
-                copied_count = _copy_media_between_docx(body_path, output_path)
-                if copied_count > 0:
-                    print(f"  已补充复制 {copied_count} 张图片（修复 docxcompose 图片丢失）")
-                # 修复 docxcompose 合并后图片 rId 映射错误
-                fixed_rid_count = _fix_docxcompose_image_rels(body_path, output_path)
-                if fixed_rid_count > 0:
-                    print(f"  已修复 {fixed_rid_count} 处图片 rId 映射错误")
+                print(f"  已将 body.docx 插入到 marker 位置（使用替换逻辑）")
             else:
                 # 如果没找到 marker，使用 docxcompose 追加到末尾
                 print(f"  ⚠️ 未找到 BODY_MARKER，使用 docxcompose 追加 body")
@@ -2481,7 +2614,7 @@ def render_report(
 
                 # 修复 docxcompose 插入的分节符页边距和 header/footer
                 if body_margins:
-                    _fix_docxcompose_sectpr_margins(output_path, body_margins, False, body_header_footer_refs)
+                    _fix_docxcompose_sectpr_margins(output_path, body_margins, False, body_header_footer_refs, sections)
 
                 # 补救：确保 body 中的图片被正确复制
                 copied_count = _copy_media_between_docx(body_path, output_path)
@@ -3265,10 +3398,10 @@ def _copy_headers_footers_between_docs(body_path: str, output_path: str) -> Dict
 
                 if file_type and ('header' in rel_type or 'footer' in rel_type):
                     # 跳过 body.docx 的 header1/2/3.xml - 这些包含错误的 header
-                    # 正文应该使用 template 的 header6.xml（公司名称 (Stock code) 评级调整）
+                    # 正文应该使用 template 的 header5.xml（公司名称 (Stock code) 评级调整, tblInd=-3099）
                     # footer5.xml（日期+页码），而不是 body 自己的
                     if target in ('header1.xml', 'header2.xml', 'header3.xml'):
-                        print(f"  跳过 body 的 {file_type} 文件: {target}（正文应使用 template 的 header6/footer5）")
+                        print(f"  跳过 body 的 {file_type} 文件: {target}（正文应使用 template 的 header5/footer5）")
                         continue
                     
                     # 读取文件内容
