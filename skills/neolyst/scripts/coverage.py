@@ -80,3 +80,38 @@ def create_coverage(
         raise ValueError(str(e)) from e
 
     return str(resp.data[0]["coverage_id"])
+
+
+def list_coverage_history(
+    client: Client,
+    ticker: str,
+    first_analyst_email: str,
+) -> list[dict]:
+    """
+    按 ticker + 1作分析师邮箱查询 coverage 的已发布历史报告。
+
+    Returns:
+        list[dict]: 每项含 report_id/title/rating/target_price/published_at，
+                    按 published_at desc 排序。coverage 存在但无历史时返回空列表。
+
+    Raises:
+        ValueError: coverage 未找到
+    """
+    try:
+        resp = client.rpc("list_coverage_history", {
+            "p_ticker": ticker,
+            "p_analyst_email": first_analyst_email,
+        }).execute()
+    except Exception as e:
+        raise ValueError(str(e)) from e
+
+    return [
+        {
+            "report_id": str(row["report_id"]),
+            "title": row["title"],
+            "rating": row["rating"],
+            "target_price": row["target_price"],
+            "published_at": row["published_at"],
+        }
+        for row in (resp.data or [])
+    ]

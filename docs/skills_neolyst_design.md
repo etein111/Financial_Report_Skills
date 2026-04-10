@@ -18,12 +18,13 @@
 
 ### 2.1 接口形态
 
-- `neolyst` 对外只暴露业务接口：`resolve_analyst_by_email`、`resolve_template`、`upsert_template`、`reuse_template`、`resolve_coverage`、`create_coverage`、`save_draft_report`、`validators`、`submit_report`。
+- `neolyst` 对外只暴露业务接口：`resolve_analyst_by_email`、`resolve_template`、`upsert_template`、`reuse_template`、`resolve_coverage`、`create_coverage`、`list_coverage_history`、`save_draft_report`、`validators`、`submit_report`。
 - `resolve_analyst_by_email` 校验并返回标准化后的 analyst 记录，业务主键为 `analyst_email`。
 - `resolve_template` 解析模板资产。
 - `upsert_template` 发布主模板。
 - `reuse_template` 发布共享模板关系。
 - `resolve_coverage`、`create_coverage` 负责 `coverage` 解析与创建。
+- `list_coverage_history` 查询 coverage 下的已发布历史报告。
 - `save_draft_report` 保存 draft。
 - `validators` 校验指定 draft 版本是否可提交。
 - `submit_report` 提交指定 draft 版本。
@@ -491,4 +492,15 @@ draft 输入可包含以下字段：
 
 ## 7. 后续待做
 
-- Coverage 审批链路。当前设计在用户确认“该 Coverage 已完成审批”后允许 `create_coverage` 直接创建 Coverage；后续需要补上首次覆盖场景下的正式审批流程，并与 `resolve_coverage` / `create_coverage` 的调用时机重新收口。
+- Coverage 审批链路。当前设计在用户确认”该 Coverage 已完成审批”后允许 `create_coverage` 直接创建 Coverage；后续需要补上首次覆盖场景下的正式审批流程，并与 `resolve_coverage` / `create_coverage` 的调用时机重新收口。
+
+## 补充：Coverage 历史查询
+
+- 新增 `list_coverage_history(ticker, first_analyst_email)` 能力，面向”报告尚未写完、只有 ticker 和 1作信息”的前置查询场景。
+- coverage 的定位逻辑沿用现有 `resolve_coverage`：按 `ticker + coverage_analyst.analyst_email` 命中唯一 coverage。
+- 只返回 `status = 'published'` 的历史报告；`submitted`、`draft`、`rejected` 均不纳入结果。
+- 返回字段固定为：`report_id`、`title`、`rating`、`target_price`、`published_at`。
+- 结果按 `published_at desc` 排序。
+- coverage 已找到但没有历史发布记录时返回空列表，不抛错。
+- 该读取带业务判定，按仓库约定下沉到 Supabase RPC；Python 侧只做参数整理和调用。
+- 权限设计：新增 RLS policy `report_select_published`，允许 `analyst` 角色读取所有 `status = 'published'` 的报告行，无需 SECURITY DEFINER。

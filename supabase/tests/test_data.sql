@@ -602,3 +602,143 @@ values
      '快评篇幅过长，请精简至两页以内并补充关键财务指标对比表。',
       '2026-03-21 09:30:00+00')
 on conflict (id) do nothing;
+
+
+-- ============================================================
+-- 9. 威胜控股测试数据（coverage + 两份报告）
+-- ============================================================
+
+-- 9a. coverage: 威胜控股（3393.HK）
+insert into public.coverage (id, ticker, english_name, chinese_name, traditional_chinese, sector_id, isin, country_of_domicile, reporting_currency, is_active)
+values (
+    'c0000000-0000-0000-0000-000000000007'::uuid,
+    '3393.HK', 'Wasion Holdings', '威胜控股', '威勝控股',
+    '00000000-0000-0000-0000-000000000088'::uuid,
+    'HK0000033938', 'HK', 'HKD', true
+) on conflict (id) do update set
+    ticker              = excluded.ticker,
+    english_name        = excluded.english_name,
+    chinese_name        = excluded.chinese_name,
+    traditional_chinese = excluded.traditional_chinese,
+    sector_id           = excluded.sector_id,
+    isin                = excluded.isin,
+    country_of_domicile = excluded.country_of_domicile,
+    reporting_currency  = excluded.reporting_currency,
+    is_active           = excluded.is_active;
+
+-- 9b. coverage_analyst
+insert into public.coverage_analyst (coverage_id, analyst_email, author_order)
+values
+    ('c0000000-0000-0000-0000-000000000007'::uuid, 'harryyang@hfisec.com.hk', 1),
+    ('c0000000-0000-0000-0000-000000000007'::uuid, 'dengyida@hfisec.com.hk',  2)
+on conflict (coverage_id, analyst_email) do update set
+    author_order = excluded.author_order;
+
+-- 9c. 报告 1：威胜控股首次覆盖 —— 已发布（2025-07-25, 目标价 120, OUTPERFORM）
+insert into public.report (
+    id, title, report_type, status, current_version_no,
+    owner_user_id, coverage_id, ticker,
+    sector_id, region_code, rating, target_price,
+    investment_thesis, report_language, contact_person,
+    published_by, published_at
+) values (
+    'e0000000-0000-0000-0000-000000000008'::uuid,
+    '威胜控股（3393.HK）首次覆盖：配网投资与AI算力双轮驱动，能源计量龙头再启航',
+    'company', 'published', 1,
+    'a0000000-0000-0000-0000-000000000010'::uuid,
+    'c0000000-0000-0000-0000-000000000007'::uuid,
+    '3393.HK',
+    '00000000-0000-0000-0000-000000000088'::uuid,
+    'HK', 'OUTPERFORM', 120.00,
+    '配网投资高景气叠加AI算力用电需求爆发，威胜作为能源计量龙头，智能电表海外拓展加速，业绩进入新一轮增长周期。',
+    'zh', 'harryyang@hfisec.com.hk',
+    'a0000000-0000-0000-0000-000000000002'::uuid,
+    '2025-07-25 10:00:00+00'
+) on conflict (id) do nothing;
+
+-- 9d. 报告 2：威胜控股更新报告 —— 已发布（2025-10-25, 目标价 140, NEUTRAL）
+insert into public.report (
+    id, title, report_type, status, current_version_no,
+    owner_user_id, coverage_id, ticker,
+    sector_id, region_code, rating, target_price,
+    investment_thesis, report_language, contact_person,
+    published_by, published_at
+) values (
+    'e0000000-0000-0000-0000-000000000009'::uuid,
+    '威胜控股（3393.HK）更新：海外订单放缓拖累短期增速，下调评级至中性',
+    'company', 'published', 1,
+    'a0000000-0000-0000-0000-000000000010'::uuid,
+    'c0000000-0000-0000-0000-000000000007'::uuid,
+    '3393.HK',
+    '00000000-0000-0000-0000-000000000088'::uuid,
+    'HK', 'NEUTRAL', 140.00,
+    '海外市场拓展节奏放缓，国内配网招标竞争加剧，短期增速承压；上调目标价至140港元反映估值切换，但下调评级至中性。',
+    'zh', 'harryyang@hfisec.com.hk',
+    'a0000000-0000-0000-0000-000000000002'::uuid,
+    '2025-10-25 10:00:00+00'
+) on conflict (id) do nothing;
+
+-- 9e. report_analyst
+insert into public.report_analyst (report_id, analyst_email, author_order)
+values
+    ('e0000000-0000-0000-0000-000000000008'::uuid, 'harryyang@hfisec.com.hk', 1),
+    ('e0000000-0000-0000-0000-000000000008'::uuid, 'dengyida@hfisec.com.hk',  2),
+
+    ('e0000000-0000-0000-0000-000000000009'::uuid, 'harryyang@hfisec.com.hk', 1),
+    ('e0000000-0000-0000-0000-000000000009'::uuid, 'dengyida@hfisec.com.hk',  2)
+on conflict (report_id, analyst_email) do update set
+    author_order = excluded.author_order;
+
+-- 9f. report_version
+insert into public.report_version (id, report_id, version_no, snapshot_json, word_file_path, created_by)
+values (
+    'd0000000-0000-0000-0000-000000000008'::uuid,
+    'e0000000-0000-0000-0000-000000000008'::uuid,
+    1,
+    '{"title": "威胜控股（3393.HK）首次覆盖", "rating": "OUTPERFORM", "target_price": 120.00, "ticker": "3393.HK"}'::jsonb,
+    'reports/e0000000-0000-0000-0000-000000000008/v1/威胜控股首次覆盖.docx',
+    'a0000000-0000-0000-0000-000000000010'::uuid
+) on conflict (id) do nothing;
+
+insert into public.report_version (id, report_id, version_no, snapshot_json, word_file_path, created_by)
+values (
+    'd0000000-0000-0000-0000-000000000009'::uuid,
+    'e0000000-0000-0000-0000-000000000009'::uuid,
+    1,
+    '{"title": "威胜控股（3393.HK）更新", "rating": "NEUTRAL", "target_price": 140.00, "ticker": "3393.HK"}'::jsonb,
+    'reports/e0000000-0000-0000-0000-000000000009/v1/威胜控股更新.docx',
+    'a0000000-0000-0000-0000-000000000010'::uuid
+) on conflict (id) do nothing;
+
+-- 9g. report_status_log
+-- 威胜首次覆盖: draft -> submitted -> published (2025-07-25)
+insert into public.report_status_log (id, report_id, from_status, to_status, action_by, action_by_name, version_no, action_at)
+values
+    ('b0000000-0000-0000-0000-000000000015'::uuid,
+     'e0000000-0000-0000-0000-000000000008'::uuid,
+     'draft', 'submitted',
+     'a0000000-0000-0000-0000-000000000010'::uuid, 'Bin Yang', 1,
+     '2025-07-24 18:00:00+00'),
+
+    ('b0000000-0000-0000-0000-000000000016'::uuid,
+     'e0000000-0000-0000-0000-000000000008'::uuid,
+     'submitted', 'published',
+     'a0000000-0000-0000-0000-000000000002'::uuid, '测试审批员', 1,
+     '2025-07-25 10:00:00+00')
+on conflict (id) do nothing;
+
+-- 威胜更新报告: draft -> submitted -> published (2025-10-25)
+insert into public.report_status_log (id, report_id, from_status, to_status, action_by, action_by_name, version_no, action_at)
+values
+    ('b0000000-0000-0000-0000-000000000017'::uuid,
+     'e0000000-0000-0000-0000-000000000009'::uuid,
+     'draft', 'submitted',
+     'a0000000-0000-0000-0000-000000000010'::uuid, 'Bin Yang', 1,
+     '2025-10-24 18:00:00+00'),
+
+    ('b0000000-0000-0000-0000-000000000018'::uuid,
+     'e0000000-0000-0000-0000-000000000009'::uuid,
+     'submitted', 'published',
+     'a0000000-0000-0000-0000-000000000002'::uuid, '测试审批员', 1,
+     '2025-10-25 10:00:00+00')
+on conflict (id) do nothing;

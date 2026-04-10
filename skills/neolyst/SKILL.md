@@ -1,6 +1,6 @@
 ---
 name: neolyst
-description: "Neolyst Supabase 数据访问层。当你需要操作 Neolyst 平台数据库时——无论是查询分析师信息、解析或上传模板、管理 coverage、保存报告草稿、校验或提交报告——必须使用此 skill，绝不能自行构造原始 Supabase 查询。触发场景包括但不限于：调用方提到 analyst 邮箱查询、模板同步、coverage 创建、draft 保存、报告提交、或任何需要读写 Neolyst 数据库的操作。"
+description: "Neolyst Supabase 数据访问层。当你需要操作 Neolyst 平台数据库时——无论是查询分析师信息、解析或上传模板、管理 coverage、保存报告草稿、校验或提交报告——必须使用此 skill，绝不能自行构造原始 Supabase 查询。触发场景包括但不限于：调用方提到 analyst 邮箱查询、模板同步、coverage 创建、coverage 历史报告查询、draft 保存、报告提交、或任何需要读写 Neolyst 数据库的操作。"
 ---
 
 # neolyst
@@ -247,6 +247,36 @@ result = submit_report.submit_report(client, report_id="uuid", version_no=1)
 # 返回：{"report_id": "uuid", "status": "submitted", "version_no": 1}
 # 内部先调用 validate_draft，校验失败则抛出异常
 # 成功后原子更新 report.status 并写入 report_status_log
+```
+
+---
+
+### 10. list_coverage_history ✅ 已实现
+
+按 `ticker + first_analyst_email` 定位唯一 coverage，返回该 coverage 下所有已发布历史报告。
+
+```python
+from skills.neolyst.scripts import coverage
+
+rows = coverage.list_coverage_history(
+    client,
+    ticker="VRT US",
+    first_analyst_email="alice@neolyst.com",
+)
+# 返回：
+# [
+#   {
+#     "report_id": "uuid",
+#     "title": "Vertiv: AI demand drives earnings growth",
+#     "rating": "OUTPERFORM",
+#     "target_price": 140,
+#     "published_at": "2026-04-09T08:00:00+00:00",
+#   },
+#   ...
+# ]
+# 按 published_at desc 排序
+# coverage 找不到：抛出 ValueError（含"未找到匹配的 Coverage"）
+# coverage 找到但没有已发布历史：返回 []
 ```
 
 ---

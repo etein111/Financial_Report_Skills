@@ -128,3 +128,134 @@ class TestResolveCoverage:
         from skills.neolyst.scripts import coverage as cov
         with pytest.raises(ValueError, match="未找到"):
             cov.resolve_coverage(neolyst_client, TEST_TICKER, "nobody@example.com")
+
+
+@pytest.fixture(scope="module")
+def history_coverage_id(neolyst_client, test_sector_id):
+    from skills.neolyst.scripts import coverage as cov
+
+    suffix = uuid.uuid4().hex[:6].upper()
+    coverage_id = cov.create_coverage(
+        neolyst_client,
+        ticker=f"HIS{suffix}",
+        english_name=f"History Coverage {suffix}",
+        sector_id=test_sector_id,
+        isin=f"US{suffix}{'0' * (10 - len(suffix))}",
+        country_of_domicile="United States",
+        analysts=[{"analyst_email": TEST_ANALYST, "author_order": 1}],
+    )
+    yield coverage_id
+    neolyst_client.table("coverage").delete().eq("id", coverage_id).execute()
+
+
+@pytest.fixture(scope="module")
+def history_dataset(neolyst_client, history_coverage_id):
+    user = neolyst_client.auth.get_user().user
+    ticker = f"HIS{uuid.uuid4().hex[:6].upper()}"
+
+    neolyst_client.table("coverage").update({"ticker": ticker}).eq("id", history_coverage_id).execute()
+
+    rows = [
+        {
+            "id": str(uuid.uuid4()),
+            "title": "Newest Published Report",
+            "report_type": "company",
+            "status": "published",
+            "current_version_no": 1,
+            "owner_user_id": user.id,
+            "coverage_id": history_coverage_id,
+            "ticker": ticker,
+            "rating": "OUTPERFORM",
+            "target_price": 120,
+            "report_language": "en",
+            "published_by": user.id,
+            "published_at": "2026-04-09T08:00:00+00:00",
+        },
+        {
+            "id": str(uuid.uuid4()),
+            "title": "Older Published Report",
+            "report_type": "company",
+            "status": "published",
+            "current_version_no": 1,
+            "owner_user_id": user.id,
+            "coverage_id": history_coverage_id,
+            "ticker": ticker,
+            "rating": "NEUTRAL",
+            "target_price": 98,
+            "report_language": "en",
+            "published_by": user.id,
+            "published_at": "2026-03-31T08:00:00+00:00",
+        },
+        {
+            "id": str(uuid.uuid4()),
+            "title": "Submitted Report Should Be Hidden",
+            "report_type": "company",
+            "status": "submitted",
+            "current_version_no": 1,
+            "owner_user_id": user.id,
+            "coverage_id": history_coverage_id,
+            "ticker": ticker,
+            "rating": "UNDERPERFORM",
+            "target_price": 80,
+            "report_language": "en",
+            "published_at": None,
+        },
+    ]
+    neolyst_client.table("report").insert(rows).execute()
+    yield {"ticker": ticker, "rows": rows}
+    for row in rows:
+        neolyst_client.table("report").delete().eq("id", row["id"]).execute()
+
+
+class TestListCoverageHistory:
+    def test_returns_only_published_rows(self, neolyst_client, history_dataset):
+        from skills.neolyst.scripts import coverage as cov
+
+        result = cov.list_coverage_history(
+            neolyst_client,
+            ticker=history_dataset["ticker"],
+            first_analyst_email=TEST_ANALYST,
+        )
+        assert len(result) == 2
+        assert [r["title"] for r in result] == [
+            "Newest Published Report",
+            "Older Published Report",
+        ]
+
+    def test_returns_expected_five_fields(self, neolyst_client, history_dataset):
+        from skills.neolyst.scripts import coverage as cov
+
+        result = cov.list_coverage_history(
+            neolyst_client,
+            ticker=history_dataset["ticker"],
+            first_analyst_email=TEST_ANALYST,
+        )
+        assert set(result[0].keys()) == {
+            "report_id",
+            "title",
+            "rating",
+            "target_price",
+            "published_at",
+        }
+
+    def test_case_insensitive_inputs(self, neolyst_client, history_dataset):
+        from skills.neolyst.scripts import coverage as cov
+
+        result = cov.list_coverage_history(
+            neolyst_client,
+            ticker=history_dataset["ticker"].lower(),
+            first_analyst_email=TEST_ANALYST.upper(),
+        )
+        assert result[0]["title"] == "Newest Published Report"
+
+    def test_returns_empty_list_when_no_published_history(self, neolyst_client, created_coverage_id):
+        from skills.neolyst.scripts import coverage as cov
+
+        result = cov.list_coverage_history(neolyst_client, TEST_TICKER, TEST_ANALYST)
+        assert result == []
+
+    def test_missing_coverage_raises(self, neolyst_client):
+        from skills.neolyst.scripts import coverage as cov
+
+        with pytest.raises(ValueError, match="未找到匹配的 Coverage"):
+            cov.list_coverage_history(neolyst_client, "GHOST_TICKER_99", TEST_ANALYST)
