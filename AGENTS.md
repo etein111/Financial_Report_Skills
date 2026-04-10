@@ -1,7 +1,7 @@
 # 规范索引
 
-- 当涉及代码实现、重构、调试、测试或代码评审时，查阅 [principles/CODING_STANDARDS.md](./principles/CODING_STANDARDS.md)。
-- 当涉及 Skill 开发、Skill 目录结构、测试目录组织或 Skill 交付形式时，查阅 [principles/SKILL_STANDARD.md](./principles/SKILL_STANDARD.md)。
+- 当涉及代码实现、重构、调试、测试或代码评审时，查阅 [principles/CODING.md](./principles/CODING.md)。
+- 当涉及 Skill 开发、Skill 目录结构、测试目录组织或 Skill 交付形式时，查阅 [principles/SKILL.md](./principles/SKILL.md)。
 - 当涉及业务逻辑落点、Python skill 与 Supabase 的职责边界、RPC、函数、触发器、schema、migration，或“直接查表 / 走 RPC”的边界判断时，查阅 [principles/ARCHITECTURE.md](./principles/ARCHITECTURE.md)。
 - 当涉及文档写作、说明撰写、结构整理、章节拆分、表述压缩、信息组织，或 AGENTS.md 的文案整理时，查阅 [principles/WRITING.md](./principles/WRITING.md)。
 - 当涉及 AGENTS.md、提示词、规则编写、触发条件、规则整理或代理协作约束时，查阅 [principles/AGENTS_PROMPT.md](./principles/AGENTS_PROMPT.md)。

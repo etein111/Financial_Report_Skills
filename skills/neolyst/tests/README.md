@@ -11,7 +11,8 @@
 ## 运行测试
 
 ```bash
-export NEOLYST_TEST_URL=http://...
+export NEOLYST_TEST_URL=http://127.0.0.1:54321
+export NEOLYST_TEST_ANON_KEY=...
 export NEOLYST_TEST_EMAIL=your_email@example.com
 export NEOLYST_TEST_PASSWORD=your_password
 uv run pytest skills/neolyst/tests/ -v
