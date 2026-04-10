@@ -2694,9 +2694,15 @@ def render_report(
 
         # 7.5 生成并插入图表（compare_chart, volume_chart, recommendation_chart）
         chart_output_dir = os.path.join(os.path.dirname(output_path), 'reports')
-        chart_paths = generate_and_insert_charts(output_path, elements, chart_output_dir)
+        chart_result = generate_and_insert_charts(output_path, elements, chart_output_dir)
+        chart_paths = chart_result.get('chart_paths', {})
         if chart_paths:
             print(f"  ✅ 已生成并插入 {len(chart_paths)} 个图表")
+
+        # 将图表生成状态合并到 elements 中（用于后续验证）
+        elements['compare_chart_generated'] = chart_result.get('compare_chart_generated', False)
+        elements['volume_chart_generated'] = chart_result.get('volume_chart_generated', False)
+        elements['recommendation_chart_generated'] = chart_result.get('recommendation_chart_generated', False)
 
         # 8. 清理临时文件
         temp_path.unlink(missing_ok=True)
@@ -3702,7 +3708,7 @@ def generate_and_insert_charts(
     docx_path: str,
     elements: Dict[str, Any],
     output_dir: str = None
-) -> Dict[str, str]:
+) -> Dict[str, Any]:
     """生成并插入图表到文档中。
 
     根据 ticker 自动生成 compare_chart、volume_chart 和 recommendation_chart，
@@ -3714,7 +3720,13 @@ def generate_and_insert_charts(
         output_dir: 图表输出目录，默认使用 reports/
 
     Returns:
-        生成的图表路径字典 {'compare_chart': path, 'volume_chart': path, 'recommendation_chart': path}
+        包含生成状态的字典:
+        {
+            'chart_paths': {'compare_chart': path, 'volume_chart': path, 'recommendation_chart': path},
+            'compare_chart_generated': bool,
+            'volume_chart_generated': bool,
+            'recommendation_chart_generated': bool
+        }
     """
     import sys
     import os
@@ -3728,14 +3740,24 @@ def generate_and_insert_charts(
 
     if not DOCX_AVAILABLE:
         print("Error: python-docx not installed")
-        return {}
+        return {
+            'chart_paths': {},
+            'compare_chart_generated': False,
+            'volume_chart_generated': False,
+            'recommendation_chart_generated': False
+        }
 
     # 获取 ticker
     ticker = elements.get('ticker', '')
     ticker_name = elements.get('company_en', elements.get('company_cn', ''))
     if not ticker:
         print("Warning: No ticker found in elements")
-        return {}
+        return {
+            'chart_paths': {},
+            'compare_chart_generated': False,
+            'volume_chart_generated': False,
+            'recommendation_chart_generated': False
+        }
 
     # 确定输出目录
     if output_dir is None:
@@ -3751,6 +3773,9 @@ def generate_and_insert_charts(
     recommendation_chart_path = os.path.join(output_dir, 'recommendation_chart.png')
 
     chart_paths = {}
+    compare_chart_generated = False
+    volume_chart_generated = False
+    recommendation_chart_generated = False
 
     # 1. 生成 compare_chart 和 volume_chart（组合图，两个面板在一起）
     try:
@@ -3775,6 +3800,8 @@ def generate_and_insert_charts(
             if os.path.exists(abs_chart_path):
                 chart_paths['compare_chart'] = abs_chart_path
                 chart_paths['volume_chart'] = abs_chart_path  # 复用同一张图
+                compare_chart_generated = True
+                volume_chart_generated = True
                 print(f"  compare_chart 和 volume_chart 生成成功: {abs_chart_path}")
         else:
             print(f"  生成 compare_chart 和 volume_chart 失败: {result.stderr}")
@@ -3824,6 +3851,7 @@ def generate_and_insert_charts(
             if result.returncode == 0:
                 if os.path.exists(abs_rec_chart_path):
                     chart_paths['recommendation_chart'] = abs_rec_chart_path
+                    recommendation_chart_generated = True
                     print(f"  recommendation_chart 生成成功: {abs_rec_chart_path}")
             else:
                 print(f"  生成 recommendation_chart 失败: {result.stderr}")
@@ -3839,7 +3867,12 @@ def generate_and_insert_charts(
     if chart_paths:
         insert_charts_into_document(docx_path, chart_paths)
 
-    return chart_paths
+    return {
+        'chart_paths': chart_paths,
+        'compare_chart_generated': compare_chart_generated,
+        'volume_chart_generated': volume_chart_generated,
+        'recommendation_chart_generated': recommendation_chart_generated
+    }
 
 
 def insert_charts_into_document(docx_path: str, chart_paths: Dict[str, str]) -> bool:
@@ -3985,8 +4018,14 @@ def render_with_charts(
 
     # 2. 生成并插入图表
     if include_charts and 'ticker' in elements:
-        chart_paths = generate_and_insert_charts(output_path, elements)
+        chart_result = generate_and_insert_charts(output_path, elements)
+        chart_paths = chart_result.get('chart_paths', {})
         if chart_paths:
             print(f"已生成并插入 {len(chart_paths)} 个图表")
+
+        # 将图表生成状态合并到 elements 中（用于后续验证）
+        elements['compare_chart_generated'] = chart_result.get('compare_chart_generated', False)
+        elements['volume_chart_generated'] = chart_result.get('volume_chart_generated', False)
+        elements['recommendation_chart_generated'] = chart_result.get('recommendation_chart_generated', False)
 
     return True

@@ -125,6 +125,64 @@ one_year_low:
 rating:
   description: rating
   format: OUTPERFORM
+compare_chart:
+  description: 相对收益对比图
+  format: 自动生成
+  hints:
+  - 基于 yfinance 数据自动绘制
+  - 上方面板：股票 vs MSCI China 归一化对比
+  - 下方面板：成交量柱状图
+  - 颜色：深蓝 #23558C，灰色 #808080
+  - 尺寸：6.35cm x 4.57cm
+  - 验证：需检查 compare_chart_generated 状态为 true
+
+volume_chart:
+  description: 成交量图
+  format: 自动生成
+  hints:
+  - 基于 yfinance 数据自动绘制
+  - 显示成交量柱状图
+  - 颜色：深蓝 #23558C，浅蓝 #B8D4E8
+  - 尺寸：6.35cm x 1.74cm
+  - 验证：需检查 volume_chart_generated 状态为 true
+
+recommendation_chart:
+  description: 推荐走势/目标价图
+  format: 自动生成
+  hints:
+  - 基于 yfinance 数据自动绘制
+  - 主曲线：股票收盘价走势（深蓝色）
+  - 目标价：水平线段（灰色）
+  - 标注：推荐序号 1, 2, 3...
+  - 下方面板：推荐历史信息
+  - 颜色：深蓝 #23558C，灰色 #808080
+  - 尺寸：17.64cm x 10.58cm
+  - 验证：需检查 recommendation_chart_generated 状态为 true
+
+compare_chart_generated:
+  description: compare_chart 生成状态
+  format: boolean
+  hints:
+  - 渲染时自动生成
+  - true 表示图表已成功生成并插入文档
+  - false 或缺失表示生成失败
+
+volume_chart_generated:
+  description: volume_chart 生成状态
+  format: boolean
+  hints:
+  - 渲染时自动生成
+  - true 表示图表已成功生成并插入文档
+  - false 或缺失表示生成失败
+
+recommendation_chart_generated:
+  description: recommendation_chart 生成状态
+  format: boolean
+  hints:
+  - 渲染时自动生成
+  - true 表示图表已成功生成并插入文档
+  - false 或缺失表示生成失败
+
 report_date:
   description: report_date
   format: 21 Oct 2025
@@ -143,21 +201,3 @@ ticker:
 title:
   description: title
   format: 首次覆盖：安全、创新与强大生态系统铸就西锐私人航空全球领导者地位
-
-# 页眉页脚配置
-sections:
-  cover:
-    header: header1.xml
-    footer: footer1.xml
-  transition:
-    header: header5.xml
-    footer: footer2.xml
-  body:
-    header: header5.xml
-    footer: footer2.xml
-  english_summary:
-    header: header6.xml
-    footer: footer3.xml
-  appendix:
-    header: header4.xml  # 空页眉
-    footer: footer6.xml

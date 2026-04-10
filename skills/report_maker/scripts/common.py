@@ -300,17 +300,40 @@ def validate_elements_against_schema(
     """
     errors = []
 
-    # 检查是否缺少字段
-    schema_fields = set(schema.keys())
-    elements_fields = set(elements.keys())
-    missing_fields = schema_fields - elements_fields
+    # 获取 schema 中非自动生成的字段
+    schema_fields = set()
+    auto_generated_fields = set()
+    boolean_status_fields = set()  # *_generated 类型的布尔状态字段
+    for field_name, field_config in schema.items():
+        if isinstance(field_config, dict):
+            field_format = field_config.get('format', '')
+            if field_format == '自动生成':
+                auto_generated_fields.add(field_name)
+            elif field_format == 'boolean' and field_name.endswith('_generated'):
+                boolean_status_fields.add(field_name)
+            else:
+                schema_fields.add(field_name)
+        else:
+            schema_fields.add(field_name)
 
+    elements_fields = set(elements.keys())
+
+    # 检查是否缺少字段（排除自动生成的字段和布尔状态字段）
+    missing_fields = schema_fields - elements_fields
     if missing_fields:
         errors.append(f"缺少字段: {', '.join(missing_fields)}")
 
-    # 检查是否有多余字段
-    extra_fields = elements_fields - schema_fields
+    # 检查是否有多余字段（排除自动生成的字段和布尔状态字段）
+    extra_fields = elements_fields - schema_fields - auto_generated_fields - boolean_status_fields
     if extra_fields:
         errors.append(f"多余字段: {', '.join(extra_fields)}")
+
+    # 检查图表生成状态（布尔状态字段必须为 true）
+    for field_name in boolean_status_fields:
+        if field_name.endswith('_generated'):
+            chart_name = field_name.replace('_generated', '')
+            status = elements.get(field_name, False)
+            if not status:
+                errors.append(f"图表 {chart_name} 生成失败，请检查渲染日志")
 
     return errors

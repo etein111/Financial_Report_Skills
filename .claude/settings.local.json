@@ -119,7 +119,8 @@
       "Bash(\".venv/Scripts/python\" recommendation_chart.py)",
       "Bash(\".venv/Scripts/python\" -c \"\nfrom docx import Document\ndoc = Document\\(''templates/company/template.docx''\\)\nprint\\(''=== Tables ===''\\)\nfor i, table in enumerate\\(doc.tables\\):\n    print\\(f''Table {i}:''\\)\n    for j, row in enumerate\\(table.rows\\):\n        row_texts = [cell.text[:40] for cell in row.cells]\n        print\\(f''  Row {j}: {row_texts}''\\)\n\")",
       "Bash(\".venv/Scripts/python\" -c \"\nfrom docx import Document\n\ndoc = Document\\(''templates/company/template.docx''\\)\n\n# 搜索所有包含 chart 或 placeholder 的内容\nfor i, para in enumerate\\(doc.paragraphs\\):\n    text = para.text.strip\\(\\)\n    if text and \\(''chart'' in text.lower\\(\\) or ''{{'' in text\\):\n        print\\(f''Para {i}: {repr\\(text\\)}''\\)\n\nfor i, table in enumerate\\(doc.tables\\):\n    for j, row in enumerate\\(table.rows\\):\n        for k, cell in enumerate\\(row.cells\\):\n            text = cell.text.strip\\(\\)\n            if text and \\(''chart'' in text.lower\\(\\) or ''{{'' in text\\):\n                print\\(f''Table {i}, Row {j}, Cell {k}: {repr\\(text[:50]\\)}''\\)\n\")",
-      "Bash(\".venv/Scripts/python\" scripts/charts/recommendation_chart.py)"
+      "Bash(\".venv/Scripts/python\" scripts/charts/recommendation_chart.py)",
+      "Skill(report_maker)"
     ]
   }
 }
