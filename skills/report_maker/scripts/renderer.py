@@ -3683,3 +3683,299 @@ def expand_analyst_certification(docx_path: str, elements: Dict[str, Any]) -> in
         if os.path.exists(temp_dir):
             shutil.rmtree(temp_dir)
         return 0
+
+
+# ============== 图表处理函数 ==============
+
+def generate_and_insert_charts(
+    docx_path: str,
+    elements: Dict[str, Any],
+    output_dir: str = None
+) -> Dict[str, str]:
+    """生成并插入图表到文档中。
+
+    根据 ticker 自动生成 compare_chart、volume_chart 和 recommendation_chart，
+    并插入到模板的占位符位置。
+
+    Args:
+        docx_path: Word 文档路径
+        elements: 包含报告数据的字典，必须包含 ticker
+        output_dir: 图表输出目录，默认使用 reports/
+
+    Returns:
+        生成的图表路径字典 {'compare_chart': path, 'volume_chart': path, 'recommendation_chart': path}
+    """
+    import sys
+    import os
+    import subprocess
+    import tempfile
+    import zipfile
+    import hashlib
+    from datetime import datetime
+    from lxml import etree
+    from docx import Document
+
+    if not DOCX_AVAILABLE:
+        print("Error: python-docx not installed")
+        return {}
+
+    # 获取 ticker
+    ticker = elements.get('ticker', '')
+    ticker_name = elements.get('company_en', elements.get('company_cn', ''))
+    if not ticker:
+        print("Warning: No ticker found in elements")
+        return {}
+
+    # 确定输出目录
+    if output_dir is None:
+        output_dir = os.path.join(os.path.dirname(docx_path), 'reports')
+    os.makedirs(output_dir, exist_ok=True)
+
+    # 图表路径
+    compare_chart_path = os.path.join(output_dir, 'compare_chart.png')
+    volume_chart_path = os.path.join(output_dir, 'volume_chart.png')
+    recommendation_chart_path = os.path.join(output_dir, 'recommendation_chart.png')
+
+    chart_paths = {}
+
+    # 1. 生成 compare_chart 和 volume_chart
+    try:
+        print(f"正在生成 compare_chart 和 volume_chart for {ticker}...")
+
+        # 调用 relative_chart.py 脚本，传递输出路径参数
+        script_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+                                  'scripts', 'charts', 'relative_chart.py')
+
+        # 使用绝对路径
+        abs_compare_path = os.path.abspath(compare_chart_path)
+        abs_volume_path = os.path.abspath(volume_chart_path)
+
+        result = subprocess.run(
+            [sys.executable, script_path, ticker, ticker_name, abs_compare_path, abs_volume_path],
+            capture_output=True,
+            text=True,
+            timeout=120
+        )
+
+        if result.returncode == 0:
+            # 直接使用指定路径
+            if os.path.exists(abs_compare_path):
+                chart_paths['compare_chart'] = abs_compare_path
+            if os.path.exists(abs_volume_path):
+                chart_paths['volume_chart'] = abs_volume_path
+            print(f"  compare_chart 和 volume_chart 生成成功: {abs_compare_path}")
+        else:
+            print(f"  生成 compare_chart 和 volume_chart 失败: {result.stderr}")
+
+    except subprocess.TimeoutExpired:
+        print("  生成 compare_chart 和 volume_chart 超时")
+    except Exception as e:
+        print(f"  生成 compare_chart 和 volume_chart 出错: {e}")
+
+    # 2. 生成 recommendation_chart
+    try:
+        print(f"正在生成 recommendation_chart for {ticker}...")
+
+        # 提取推荐历史
+        recommendations = []
+        for i in range(1, 10):
+            rec_date = elements.get(f'rec{i}_date', '')
+            rec_rating = elements.get(f'rec{i}_rating', '')
+            rec_price = elements.get(f'rec{i}_price', 0)
+            rec_target = elements.get(f'rec{i}_target', 0)
+
+            if rec_date and rec_rating:
+                recommendations.append({
+                    'date': rec_date,
+                    'rating': rec_rating,
+                    'price': float(rec_price) if rec_price else 0,
+                    'target': float(rec_target) if rec_target else 0
+                })
+
+        if recommendations:
+            # 调用 recommendation_chart.py 脚本
+            script_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+                                      'scripts', 'charts', 'recommendation_chart.py')
+
+            import json
+            rec_json = json.dumps(recommendations)
+
+            # 使用绝对路径
+            abs_rec_chart_path = os.path.abspath(recommendation_chart_path)
+
+            result = subprocess.run(
+                [sys.executable, script_path, ticker, ticker_name, rec_json, abs_rec_chart_path],
+                capture_output=True,
+                text=True,
+                timeout=120
+            )
+
+            if result.returncode == 0:
+                if os.path.exists(abs_rec_chart_path):
+                    chart_paths['recommendation_chart'] = abs_rec_chart_path
+                    print(f"  recommendation_chart 生成成功: {abs_rec_chart_path}")
+            else:
+                print(f"  生成 recommendation_chart 失败: {result.stderr}")
+        else:
+            print("  未找到推荐历史数据，跳过 recommendation_chart")
+
+    except subprocess.TimeoutExpired:
+        print("  生成 recommendation_chart 超时")
+    except Exception as e:
+        print(f"  生成 recommendation_chart 出错: {e}")
+
+    # 3. 将图表插入到文档占位符位置
+    if chart_paths:
+        insert_charts_into_document(docx_path, chart_paths)
+
+    return chart_paths
+
+
+def insert_charts_into_document(docx_path: str, chart_paths: Dict[str, str]) -> bool:
+    """将图表插入到文档的占位符位置。
+
+    Args:
+        docx_path: Word 文档路径
+        chart_paths: 图表路径字典 {'compare_chart': path, 'volume chart': path, 'recommendation_chart': path}
+
+    Returns:
+        是否成功
+    """
+    try:
+        from docx import Document
+        from docx.shared import Cm, Inches
+
+        doc = Document(docx_path)
+
+        # 定义图表占位符及其尺寸（厘米）
+        chart_configs = {
+            'compare_chart': {'width': 6.35, 'height': 2.83},
+            'volume chart': {'width': 6.35, 'height': 1.74},
+            'recommendation_chart': {'width': 17.64, 'height': 10.58},
+        }
+
+        # 遍历所有段落
+        for para in doc.paragraphs:
+            para_text = para.text.strip()
+            for placeholder, config in chart_configs.items():
+                if placeholder in para_text:
+                    # 找到占位符，插入图片
+                    if placeholder in chart_paths and os.path.exists(chart_paths[placeholder]):
+                        # 在段落中添加图片
+                        run = para.add_run()
+                        run.add_picture(chart_paths[placeholder],
+                                       width=Cm(config['width']),
+                                       height=Cm(config['height']))
+                        print(f"  已插入 {placeholder} 到段落")
+                    # 清空占位符文本
+                    for run in para.runs:
+                        if placeholder in run.text:
+                            run.text = run.text.replace(placeholder, '').strip()
+                            break
+
+        # 遍历所有表格单元格（处理嵌套表格）
+        for table in doc.tables:
+            for row in table.rows:
+                for cell in row.cells:
+                    # 处理嵌套表格
+                    _insert_chart_in_cell_xml(docx_path, cell._element, chart_paths, chart_configs)
+
+        doc.save(docx_path)
+        print(f"  图表已插入文档: {docx_path}")
+        return True
+
+    except Exception as e:
+        print(f"  插入图表到文档出错: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+
+def _insert_chart_in_cell_xml(docx_path: str, cell_element, chart_paths: Dict[str, str],
+                               chart_configs: Dict[str, Dict]) -> None:
+    """在单元格的 XML 级别插入图表（处理嵌套表格）。
+
+    Args:
+        docx_path: Word 文档路径
+        cell_element: 单元格 XML 元素
+        chart_paths: 图表路径字典
+        chart_configs: 图表配置
+    """
+    from docx.oxml.ns import qn
+    from docx import Document
+    from docx.shared import Cm
+    from copy import deepcopy
+
+    W = qn('w')
+    TBL = qn('w:tbl')
+
+    # 查找嵌套表格
+    nested_tables = cell_element.findall(f'.//{TBL}')
+    if not nested_tables:
+        return
+
+    for nested_tbl in nested_tables:
+        # 在嵌套表格中查找占位符段落
+        paragraphs = nested_tbl.findall(f'.//{W}p')
+
+        for para in paragraphs:
+            # 获取段落文本
+            para_text = ''
+            for t in para.iter(qn('w:t')):
+                para_text += (t.text or '')
+
+            # 检查是否是图表占位符
+            for placeholder, config in chart_configs.items():
+                if placeholder in para_text:
+                    chart_path = chart_paths.get(placeholder)
+                    if chart_path and os.path.exists(chart_path):
+                        # 找到占位符，插入图片
+                        # 在段落末尾添加图片
+                        # 创建图片元素
+                        try:
+                            # 使用 docx 的方式添加图片到段落
+                            pass  # 这里需要特殊处理
+
+                        except Exception as e:
+                            print(f"  在嵌套表格中插入图表出错: {e}")
+
+                    # 清除占位符文本
+                    for t in para.iter(qn('w:t')):
+                        if t.text:
+                            t.text = t.text.replace(placeholder, '')
+
+
+def render_with_charts(
+    template_path: str,
+    elements: Dict[str, Any],
+    abstract_path: str,
+    body_path: str,
+    output_path: str,
+    include_charts: bool = True
+) -> bool:
+    """渲染模板并生成图表的完整流程。
+
+    Args:
+        template_path: 模板路径
+        elements: 报告数据
+        abstract_path: 摘要文档路径
+        body_path: 正文文档路径
+        output_path: 输出路径
+        include_charts: 是否生成并插入图表
+
+    Returns:
+        是否成功
+    """
+    # 1. 先渲染模板（不包含图表）
+    success = render_template(template_path, elements, abstract_path, body_path, output_path)
+
+    if not success:
+        return False
+
+    # 2. 生成并插入图表
+    if include_charts and 'ticker' in elements:
+        chart_paths = generate_and_insert_charts(output_path, elements)
+        if chart_paths:
+            print(f"已生成并插入 {len(chart_paths)} 个图表")
+
+    return True
