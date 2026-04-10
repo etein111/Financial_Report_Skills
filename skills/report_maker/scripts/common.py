@@ -169,29 +169,29 @@ def normalize_report_name(filename: str) -> str:
 def generate_report_filename(elements: Dict[str, Any], extension: str = ".docx") -> str:
     """根据 elements 生成报告文件名。
 
-    格式：{company}({ticker})：{title}{extension}
+    格式：{company_cn}({ticker})：{title}{extension}
     示例：西锐飞机(2507 HK)：首次覆盖：安全、创新与强大生态系统铸就西锐私人航空全球领导者地位.docx
 
     Args:
-        elements: 要素字典，需要包含 company、ticker、title 字段
+        elements: 要素字典，需要包含 company_cn、ticker、title 字段
         extension: 文件扩展名，默认为 ".docx"
 
     Returns:
         生成的文件名，如果缺少必要字段则返回默认文件名
     """
-    company = elements.get('company', '').strip()
+    company_cn = elements.get('company_cn', '').strip()
     ticker = elements.get('ticker', '').strip()
     title = elements.get('title', '').strip()
 
     # 如果缺少必要字段，返回默认文件名
-    if not company or not ticker or not title:
+    if not company_cn or not ticker or not title:
         return FILE_OUTPUT_DOCX if extension == ".docx" else FILE_OUTPUT_PDF
 
     # 格式化 ticker：将点号替换为空格（如 2507.HK -> 2507 HK）
     ticker_formatted = ticker.replace('.', ' ')
 
     # 构建文件名（使用中文全角冒号，避免 Windows 禁止字符）
-    filename = f"{company}({ticker_formatted})：{title}"
+    filename = f"{company_cn}({ticker_formatted})：{title}"
 
     # 清理文件名中的非法字符
     filename = sanitize_filename(filename)
