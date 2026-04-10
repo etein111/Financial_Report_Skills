@@ -17,3 +17,10 @@ export NEOLYST_TEST_EMAIL=your_email@example.com
 export NEOLYST_TEST_PASSWORD=your_password
 uv run pytest skills/neolyst/tests/ -v
 ```
+
+测试入口不会直接读取 `skills/neolyst/neolyst.yaml`。`conftest.py` 会在 pytest 启动时执行以下映射：
+
+- `NEOLYST_TEST_URL` -> `NEOLYST_URL`
+- `NEOLYST_TEST_ANON_KEY` -> `NEOLYST_ANON_KEY`
+
+因此，本地联调必须显式提供以上 4 个 `NEOLYST_TEST_*` 环境变量，不能依赖 yaml 默认值。

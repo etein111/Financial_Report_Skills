@@ -23,23 +23,30 @@ client = connection.get_client()
 
 ### 配置文件（随 skill 发布，非敏感，已提交到仓库）
 
-`skills/neolyst/neolyst.yaml` — Supabase 连接配置：
+`skills/neolyst/neolyst.yaml` — 运行时默认 Supabase 连接配置：
 
 ```yaml
-supabase_url: "http://127.0.0.1:54321"   # 本地 Supabase 服务地址
+supabase_url: "https://neolyst.zeabur.app"  # 当前仓库默认指向 staging
 anon_key: "eyJhbG..."                     # Supabase anon/publishable key（非密钥）
 ```
 
-anon key 是公开的客户端 key，不是敏感信息，可以安全提交到版本库。
+anon key 是公开的客户端 key，不是敏感信息，可以安全提交到版本库。`neolyst.yaml` 是运行时默认配置，不保证指向本地环境。
 
 ### 凭据文件（本地保存，不提交）
 
-`skills/neolyst/user.json` — 用户登录凭据及 session token：
+`skills/neolyst/user.json` — 用户登录凭据：
 
 ```json
 {
   "email": "user@example.com",
-  "password": "...",
+  "password": "..."
+}
+```
+
+`skills/neolyst/session.json` — 当前登录 session：
+
+```json
+{
   "access_token": "eyJ...",
   "refresh_token": "eyJ...",
   "expires_at": 1712345678
@@ -53,7 +60,7 @@ anon key 是公开的客户端 key，不是敏感信息，可以安全提交到�
 1. 告知用户需要 Neolyst 账号凭据（邮箱 + 密码）
 2. 向用户请求邮箱和密码
 3. 调用 `get_client(email=..., password=...)` 完成首次登录
-4. 登录成功后凭据自动保存到 `skills/neolyst/user.json`，后续调用无需再次输入
+4. 登录成功后邮箱和密码自动保存到 `skills/neolyst/user.json`，session 自动保存到 `skills/neolyst/session.json`
 
 ```python
 # 首次登录示例
@@ -63,12 +70,26 @@ client = connection.get_client(email="user@neolyst.com", password="your_password
 ### Session 自动管理
 
 `get_client` 的完整认证顺序：
-1. 读取 `user.json`，用 `access_token` 恢复 session
-2. token 过期时自动用 `refresh_token` 刷新，回写文件
-3. refresh 失败时用文件里存的 `email + password` 重新登录，回写文件
+1. 读取 `session.json`，用 `access_token` 恢复 session
+2. token 过期时自动用 `refresh_token` 刷新，回写 `session.json`
+3. refresh 失败时用 `user.json` 里的 `email + password` 重新登录，回写 `session.json`
 4. 以上均失败（凭据无效、账号不存在等）→ 抛出 `ValueError`，**此时必须向用户索取邮箱和密码**，再调用 `get_client(email=..., password=...)`
 
 **access token 有效期约 1 小时**，refresh token 随之轮换。长时间不用后需要重新登录属于正常现象。
+
+### 测试连接约束
+
+本地测试不得依赖 `neolyst.yaml` 的默认值。`skills/neolyst/tests` 会强制把：
+
+- `NEOLYST_TEST_URL` 映射到 `NEOLYST_URL`
+- `NEOLYST_TEST_ANON_KEY` 映射到 `NEOLYST_ANON_KEY`
+
+如需本地联调，还需要显式提供：
+
+- `NEOLYST_TEST_EMAIL`
+- `NEOLYST_TEST_PASSWORD`
+
+也就是说，测试连接目标必须通过环境变量声明，不能默认回落到 staging 配置。
 
 ---
 
@@ -216,7 +237,7 @@ result = draft_report.save_draft_report(client, {
 
 **字段分层：**
 - 保存 draft 最小字段：`title`、`report_type`、`report_language`、`analysts`、`report_file`、`pdf_file`
-- 提交前必须补齐：`contact_person`、`investment_thesis`，以及按类型要求的字段（见 validators）
+- 提交前必须补齐：`contact_person`、`investment_thesis`，以及按类型要求的字段（见 `validate_draft`）
 
 ---
 
@@ -302,6 +323,6 @@ rows = coverage.list_coverage_history(
 
 - `save_draft_report` 的 `report_id` 首次为 `None`，后续版本传已有 ID，沿用同一 report 追加版本
 - `create_coverage` 只能在 `resolve_coverage` 未命中、且用户已确认"Coverage 已完成审批"后才调用
-- `submit_report` 之前必须先通过 `validators`
+- `submit_report` 之前必须先通过 `validate_draft`
 - `reuse_template` 的复用是静态路径复制；主模板重新上传后需重新执行一次 `reuse_template`
 - `contact_person` 必须属于本次报告的 `analysts[].analyst_email`

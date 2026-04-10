@@ -41,28 +41,28 @@
 **Files:**
 - Modify: `skills/neolyst/SKILL.md`
 
-- [ ] **Step 1: 用 `skill-creator` 全面扫描并清理 `SKILL.md` 的过期内容**
+- [x] **Step 1: 用 `skill-creator` 全面扫描并清理 `SKILL.md` 的过期内容**
 
 要求：
 - 不只改 `validate_draft` 相关命名
 - 一并清理所有与当前实现不一致的接口说明、文件说明、测试说明、调用约束
 - 重点检查：`validators`、`user.json` 单文件描述、`neolyst.yaml` 本地默认描述、测试连接方式、提交前约束表述
 
-- [ ] **Step 2: 用 `skill-creator` 更新 `SKILL.md` 中的校验接口命名**
+- [x] **Step 2: 用 `skill-creator` 更新 `SKILL.md` 中的校验接口命名**
 
 要求：
 - 将“### 8. validate_draft ✅ 已实现”作为唯一公开名称保留
 - 删除“见 validators”一类旧表述，统一改为“见 `validate_draft`”
 - 保留 `validators.py` 模块路径示例，但不再把 `validators` 当成对外函数名
 
-- [ ] **Step 3: 用 `skill-creator` 更新认证与测试说明**
+- [x] **Step 3: 用 `skill-creator` 更新认证与测试说明**
 
 要求：
 - 将认证文件说明改为 `user.json` + `session.json`
 - 说明 `neolyst.yaml` 是运行时默认配置，可指向 staging
 - 说明本地测试必须通过 `NEOLYST_URL` / `NEOLYST_ANON_KEY` 覆盖，不依赖 yaml 默认值
 
-- [ ] **Step 4: 运行 grep 验证 `SKILL.md` 清理结果**
+- [x] **Step 4: 运行 grep 验证 `SKILL.md` 清理结果**
 
 Run:
 ```bash
@@ -80,21 +80,21 @@ Expected:
 **Files:**
 - Modify: `docs/skills_neolyst_design.md`
 
-- [ ] **Step 1: 更新接口命名与校验落点描述**
+- [x] **Step 1: 更新接口命名与校验落点描述**
 
 要求：
 - 将“`validators`”统一改为“`validate_draft`”
 - 在“业务逻辑落点”或“执行流程”中明确：当前 `validate_draft` 由 Python 侧实现，不是 Supabase RPC
 - 保持 `submit_report` 仍通过 RPC 完成状态流转
 
-- [ ] **Step 2: 更新连接与测试配置描述**
+- [x] **Step 2: 更新连接与测试配置描述**
 
 要求：
 - 将认证文件说明改为 `user.json` + `session.json`
 - 删除“`neolyst.yaml` 默认本地 Supabase”之类表述
 - 将“测试通过环境变量覆盖”改成强约束，而不是可选备注
 
-- [ ] **Step 3: 校验设计文档不再误导上游接入**
+- [x] **Step 3: 校验设计文档不再误导上游接入**
 
 Run:
 ```bash
@@ -111,20 +111,20 @@ Expected:
 - Modify: `skills/neolyst/tests/README.md`
 - Modify: `plans/2026-04-07-neolyst-skill-roadmap.md`
 
-- [ ] **Step 1: 更新测试 README**
+- [x] **Step 1: 更新测试 README**
 
 要求：
 - 写明本地测试使用 `NEOLYST_TEST_URL` / `NEOLYST_TEST_ANON_KEY` / `NEOLYST_TEST_EMAIL` / `NEOLYST_TEST_PASSWORD`
 - 明确 pytest 运行过程中会映射到 `NEOLYST_URL` / `NEOLYST_ANON_KEY`
 
-- [ ] **Step 2: 更新 roadmap 中 Iter 7 / Iter 8 的范围与计划文件链接**
+- [x] **Step 2: 更新 roadmap 中 Iter 7 / Iter 8 的范围与计划文件链接**
 
 要求：
 - Iter 7 范围写为“契约与文档对齐”
 - Iter 8 范围写为“report_maker + template_maker 接入”
 - 两行都补上计划文件链接
 
-- [ ] **Step 3: 跑 `neolyst` 测试确认文档收尾未影响现状**
+- [x] **Step 3: 跑 `neolyst` 测试确认文档收尾未影响现状**
 
 Run:
 ```bash
@@ -134,7 +134,7 @@ uv run pytest skills/neolyst/tests -q
 Expected:
 - 全量通过
 
-- [ ] **Step 4: 更新本计划状态**
+- [x] **Step 4: 更新本计划状态**
 
 要求：
 - 将本文件中的完成项打勾
@@ -142,7 +142,7 @@ Expected:
 
 ## 完成标准
 
-- [ ] `SKILL.md` 已完成一轮彻底清理，不再保留已知过期文案
-- [ ] `SKILL.md`、设计文档、测试 README 对 `validate_draft` / 连接配置 / 测试配置的表述完全一致
-- [ ] roadmap 已挂出 Iter 7 / Iter 8 正式计划文件
-- [ ] `uv run pytest skills/neolyst/tests -q` 通过
+- [x] `SKILL.md` 已完成一轮彻底清理，不再保留已知过期文案
+- [x] `SKILL.md`、设计文档、测试 README 对 `validate_draft` / 连接配置 / 测试配置的表述完全一致
+- [x] roadmap 已挂出 Iter 7 / Iter 8 正式计划文件
+- [x] `uv run pytest skills/neolyst/tests -q` 通过
