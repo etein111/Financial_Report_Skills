@@ -81,4 +81,4 @@
 ### 4. 创建或修改 SKILL.md 时必须调用 skill-creator
 
 - 新建 skill 或修改已有 `SKILL.md` 时，通过 `skill-creator` 操作，不得手动编写
-- 详见 `docs/SKILL_STANDARD.md`
+- 详见 `principles/SKILL_STANDARD.md`
