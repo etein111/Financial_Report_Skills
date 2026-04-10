@@ -13,7 +13,7 @@
 --   8. 报告状态流转日志
 
 -- ============================================================
--- 0. 辅助：密码统一用 'Test1234!' 的 bcrypt hash
+-- 0. 密码规则：各用户密码 = 邮箱地址，方便记忆
 -- ============================================================
 
 -- ============================================================
@@ -34,12 +34,13 @@ insert into auth.users (
     'a0000000-0000-0000-0000-000000000001'::uuid,
     'authenticated', 'authenticated',
     'admin@test.com',
-    '$2a$06$NC.pQkJYfr8I6PVpbHHg8eZoesWge99orpd5fLvdofyvNK4wMIgxC',
+    '$2b$06$4lg0vKb.3zYB/2r58FmzoOxsZTjvuWuCJz.sQdqY3HVV4T6Sag8U6',
     now(), '', '', '', '', '', 0,
     '{"role": "admin", "provider": "email", "providers": ["email"]}'::jsonb,
     '{"full_name": "测试管理员"}'::jsonb,
     now(), now(), false, false
-) on conflict (id) do nothing;
+) on conflict (id) do update set
+    encrypted_password = excluded.encrypted_password;
 
 -- SA（审批角色）
 insert into auth.users (
@@ -55,12 +56,13 @@ insert into auth.users (
     'a0000000-0000-0000-0000-000000000002'::uuid,
     'authenticated', 'authenticated',
     'sa@test.com',
-    '$2a$06$NC.pQkJYfr8I6PVpbHHg8eZoesWge99orpd5fLvdofyvNK4wMIgxC',
+    '$2b$06$ONiy4cC5rvvN3Q0xzmESUO3oh.gZFftOLnVg9YQAT2Ph.J2W15EY.',
     now(), '', '', '', '', '', 0,
     '{"role": "sa", "provider": "email", "providers": ["email"]}'::jsonb,
     '{"full_name": "测试审批员"}'::jsonb,
     now(), now(), false, false
-) on conflict (id) do nothing;
+) on conflict (id) do update set
+    encrypted_password = excluded.encrypted_password;
 
 -- analyst 1 —— 杨斌（Bin Yang）
 insert into auth.users (
@@ -76,12 +78,13 @@ insert into auth.users (
     'a0000000-0000-0000-0000-000000000010'::uuid,
     'authenticated', 'authenticated',
     'harryyang@hfisec.com.hk',
-    '$2a$06$NC.pQkJYfr8I6PVpbHHg8eZoesWge99orpd5fLvdofyvNK4wMIgxC',
+    '$2b$06$ZErqP8gYPH2fbycT2fntU.NDI/A.8iQlmn3bHXgrqGEb26px4pGB6',
     now(), '', '', '', '', '', 0,
     '{"role": "analyst", "provider": "email", "providers": ["email"]}'::jsonb,
     '{"full_name": "杨斌"}'::jsonb,
     now(), now(), false, false
-) on conflict (id) do nothing;
+) on conflict (id) do update set
+    encrypted_password = excluded.encrypted_password;
 
 -- analyst 2 —— 邓轶达（Yida Deng）
 insert into auth.users (
@@ -97,12 +100,13 @@ insert into auth.users (
     'a0000000-0000-0000-0000-000000000011'::uuid,
     'authenticated', 'authenticated',
     'dengyida@hfisec.com.hk',
-    '$2a$06$NC.pQkJYfr8I6PVpbHHg8eZoesWge99orpd5fLvdofyvNK4wMIgxC',
+    '$2b$06$sxdS3mFXOypAzBB.p/5NbOjPsXb6ngtz/KlXc5Eyji5KZkCl/E5py',
     now(), '', '', '', '', '', 0,
     '{"role": "analyst", "provider": "email", "providers": ["email"]}'::jsonb,
     '{"full_name": "邓轶达"}'::jsonb,
     now(), now(), false, false
-) on conflict (id) do nothing;
+) on conflict (id) do update set
+    encrypted_password = excluded.encrypted_password;
 
 -- analyst 3 —— 李明（Ming Li）
 insert into auth.users (
@@ -118,12 +122,13 @@ insert into auth.users (
     'a0000000-0000-0000-0000-000000000012'::uuid,
     'authenticated', 'authenticated',
     'mingli@hfisec.com.hk',
-    '$2a$06$NC.pQkJYfr8I6PVpbHHg8eZoesWge99orpd5fLvdofyvNK4wMIgxC',
+    '$2b$06$.o10m6rfAflv/.sgr8LSVuCYG0NO1YelxoIWzWEXaemjZwDHZrlB6',
     now(), '', '', '', '', '', 0,
     '{"role": "analyst", "provider": "email", "providers": ["email"]}'::jsonb,
     '{"full_name": "李明"}'::jsonb,
     now(), now(), false, false
-) on conflict (id) do nothing;
+) on conflict (id) do update set
+    encrypted_password = excluded.encrypted_password;
 
 
 -- ============================================================
@@ -501,7 +506,8 @@ values
      'e0000000-0000-0000-0000-000000000001'::uuid,
      'submitted', 'published',
      'a0000000-0000-0000-0000-000000000002'::uuid, '测试审批员', 1,
-     '2026-01-05 10:00:00+00');
+      '2026-01-05 10:00:00+00')
+on conflict (id) do nothing;
 
 -- 西锐飞机: draft -> submitted -> published
 insert into public.report_status_log (id, report_id, from_status, to_status, action_by, action_by_name, version_no, action_at)
@@ -516,7 +522,8 @@ values
      'e0000000-0000-0000-0000-000000000002'::uuid,
      'submitted', 'published',
      'a0000000-0000-0000-0000-000000000002'::uuid, '测试审批员', 1,
-     '2025-10-21 10:00:00+00');
+      '2025-10-21 10:00:00+00')
+on conflict (id) do nothing;
 
 -- Bloom Energy: draft -> submitted (v1) -> rejected -> draft -> submitted (v2)
 insert into public.report_status_log (id, report_id, from_status, to_status, action_by, action_by_name, version_no, reason, action_at)
@@ -544,7 +551,8 @@ values
      'e0000000-0000-0000-0000-000000000003'::uuid,
      'draft', 'submitted',
      'a0000000-0000-0000-0000-000000000010'::uuid, 'Bin Yang', 2, null,
-     '2026-03-05 11:00:00+00');
+      '2026-03-05 11:00:00+00')
+on conflict (id) do nothing;
 
 -- 行业快报: draft -> submitted -> published
 insert into public.report_status_log (id, report_id, from_status, to_status, action_by, action_by_name, version_no, action_at)
@@ -559,7 +567,8 @@ values
      'e0000000-0000-0000-0000-000000000005'::uuid,
      'submitted', 'published',
      'a0000000-0000-0000-0000-000000000002'::uuid, '测试审批员', 1,
-     '2026-03-20 10:00:00+00');
+      '2026-03-20 10:00:00+00')
+on conflict (id) do nothing;
 
 -- 宏观报告: draft -> submitted -> published
 insert into public.report_status_log (id, report_id, from_status, to_status, action_by, action_by_name, version_no, action_at)
@@ -574,7 +583,8 @@ values
      'e0000000-0000-0000-0000-000000000006'::uuid,
      'submitted', 'published',
      'a0000000-0000-0000-0000-000000000002'::uuid, '测试审批员', 1,
-     '2026-03-17 10:00:00+00');
+      '2026-03-17 10:00:00+00')
+on conflict (id) do nothing;
 
 -- 腾讯快评: draft -> submitted -> rejected
 insert into public.report_status_log (id, report_id, from_status, to_status, action_by, action_by_name, version_no, reason, action_at)
@@ -590,4 +600,5 @@ values
      'submitted', 'rejected',
      'a0000000-0000-0000-0000-000000000002'::uuid, '测试审批员', 1,
      '快评篇幅过长，请精简至两页以内并补充关键财务指标对比表。',
-     '2026-03-21 09:30:00+00');
+      '2026-03-21 09:30:00+00')
+on conflict (id) do nothing;
