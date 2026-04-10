@@ -3,16 +3,30 @@
 from __future__ import annotations
 
 import glob
+import json
 import os
 import subprocess
 from pathlib import Path
 
+_PROJECT_ROOT = Path(__file__).resolve().parents[3]
+_ZEBUR_CONFIG = _PROJECT_ROOT / "supabase" / "staging.json"
 
-DB_HOST = "47.239.121.31"
-DB_PORT = "31439"
-DB_USER = "supabase_admin"
-DB_PASS = "u9hI31H68ozy42B5cKde0nRfxGjYiLr7"
-DB_NAME = "postgres"
+
+def _load_zeabur_config() -> dict:
+    if not _ZEBUR_CONFIG.exists():
+        raise FileNotFoundError(
+            f"Zeabur config not found: {_ZEBUR_CONFIG}\n"
+            "Create it with: {\"host\":..., \"port\":..., \"user\":..., \"password\":..., \"dbname\":...}"
+        )
+    return json.loads(_ZEBUR_CONFIG.read_text())
+
+
+_cfg = _load_zeabur_config()
+DB_HOST = _cfg["host"]
+DB_PORT = _cfg["port"]
+DB_USER = _cfg["user"]
+DB_PASS = _cfg["password"]
+DB_NAME = _cfg["dbname"]
 
 
 def psql_env() -> dict:
