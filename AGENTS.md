@@ -104,15 +104,9 @@ AI 编程助手的统一指导文件。Claude Code 和 Codex 共享此配置。
 - **核心实体**：Analyst（分析师）、Sector（行业）、Coverage（覆盖）、Template（模板）、Report（报告）
 - **报告状态流转**：`draft → submitted → published/rejected`
 
-## 技术栈与工具库
+## Skill 管理原则
 
-### Word 文档操作
-
-本项目大量处理 Word 模板和报告，默认按以下规则选型：
-- 创建、读取和精细修改 `.docx` 时，优先使用 `python-docx`
-- 模板变量替换和批量渲染时，优先使用 `docxtpl`
-- 纯文本分析或结构摸底时，优先使用 `docx2txt`
-- 合并文档时，优先使用 `docxcompose`
-处理注意事项：
-- `python-docx` 的 `cell.text` 不包含嵌套表格内容, 涉及嵌套表格时，必须显式遍历 `cell.tables`.
+- 日常开发操作（数据库管理、环境推送等）统一收进 `skills/dev_ops/`
+- 相关的脚本和文档随 skill 归档，不在 `supabase/` 下散落
+- 需要整理时记在 `docs/TODO.md`，不要当场顺手做
 

@@ -64,8 +64,8 @@ def exec_file(fpath: str) -> None:
 
 
 def main() -> None:
-    script_dir = Path(__file__).resolve().parent
-    migration_dir = script_dir / "migrations"
+    project_root = Path(__file__).resolve().parents[3]
+    migration_dir = project_root / "supabase" / "migrations"
 
     migration_files = sorted(glob.glob(str(migration_dir / "*.sql")))
     if not migration_files:
