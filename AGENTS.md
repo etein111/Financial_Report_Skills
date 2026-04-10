@@ -1,14 +1,7 @@
-
 # AGENTS.md
 AI 编程助手的统一指导文件。Claude Code 和 Codex 共享此配置。
 
-## 文档索引
-
-本文件只保留协作入口，不展开具体规范细则。
-
-后续遇到代码实现、重构、代码评审等问题时，查阅 [docs/CODING_STANDARDS.md](./docs/CODING_STANDARDS.md)。
-
-后续遇到 Skill 目录结构、测试目录组织等问题时，查阅 [docs/SKILL_STANDARD.md](./docs/SKILL_STANDARD.md)。
+# 交互约定
 
 ## 语言偏好
 
@@ -23,6 +16,16 @@ AI 编程助手的统一指导文件。Claude Code 和 Codex 共享此配置。
 - 关键考量/取舍
 - 不确定时的默认决策
 
+# 任务规范
+
+## 文档索引
+
+本文件只保留协作入口，不展开具体规范细则。
+
+后续遇到代码实现、重构、代码评审等问题时，查阅 [docs/CODING_STANDARDS.md](./docs/CODING_STANDARDS.md)。
+
+后续遇到 Skill 目录结构、测试目录组织等问题时，查阅 [docs/SKILL_STANDARD.md](./docs/SKILL_STANDARD.md)。
+
 ## 业务逻辑落点原则
 
 **所有业务逻辑必须在 Supabase 侧实现，Python skill 只做 I/O（文件上传、参数整理、调用接口）。**
@@ -34,8 +37,6 @@ AI 编程助手的统一指导文件。Claude Code 和 Codex 共享此配置。
 
 **所有 schema 变更（包括函数、触发器、RPC）必须写入 `supabase/migrations/` 文件，不允许手动在 Studio 里操作。**
 
-
-
 **写任何实现计划之前，必须先向用户提出不确定的问题，等待确认后再动笔。**
 
 不清楚的事情包括但不限于：
@@ -46,7 +47,28 @@ AI 编程助手的统一指导文件。Claude Code 和 Codex 共享此配置。
 
 提问方式：圈出设计文档中已明确的内容，列出不确定项，一次性问完，等用户回答后再写计划。
 
+# 工作流程
 
+## 迭代执行工作流
+
+每次开始一个新迭代时，**必须按以下顺序执行**，每步都通过 superpowers skill 完成：
+
+1. 读取 `plans/2026-04-07-neolyst-skill-roadmap.md` 了解当前进度
+2. 读取上一迭代的计划文件（`plans/` 目录）
+3. 向用户提出所有不确定的问题，等待确认后再动笔
+4. **调用 `superpowers:writing-plans` skill 写本迭代计划**，保存到 `plans/` 目录
+5. **调用 `superpowers:subagent-driven-development`（推荐）或 `superpowers:executing-plans` skill 执行计划**
+6. 完成后更新 roadmap 状态和相关文档
+
+> **重要**：计划撰写和计划执行都必须通过 superpowers skill 完成，不允许自行用 Plan Mode 写计划或自行逐步实现。
+
+## Skill 管理原则
+
+- 日常开发操作（数据库管理、环境推送等）统一收进 `skills/dev_ops/`
+- 相关的脚本和文档随 skill 归档，不在 `supabase/` 下散落
+- 需要整理时记在 `docs/TODO.md`，不要当场顺手做
+
+# 文档规范
 
 **每次完成实现变更后，必须在同一次任务内检查并更新相关文档，不允许留到下次。**
 
@@ -70,28 +92,18 @@ AI 编程助手的统一指导文件。Claude Code 和 Codex 共享此配置。
 
 完成一个任务后，问自己：**"这个改动有没有改变文档里已经写定的内容？"** 有则立刻更新，没有则跳过。不需要每次都把文档从头读一遍。
 
-
 - 以场景为中心组织框架，不按技术分类
 - 只写看了就能上手的内容，深度细节交给资料链接
 - 一眼能看懂，太长没人看
 
-## 迭代执行工作流
-
-每次开始一个新迭代时，**必须按以下顺序执行**，每步都通过 superpowers skill 完成：
-
-1. 读取 `plans/2026-04-07-neolyst-skill-roadmap.md` 了解当前进度
-2. 读取上一迭代的计划文件（`plans/` 目录）
-3. 向用户提出所有不确定的问题，等待确认后再动笔
-4. **调用 `superpowers:writing-plans` skill 写本迭代计划**，保存到 `plans/` 目录
-5. **调用 `superpowers:subagent-driven-development`（推荐）或 `superpowers:executing-plans` skill 执行计划**
-6. 完成后更新 roadmap 状态和相关文档
-
-> **重要**：计划撰写和计划执行都必须通过 superpowers skill 完成，不允许自行用 Plan Mode 写计划或自行逐步实现。
+# 目录规范
 
 ## 临时文件位置规则
 
 - 不要在项目根目录下创建任何临时目录或文件。
 - 临时文件只允许放在 `/tmp/`,`~/tmp/`
+
+# 背景与系统说明
 
 ## 相关概念
 
@@ -103,10 +115,3 @@ AI 编程助手的统一指导文件。Claude Code 和 Codex 共享此配置。
 - **角色**：`admin`（管理员）、`sa`（审批）、`analyst`（分析师）
 - **核心实体**：Analyst（分析师）、Sector（行业）、Coverage（覆盖）、Template（模板）、Report（报告）
 - **报告状态流转**：`draft → submitted → published/rejected`
-
-## Skill 管理原则
-
-- 日常开发操作（数据库管理、环境推送等）统一收进 `skills/dev_ops/`
-- 相关的脚本和文档随 skill 归档，不在 `supabase/` 下散落
-- 需要整理时记在 `docs/TODO.md`，不要当场顺手做
-
