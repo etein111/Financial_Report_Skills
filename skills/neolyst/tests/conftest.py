@@ -13,9 +13,6 @@ NEOLYST_TEST_DIR = Path(os.environ.get("NEOLYST_TEST_DIR", Path.home() / "tmp" /
 NEOLYST_TEST_EMAIL = os.environ.get("NEOLYST_TEST_EMAIL", "yangxue@opendelp.com")
 NEOLYST_TEST_PASSWORD = os.environ.get("NEOLYST_TEST_PASSWORD", "Admin123")
 
-# 本地 Supabase URL：通过环境变量覆盖 neolyst.yaml 中的远程 URL
-os.environ.setdefault("NEOLYST_URL", os.environ.get("NEOLYST_TEST_URL", "http://127.0.0.1:54321"))
-
 
 @pytest.fixture(scope="session")
 def neolyst_client():
@@ -29,3 +26,13 @@ def neolyst_client():
         email=NEOLYST_TEST_EMAIL,
         password=NEOLYST_TEST_PASSWORD,
     )
+
+
+@pytest.fixture(scope="session", autouse=True)
+def ensure_buckets(neolyst_client):
+    """确保 templates 和 reports bucket 存在（幂等）。"""
+    for bucket in ("templates", "reports"):
+        try:
+            neolyst_client.storage.create_bucket(bucket, options={"public": False})
+        except Exception:
+            pass  # 已存在则忽略

@@ -26,7 +26,7 @@ client = connection.get_client()
 `skills/neolyst/neolyst.yaml` — Supabase 连接配置：
 
 ```yaml
-supabase_url: "http://47.57.213.88:80"   # Supabase 服务地址
+supabase_url: "http://127.0.0.1:54321"   # 本地 Supabase 服务地址
 anon_key: "eyJhbG..."                     # Supabase anon/publishable key（非密钥）
 ```
 
@@ -34,7 +34,7 @@ anon key 是公开的客户端 key，不是敏感信息，可以安全提交到�
 
 ### 凭据文件（本地保存，不提交）
 
-`skills/neolyst/.neolyst` — 用户登录凭据及 session token：
+`skills/neolyst/user.json` — 用户登录凭据及 session token：
 
 ```json
 {
@@ -48,12 +48,12 @@ anon key 是公开的客户端 key，不是敏感信息，可以安全提交到�
 
 ### 首次使用：询问并记录凭据
 
-**如果 `skills/neolyst/.neolyst` 文件不存在**，说明用户尚未登录过。此时必须：
+**如果 `skills/neolyst/user.json` 文件不存在**，说明用户尚未登录过。此时必须：
 
 1. 告知用户需要 Neolyst 账号凭据（邮箱 + 密码）
 2. 向用户请求邮箱和密码
 3. 调用 `get_client(email=..., password=...)` 完成首次登录
-4. 登录成功后凭据自动保存到 `skills/neolyst/.neolyst`，后续调用无需再次输入
+4. 登录成功后凭据自动保存到 `skills/neolyst/user.json`，后续调用无需再次输入
 
 ```python
 # 首次登录示例
@@ -63,10 +63,12 @@ client = connection.get_client(email="user@neolyst.com", password="your_password
 ### Session 自动管理
 
 `get_client` 的完整认证顺序：
-1. 读取 `.neolyst`，用 `access_token` 恢复 session
+1. 读取 `user.json`，用 `access_token` 恢复 session
 2. token 过期时自动用 `refresh_token` 刷新，回写文件
-3. refresh 失败时用 `email + password` 重新登录，回写文件
-4. 无可用 session 也无凭据 → 抛出 `ValueError`，需要执行首次登录流程
+3. refresh 失败时用文件里存的 `email + password` 重新登录，回写文件
+4. 以上均失败（凭据无效、账号不存在等）→ 抛出 `ValueError`，**此时必须向用户索取邮箱和密码**，再调用 `get_client(email=..., password=...)`
+
+**access token 有效期约 1 小时**，refresh token 随之轮换。长时间不用后需要重新登录属于正常现象。
 
 ---
 
@@ -85,12 +87,12 @@ record = analyst.resolve_analyst_by_email(client, "alice@neolyst.com")
 ```
 
 - 邮箱大小写不敏感，内部统一 lowercase
-- `is_active=False` 的分析师会抛出 `ValueError: Analyst is inactive`
+- `is_active=False` 的分析师会抛出 `ValueError: 分析师已停用`
 - 业务主键是 `email`，无 `id` 字段
 
 ---
 
-### 2. resolve_template 🔲 待实现
+### 2. resolve_template ✅ 已实现
 
 按 `report_type + language` 查询模板记录，将模板文件和 schema 下载到本地并返回路径。
 
@@ -104,7 +106,7 @@ result = template.resolve_template(client, report_type="company", language="en")
 
 ---
 
-### 3. upsert_template 🔲 待实现
+### 3. upsert_template ✅ 已实现
 
 上传本地模板文件到 Storage，并写入/更新对应的 `report_template` 记录。
 
@@ -121,7 +123,7 @@ template.upsert_template(
 
 ---
 
-### 4. reuse_template 🔲 待实现
+### 4. reuse_template ✅ 已实现
 
 让某个 `report_type` 的模板记录静态复制另一个 `report_type` 的文件路径（共用模板资产）。
 
@@ -133,12 +135,13 @@ template.reuse_template(
     same_as_report_type="macro",
 )
 # 返回：None
+# 注意：必须先通过 upsert_template 发布源模板，才能调用 reuse_template
 # 失败场景（直接抛出 ValueError）：源模板不存在、language 不一致、report_type 复用自己
 ```
 
 ---
 
-### 5. resolve_coverage 🔲 待实现
+### 5. resolve_coverage ✅ 已实现
 
 按 `ticker` 查询 coverage，并验证 `first_analyst_email` 在该 coverage 的分析师列表中。
 
@@ -153,7 +156,7 @@ coverage_id = coverage.resolve_coverage(client, ticker="VRT US", first_analyst_e
 
 ---
 
-### 6. create_coverage 🔲 待实现
+### 6. create_coverage ✅ 已实现
 
 创建新的 coverage 记录及初始 `coverage_analyst` 关系。
 
@@ -179,7 +182,7 @@ coverage_id = coverage.create_coverage(
 
 ---
 
-### 7. save_draft_report 🔲 待实现
+### 7. save_draft_report ✅ 已实现
 
 保存机器处理后的 draft 版本。上传本地文件到 Storage，写入 `report` / `report_version` / `report_analyst`。
 
@@ -209,39 +212,41 @@ result = draft_report.save_draft_report(client, {
 # 不要求当前版本满足最终提交条件
 ```
 
+报告文件存储路径：`reports/{report_id}/v{version_no}/{原始文件名}`，各版本独立目录，不互相覆盖。
+
 **字段分层：**
 - 保存 draft 最小字段：`title`、`report_type`、`report_language`、`analysts`、`report_file`、`pdf_file`
 - 提交前必须补齐：`contact_person`、`investment_thesis`，以及按类型要求的字段（见 validators）
 
 ---
 
-### 8. validators 🔲 待实现
+### 8. validate_draft ✅ 已实现
 
-校验指定 draft 版本是否满足提交条件。
+校验指定 draft 版本是否满足提交条件。全量收集所有错误后一次性抛出。
 
 ```python
-from skills.neolyst.scripts import validators
+from skills.neolyst.scripts.validators import validate_draft
 
-result = validators.validators(client, report_id="uuid", version_no=1)
+result = validate_draft(client, report_id="uuid", version_no=1)
 # 通过：返回 {"report_id": "uuid", "version_no": 1}
-# 失败：抛出 ValueError（含具体失败原因，足以让上游 LLM 或人工据此补字段）
+# 失败：抛出 ValueError（消息以"；"分隔所有失败项，足以让调用方据此补字段）
 ```
 
-**校验内容：** 结构完整性、必填字段、主数据存在性（analyst/coverage/sector/region）、文件路径有效性、公司类报告的 coverage 一致性。
+**校验内容：** report 存在且状态为 draft/rejected、版本存在、word/pdf 文件路径非空、必填字段（title/report_type/report_language/investment_thesis/contact_person）、分析师列表非空且 contact_person 在内、每个分析师存在且 is_active、company 类型必须有 coverage_id 且存在、sector_id/region_code 有值时验证存在性。
 
 ---
 
-### 9. submit_report 🔲 待实现
+### 9. submit_report ✅ 已实现
 
-将已校验的 draft 版本提交为 `submitted` 状态。
+将已校验的 draft/rejected 版本提交为 `submitted` 状态。
 
 ```python
 from skills.neolyst.scripts import submit_report
 
 result = submit_report.submit_report(client, report_id="uuid", version_no=1)
 # 返回：{"report_id": "uuid", "status": "submitted", "version_no": 1}
-# 内部会再次执行 validators，校验失败则抛出异常
-# 不隐式创建 coverage，不补字段，不做人机交互
+# 内部先调用 validate_draft，校验失败则抛出异常
+# 成功后原子更新 report.status 并写入 report_status_log
 ```
 
 ---
@@ -253,9 +258,10 @@ result = submit_report.submit_report(client, report_id="uuid", version_no=1)
 | 场景 | 异常类型 |
 |------|---------|
 | 记录不存在 | `ValueError`，含缺失的标识符 |
-| 分析师已停用 | `ValueError: Analyst is inactive` |
+| 分析师已停用 | `ValueError: 分析师已停用` |
 | 模板数据异常（重复记录） | `ValueError`，说明重复情况 |
-| Coverage 命中多条 | `ValueError: ambiguous coverage` |
+| Coverage 未命中 | `ValueError`，含"未找到匹配的 Coverage"，提示创建 |
+| Coverage ticker/isin 重复 | `ValueError`，含"Coverage 已存在" |
 | 提交前校验失败 | `ValueError`，列出所有失败字段 |
 | 文件不存在 | `FileNotFoundError` |
 | token 过期 | 自动处理（refresh → re-login），对调用方透明 |

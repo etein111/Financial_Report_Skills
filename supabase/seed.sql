@@ -158,25 +158,34 @@ set
     sort = excluded.sort,
     is_active = excluded.is_active;
 
+-- 初始管理员分析师档案（对应上面的 auth.users）
+insert into public.analyst (english_name, chinese_name, email, region_code, is_active)
+values ('Xue Yang', '杨雪', 'yangxue@opendelp.com', 'HK', true)
+on conflict (email) do update set
+    english_name = excluded.english_name,
+    chinese_name = excluded.chinese_name,
+    region_code  = excluded.region_code,
+    is_active    = excluded.is_active;
+
 -- 初始模板占位记录
 insert into public.report_template (id, report_type, language, template_file_path, schema_file_path)
 values
-    ('bond_en', 'bond', 'en', '', null),
-    ('bond_zh', 'bond', 'zh', '', null),
-    ('company_en', 'company', 'en', '', null),
-    ('company_zh', 'company', 'zh', '', null),
-    ('company_flash_en', 'company_flash', 'en', '', null),
-    ('company_flash_zh', 'company_flash', 'zh', '', null),
-    ('macro_en', 'macro', 'en', '', null),
-    ('macro_zh', 'macro', 'zh', '', null),
-    ('quantitative_en', 'quantitative', 'en', '', null),
-    ('quantitative_zh', 'quantitative', 'zh', '', null),
-    ('sector_en', 'sector', 'en', '', null),
-    ('sector_zh', 'sector', 'zh', '', null),
-    ('sector_flash_en', 'sector_flash', 'en', '', null),
-    ('sector_flash_zh', 'sector_flash', 'zh', '', null),
-    ('strategy_en', 'strategy', 'en', '', null),
-    ('strategy_zh', 'strategy', 'zh', '', null)
+    ('bond_en',          'bond',          'en', 'templates/bond/en/template.docx',          'templates/bond/en/schema.yaml'),
+    ('bond_zh',          'bond',          'zh', 'templates/bond/zh/template.docx',          'templates/bond/zh/schema.yaml'),
+    ('company_en',       'company',       'en', 'templates/company/en/template.docx',       'templates/company/en/schema.yaml'),
+    ('company_zh',       'company',       'zh', 'templates/company/zh/template.docx',       'templates/company/zh/schema.yaml'),
+    ('company_flash_en', 'company_flash', 'en', 'templates/company_flash/en/template.docx', 'templates/company_flash/en/schema.yaml'),
+    ('company_flash_zh', 'company_flash', 'zh', 'templates/company_flash/zh/template.docx', 'templates/company_flash/zh/schema.yaml'),
+    ('macro_en',         'macro',         'en', 'templates/macro/en/template.docx',         'templates/macro/en/schema.yaml'),
+    ('macro_zh',         'macro',         'zh', 'templates/macro/zh/template.docx',         'templates/macro/zh/schema.yaml'),
+    ('quantitative_en',  'quantitative',  'en', 'templates/quantitative/en/template.docx',  'templates/quantitative/en/schema.yaml'),
+    ('quantitative_zh',  'quantitative',  'zh', 'templates/quantitative/zh/template.docx',  'templates/quantitative/zh/schema.yaml'),
+    ('sector_en',        'sector',        'en', 'templates/sector/en/template.docx',        'templates/sector/en/schema.yaml'),
+    ('sector_zh',        'sector',        'zh', 'templates/sector/zh/template.docx',        'templates/sector/zh/schema.yaml'),
+    ('sector_flash_en',  'sector_flash',  'en', 'templates/sector_flash/en/template.docx',  'templates/sector_flash/en/schema.yaml'),
+    ('sector_flash_zh',  'sector_flash',  'zh', 'templates/sector_flash/zh/template.docx',  'templates/sector_flash/zh/schema.yaml'),
+    ('strategy_en',      'strategy',      'en', 'templates/strategy/en/template.docx',      'templates/strategy/en/schema.yaml'),
+    ('strategy_zh',      'strategy',      'zh', 'templates/strategy/zh/template.docx',      'templates/strategy/zh/schema.yaml')
 on conflict (id) do update
 set
     report_type = excluded.report_type,

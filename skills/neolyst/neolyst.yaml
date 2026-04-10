@@ -1,6 +1,6 @@
 # Neolyst Supabase 连接配置
 # 此文件随 skill 发布，包含非敏感的公开配置。
-# 用户凭据（邮箱/密码/token）存放在同目录的 .neolyst 文件中（本地，不提交）。
+# 用户凭据（邮箱/密码/token）存放在同目录的 user.json 文件中（本地，不提交）。
 
-supabase_url: "http://47.57.213.88:80"
+supabase_url: "http://127.0.0.1:54321"
 anon_key: "***REMOVED-JWT***"
