@@ -14,10 +14,6 @@ import os
 from datetime import datetime
 from typing import List, Dict
 
-proxy = "http://127.0.0.1:7890"
-os.environ["HTTP_PROXY"] = proxy
-os.environ["HTTPS_PROXY"] = proxy
-
 
 def get_stock_data(ticker: str, start_date: datetime, end_date: datetime) -> tuple:
     """获取股票数据"""
