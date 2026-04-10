@@ -2687,6 +2687,12 @@ def render_report(
             _restore_jinja_in_charts(output_path, escaped_chart_files)
             print(f"  已恢复 {len(escaped_chart_files)} 个图表文件的原始内容")
 
+        # 7.5 生成并插入图表（compare_chart, volume_chart, recommendation_chart）
+        chart_output_dir = os.path.join(os.path.dirname(output_path), 'reports')
+        chart_paths = generate_and_insert_charts(output_path, elements, chart_output_dir)
+        if chart_paths:
+            print(f"  ✅ 已生成并插入 {len(chart_paths)} 个图表")
+
         # 8. 清理临时文件
         temp_path.unlink(missing_ok=True)
 
@@ -3731,6 +3737,9 @@ def generate_and_insert_charts(
         output_dir = os.path.join(os.path.dirname(docx_path), 'reports')
     os.makedirs(output_dir, exist_ok=True)
 
+    # 计算脚本路径（与 renderer.py 同目录）
+    scripts_dir = os.path.dirname(__file__)  # skills/report_maker/scripts
+
     # 图表路径
     compare_chart_path = os.path.join(output_dir, 'compare_chart.png')
     volume_chart_path = os.path.join(output_dir, 'volume_chart.png')
@@ -3738,32 +3747,30 @@ def generate_and_insert_charts(
 
     chart_paths = {}
 
-    # 1. 生成 compare_chart 和 volume_chart
+    # 1. 生成 compare_chart 和 volume_chart（组合图，两个面板在一起）
     try:
         print(f"正在生成 compare_chart 和 volume_chart for {ticker}...")
 
         # 调用 relative_chart.py 脚本，传递输出路径参数
-        script_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
-                                  'scripts', 'charts', 'relative_chart.py')
+        # 注意：relative_chart.py 生成的是上下两个面板的组合图
+        script_path = os.path.join(scripts_dir, 'relative_chart.py')
 
-        # 使用绝对路径
-        abs_compare_path = os.path.abspath(compare_chart_path)
-        abs_volume_path = os.path.abspath(volume_chart_path)
+        # 使用绝对路径（只传一个路径，因为是组合图）
+        abs_chart_path = os.path.abspath(compare_chart_path)
 
         result = subprocess.run(
-            [sys.executable, script_path, ticker, ticker_name, abs_compare_path, abs_volume_path],
+            [sys.executable, script_path, ticker, ticker_name, abs_chart_path],
             capture_output=True,
             text=True,
             timeout=120
         )
 
         if result.returncode == 0:
-            # 直接使用指定路径
-            if os.path.exists(abs_compare_path):
-                chart_paths['compare_chart'] = abs_compare_path
-            if os.path.exists(abs_volume_path):
-                chart_paths['volume_chart'] = abs_volume_path
-            print(f"  compare_chart 和 volume_chart 生成成功: {abs_compare_path}")
+            # 组合图同时作为 compare_chart 和 volume_chart
+            if os.path.exists(abs_chart_path):
+                chart_paths['compare_chart'] = abs_chart_path
+                chart_paths['volume_chart'] = abs_chart_path  # 复用同一张图
+                print(f"  compare_chart 和 volume_chart 生成成功: {abs_chart_path}")
         else:
             print(f"  生成 compare_chart 和 volume_chart 失败: {result.stderr}")
 
@@ -3794,8 +3801,7 @@ def generate_and_insert_charts(
 
         if recommendations:
             # 调用 recommendation_chart.py 脚本
-            script_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
-                                      'scripts', 'charts', 'recommendation_chart.py')
+            script_path = os.path.join(scripts_dir, 'recommendation_chart.py')
 
             import json
             rec_json = json.dumps(recommendations)
