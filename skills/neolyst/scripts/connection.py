@@ -5,7 +5,8 @@ connection.py — Neolyst Supabase 认证与 client 管理。
   skills/neolyst/neolyst.yaml  →  supabase_url, anon_key
 
 凭据文件（本地，不提交）：
-  skills/neolyst/user.json  →  { email, password, access_token, refresh_token, expires_at }
+  skills/neolyst/user.json     →  { email, password }
+  skills/neolyst/session.json  →  { access_token, refresh_token, expires_at }
 
 测试覆盖（通过环境变量）：
   NEOLYST_URL       →  覆盖 supabase_url
@@ -22,7 +23,8 @@ from supabase import create_client, Client
 
 # skill 根目录（skills/neolyst/），neolyst.yaml 和 user.json 默认存放于此
 SKILL_ROOT = Path(__file__).parent.parent
-NEOLYST_FILE = "user.json"
+USER_FILE = "user.json"
+SESSION_FILE = "session.json"
 CONFIG_FILE = "neolyst.yaml"
 
 
@@ -57,22 +59,36 @@ def _anon_key(config: dict) -> str:
     return key
 
 
-def _user_json_path(neolyst_dir: str | None) -> Path:
+def _file_path(neolyst_dir: str | None, filename: str) -> Path:
     base = Path(neolyst_dir) if neolyst_dir else SKILL_ROOT
-    return base / NEOLYST_FILE
+    return base / filename
 
 
-def _load_neolyst(neolyst_dir: str | None) -> dict | None:
-    p = _user_json_path(neolyst_dir)
-    if not p.exists():
+def _load_json(path: Path) -> dict | None:
+    if not path.exists():
         return None
-    return json.loads(p.read_text())
+    return json.loads(path.read_text())
 
 
-def _save_neolyst(neolyst_dir: str | None, data: dict) -> None:
-    p = _user_json_path(neolyst_dir)
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps(data, indent=2))
+def _save_json(path: Path, data: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, indent=2))
+
+
+def _load_user(neolyst_dir: str | None) -> dict | None:
+    return _load_json(_file_path(neolyst_dir, USER_FILE))
+
+
+def _load_session(neolyst_dir: str | None) -> dict | None:
+    return _load_json(_file_path(neolyst_dir, SESSION_FILE))
+
+
+def _save_user(neolyst_dir: str | None, data: dict) -> None:
+    _save_json(_file_path(neolyst_dir, USER_FILE), data)
+
+
+def _save_session(neolyst_dir: str | None, data: dict) -> None:
+    _save_json(_file_path(neolyst_dir, SESSION_FILE), data)
 
 
 def _is_expired(expires_at: int, buffer_seconds: int = 60) -> bool:
@@ -108,23 +124,22 @@ def get_client(
     url = _supabase_url(config)
     key = _anon_key(config)
     client = create_client(url, key)
-    data = _load_neolyst(neolyst_dir)
+    user_data = _load_user(neolyst_dir)
+    session_data = _load_session(neolyst_dir)
 
-    if data and data.get("access_token"):
-        if not _is_expired(data.get("expires_at", 0)):
+    if session_data and session_data.get("access_token"):
+        if not _is_expired(session_data.get("expires_at", 0)):
             try:
-                client.auth.set_session(data["access_token"], data["refresh_token"])
+                client.auth.set_session(session_data["access_token"], session_data["refresh_token"])
                 client.auth.get_user()  # 验证 token 对当前服务器是否有效
                 return client
             except Exception:
                 pass  # token 对当前服务器无效，继续尝试 refresh/re-login
         # token 过期或无效，尝试 refresh
         try:
-            resp = client.auth.refresh_session(data["refresh_token"])
+            resp = client.auth.refresh_session(session_data["refresh_token"])
             session = resp.session
-            _save_neolyst(neolyst_dir, {
-                "email": data.get("email", ""),
-                "password": data.get("password", ""),
+            _save_session(neolyst_dir, {
                 "access_token": session.access_token,
                 "refresh_token": session.refresh_token,
                 "expires_at": session.expires_at,
@@ -133,8 +148,8 @@ def get_client(
         except Exception:
             pass  # refresh 失败，继续尝试 password 登录
 
-    _email = email or (data.get("email") if data else None)
-    _password = password or (data.get("password") if data else None)
+    _email = email or (user_data.get("email") if user_data else None)
+    _password = password or (user_data.get("password") if user_data else None)
     if not _email or not _password:
         raise ValueError(
             "No valid session and no credentials provided. "
@@ -149,9 +164,8 @@ def get_client(
             "Please call get_client(email=..., password=...) with valid credentials."
         ) from e
     session = resp.session
-    _save_neolyst(neolyst_dir, {
-        "email": _email,
-        "password": _password,
+    _save_user(neolyst_dir, {"email": _email, "password": _password})
+    _save_session(neolyst_dir, {
         "access_token": session.access_token,
         "refresh_token": session.refresh_token,
         "expires_at": session.expires_at,
