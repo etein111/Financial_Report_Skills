@@ -92,7 +92,6 @@ class TestValidateDraftHappyPath:
         result = validate_draft(
             neolyst_client,
             valid_report["report_id"],
-            valid_report["version_no"],
         )
         assert result["report_id"] == valid_report["report_id"]
         assert result["version_no"] == valid_report["version_no"]
@@ -111,7 +110,7 @@ class TestValidateDraftFieldErrors:
         })
         try:
             with pytest.raises(ValueError, match="投资论点"):
-                validate_draft(neolyst_client, result["report_id"], result["version_no"])
+                validate_draft(neolyst_client, result["report_id"])
         finally:
             _cleanup(neolyst_client, result["report_id"])
 
@@ -125,7 +124,7 @@ class TestValidateDraftFieldErrors:
         })
         try:
             with pytest.raises(ValueError, match="联系人"):
-                validate_draft(neolyst_client, result["report_id"], result["version_no"])
+                validate_draft(neolyst_client, result["report_id"])
         finally:
             _cleanup(neolyst_client, result["report_id"])
 
@@ -139,7 +138,7 @@ class TestValidateDraftFieldErrors:
         })
         try:
             with pytest.raises(ValueError, match="报告语言"):
-                validate_draft(neolyst_client, result["report_id"], result["version_no"])
+                validate_draft(neolyst_client, result["report_id"])
         finally:
             _cleanup(neolyst_client, result["report_id"])
 
@@ -157,7 +156,7 @@ class TestValidateDraftAnalystErrors:
         })
         try:
             with pytest.raises(ValueError, match="contact_person"):
-                validate_draft(neolyst_client, result["report_id"], result["version_no"])
+                validate_draft(neolyst_client, result["report_id"])
         finally:
             _cleanup(neolyst_client, result["report_id"])
 
@@ -172,7 +171,7 @@ class TestValidateDraftCoverageErrors:
         result = _save_draft(neolyst_client, tmp_path, {"coverage_id": None})
         try:
             with pytest.raises(ValueError, match="coverage_id"):
-                validate_draft(neolyst_client, result["report_id"], result["version_no"])
+                validate_draft(neolyst_client, result["report_id"])
         finally:
             _cleanup(neolyst_client, result["report_id"])
 
@@ -180,12 +179,39 @@ class TestValidateDraftCoverageErrors:
 # ── version / file errors ─────────────────────────────────────────────
 
 class TestValidateDraftVersionErrors:
-    def test_nonexistent_version_fails(self, neolyst_client, valid_report):
-        """传入不存在的 version_no=999 时校验失败，错误含"版本"。"""
+    def test_current_version_zero_fails(self, neolyst_client, test_coverage_id, tmp_path):
+        """current_version_no=0 时校验失败，错误含"当前没有可校验版本"。"""
         from skills.neolyst.scripts.validators import validate_draft
 
-        with pytest.raises(ValueError, match="版本"):
-            validate_draft(neolyst_client, valid_report["report_id"], 999)
+        result = _save_draft(neolyst_client, tmp_path, {"coverage_id": test_coverage_id})
+        try:
+            (
+                neolyst_client.table("report")
+                .update({"current_version_no": 0})
+                .eq("id", result["report_id"])
+                .execute()
+            )
+            with pytest.raises(ValueError, match="当前没有可校验版本"):
+                validate_draft(neolyst_client, result["report_id"])
+        finally:
+            _cleanup(neolyst_client, result["report_id"])
+
+    def test_current_version_missing_row_fails(self, neolyst_client, test_coverage_id, tmp_path):
+        """current_version_no 指向不存在的 report_version 时校验失败。"""
+        from skills.neolyst.scripts.validators import validate_draft
+
+        result = _save_draft(neolyst_client, tmp_path, {"coverage_id": test_coverage_id})
+        try:
+            (
+                neolyst_client.table("report")
+                .update({"current_version_no": 999})
+                .eq("id", result["report_id"])
+                .execute()
+            )
+            with pytest.raises(ValueError, match=r"当前版本 v999 不存在"):
+                validate_draft(neolyst_client, result["report_id"])
+        finally:
+            _cleanup(neolyst_client, result["report_id"])
 
     def test_missing_pdf_file_fails(self, neolyst_client, test_coverage_id, tmp_path):
         """pdf_file 未上传（pdf_file_path 为 None）时校验失败，错误含"PDF"。"""
@@ -214,7 +240,7 @@ class TestValidateDraftVersionErrors:
         })
         try:
             with pytest.raises(ValueError, match="PDF"):
-                validate_draft(neolyst_client, result["report_id"], result["version_no"])
+                validate_draft(neolyst_client, result["report_id"])
         finally:
             _cleanup(neolyst_client, result["report_id"])
 
@@ -227,4 +253,4 @@ class TestValidateDraftStatusErrors:
         from skills.neolyst.scripts.validators import validate_draft
 
         with pytest.raises(ValueError, match="报告不存在"):
-            validate_draft(neolyst_client, str(uuid.uuid4()), 1)
+            validate_draft(neolyst_client, str(uuid.uuid4()))

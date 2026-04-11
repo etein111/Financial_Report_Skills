@@ -3,7 +3,7 @@ validators.py — Neolyst draft 报告提交前校验。
 
 校验规则（全量收集，一次性抛出所有错误）：
 1. report 存在且 status in ('draft', 'rejected')
-2. 指定版本存在
+2. report.current_version_no > 0，且当前版本存在
 3. word_file_path / pdf_file_path 非空
 4. 必填字段：title / report_type / report_language / investment_thesis / contact_person
 5. 至少一个分析师；contact_person 在分析师列表中（大小写不敏感）
@@ -17,17 +17,16 @@ validators.py — Neolyst draft 报告提交前校验。
 from supabase import Client
 
 
-def validate_draft(client: Client, report_id: str, version_no: int) -> dict:
+def validate_draft(client: Client, report_id: str) -> dict:
     """
-    校验 draft 报告指定版本是否满足提交条件。
+    校验 draft 报告当前版本是否满足提交条件。
 
     Args:
         client: 已认证的 Supabase client
         report_id: 报告 UUID 字符串
-        version_no: 要提交的版本号（整数）
 
     Returns:
-        dict: {"report_id": report_id, "version_no": version_no}（校验通过时）
+        dict: {"report_id": report_id, "version_no": current_version_no}（校验通过时）
 
     Raises:
         ValueError: 校验失败，消息列出所有失败项，以"；"分隔
@@ -37,8 +36,10 @@ def validate_draft(client: Client, report_id: str, version_no: int) -> dict:
     # 1. report 存在性与状态
     report_resp = (
         client.table("report")
-        .select("id, status, title, report_type, report_language, "
-                "investment_thesis, contact_person, coverage_id, sector_id, region_code")
+        .select(
+            "id, status, current_version_no, title, report_type, report_language, "
+            "investment_thesis, contact_person, coverage_id, sector_id, region_code"
+        )
         .eq("id", report_id)
         .execute()
     )
@@ -46,23 +47,27 @@ def validate_draft(client: Client, report_id: str, version_no: int) -> dict:
         raise ValueError(f"报告不存在: {report_id}")
     report = report_resp.data[0]
     report_type = report.get("report_type")
+    current_version_no = report.get("current_version_no") or 0
 
     if report["status"] not in ("draft", "rejected"):
         errors.append(f"报告状态为 {report['status']}，仅 draft/rejected 可提交")
 
-    # 2. version 存在性
-    version_resp = (
-        client.table("report_version")
-        .select("word_file_path, pdf_file_path")
-        .eq("report_id", report_id)
-        .eq("version_no", version_no)
-        .execute()
-    )
-    if not version_resp.data:
-        errors.append(f"版本 v{version_no} 不存在")
-        version = None
+    # 2. 当前版本存在性
+    version = None
+    if current_version_no <= 0:
+        errors.append("报告当前没有可校验版本")
     else:
-        version = version_resp.data[0]
+        version_resp = (
+            client.table("report_version")
+            .select("word_file_path, pdf_file_path")
+            .eq("report_id", report_id)
+            .eq("version_no", current_version_no)
+            .execute()
+        )
+        if not version_resp.data:
+            errors.append(f"当前版本 v{current_version_no} 不存在")
+        else:
+            version = version_resp.data[0]
 
     # 3. 文件路径
     if version:
@@ -151,4 +156,4 @@ def validate_draft(client: Client, report_id: str, version_no: int) -> dict:
     if errors:
         raise ValueError("校验失败：" + "；".join(errors))
 
-    return {"report_id": report_id, "version_no": version_no}
+    return {"report_id": report_id, "version_no": current_version_no}

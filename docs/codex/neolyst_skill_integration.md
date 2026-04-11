@@ -101,8 +101,8 @@ draft 输入可包含以下字段：
 
 1. 先保存 draft，不再等待所有字段完全正确
 2. 人工在 Neolyst 中查看 draft
-3. 提交前由上层流程调用 `validate_draft(report_id, version_no)` 做校验
-4. 校验通过后，再调用 `submit_report(report_id, version_no)` 提交
+3. 提交前由上层流程调用 `validate_draft(report_id)` 做校验
+4. 校验通过后，再调用 `submit_report(report_id)` 提交；返回值中的 `version_no` 为实际提交版本
 
 `report_maker` 的职责默认止于 draft 保存，不自动执行最终提交。
 

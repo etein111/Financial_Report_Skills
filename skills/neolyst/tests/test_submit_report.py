@@ -64,7 +64,7 @@ def submitted_report(neolyst_client, submit_coverage_id, tmp_path_factory):
         "pdf_file": pdf_path,
         "model_file": None,
     })
-    result = sr.submit_report(neolyst_client, draft["report_id"], draft["version_no"])
+    result = sr.submit_report(neolyst_client, draft["report_id"])
     yield result
     neolyst_client.table("report").delete().eq("id", result["report_id"]).execute()
 
@@ -112,5 +112,76 @@ class TestSubmitReport:
             sr.submit_report(
                 neolyst_client,
                 submitted_report["report_id"],
-                submitted_report["version_no"],
             )
+
+    def test_submit_without_current_version_raises(self, neolyst_client, submit_coverage_id, tmp_path):
+        """current_version_no=0 时 submit_report 抛出 ValueError。"""
+        from skills.neolyst.scripts import draft_report
+        from skills.neolyst.scripts import submit_report as sr
+
+        word_path, pdf_path = _make_files(tmp_path)
+        draft = draft_report.save_draft_report(neolyst_client, {
+            "report_id": None,
+            "title": "Submit No Version",
+            "report_type": "company",
+            "report_language": "en",
+            "investment_thesis": "Test investment thesis",
+            "contact_person": TEST_ANALYST,
+            "analysts": [{"analyst_email": TEST_ANALYST, "author_order": 1}],
+            "ticker": "SUBZERO",
+            "coverage_id": submit_coverage_id,
+            "sector_id": None,
+            "region_code": None,
+            "rating": "OUTPERFORM",
+            "target_price": 100.0,
+            "report_file": word_path,
+            "pdf_file": pdf_path,
+            "model_file": None,
+        })
+        try:
+            (
+                neolyst_client.table("report")
+                .update({"current_version_no": 0})
+                .eq("id", draft["report_id"])
+                .execute()
+            )
+            with pytest.raises(ValueError, match="当前没有可提交版本"):
+                sr.submit_report(neolyst_client, draft["report_id"])
+        finally:
+            neolyst_client.table("report").delete().eq("id", draft["report_id"]).execute()
+
+    def test_submit_with_missing_current_version_row_raises(self, neolyst_client, submit_coverage_id, tmp_path):
+        """current_version_no 指向不存在版本时 submit_report 抛出 ValueError。"""
+        from skills.neolyst.scripts import draft_report
+        from skills.neolyst.scripts import submit_report as sr
+
+        word_path, pdf_path = _make_files(tmp_path)
+        draft = draft_report.save_draft_report(neolyst_client, {
+            "report_id": None,
+            "title": "Submit Missing Version",
+            "report_type": "company",
+            "report_language": "en",
+            "investment_thesis": "Test investment thesis",
+            "contact_person": TEST_ANALYST,
+            "analysts": [{"analyst_email": TEST_ANALYST, "author_order": 1}],
+            "ticker": "SUBMISS",
+            "coverage_id": submit_coverage_id,
+            "sector_id": None,
+            "region_code": None,
+            "rating": "OUTPERFORM",
+            "target_price": 100.0,
+            "report_file": word_path,
+            "pdf_file": pdf_path,
+            "model_file": None,
+        })
+        try:
+            (
+                neolyst_client.table("report")
+                .update({"current_version_no": 999})
+                .eq("id", draft["report_id"])
+                .execute()
+            )
+            with pytest.raises(ValueError, match=r"当前版本 v999 不存在"):
+                sr.submit_report(neolyst_client, draft["report_id"])
+        finally:
+            neolyst_client.table("report").delete().eq("id", draft["report_id"]).execute()

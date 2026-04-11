@@ -38,8 +38,8 @@
 - `resolve_coverage`、`create_coverage`：负责 `coverage` 解析与创建
 - `list_coverage_history`：查询指定 coverage 下的已发布历史报告
 - `save_draft_report`：保存 draft
-- `validate_draft`：校验指定 draft 版本是否可提交
-- `submit_report`：提交指定 draft 版本
+- `validate_draft`：校验当前 draft 的当前版本是否可提交
+- `submit_report`：提交当前 draft 的当前版本
 
 ## 3. 核心契约
 
@@ -245,7 +245,7 @@ neolyst/
 
 ### 6.2 validate_draft
 
-`validate_draft(report_id, version_no)` 用于校验指定 draft 版本是否满足提交条件。当前实现保留在 Python 侧，通过只读 SELECT 查询完成。
+`validate_draft(report_id)` 用于校验当前 draft 的当前版本是否满足提交条件。当前实现保留在 Python 侧，通过只读 SELECT 查询完成。
 
 校验范围包括：
 
