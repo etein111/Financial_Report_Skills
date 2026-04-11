@@ -6,14 +6,13 @@
 
 ## 1. report_maker 改造
 
-### 1.1 模板与查询
+### 1.1 模板获取
 
-- `report_maker` 保持现有草稿解析、字段确认、模板渲染和输出 Word/PDF 主流程不变。
 - 生成阶段所需的 Neolyst 数据读取统一通过 `neolyst` 接口完成。
-- 模板选择通过 `neolyst` 完成：根据 `report_type` 和 `report_language` 调用 `neolyst.resolve_template` 获取模板资产，不再从本地 `templates/` 目录读取模板。
-- 运行时使用的 Word 模板和对应 `schema.yaml` 都以 `neolyst` 中保存的模板记录为准。
-- 若多个 `report_type` 共用同一模板，则这些 `report_type` 在运行时都会解析到同一套模板资产路径。
-- 机器处理并生成 Word/PDF 后，`report_maker` 调用 `neolyst.save_draft_report` 将机器处理结果保存为第一个 draft 版本。人工确认前，Neolyst 中已经存在该 `report_id` 下可查看的 draft。
+- `report_maker` 根据 `report_type` 和 `report_language` 调用 `neolyst.resolve_template` 获取模板资产，不再从本地 `templates/` 目录读取。
+- 运行时使用的 Word 模板和 `schema.yaml` 以 `neolyst` 中保存的模板记录为准。多个 `report_type` 共用同一模板时，都会解析到同一套模板资产路径。
+- `neolyst.resolve_template` 以 `report_type + language` 解析目标模板，最终落到唯一的 `report_template.id = {report_type}_{language}` 记录；若数据库中出现重复组合，直接报数据异常。
+- `report_maker` 不再维护额外的"报告类型 -> 模板类型"映射表。
 
 ### 1.2 提交字段确认
 
@@ -75,28 +74,21 @@
 - `pdf_file` ← 最终生成的 PDF 文件路径
 - `model_file` ← 仅在公司类报告提交时提供
 
-**模板解析规则：**
+### 1.4 draft 保存与查看
 
-- `neolyst.resolve_template` 以 `report_type + language` 解析目标模板，最终落到唯一的 `report_template.id = {report_type}_{language}` 记录；若数据库中出现重复组合，应直接报数据异常
-- 若多个 `report_type` 共用同一模板资产，则这些 `report_type` 最终解析到同一组 `template_file_path` 与 `schema_file_path`
-- `report_maker` 不再维护额外的"报告类型 -> 模板类型"映射表
-
-### 1.4 draft 查看
-
-- `report_maker` 不再等待所有字段完全正确后才把结果写入 Neolyst
-- 机器处理结果通过 `neolyst.save_draft_report` 直接保存为 draft
-- 人工可以直接在 Neolyst 中查看该版本、核对内容，并决定是否继续提交
+- `report_maker` 不再等待所有字段完全正确后才写入 Neolyst。机器处理并生成 Word/PDF 后，直接调用 `neolyst.save_draft_report` 保存为第一个 draft 版本。
+- 人工确认前，Neolyst 中已经存在该 `report_id` 下可查看的 draft。
+- `report_maker` 的职责默认止于 draft 保存，不自动执行最终提交。
 
 ### 1.5 提交前校验
 
-- 在人工确认提交前，根据 `report_id` 和 `version_no` 调用 `neolyst.validate_draft(report_id, version_no)` 对指定 draft 版本执行提交前校验
-- 对于公司类报告，提交前仍需要完成 `neolyst.resolve_coverage`、必要时的 `neolyst.create_coverage`、`contact_person` 确认以及其他提交必填字段补齐
-- 只有该 draft 版本满足提交条件后，才允许进入 `neolyst.submit_report`
+- 在人工确认提交前，根据 `report_id` 和 `version_no` 调用 `neolyst.validate_draft(report_id, version_no)` 对指定 draft 版本执行提交前校验。
+- 对于公司类报告，提交前仍需完成 `neolyst.resolve_coverage`、必要时的 `neolyst.create_coverage`、`contact_person` 确认以及其他提交必填字段补齐。
+- 只有该 draft 版本满足提交条件后，才允许进入 `neolyst.submit_report`。
 
 ### 1.6 报告提交
 
-- 人工在 Neolyst 中查看并确认指定 draft 版本后，调用 `neolyst.submit_report(report_id, version_no)` 将该版本提交为 `submitted`
-- `report_maker` 的职责默认止于 draft 保存，不自动执行最终提交
+人工在 Neolyst 中查看并确认指定 draft 版本后，调用 `neolyst.submit_report(report_id, version_no)` 将该版本提交为 `submitted`。
 
 ### 1.7 失败处理
 
