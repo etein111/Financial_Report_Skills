@@ -71,64 +71,44 @@
 - 若多个 `report_type` 共用同一模板资产，则这些 `report_type` 最终解析到同一组 `template_file_path` 与 `schema_file_path`
 - `report_maker` 不再维护额外的“报告类型 -> 模板类型”映射表
 
-## 5. 提交前数据准备：文件、字段与确认规则
+## 5. 提交前数据准备：字段来源与补齐规则
 
-本章只整理提交报告所需字段来源，不展开纯渲染字段。
+本章只说明提交字段来源。默认不做人工确认，只有字段缺失、格式异常、或 `neolyst` / `validate_draft` 校验失败时再交互；`contact_person` 始终通过交互确认。
 
-总原则：默认不做人工确认，只有字段缺失、格式异常、或 `neolyst` 校验失败时，再向用户确认。`contact_person` 是例外，始终通过交互确认。字段完整性和提交条件的最终判断，统一以 `validate_draft` 的返回结果为准，不在这里单独维护一套静态必填矩阵。
+`report_maker` 需要把机器处理结果映射成 `neolyst` draft 输入：
 
-`report_maker` 在机器处理完成后，需要将内部数据显式转换为 `neolyst` 所要求的扁平 draft 输入。`elements.yaml`、渲染上下文和输出目录结构不直接等价于 draft 输入，需要单独映射。
+- 保存 draft 的最小字段：`title`、`report_type`、`report_language`、`analysts`、`report_file`、`pdf_file`
+- 提交前补齐字段：`contact_person`、`investment_thesis`、`coverage_id`、`ticker`、`rating`、`target_price`、`region_code`、`sector_id`、`model_file`
 
-draft 输入分两层：
+### 5.1 报告要素
 
-- 保存 draft 时的最小字段：`title`、`report_type`、`report_language`、`analysts`、`report_file`、`pdf_file`
-- 提交前补齐字段：`contact_person`、`investment_thesis`，以及按研报类型要求的 `coverage_id`、`ticker`、`rating`、`target_price`、`region_code`、`sector_id`、`model_file`
+| 字段 | 来源 | 备注 |
+| --- | --- | --- |
+| `title` | 报告制作阶段已确认 | 提交阶段不再重复确认；缺失视为前序流程出错 |
+| `report_type` | 流程输入 | 进入 `report_maker` 前已确定 |
+| `report_language` | 报告 `title` | 直接判断，不再交互确认 |
+| `investment_thesis` | 报告摘要 | 经 LLM 压缩为 150 字以内概述，突出观点和新的变化 |
+| `ticker` | `elements.yaml` | 公司类报告自动带入 draft |
+| `rating` | `elements.yaml` | 公司类报告自动带入 draft |
+| `target_price` | `elements.yaml` | 公司类报告自动带入 draft |
+| `coverage_id` | `resolve_coverage(ticker, 1作 analyst_email)` | 公司类报告使用；未命中时，提示用户去 Neolyst 中补建或修正 Coverage，再回到当前流程继续提交 |
+| `region_code` | `elements.yaml` | 行业类报告使用；不从正文抽取 |
+| `sector_id` | `elements.yaml` | 行业类报告使用；不从正文抽取 |
 
-### 5.0 本轮已确认规则
+### 5.2 分析师
 
-- `title` 在报告制作阶段就已经与用户确认；提交阶段不再重复确认，缺失视为前序流程出错
-- `report_language` 由报告 `title` 直接判断，不再交互确认
-- `analysts` 由 `elements.yaml` 中 `a1 ~ a8` 作者槽位组装，再用 `resolve_analyst_by_email` 校验和标准化
-- `investment_thesis` 来自报告摘要，经 LLM 缩写为 150 字以内的概述，重点表达观点并突出新的变化
-- `contact_person` 一律通过交互确认；交互时可以把 `1作 analyst_email` 作为默认选项
-- `model_file` 不在 `elements.yaml` 中，而是随原始报告一起进入流程；到提交准备阶段若仍缺失，再向用户索要
-- `region_code`、`sector_id` 只从 `elements.yaml` 取，不从正文抽取
-- 公司类报告的 `coverage_id` 通过 `resolve_coverage` 获取；未命中时，提示用户去 Neolyst 中补建或修正 Coverage，再回到当前流程继续提交
+| 字段 | 来源 | 备注 |
+| --- | --- | --- |
+| `analysts` | `elements.yaml` 中 `a1 ~ a8` 作者槽位 | 用 `resolve_analyst_by_email` 校验并标准化，`author_order` 按槽位顺序生成，最多 8 人 |
+| `contact_person` | 用户交互 | 默认可展示 `1作 analyst_email`；最终值必须属于 `analysts[].analyst_email` |
 
-### 5.1 通用提交字段
+### 5.3 文件
 
-| 字段 | 适用范围 | 来源 | 说明 |
-| --- | --- | --- | --- |
-| `title` | 全部报告 | 报告制作阶段已与用户确认，并进入后续渲染输入 | 提交阶段不再重复确认；缺失视为前序流程出错 |
-| `report_type` | 全部报告 | 流程输入，进入 `report_maker` 前已确定 | 作为提交字段写入 draft |
-| `report_language` | 全部报告 | 由报告 `title` 直接判断 | 自动写入，不再交互确认 |
-| `investment_thesis` | 全部报告 | 报告摘要，经 LLM 缩写生成 | 控制在 150 字以内，重点表达观点和新的变化 |
-
-### 5.2 分析师与联系人字段
-
-| 字段 | 适用范围 | 来源 | 说明 |
-| --- | --- | --- | --- |
-| `analysts` | 全部报告 | 由 `elements.yaml` 中 `a1 ~ a8` 作者槽位组装而来 | 用 `resolve_analyst_by_email(email)` 校验并标准化；`author_order` 按槽位顺序生成；最多支持 8 人 |
-| `contact_person` | 全部报告 | 通过交互指定 | 交互时可以把 `1作 analyst_email` 作为默认选项；最终值必须属于 `analysts[].analyst_email` |
-
-### 5.3 公司类与行业类业务字段
-
-| 字段 | 适用范围 | 来源 | 说明 |
-| --- | --- | --- | --- |
-| `ticker` | 公司类报告 | `elements.yaml` | 自动带入 draft |
-| `rating` | 公司类报告 | `elements.yaml` | 自动带入 draft |
-| `target_price` | 公司类报告 | `elements.yaml` | 自动带入 draft |
-| `coverage_id` | 公司类报告 | 通过 `resolve_coverage(ticker, 1作 analyst_email)` 获取 | 未命中时，提示用户去 Neolyst 中补建或修正 Coverage，再回到当前流程继续提交 |
-| `region_code` | 行业类报告 | `elements.yaml` | 只从 `elements.yaml` 取，不从正文抽取 |
-| `sector_id` | 行业类报告 | `elements.yaml` | 只从 `elements.yaml` 取，不从正文抽取 |
-
-### 5.4 文件字段
-
-| 字段 | 适用范围 | 来源 | 说明 |
-| --- | --- | --- | --- |
-| `report_file` | 全部报告 | `report_maker` 合成后的最终 Word 文件 | 写入 draft 的文件字段 |
-| `pdf_file` | 全部报告 | `report_maker` 生成的最终 PDF 文件 | 写入 draft 的文件字段 |
-| `model_file` | 公司类报告 | 与原始报告一起进入流程的 Excel 模型文件 | 不在 `elements.yaml` 中；到提交准备阶段若仍缺失，再向用户索要 |
+| 字段 | 来源 | 备注 |
+| --- | --- | --- |
+| `report_file` | `report_maker` 合成后的最终 Word 文件 | 写入 draft 的文件字段 |
+| `pdf_file` | `report_maker` 生成的最终 PDF 文件 | 写入 draft 的文件字段 |
+| `model_file` | 与原始报告一起进入流程的 Excel 模型文件 | 不在 `elements.yaml` 中；到提交准备阶段若仍缺失，再向用户索要 |
 
 ## 6. 保存 draft：生成结果入库并在 neolyst 查看
 
@@ -155,13 +135,3 @@ draft 输入分两层：
 当 `save_draft_report`、`resolve_coverage`、`validate_draft` 或 `submit_report` 抛出具体错误时，`report_maker` 或人工流程负责根据错误内容继续补字段、重新确认或终止流程。
 
 字段缺失、字段歧义、联系人确认和 `coverage` 信息不足等问题，由 `report_maker` 继续通过对话处理。多轮补充、重新保存 draft、重新校验和重新提交都围绕同一个 `report_id` 进行。
-
-## 8. 后续迭代
-
-当前回合已经确认的字段规则都已写入正文。后续如果要继续提高自动化，再单独扩展。
-
-后续如果要继续清理文档，建议优先补齐以下内容：
-
-- 各类报告在 `validate_draft` 之外是否还需要额外前置校验
-- `target_price`、`region_code`、`sector_id` 等字段是否需要在提交前主动预检查
-- `coverage` 补建链路后续是否继续集成到 skill 内
