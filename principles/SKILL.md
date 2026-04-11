@@ -30,3 +30,6 @@ skills/<skill_name>/
 **适用场景**：
 - 新建 skill（创建 `SKILL.md`）
 - 修改 skill 的触发描述、接口说明或使用流程
+
+## 待定
+增量修改skills可以考虑superpowers:writing-skills

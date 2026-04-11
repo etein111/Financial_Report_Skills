@@ -121,3 +121,13 @@
 - `model_file` 仅在公司类报告提交时提供
 
 首次保存后，Neolyst 中已经存在该 `report_id` 下可查看的第一个 draft 版本。后续如需补字段、重新保存、重新校验或重新提交，都围绕同一个 `report_id` 进行。
+
+## 7. 后续流程：校验与提交
+
+草稿保存后，不自动提交，用户可以上neolyst查看报告的生成情况。
+
+用户明确发出提交报告的指令后，首先要调用 neolyst skill的 `validate_draft(report_id, version_no)` 执行提交前校验。需要准备 `report_id` 和 `version_no` 。
+校验失败时，`validate_draft` 返回完整错误；根据错误提示，与用户交互，补字段、修正数据、重新提交检验。
+对于公司类报告，进入提交前还需要先能确定有效的 `coverage_id`；若 `coverage` 未命中或数据无效，要通过对话创建新的coverage。
+
+校验通过后调用neolyst skill的 `submit_report(report_id, version_no)` 将该版本提交为 `submitted`。
