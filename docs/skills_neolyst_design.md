@@ -1,4 +1,4 @@
-# skills_neolyst 设计文档
+# neolyst Skill 设计文档
 
 ## 1. 定位与边界
 
@@ -39,7 +39,7 @@
 - 模板文件位于模板 bucket，最终路径以 `report_template.template_file_path` 与 `report_template.schema_file_path` 为准，不由 `report_type` 公式推导。
 - 报告文件位于报告 bucket，bucket 内路径固定为 `{report_id}/`；文件名由 `neolyst` 在 skill 内统一生成并保持稳定，同一类产物在各版本间使用一致命名。
 - `report_id` 在首次保存 draft 时为空；机器处理后的 draft 和后续人工修订版都沿用同一个 `report_id` 追加新版本。
-- draft 契约分为“可保存字段”和“提交前必填字段”两层。
+- draft 契约分为"可保存字段"和"提交前必填字段"两层。
 - `company` / `company_flash` 在 draft 阶段允许暂时缺少 `coverage_id`，提交前必须补齐。
 - `contact_person` 在 draft 阶段允许暂时缺少；该字段存储 analyst email，提交前必须由 `report_maker` 负责确认和填充。
 - `report_language` 作为模板选择字段，由 `report_maker` 自动识别并向用户确认后写入 draft。
@@ -63,13 +63,13 @@
 - `connection.py` 启动时先尝试用 `session.json` 中的 `access_token` + `refresh_token` 恢复 session；若已过期或失效，则回退到 `user.json` 中的 `email + password` 重新登录，并只回写 `session.json`。
 - `user.json` 不存在时，调用方需向用户索取邮箱和密码，使用 `get_client(email=..., password=...)` 完成首次登录。成功后自动写入 `user.json` 与 `session.json`，后续无需再次手动输入。
 - 当前库的 RLS 通过 `current_app_role()` 读取 `auth.jwt().app_metadata.role`，按 `admin`、`sa`、`analyst` 做权限控制；skill 设计必须与该角色模型兼容。
-- 报告所有者与执行审计均以当前登录身份为准。`owner_user_id`、`report_version.created_by`、`report_status_log.action_by` 等字段遵循”谁保存/提交，系统就记谁”；`resolve_analyst_by_email` 只用于确定报告分析师身份，不用于决定执行审计用户。
+- 报告所有者与执行审计均以当前登录身份为准。`owner_user_id`、`report_version.created_by`、`report_status_log.action_by` 等字段遵循"谁保存/提交，系统就记谁"；`resolve_analyst_by_email` 只用于确定报告分析师身份，不用于决定执行审计用户。
 - 本 skill 不做代理执行，因为这会破坏 Neolyst 的安全性，也不符合实际业务关系。
 
 ### 2.5 业务逻辑落点
 
 - 凡涉及业务数据一致性、状态流转、关系维护、主表/版本表同步的逻辑，均优先在 Supabase 侧实现为稳定接口。
-- 凡涉及复杂读操作或复杂写操作，均默认在 Supabase 侧封装为 RPC / 稳定接口，而不是在 skill 侧拼接多次底层表操作。这里的“复杂”包括但不限于：需要按固定规则确定模板或报告文件路径、需要同时维护多张表、需要做跨表一致性判断、需要把业务校验与写入合并为一个原子操作。
+- 凡涉及复杂读操作或复杂写操作，均默认在 Supabase 侧封装为 RPC / 稳定接口，而不是在 skill 侧拼接多次底层表操作。这里的"复杂"包括但不限于：需要按固定规则确定模板或报告文件路径、需要同时维护多张表、需要做跨表一致性判断、需要把业务校验与写入合并为一个原子操作。
 - `neolyst` skill 主要负责认证、文件上传、参数整理以及调用 Supabase 暴露的接口/函数，不在 skill 侧重复实现核心业务一致性规则。
 - 适合下沉到 Supabase 侧的逻辑包括：模板发布与复用、模板解析、coverage 解析与创建、draft 保存、提交状态流转，以及 `report` / `report_version` / `report_analyst` 之间的一致性维护。
 - 当前实现边界：`upsert_template` / `reuse_template` 由 Supabase 侧负责锁定目标模板记录并落库；`save_draft_report` 由 Supabase 侧负责在一次业务接口调用中同步维护 `report`、`report_version`、`report_analyst`；`submit_report` 继续通过 RPC 完成状态流转；`validate_draft` 暂时保留在 Python 侧，以 SELECT 查询完成提交前校验，不下沉为 RPC。
@@ -127,7 +127,7 @@
 
 `resolve_coverage` 的输入为 `ticker` 和 `first_analyst_email`。执行时先按 `ticker` 查询候选 `coverage`，再关联 `coverage_analyst` 过滤出包含该 `first_analyst_email` 的记录。只要该分析师出现在某条 `coverage` 的分析师列表中，就视为命中，不要求其在 `coverage_analyst` 中维护额外角色字段。
 
-命中唯一 `coverage` 时返回 `coverage_id`；命中多条时抛出“无法自动确定”的具体错误；未命中时抛出“需要进入 create_coverage 流程”的具体错误。
+命中唯一 `coverage` 时返回 `coverage_id`；命中多条时抛出"无法自动确定"的具体错误；未命中时抛出"需要进入 create_coverage 流程"的具体错误。
 
 `resolve_coverage` 只负责解析和确认 `coverage_id`，不修改数据库，也不承担补数据或自动创建逻辑。
 
@@ -139,7 +139,7 @@
 
 初始 `coverage_analyst` 与本次报告分析师列表保持一致，最多支持 8 位分析师，其中必须包含报告 `1作 analyst_email`。分析师排序统一写入 `author_order`，其中 `author_order = 1` 代表报告 1 作。创建成功后返回新的 `coverage_id`，供上游写回当前 draft。
 
-`create_coverage` 是显式创建接口，不由 `submit_report` 隐式触发。只有在 `resolve_coverage` 未命中，且上游已经与用户确认“该 Coverage 已完成审批”后，才进入 `create_coverage`。失败时直接抛出具体错误。
+`create_coverage` 是显式创建接口，不由 `submit_report` 隐式触发。只有在 `resolve_coverage` 未命中，且上游已经与用户确认"该 Coverage 已完成审批"后，才进入 `create_coverage`。失败时直接抛出具体错误。
 
 `create_coverage` 的主数据写入、一致性校验和 `coverage_analyst` 关系创建优先在 Supabase 侧通过 RPC / 稳定接口实现；skill 侧负责参数整理并调用该接口。
 
@@ -355,151 +355,13 @@ neolyst/
 - 本地测试必须显式提供 `NEOLYST_TEST_URL`、`NEOLYST_TEST_ANON_KEY`、`NEOLYST_TEST_EMAIL`、`NEOLYST_TEST_PASSWORD`
 - pytest 启动时会把 `NEOLYST_TEST_URL` / `NEOLYST_TEST_ANON_KEY` 映射到 `NEOLYST_URL` / `NEOLYST_ANON_KEY`，确保测试不会回落到 `neolyst.yaml`
 
-## 5. report_maker 对接 neolyst 的改造要求
+## 5. 后续待做
 
-### 5.1 模板与查询
+- Coverage 审批链路。当前设计在用户确认"该 Coverage 已完成审批"后允许 `create_coverage` 直接创建 Coverage；后续需要补上首次覆盖场景下的正式审批流程，并与 `resolve_coverage` / `create_coverage` 的调用时机重新收口。
 
-`report_maker` 保持现有草稿解析、字段确认、模板渲染和输出 Word/PDF 主流程不变。生成阶段所需的 Neolyst 数据读取统一通过 `neolyst` 接口完成。
+## 6. Coverage 历史查询
 
-模板选择也通过 `neolyst` 完成。`report_maker` 根据 `report_type` 和 `language` 调用 `resolve_template` 获取当前使用的模板资产，不再从本地 `templates/` 目录读取模板。这里的 `language` 来自当前报告的 `report_language`。运行时使用的 Word 模板和对应 `schema.yaml` 都以 `neolyst` 中保存的模板记录为准。若多个 `report_type` 共用同一模板，则这些 `report_type` 在运行时都会解析到同一套模板资产路径。
-
-机器处理并生成 Word/PDF 后，`report_maker` 调用 `save_draft_report` 将机器处理结果保存为第一个 draft 版本。人工确认前，Neolyst 中已经存在该 `report_id` 下可查看的 draft。
-
-### 5.2 提交字段确认
-
-`report_maker` 负责补齐提交所需但不属于报告渲染本身的业务字段，并在必要时通过对话确认后写入 draft。
-
-`contact_person` 由 `report_maker` 负责确认和填充，规则如下：
-
-- 单 analyst 场景，使用该 analyst 的 email 作为 `contact_person`
-- 多 analyst 场景，通过对话确认后填入
-- `contact_person` 必须属于本次报告的 `analysts[].analyst_email`
-
-`report_maker` 需要能够明确得到以下提交所需的分析师信息：
-
-- 报告分析师列表
-- 每个分析师对应的 `analyst_email`
-- 每个分析师的 `author_order`
-- 报告 `1作 analyst_email`
-
-`report_maker` 通过 `resolve_analyst_by_email(email)` 校验输入 email 是否对应有效 analyst，并获取标准化后的 analyst 信息。分析师列表最多支持 8 人。新建 `coverage` 时，该列表用于初始化 `coverage_analyst`；对已有 `coverage`，只要求报告 `1作 analyst_email` 存在于 `coverage_analyst` 中。
-
-`report_language` 由 `report_maker` 自动识别，并通过对话确认后写入。该字段用于确定提交所对应的模板语言。
-
-对于公司类报告，`report_maker` 还负责准备以下 `coverage` 相关输入：
-
-- `ticker`
-- 报告 `1作 analyst_email`
-- 新建 `coverage` 所需字段，包括 `english_name`、`sector_id`、`isin`、`country_of_domicile`
-- 如已具备中文信息，同时准备 `chinese_name` 和 `traditional_chinese`
-
-新建 `coverage` 时，`report_maker` 使用本次报告分析师列表初始化 `coverage_analyst`。对已有 `coverage`，`report_maker` 不通过提交流程改写其既有 `coverage_analyst`，报告作者关系独立进入 `report_analyst`。
-
-当 `resolve_coverage` 未命中且需要进入 `create_coverage` 时，`report_maker` 先与用户对话确认“该 Coverage 已完成审批”，确认后才继续调用 `create_coverage`。
-
-### 5.3 draft 组装
-
-`report_maker` 在机器处理完成后，需要将内部数据显式转换为 `neolyst` 所要求的扁平 draft 输入。`elements.yaml`、渲染上下文和输出目录结构不直接等价于 draft 输入，需要单独映射。
-
-draft 输入分两层：
-
-- 保存 draft 时的最小字段：`title`、`report_type`、`report_language`、`analysts`、`report_file`、`pdf_file`
-- 提交前补齐字段：`contact_person`、`investment_thesis`，以及按研报类型要求的 `coverage_id`、`ticker`、`rating`、`target_price`、`region_code`、`sector_id`、`model_file`
-
-draft 输入可包含以下字段：
-
-- 报告基本字段：`title`、`report_id`、`report_type`、`report_language`、`investment_thesis`
-- 分析师与联系人字段：`analysts`、`contact_person`
-- 公司类报告字段：`coverage_id`、`ticker`、`rating`、`target_price`
-- 行业类报告字段：`region_code`、`sector_id`
-- 文件字段：`report_file`、`pdf_file`、`model_file`
-
-文件字段映射：
-
-- draft 使用最终生成的 Word 文件路径作为 `report_file`
-- draft 使用最终生成的 PDF 文件路径作为 `pdf_file`
-- `model_file` 仅在公司类报告提交时提供
-
-模板解析规则：
-
-- `resolve_template` 以 `report_type + language` 解析目标模板，但最终应落到唯一的 `report_template.id = {report_type}_{language}` 记录；若数据库中出现重复组合，应直接报数据异常
-- 若多个 `report_type` 共用同一模板资产，则这些 `report_type` 最终解析到同一组 `template_file_path` 与 `schema_file_path`
-- `report_maker` 不再维护额外的“报告类型 -> 模板类型”映射表
-
-### 5.4 draft 查看
-
-`report_maker` 不再等待所有字段完全正确后才把结果写入 Neolyst。机器处理结果通过 `save_draft_report` 直接保存为 draft，人工可以直接在 Neolyst 中查看该版本、核对内容，并决定是否继续提交。
-
-### 5.5 提交前校验
-
-在人工确认提交前，Neolyst 或其他上层流程根据 `report_id` 和 `version_no` 调用 `validate_draft(report_id, version_no)` 对指定 draft 版本执行提交前校验。
-
-对于公司类报告，提交前仍需要完成 `resolve_coverage`、必要时的 `create_coverage`、`contact_person` 确认以及其他提交必填字段补齐。只有该 draft 版本满足提交条件后，才允许进入 `submit_report`。
-
-### 5.6 报告提交
-
-人工在 Neolyst 中查看并确认指定 draft 版本后，调用 `submit_report(report_id, version_no)` 将该版本提交为 `submitted`。
-
-`report_maker` 的职责默认止于 draft 保存，不自动执行最终提交。
-
-### 5.7 失败处理
-
-当 `save_draft_report`、`resolve_coverage`、`create_coverage`、`validate_draft` 或 `submit_report` 抛出具体错误时，`report_maker` 或人工流程负责根据错误内容继续补字段、重新确认或终止流程。
-
-字段缺失、字段歧义、联系人确认和 `coverage` 创建信息不足等问题，由 `report_maker` 继续通过对话处理。多轮补充、重新保存 draft、重新校验和重新提交都围绕同一个 `report_id` 进行。
-
-## 6. template_maker 对接 neolyst 的改造要求
-
-### 6.1 模板资产写入 neolyst
-
-`template_maker` 负责提供 `report_type + language` 和本地源文件路径；`neolyst` 负责上传到 Storage，并调用 Supabase 侧模板发布接口完成幂等写入。
-
-主模板发布上传实际的 Word 模板和 `schema.yaml`。共享模板发布只声明“当前 `report_type` 复用另一个已发布 `report_type` 的模板”，不重复上传文件。
-
-`upsert_template` 输入字段：
-
-- `report_type`
-- `language`
-- `template_local_path`
-- `schema_local_path`
-
-`reuse_template` 输入字段：
-
-- `report_type`
-- `language`
-- `same_as_report_type`
-
-发布完成后，运行时模板来源统一为 `report_template` 表。记录中的 `template_file_path` 和 `schema_file_path` 共同定义一套模板资产。
-
-`schema.yaml` 是模板资产的一部分，用于描述抽取字段和抽取约束。
-
-### 6.2 共享模板关系写入 neolyst
-
-模板关系通过 `upsert_template` 与 `reuse_template` 直接写入 `neolyst`，不再以本地 `router.yaml` 或目录结构作为运行时事实来源。
-
-若多个 `report_type` 共用同一模板，先用 `upsert_template` 发布主模板，再用 `reuse_template` 为其他 `report_type` 写入共享关系。例如先发布 `macro + en`，再声明 `quantitative + en` 复用 `macro`。
-
-共享关系采用静态复制。若主模板后续重新上传并生成新路径，需要重新执行 `reuse_template`。
-
-`reuse_template` 至少覆盖以下错误：
-
-- 源模板未发布
-- `language` 不一致
-- `report_type` 复用自己
-
-### 6.3 本地模板目录的定位变化
-
-本地 `templates/` 目录保留为模板制作阶段的工作目录，用于编辑、验证和预览模板。模板一旦发布，运行时来源统一为 `neolyst.resolve_template` 返回的模板资产，`report_maker` 不再直接读取该目录中的模板文件。
-
-`router.yaml` 等本地辅助组织方式如果继续保留，也只服务于模板制作阶段的人类维护体验；它们不再是运行时模板选择的事实来源，也不参与 `report_type -> 模板` 的最终判定。
-
-## 7. 后续待做
-
-- Coverage 审批链路。当前设计在用户确认”该 Coverage 已完成审批”后允许 `create_coverage` 直接创建 Coverage；后续需要补上首次覆盖场景下的正式审批流程，并与 `resolve_coverage` / `create_coverage` 的调用时机重新收口。
-
-## 补充：Coverage 历史查询
-
-- 新增 `list_coverage_history(ticker, first_analyst_email)` 能力，面向”报告尚未写完、只有 ticker 和 1作信息”的前置查询场景。
+- 新增 `list_coverage_history(ticker, first_analyst_email)` 能力，面向"报告尚未写完、只有 ticker 和 1作信息"的前置查询场景。
 - coverage 的定位逻辑沿用现有 `resolve_coverage`：按 `ticker + coverage_analyst.analyst_email` 命中唯一 coverage。
 - 只返回 `status = 'published'` 的历史报告；`submitted`、`draft`、`rejected` 均不纳入结果。
 - 返回字段固定为：`report_id`、`title`、`rating`、`target_price`、`published_at`。
