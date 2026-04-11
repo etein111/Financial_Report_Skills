@@ -145,31 +145,33 @@ result = draft_report.save_draft_report(client, {
 
 ## 8. validate_draft
 
-校验指定 draft 版本是否满足提交条件。全量收集所有错误后一次性抛出。
+校验当前 draft 的当前版本是否满足提交条件。全量收集所有错误后一次性抛出。
 
 ```python
 from skills.neolyst.scripts.validators import validate_draft
 
-result = validate_draft(client, report_id="uuid", version_no=1)
+result = validate_draft(client, report_id="uuid")
 # 通过：返回 {"report_id": "uuid", "version_no": 1}
 # 失败：抛出 ValueError（消息以"；"分隔所有失败项）
 ```
 
 只负责校验，不自动补字段、不自动重试、不自动保存 draft。
 
-校验范围：report 存在且状态为 draft/rejected、版本存在、word/pdf 文件路径非空、必填字段（title/report_type/report_language/investment_thesis/contact_person）、分析师列表非空且 contact_person 在内、每个分析师存在且 is_active、company 类型必须有 coverage_id 且存在、sector_id/region_code 有值时验证存在性。
+当前版本由 `report.current_version_no` 决定。
+
+校验范围：report 存在且状态为 draft/rejected、`report.current_version_no` 大于 0、当前版本存在、word/pdf 文件路径非空、必填字段（title/report_type/report_language/investment_thesis/contact_person）、分析师列表非空且 contact_person 在内、每个分析师存在且 is_active、company 类型必须有 coverage_id 且存在、sector_id/region_code 有值时验证存在性。
 
 ## 9. submit_report
 
-将 draft/rejected 版本提交为 `submitted`。内部先执行校验。
+将当前 draft/rejected 版本提交为 `submitted`。
 
 ```python
 from skills.neolyst.scripts import submit_report
 
-result = submit_report.submit_report(client, report_id="uuid", version_no=1)
+result = submit_report.submit_report(client, report_id="uuid")
 # 返回：{"report_id": "uuid", "status": "submitted", "version_no": 1}
-# 校验失败时直接抛出异常，不自动补字段或重试
-# 成功后原子更新 report.status 并写入 report_status_log
+# 提交前如需完整字段校验，请先显式调用 validate_draft(client, report_id="uuid")
+# 数据库 RPC 内部读取 report.current_version_no，并返回真实提交版本
 ```
 
 ## 10. list_coverage_history

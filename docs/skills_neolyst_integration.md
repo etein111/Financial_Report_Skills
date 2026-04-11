@@ -126,8 +126,8 @@
 
 草稿保存后，不自动提交，用户可以上neolyst查看报告的生成情况。
 
-用户明确发出提交报告的指令后，首先要调用 neolyst skill的 `validate_draft(report_id, version_no)` 执行提交前校验。需要准备 `report_id` 和 `version_no` 。
+用户明确发出提交报告的指令后，首先要调用 neolyst skill 的 `validate_draft(report_id)` 执行提交前校验。只需要准备 `report_id`，实际校验版本由 `report.current_version_no` 决定。
 校验失败时，`validate_draft` 返回完整错误；根据错误提示，与用户交互，补字段、修正数据、重新提交检验。
 对于公司类报告，进入提交前还需要先能确定有效的 `coverage_id`；若 `coverage` 未命中或数据无效，要通过对话创建新的coverage。
 
-校验通过后调用neolyst skill的 `submit_report(report_id, version_no)` 将该版本提交为 `submitted`。
+校验通过后调用 neolyst skill 的 `submit_report(report_id)` 将当前版本提交为 `submitted`。返回值中的 `version_no` 为实际提交版本。

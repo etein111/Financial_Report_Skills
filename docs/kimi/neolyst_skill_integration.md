@@ -88,11 +88,11 @@ draft 输入可包含以下字段：
 
 ### 1.4 提交流程
 
-在人工确认提交前，根据 `report_id` 和 `version_no` 调用 `neolyst.validate_draft(report_id, version_no)` 对指定 draft 版本执行提交前校验。
+在人工确认提交前，根据 `report_id` 调用 `neolyst.validate_draft(report_id)` 对当前版本执行提交前校验。
 
-对于公司类报告，提交前需完成 `neolyst.resolve_coverage`、必要时的 `neolyst.create_coverage`、`contact_person` 确认以及其他提交必填字段补齐。只有该 draft 版本满足提交条件后，才允许进入 `neolyst.submit_report`。
+对于公司类报告，提交前需完成 `neolyst.resolve_coverage`、必要时的 `neolyst.create_coverage`、`contact_person` 确认以及其他提交必填字段补齐。只有当前版本满足提交条件后，才允许进入 `neolyst.submit_report`。
 
-人工在 Neolyst 中查看并确认指定 draft 版本后，调用 `neolyst.submit_report(report_id, version_no)` 将该版本提交为 `submitted`。
+人工在 Neolyst 中查看并确认当前 draft 版本后，调用 `neolyst.submit_report(report_id)` 将该版本提交为 `submitted`，返回值中的 `version_no` 为实际提交版本。
 
 ### 1.5 失败处理
 

@@ -26,8 +26,8 @@
 - `resolve_coverage`、`create_coverage` 负责 `coverage` 解析与创建。
 - `list_coverage_history` 查询 coverage 下的已发布历史报告。
 - `save_draft_report` 保存 draft。
-- `validate_draft` 校验指定 draft 版本是否可提交。
-- `submit_report` 提交指定 draft 版本。
+- `validate_draft` 校验当前 draft 的当前版本是否可提交。
+- `submit_report` 提交当前 draft 的当前版本。
 - 不暴露 `upload_file` 之类的底层中间接口。
 
 ### 2.2 draft 与提交契约
@@ -105,7 +105,7 @@
 
 ### 2.9 校验与错误语义
 
-- 提交前校验由 `neolyst` 负责，`validate_draft(report_id, version_no)` 用于校验指定 draft 版本是否满足提交条件。
+- 提交前校验由 `neolyst` 负责，`validate_draft(report_id)` 用于校验当前 draft 的当前版本是否满足提交条件。
 - `reuse_template(report_type, language, same_as_report_type)` 约束如下：
   - 源模板记录必须存在
   - 复用只能发生在同一 `language` 内

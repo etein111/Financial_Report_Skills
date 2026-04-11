@@ -20,8 +20,8 @@ neolyst skill 是 Neolyst Supabase 数据访问层,实现位置：`skills/neolys
 | 5 | `resolve_coverage(client, ticker, first_analyst_email)` | `coverage` | 按 ticker + 分析师定位唯一 coverage |
 | 6 | `create_coverage(client, ticker, english_name, sector_id, ...)` | `coverage` | 创建 coverage 及初始分析师关系 |
 | 7 | `save_draft_report(client, draft_input)` | `draft_report` | 保存 draft 版本，上传文件，返回 report_id + version_no |
-| 8 | `validate_draft(client, report_id, version_no)` | `validators` | 校验 draft 是否满足提交条件，收集全部错误 |
-| 9 | `submit_report(client, report_id, version_no)` | `submit_report` | 将 draft 提交为 submitted，内部执行校验 |
+| 8 | `validate_draft(client, report_id)` | `validators` | 校验当前 draft 版本是否满足提交条件，收集全部错误 |
+| 9 | `submit_report(client, report_id)` | `submit_report` | 将当前 draft 版本提交为 submitted，返回真实 version_no |
 | 10 | `list_coverage_history(client, ticker, first_analyst_email)` | `coverage` | 返回 coverage 下已发布的历史报告 |
 
 完整签名、参数、返回值和代码示例见 `references/interfaces.md`。
@@ -36,7 +36,7 @@ neolyst skill 是 Neolyst Supabase 数据访问层,实现位置：`skills/neolys
 
 - `save_draft_report`：`report_id` 首次为 `None`，后续版本沿用同一 ID
 - `create_coverage`：仅在 `resolve_coverage` 未命中且用户确认"Coverage 已完成审批"后调用
-- `submit_report`：内部执行校验；调用方也可单独调用 `validate_draft` 做预检
+- `submit_report`：只提交 `report.current_version_no` 指向的当前版本；如需完整字段校验，调用方先显式调用 `validate_draft`
 - `reuse_template`：静态路径复制；主模板重新上传后需重新执行才能同步
 - `contact_person`：必须属于 `analysts[].analyst_email`
 - 分析师列表：最多 8 人；`author_order=1` 为第一作者
