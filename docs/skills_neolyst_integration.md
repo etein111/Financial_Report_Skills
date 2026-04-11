@@ -121,17 +121,3 @@
 - `model_file` 仅在公司类报告提交时提供
 
 首次保存后，Neolyst 中已经存在该 `report_id` 下可查看的第一个 draft 版本。后续如需补字段、重新保存、重新校验或重新提交，都围绕同一个 `report_id` 进行。
-
-## 7. 提交报告：提交前校验与最终提交
-
-在人工确认提交前，Neolyst 或其他上层流程根据 `report_id` 和 `version_no` 调用 `validate_draft(report_id, version_no)`，对指定 draft 版本执行提交前校验。
-
-对于公司类报告，提交前仍需要完成 `resolve_coverage`。若未命中，则提示用户去 Neolyst 中补建或修正 Coverage，随后回到当前流程继续提交。同时仍需要完成 `contact_person` 确认，以及其他提交必填字段补齐。只有该 draft 版本满足提交条件后，才允许进入 `submit_report`。
-
-人工在 Neolyst 中查看并确认指定 draft 版本后，调用 `submit_report(report_id, version_no)` 将该版本提交为 `submitted`。
-
-`report_maker` 的职责默认止于 draft 保存，不自动执行最终提交。
-
-当 `save_draft_report`、`resolve_coverage`、`validate_draft` 或 `submit_report` 抛出具体错误时，`report_maker` 或人工流程负责根据错误内容继续补字段、重新确认或终止流程。
-
-字段缺失、字段歧义、联系人确认和 `coverage` 信息不足等问题，由 `report_maker` 继续通过对话处理。多轮补充、重新保存 draft、重新校验和重新提交都围绕同一个 `report_id` 进行。
