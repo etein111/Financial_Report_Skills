@@ -8,7 +8,7 @@
 from skills.neolyst.scripts import analyst
 
 record = analyst.resolve_analyst_by_email(client, "alice@neolyst.com")
-# 返回：dict，含 email, english_name, chinese_name, suffix, sfc, region_code, is_active
+# 返回：dict，含 email, english_name, chinese_name, suffix, sfc, region_code, is_active, created_at, updated_at
 # 找不到或已停用：抛出 ValueError（含具体原因）
 ```
 
@@ -24,11 +24,13 @@ record = analyst.resolve_analyst_by_email(client, "alice@neolyst.com")
 from skills.neolyst.scripts import template
 
 result = template.resolve_template(client, report_type="company", language="en")
-# 返回：{"template_local_path": "...", "schema_local_path": "..."}
+# 返回：{"template_local_path": "...", "schema_local_path": str | None}
 # 找不到模板或路径为空：抛出 ValueError
 ```
 
-文件下载到 `templates/{report_type}/{language}/`，文件名与 bucket 中一致。
+- `dest_dir`：下载根目录，默认 `"."`，文件落在 `{dest_dir}/templates/{report_type}/{language}/`
+- 本地文件名为 `template.docx` 和 `schema.yaml`（与 bucket 中路径一致）
+- `schema_local_path` 在 schema 不存在或下载失败时返回 `None`
 
 ## 3. upsert_template
 
@@ -40,7 +42,7 @@ template.upsert_template(
     report_type="company",
     language="en",
     template_local_path="/abs/path/template.docx",
-    schema_local_path="/abs/path/schema.yaml",
+    schema_local_path="/abs/path/schema.yaml",  # 可选，默认 None
 )
 # 返回：None。幂等操作，多次调用安全。
 ```
@@ -125,6 +127,8 @@ result = draft_report.save_draft_report(client, {
     "report_language": "en",
     "contact_person": "alice@neolyst.com",
     "investment_thesis": "AI-driven demand supports earnings growth.",
+    "sector_id": "00000000-0000-0000-0000-000000000019",    # 可选
+    "region_code": "CN",                                    # 可选
     "analysts": [
         {"analyst_email": "alice@neolyst.com", "author_order": 1},
         {"analyst_email": "bob@neolyst.com", "author_order": 2},
@@ -159,7 +163,15 @@ result = validate_draft(client, report_id="uuid")
 
 当前版本由 `report.current_version_no` 决定。
 
-校验范围：report 存在且状态为 draft/rejected、`report.current_version_no` 大于 0、当前版本存在、word/pdf 文件路径非空、必填字段（title/report_type/report_language/investment_thesis/contact_person）、分析师列表非空且 contact_person 在内、每个分析师存在且 is_active、company 类型必须有 coverage_id 且存在、sector_id/region_code 有值时验证存在性。
+校验范围：
+- report 存在且状态为 draft/rejected
+- `report.current_version_no` 大于 0，且当前版本存在
+- word/pdf 文件路径非空
+- 必填字段：title / report_type / report_language / investment_thesis / contact_person
+- 分析师列表非空，且 contact_person 在分析师列表中（大小写不敏感）
+- 每个分析师存在且 is_active
+- company 类型：coverage_id 必填且存在
+- sector_id / region_code 有值时验证存在性
 
 ## 9. submit_report
 

@@ -14,8 +14,8 @@ neolyst skill 是 Neolyst Supabase 数据访问层,实现位置：`skills/neolys
 | # | 接口 | 模块 | 说明 |
 |---|------|------|------|
 | 1 | `resolve_analyst_by_email(client, email)` | `analyst` | 按邮箱查询标准化 analyst 记录 |
-| 2 | `resolve_template(client, report_type, language)` | `template` | 下载模板 + schema 到本地路径 |
-| 3 | `upsert_template(client, report_type, language, template_local_path, schema_local_path)` | `template` | 上传模板文件并 upsert `report_template` 记录 |
+| 2 | `resolve_template(client, report_type, language, dest_dir=".")` | `template` | 下载模板 + schema 到本地路径 |
+| 3 | `upsert_template(client, report_type, language, template_local_path, schema_local_path=None)` | `template` | 上传模板文件并 upsert `report_template` 记录 |
 | 4 | `reuse_template(client, report_type, language, same_as_report_type)` | `template` | 静态复制另一个 report_type 的模板路径 |
 | 5 | `resolve_coverage(client, ticker, first_analyst_email)` | `coverage` | 按 ticker + 分析师定位唯一 coverage |
 | 6 | `create_coverage(client, ticker, english_name, sector_id, ...)` | `coverage` | 创建 coverage 及初始分析师关系 |
