@@ -37,7 +37,7 @@
 - draft 输入不携带执行上下文字段，例如 `workspace_root`、`trace_id`、`server_url_override`、`dry_run`。
 - `save_draft_report` 的文件输入统一使用本地路径，由 `neolyst` 上传到 Storage。
 - 模板文件位于模板 bucket，最终路径以 `report_template.template_file_path` 与 `report_template.schema_file_path` 为准，不由 `report_type` 公式推导。
-- 报告文件位于报告 bucket，bucket 内路径固定为 `{report_id}/`；文件名由 `neolyst` 在 skill 内统一生成并保持稳定，同一类产物在各版本间使用一致命名。
+- 报告文件位于报告 bucket，持久化字段中的 Storage 路径包含 bucket 前缀 `reports/`；bucket 内相对路径固定为 `{report_id}/v{version_no}/{原始文件名}`，文件名保留调用方传入的原始文件名，版本间通过版本目录隔离。
 - `report_id` 在首次保存 draft 时为空；机器处理后的 draft 和后续人工修订版都沿用同一个 `report_id` 追加新版本。
 - draft 契约分为"可保存字段"和"提交前必填字段"两层。
 - `company` / `company_flash` 在 draft 阶段允许暂时缺少 `coverage_id`，提交前必须补齐。
@@ -46,7 +46,7 @@
 - `analysts` 列表与 `coverage_analyst` / `report_analyst` 统一以 `analyst_email` 作为业务键，排序字段统一使用 `author_order`；不再引入 `analyst_id`、`role`、`sort_order` 三套并存的表示。
 - `save_draft_report` 输入中的 `report_file`、`pdf_file`、`model_file` 仅用于上传前定位本地文件；文件路径的唯一准源是 `report_version.word_file_path`、`report_version.pdf_file_path`、`report_version.model_file_path`。`snapshot_json` 如保留文件字段，只作为版本快照，不作为校验和提交的判定来源。
 - `save_draft_report` 成功时至少返回 `report_id` 和 `version_no`。
-- `validate_draft` 与 `submit_report` 都以 `report_id + version_no` 为输入。
+- `validate_draft` 与 `submit_report` 都只以 `report_id` 为输入，实际作用版本由 `report.current_version_no` 决定。
 
 ### 2.3 研报类型与模板记录
 
@@ -84,9 +84,9 @@
 - Storage RLS 策略：
   - `templates`：所有已认证用户可下载；仅 `admin` 角色可上传/更新/删除
   - `reports`：`admin` 可读写全部；`analyst` 可读写自己 `draft`/`submitted` 状态的报告文件；`sa` 可读 `submitted`/`published`/`rejected` 状态的报告文件
-- 模板 bucket 路径规则：`{report_type}/{language}/template.docx` 和 `{report_type}/{language}/schema.yaml`。路径由 `storage.py` 按此规则生成，`template_file_path` / `schema_file_path` 字段存储的即是该路径。
-- 报告 bucket 路径规则：`{report_id}/v{version_no}/{原始文件名}`。路径由 `draft_report.py` 在 `commit_draft_version` 前生成，文件名保留调用方传入的原始文件名（`Path(local_path).name`），版本间文件存储在独立目录下互不覆盖。
-- `resolve_template` 将模板文件下载到当前工作目录的 `templates/{report_type}/{language}/` 下，文件名与 bucket 中一致（`template.docx`、`schema.yaml`）。
+- 模板 bucket 路径规则：`templates/{report_type}/{language}/template.docx` 和 `templates/{report_type}/{language}/schema.yaml`。`template_file_path` / `schema_file_path` 字段存储含 bucket 前缀的完整路径；路径由 Supabase RPC `get_template_storage_paths` 统一生成，`storage.py` 只负责上传/下载。
+- 报告 bucket 路径规则：`reports/{report_id}/v{version_no}/{原始文件名}`。路径由 `draft_report.py` 在调用 draft 保存 RPC 前生成，文件名保留调用方传入的原始文件名（`Path(local_path).name`），版本间文件存储在独立目录下互不覆盖。
+- `resolve_template(client, report_type, language, dest_dir=".")` 将模板文件下载到 `dest_dir/templates/{report_type}/{language}/` 下，文件名与 bucket 中一致（`template.docx`、`schema.yaml`）。
 
 ### 2.7 Supabase 连接配置
 
@@ -195,93 +195,36 @@
 
 ### 3.4 validate_draft 执行流程
 
-`validate_draft` 接收 `report_id` 和 `version_no`，用于判断该 draft 版本是否满足进入 `submit_report` 的条件。
+`validate_draft` 只接收 `report_id`，用于判断该报告当前版本是否满足进入 `submit_report` 的条件。实际被校验的版本由 `report.current_version_no` 决定；校验通过时返回真实 `version_no`。
 
-校验范围：
+当前实现的校验范围如下：
 
-- 结构校验
-- 必填字段校验
-- 主数据校验
-- 公司类报告校验
-- 文件路径校验
-
-结构校验：
-
-以下规则属于 `validate_draft` 这层业务校验要求。当前实现保留在 Python 侧，通过只读 SELECT 查询完成；它们不要求全部下沉为当前裸表 schema 的 CHECK / FK 约束。
-
-- 指定的 draft 版本必须存在
-- `analysts` 必须为非空列表
-- `analysts` 最多支持 8 位分析师
-- `analysts[].analyst_email`、`author_order` 必须完整
-- `analysts` 中必须恰好存在一位 `author_order = 1` 的分析师，作为报告 `1作 analyst_email`
-- `analysts[].author_order` 必须唯一
-- draft 版本中的文件字段必须已经是有效的 storage 路径或已持久化文件引用
-- 文件路径判定以 `report_version.word_file_path`、`report_version.pdf_file_path`、`report_version.model_file_path` 为准
-
-draft 版本需已持久化的核心内容：
-
-- `title`
-- `report_type`
-- `report_language`
-- `analysts`
-- `report_version.word_file_path`
-- `report_version.pdf_file_path`
-
-提交前必填字段：
-
-- `title`
-- `report_type`
-- `report_language`
-- `contact_person`
-- `investment_thesis`
-- `analysts`
-- `report_version.word_file_path`
-- `report_version.pdf_file_path`
-
-按类型要求：
-
-- `company`：`coverage_id`、`ticker`、`rating`、`target_price`、`report_version.model_file_path`
-- `company_flash`：`coverage_id`、`ticker`
-- `sector`：`region_code`、`sector_id`
-- `sector_flash`：`region_code`、`sector_id`
-- `macro`：`region_code`
-- `strategy`：`region_code`
-- `quantitative`：`region_code`
-- `bond`：`region_code`
-
-主数据校验：
-
-- `report_type` 必须对应存在的 report type
-- `report_language` 必须为有效模板语言
-- `region_code` 必须对应有效 region
-- `sector_id` 必须对应有效 sector
-- `analysts[].analyst_email` 必须对应有效 analyst
-- `contact_person` 必须属于 `analysts[].analyst_email`
-
-公司类报告校验：
-
-- `coverage_id` 必须对应存在的 `coverage`
-- `coverage.ticker` 必须与输入 `ticker` 一致
-- 报告 `1作 analyst_email` 必须存在于该 `coverage` 的 `coverage_analyst` 列表中
-- 对已有 `coverage`，提交时不自动改写 `coverage_analyst`；报告分析师关系独立写入 `report_analyst`
+- `report` 存在，且 `status` 为 `draft` 或 `rejected`
+- `report.current_version_no > 0`，且对应的 `report_version` 行存在
+- `report_version.word_file_path` 与 `report_version.pdf_file_path` 非空
+- 必填字段：`title`、`report_type`、`report_language`、`investment_thesis`、`contact_person`
+- `report_analyst` 至少存在 1 位分析师，且 `contact_person` 必须属于当前报告分析师列表（大小写不敏感）
+- 每位分析师都必须在 `analyst` 表中存在且 `is_active = true`
+- `company` 类型必须存在有效 `coverage_id`
+- `sector_id` / `region_code` 有值时，需分别命中有效 `sector` / `region`
 
 结果语义：
 
 - 校验通过：返回被校验通过的 `report_id` 和 `version_no`
-- 校验失败：直接抛出具体错误
+- 校验失败：全量收集错误后一次性抛出具体错误
 
 `validate_draft` 当前由 `skills/neolyst/scripts/validators.py` 提供实现。它负责字段完整性判断、主数据校验和版本一致性校验，但不负责状态流转，也不负责写库。
 
 ### 3.5 submit_report 执行流程
 
-`submit_report` 接收 `report_id` 和 `version_no`，用于提交该 draft 版本。对应 draft 在进入该接口前必须已经完成必要的 `resolve_coverage`、`create_coverage` 补充以及 `validate_draft` 校验。
+`submit_report` 只接收 `report_id`，用于提交 `report.current_version_no` 指向的当前版本。若调用方需要完整字段校验，应先显式调用 `validate_draft(report_id)`；`submit_report` 自身不在 Python 侧重复校验。
 
 执行顺序：
 
 1. 获取已认证的 Neolyst 访问连接
-2. 定位 `report_id + version_no` 对应的 draft 版本
-3. 再次执行提交前校验，确认该 draft 版本仍然满足提交条件
-4. 执行提交动作，将报告状态推进到 `submitted`
+2. 调用 Supabase RPC `submit_report(p_report_id)`
+3. RPC 校验报告存在、状态为 `draft` / `rejected`、`current_version_no > 0`，且当前版本行存在
+4. RPC 执行提交动作，将报告状态推进到 `submitted`，并将真实版本号写入 `report_status_log`
 5. 返回提交结果
 
 提交结果至少包括：
@@ -335,7 +278,7 @@ neolyst/
   2. 将本地文件上传到返回的路径
   3. 调用 RPC `upsert_template_record(report_type, language)` 让服务端以相同规则生成路径并 upsert `report_template` 记录
 - `reuse_template` 直接调用 RPC `reuse_template(report_type, language, same_as_report_type)`，服务端负责路径复制和合法性校验（源模板存在且已发布、不能自引用）
-- `resolve_template` 直接查询 `report_template` 表读取 `template_file_path` / `schema_file_path`（无业务逻辑，不需要 RPC），再将文件下载到本地 `templates/{report_type}/{language}/` 目录
+- `resolve_template` 直接查询 `report_template` 表读取 `template_file_path` / `schema_file_path`（无业务逻辑，不需要 RPC），再将文件下载到 `dest_dir/templates/{report_type}/{language}/` 目录
 
 `coverage.py` 负责 `resolve_coverage` 和 `create_coverage`。凡是与 `coverage`、`coverage_analyst` 相关的查询和写入都通过该模块调用 Supabase 侧对应 RPC / 稳定接口完成。
 
@@ -343,9 +286,9 @@ neolyst/
 
 `validators.py` 模块对外暴露的业务接口名是 `validate_draft`。当前实现直接查询 `report`、`report_version`、`report_analyst`、`analyst`、`coverage`、`sector`、`region` 等表完成提交前校验，不调用 RPC，也不执行提交。
 
-`submit_report.py` 负责提交已有 draft，串联连接获取、draft 版本定位、提交前校验和调用 Supabase 侧提交 RPC。`submit_report` 的职责聚焦于状态推进与提交审计；`report` 主表当前态字段和 `current_version_no` 已由 `save_draft_report` 在保存 draft 时同步更新。
+`submit_report.py` 负责提交已有 draft，直接调用 Supabase 侧提交 RPC。当前版本定位、最低一致性保护、状态流转和提交审计都在 RPC 侧完成；`report` 主表当前态字段和 `current_version_no` 已由 `save_draft_report` 在保存 draft 时同步更新。
 
-模块之间的依赖关系保持单向：`draft_report` 可以调用 `connection` 和 `storage`；`submit_report` 可以调用 `connection` 和 `validators`；`validators` 可以调用 `connection` 并直接查询相关表；`template` 可以调用 `connection` 和 `storage`；`coverage`、`analyst` 与 `storage` 只依赖 `connection`；`connection` 不依赖任何业务模块。
+模块之间的依赖关系保持单向：`draft_report` 可以调用 `connection` 和 `storage`；`submit_report` 只依赖 `connection`；`validators` 可以调用 `connection` 并直接查询相关表；`template` 可以调用 `connection` 和 `storage`；`coverage`、`analyst` 与 `storage` 只依赖 `connection`；`connection` 不依赖任何业务模块。
 
 ## 4. 联调与环境
 

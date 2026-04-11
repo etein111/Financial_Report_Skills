@@ -35,7 +35,7 @@
 - `report_type`
 - `language`
 - `template_local_path`
-- `schema_local_path`
+- `schema_local_path`（可选，不上传 schema 文件时可省略）
 
 `reuse_template` 输入字段：
 
@@ -59,7 +59,7 @@
 
 ## 4. report_maker 获取模板：运行时只从 neolyst 解析
 
-模板选择通过 `neolyst` 完成。`report_maker` 根据 `report_type` 和 `language` 调用 `resolve_template` 获取当前使用的模板资产，不再从本地 `templates/` 目录读取模板。
+模板选择通过 `neolyst` 完成。`report_maker` 根据 `report_type` 和 `language` 调用 `resolve_template(report_type, language, dest_dir=".")` 获取当前使用的模板资产，不再从本地 `templates/` 目录读取模板。
 
 这里的 `language` 来自当前报告的 `report_language`。运行时使用的 Word 模板和对应 `schema.yaml` 都以 `neolyst` 中保存的模板记录为准。
 
@@ -69,6 +69,7 @@
 
 - `resolve_template` 以 `report_type + language` 解析目标模板，但最终应落到唯一的 `report_template.id = {report_type}_{language}` 记录；若数据库中出现重复组合，应直接报数据异常
 - 若多个 `report_type` 共用同一模板资产，则这些 `report_type` 最终解析到同一组 `template_file_path` 与 `schema_file_path`
+- `resolve_template` 支持可选 `dest_dir` 参数，默认下载到当前工作目录下的 `templates/{report_type}/{language}/`
 - `report_maker` 不再维护额外的“报告类型 -> 模板类型”映射表
 
 ## 5. 提交前数据准备：字段来源与补齐规则
