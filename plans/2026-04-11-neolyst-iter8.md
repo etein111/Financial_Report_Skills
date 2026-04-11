@@ -13,10 +13,12 @@
 
 **已确认的设计决策：**
 - `report_maker` 运行时模板来源改为 `neolyst.resolve_template(report_type, language)`
+- `report_maker` 调用 `resolve_template` 时，下载目标目录必须显式限定在项目根目录内的 `templates/` 子目录，不能落到项目外路径
 - `report_maker` 生成 Word/PDF 后调用 `save_draft_report`，默认不自动 `submit_report`
 - `report_maker` 需要接入 `resolve_analyst_by_email`、`resolve_coverage`、`list_coverage_history`、`create_coverage`
 - `template_maker` 发布主模板走 `upsert_template`，共享模板走 `reuse_template`
 - `router.yaml` 不再作为运行时事实源
+- `router.py` 本轮直接删除，`invoke.py` 中现有的 router 读取、展示和写回逻辑统一改写
 - 本轮只给 `report_maker` 增加自动化集成测试，不新增 `template_maker` 自动化测试
 
 ---
@@ -32,13 +34,14 @@
 | `skills/template_maker/scripts/invoke.py` | 修改 | 模板发布改走 `neolyst` |
 | `skills/template_maker/scripts/neolyst_publish.py` | 新建 | 模板发布与复用辅助函数 |
 | `skills/template_maker/SKILL.md` | 修改 | 运行时事实源与发布流程改写 |
-| `skills/template_maker/scripts/router.py` | 修改或删除 | 退出运行时职责 |
+| `skills/template_maker/scripts/router.py` | 删除 | 移除 router 读写能力与运行时职责 |
 | `plans/2026-04-07-neolyst-skill-roadmap.md` | 修改 | Iter 8 状态回写 |
 
 ## 背景与约束
 
 - 当前 `report_maker` 仍通过 [`get_template_name`](/mnt/c/_code/neoskills/skills/report_maker/scripts/common.py) 读取本地 `templates/router.yaml`，与目标架构不符
 - 当前 `template_maker` 在 [`invoke.py`](/mnt/c/_code/neoskills/skills/template_maker/scripts/invoke.py) 中仍会写入 `router.yaml`
+- 当前 [`skills/template_maker/scripts/invoke.py`](/mnt/c/_code/neoskills/skills/template_maker/scripts/invoke.py) 既在 `_confirm_report_type_mapping()` 中读取 `router.yaml` 展示现有映射，也在创建完成后写回 `router.yaml`，router 依赖已经深入主路径
 - 当前两个 skill 中都没有任何 `neolyst` 调用
 - 按仓库规范，修改 `SKILL.md` 时必须使用 `skill-creator`
 - 本轮不扩展 `template_maker` 自动化测试，只做手工发布验证
@@ -56,7 +59,7 @@ Create:
 
 覆盖范围：
 - 通过 `neolyst.upsert_template` 发布测试模板
-- 通过 `neolyst.resolve_template` 拉取模板到临时目录
+- 通过 `neolyst.resolve_template` 拉取模板到项目内 `templates/` 子目录
 - 使用现有渲染逻辑生成 Word/PDF
 - 组装最小 draft payload 并调用 `save_draft_report`
 - 断言返回 `report_id` / `version_no` / `status = draft`
@@ -76,12 +79,15 @@ Expected:
 职责：
 - 获取 `neolyst` client
 - 封装 `resolve_template`
+- 统一约束模板下载目标目录，确保始终落在项目根目录内的 `templates/` 子目录；不得把运行时模板下载到项目外路径
 - 将 `elements + 输出文件路径 + 业务补充字段` 组装成 `save_draft_report` 所需扁平 payload
-- 提供 analyst / coverage 相关辅助函数：
-  - `resolve_analyst_emails`
-  - `resolve_or_create_coverage`
+- 提供与 `docs/skills_neolyst_design.md` 对齐的辅助函数，命名保持和 `neolyst` 契约一致：
+  - `resolve_analyst_by_email`
+  - `resolve_coverage`
+  - `create_coverage`
   - `list_coverage_history`
-  - `save_report_draft`
+  - `save_draft_report`
+- 如需减少上层重复组装，可额外提供纯适配层内部函数，例如 `build_draft_payload`；不要用 `resolve_or_create_coverage`、`save_report_draft` 这类会掩盖 `neolyst` 正式契约的命名
 
 - [ ] **Step 4: 在 `common.py` 中替换本地 router 依赖**
 
@@ -111,6 +117,9 @@ Expected:
 要求：
 - 将“本地 `templates/` 作为运行时模板来源”改为“调用 `neolyst.resolve_template`”
 - 保留本地模板目录仅作为制作阶段概念，不再作为运行时事实源
+- 明确运行时模板虽然通过 `neolyst` 下载，但下载目标仍必须位于项目根目录内的 `templates/` 子目录，以满足“禁止访问项目外路径”
+- 明确删除或改写 1.2 节“模板映射”表，不能再保留 `company -> company`、`strategy / quantitative / bond -> common` 这类硬编码运行时映射
+- 同步删除或改写“使用模板: templates/.../”这类把本地模板目录写成运行时来源的示例
 
 - [ ] **Step 2: 用 `skill-creator` 更新 draft 流程说明**
 
@@ -124,12 +133,14 @@ Expected:
 
 Run:
 ```bash
-rg -n "resolve_template|save_draft_report|validate_draft|submit_report|router.yaml|templates/" skills/report_maker/SKILL.md
+rg -n "resolve_template|resolve_analyst_by_email|resolve_coverage|create_coverage|save_draft_report|validate_draft|submit_report|router.yaml|templates/|模板映射|common" skills/report_maker/SKILL.md
 ```
 
 Expected:
 - `resolve_template` / `save_draft_report` / `validate_draft` 出现
+- `resolve_analyst_by_email` / `resolve_coverage` / `create_coverage` 的运行时调用语义已写入
 - 不再把 `router.yaml` 或本地 `templates/` 写成运行时事实源
+- 不再保留“模板映射”表或 `common` 这类本地运行时模板映射文案
 
 ## Task 3: 为 `template_maker` 增加发布与复用能力
 
@@ -148,8 +159,9 @@ Expected:
 
 要求：
 - 模板本地生成成功后，允许直接发布到 `neolyst`
-- 删除或下线“更新 `router.yaml`”这一步的运行时职责
-- 若需要保留 `router.yaml`，只能作为迁移期辅助文件，不得再作为最终事实源
+- 删除“更新 `router.yaml`”这一步的运行时职责
+- 重写 `_confirm_report_type_mapping()`：不再读取 `router.yaml` 展示现有映射，只保留“本次发布到哪个 `report_type` / language”所需的显式输入确认
+- `invoke.py` 中不再 import `router` 模块，也不再生成或返回 `router.yaml`
 
 - [ ] **Step 3: 手工验证发布链路**
 
@@ -171,7 +183,7 @@ Expected:
 
 **Files:**
 - Modify: `skills/template_maker/SKILL.md`
-- Modify or Delete: `skills/template_maker/scripts/router.py`
+- Delete: `skills/template_maker/scripts/router.py`
 
 - [ ] **Step 1: 用 `skill-creator` 更新 `template_maker/SKILL.md`**
 
@@ -180,11 +192,13 @@ Expected:
 - 增加 `upsert_template` / `reuse_template` 发布流程
 - 明确本地模板目录仍保留为制作阶段工作目录
 
-- [ ] **Step 2: 决定 `router.py` 的去留并完成代码同步**
+- [ ] **Step 2: 删除 `router.py` 并完成代码同步**
 
-规则：
-- 如果 `invoke.py` 已完全不再依赖 `router.py`，则删除 `router.py` 与对应引用
-- 如果仍需过渡保留，必须在代码注释和文档中明确“仅迁移期辅助，不参与运行时模板选择”
+要求：
+- 删除 `skills/template_maker/scripts/router.py`
+- 删除 `invoke.py` 中对 `load_router`、`update_mapping`、`save_router`、`get_all_router_mappings` 的 import 与调用
+- 将报告类型确认逻辑改成不依赖 `router.yaml` 的显式交互或参数输入
+- 若需要保留旧 router 数据，只能在迁移脚本或一次性说明中处理，不得继续留在主执行路径
 
 - [ ] **Step 3: 验证 `template_maker` 代码中不再把 `router.yaml` 当运行时事实源**
 
@@ -194,8 +208,8 @@ rg -n "router.yaml|load_router|save_router|get_all_router_mappings|update_mappin
 ```
 
 Expected:
-- 运行时主路径中不再依赖这些调用
-- 若仍有保留，必须只剩迁移注释、废弃说明或待删除代码
+- `skills/template_maker` 主路径中不再依赖这些调用
+- `router.py` 已删除，或仅剩明确标注为迁移脚本的非主路径代码
 
 ## Task 5: 回写 roadmap 并做最小联调验收
 
@@ -227,4 +241,3 @@ Expected:
 - [ ] `template_maker` 能将本地模板发布到 `neolyst`
 - [ ] `router.yaml` 不再承担运行时事实源职责
 - [ ] 新增 `report_maker` 最小集成测试通过
-
