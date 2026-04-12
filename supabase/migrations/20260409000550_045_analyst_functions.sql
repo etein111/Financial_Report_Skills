@@ -5,7 +5,7 @@ create or replace function public.resolve_analyst_by_email(
     p_email text
 )
 returns public.analyst
-language plpgsql stable security definer
+language plpgsql stable
 as $$
 declare
     v_email text;
