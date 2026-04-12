@@ -2,6 +2,31 @@
 
 Neolyst Supabase 数据访问层。实现位置：`scripts/`。
 
+技术栈：Python `supabase-py` + `uv` 管理依赖与执行环境。数据库结构真相以 `supabase/migrations/*.sql` 为准。
+
+## Storage 结构
+
+两个独立 bucket：
+
+| Bucket | 用途 | 路径规则 |
+|--------|------|---------|
+| `templates` | 模板资产 | `templates/{report_type}/{language}/template.docx` / `schema.yaml`（RPC `get_template_storage_paths` 生成） |
+| `reports` | 报告版本资产 | `reports/{report_id}/v{version_no}/{原始文件名}`（draft_report.py 生成，版本间独立目录） |
+
+DB 中存储的路径包含 bucket 前缀。`storage.py` 只负责上传/下载，不拼路径。
+
+## 报告提交流程
+
+```
+机器生成结果 → save_draft_report → [人工确认] → validate_draft → submit_report
+                  ↑                                                      │
+                  └──────── 提交失败：save_draft 追加新版本 ←──────────────┘
+```
+
+- draft 驱动：机器结果先存 draft，不要求满足提交条件；人工确认后再提交
+- 提交失败后沿用原 report_id 追加新版本，重新走 validate → submit
+- 整体行为对齐 Neolyst Web 的 Analyst Submit
+
 ## 开发与测试
 
 ### 连接配置
