@@ -56,10 +56,11 @@ def reuse_template(
     same_as_report_type: str,
 ) -> None:
     """
-    让 report_type 的模板记录复用 same_as_report_type 的文件路径。
+    让 report_type 的模板记录复用 same_as_report_type 的文件路径（静态复制）。
+    主模板重新上传后需重新执行才能同步。
 
     Raises:
-        ValueError: 源模板未发布、report_type 与 same_as_report_type 相同
+        ValueError: 源模板不存在、源模板未发布、report_type 与 same_as_report_type 相同
     """
     rpc.call_rpc(client, "reuse_template", {
         "p_report_type": report_type,

@@ -26,6 +26,7 @@ def _record_exists(client: Client, table: str, field: str, value: str) -> bool:
 def validate_draft(client: Client, report_id: str) -> dict:
     """
     校验 draft 报告当前版本是否满足提交条件。
+    纯校验，不修改数据库、不补字段、不重试、不保存 draft。
 
     Args:
         client: 已认证的 Supabase client

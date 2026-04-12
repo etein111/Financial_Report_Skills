@@ -13,8 +13,7 @@ record = analyst.resolve_analyst_by_email(client, "alice@neolyst.com")
 ```
 
 - 邮箱大小写不敏感，内部统一 lowercase
-- `is_active=False` 的分析师抛出 `ValueError: 分析师已停用`
-- 业务主键是 `email`，无 `id` 字段
+- `is_active=False` 的分析师抛出 `ValueError: Analyst is inactive: {email}`
 
 ## 2. resolve_template
 
@@ -65,7 +64,7 @@ template.reuse_template(
 )
 # 返回：None
 # 必须先通过 upsert_template 发布源模板
-# 失败场景（抛出 ValueError）：源模板不存在、language 不一致、report_type 复用自己
+# 失败场景（抛出 ValueError）：源模板不存在、report_type 复用自己
 ```
 
 若主模板重新上传并变更路径，需重新执行 `reuse_template` 才能同步。

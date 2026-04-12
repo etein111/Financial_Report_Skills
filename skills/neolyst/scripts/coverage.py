@@ -22,7 +22,7 @@ def resolve_coverage(client: Client, ticker: str, first_analyst_email: str) -> s
         str: coverage_id（uuid 字符串）
 
     Raises:
-        ValueError: 未命中（提示创建 Coverage）或数据异常
+        ValueError: 未命中、命中多条（无法自动确定）、数据异常
     """
     row = rpc.single_row(rpc.call_rpc(client, "resolve_coverage", {
         "p_ticker": ticker,
@@ -44,6 +44,7 @@ def create_coverage(
 ) -> str:
     """
     创建 coverage 及初始 coverage_analyst 关系，返回新 coverage_id。
+    仅在 resolve_coverage 未命中且用户确认"Coverage 已完成审批"后调用。
 
     Args:
         client: 已认证的 Supabase client

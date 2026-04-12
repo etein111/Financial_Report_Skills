@@ -27,6 +27,9 @@ def save_draft_report(client: Client, draft: dict) -> dict:
     若 report_id 为 None，则生成新 UUID。调用 init_draft_report RPC 创建或更新报告元数据，
     然后上传相关本地文件到 Storage，最后调用 commit_draft_version RPC 提交版本。
 
+    服务器端仅要求 analysts 非空，其余字段均可为 None。
+    必填校验由 validate_draft 在提交前执行，不要求 draft 保存时字段完整。
+
     Args:
         client: 已认证的 Supabase client
         draft: 报告草稿数据，包含以下字段：
