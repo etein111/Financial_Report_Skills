@@ -22,6 +22,8 @@
 
 命名规则：统一使用 `analyst` 前缀，保持一致。
 
+冗余说明：`lead_analyst_email` 与 `analyst_emails[1]`（PostgreSQL 数组 1-indexed）存在冗余。保留冗余是为了索引便利和直接查询效率，一致性由 RPC 写入时保证。
+
 ### 删除内容
 
 - `report_analyst` 表（含约束、索引、触发器、RLS 策略）
@@ -43,6 +45,8 @@
 - 不放 `status`（已有 `from_status`/`to_status`）
 - 不放运营字段（`owner_user_id`、`published_by`、`published_at`）
 - 文件路径现在就加（P2 文件版本调整时 metadata 结构不变）
+- **触发器统一快照**：每次状态流转都自动记录，覆盖所有路径
+- **AFTER UPDATE 触发器**：与现有 BEFORE UPDATE 校验触发器职责分离
 
 ### `report_status_log` 表新增字段
 
@@ -73,8 +77,35 @@
 }
 ```
 
+### 新增触发器
+
+- 新增 AFTER UPDATE 触发器，在 report.status 变化时自动 INSERT `report_status_log` + 构造 `metadata`
+- 现有 BEFORE UPDATE 触发器（`report_enforce_status_transition`）保持不变，仅做校验
+
 ### 受影响的 RPC
 
 | 函数 | 变更 |
 |------|------|
-| `submit_report` | INSERT `report_status_log` 时构造并写入 `metadata` |
+| `submit_report` | 移除手动 INSERT `report_status_log`，改由触发器统一写入 |
+
+---
+
+## 完整受影响清单
+
+### 新增
+
+- `report.lead_analyst_email` 字段
+- `report.analyst_emails` 字段
+- `report_status_log.metadata` 字段
+- AFTER UPDATE 触发器（统一写 status_log + metadata）
+
+### 修改
+
+- `init_draft_report` RPC：直接写 report 的 analyst 字段
+- `submit_report` RPC：移除手动 INSERT status_log，改由触发器写入
+- `validators.py`：查询 `report.analyst_emails` 替代 `report_analyst`
+
+### 删除
+
+- `report_analyst` 表（含索引、约束、触发器、RLS 策略）
+- `init_draft_report` 中对 `report_analyst` 的 DELETE+INSERT 逻辑
