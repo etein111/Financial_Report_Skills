@@ -1,3 +1,5 @@
+> **状态：已实施** — 迁移文件 `20260413000100_110_retract_permission.sql`，Python 接口 `skills/neolyst/scripts/retract_report.py`
+
 # P0 Schema 调整：收紧 submitted 权限 + 增加撤回路径
 
 > 调整日期：2026-04-12
