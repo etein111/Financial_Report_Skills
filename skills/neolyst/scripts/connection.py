@@ -27,14 +27,21 @@ USER_FILE = "user.json"
 SESSION_FILE = "session.json"
 CONFIG_FILE = "neolyst.yaml"
 
+_config_cache: dict | None = None
+
 
 def _load_config() -> dict:
-    """读取 neolyst.yaml，返回 {supabase_url, anon_key}。"""
+    """读取 neolyst.yaml，返回 {supabase_url, anon_key}。结果按进程缓存。"""
+    global _config_cache
+    if _config_cache is not None:
+        return _config_cache
     config_path = SKILL_ROOT / CONFIG_FILE
     if config_path.exists():
-        with config_path.open() as f:
-            return yaml.safe_load(f) or {}
-    return {}
+        with config_path.open(encoding="utf-8") as f:
+            _config_cache = yaml.safe_load(f) or {}
+    else:
+        _config_cache = {}
+    return _config_cache
 
 
 def _supabase_url(config: dict) -> str:
@@ -95,6 +102,15 @@ def _is_expired(expires_at: int, buffer_seconds: int = 60) -> bool:
     return time.time() >= (expires_at - buffer_seconds)
 
 
+def _extract_session_data(session) -> dict:
+    """从 Supabase session 对象提取持久化所需的三个字段。"""
+    return {
+        "access_token": session.access_token,
+        "refresh_token": session.refresh_token,
+        "expires_at": session.expires_at,
+    }
+
+
 def get_client(
     neolyst_dir: str | None = None,
     email: str | None = None,
@@ -138,12 +154,7 @@ def get_client(
         # token 过期或无效，尝试 refresh
         try:
             resp = client.auth.refresh_session(session_data["refresh_token"])
-            session = resp.session
-            _save_session(neolyst_dir, {
-                "access_token": session.access_token,
-                "refresh_token": session.refresh_token,
-                "expires_at": session.expires_at,
-            })
+            _save_session(neolyst_dir, _extract_session_data(resp.session))
             return client
         except Exception:
             pass  # refresh 失败，继续尝试 password 登录
@@ -163,11 +174,6 @@ def get_client(
             f"Authentication failed for {_email!r}: {e}. "
             "Please call get_client(email=..., password=...) with valid credentials."
         ) from e
-    session = resp.session
     _save_user(neolyst_dir, {"email": _email, "password": _password})
-    _save_session(neolyst_dir, {
-        "access_token": session.access_token,
-        "refresh_token": session.refresh_token,
-        "expires_at": session.expires_at,
-    })
+    _save_session(neolyst_dir, _extract_session_data(resp.session))
     return client

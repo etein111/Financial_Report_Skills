@@ -4,6 +4,8 @@ analyst.py — Neolyst analyst 查询模块。
 
 from supabase import Client
 
+from . import rpc
+
 
 def resolve_analyst_by_email(client: Client, email: str) -> dict:
     """
@@ -23,10 +25,7 @@ def resolve_analyst_by_email(client: Client, email: str) -> dict:
     Raises:
         ValueError: 找不到对应的 analyst，或 analyst 已停用（is_active=False）
     """
-    try:
-        resp = client.rpc("resolve_analyst_by_email", {"p_email": email}).execute()
-    except Exception as e:
-        raise ValueError(str(e)) from e
+    resp = rpc.call_rpc(client, "resolve_analyst_by_email", {"p_email": email})
 
     if not resp.data:
         raise ValueError(f"找不到分析师：{email!r}")

@@ -17,7 +17,7 @@ from pathlib import Path
 
 from supabase import Client
 
-from . import storage
+from . import rpc, storage
 
 
 def save_draft_report(client: Client, draft: dict) -> dict:
@@ -57,30 +57,22 @@ def save_draft_report(client: Client, draft: dict) -> dict:
         FileNotFoundError: 本地文件不存在（由 storage.upload 抛出）
         ValueError: RPC 调用失败或其他业务逻辑错误
     """
-    # 第 1 步：确定 report_id
     report_id = draft.get("report_id")
     if report_id is None:
         report_id = str(uuid.uuid4())
 
-    # 第 2 步：构建 p_draft（排除文件字段）
     p_draft = {
         k: v for k, v in draft.items()
         if k not in ("report_file", "pdf_file", "model_file")
     }
     p_draft["report_id"] = report_id
 
-    # 第 3 步：调用 init_draft_report RPC
-    try:
-        init_resp = client.rpc("init_draft_report", {"p_draft": p_draft}).execute()
-    except Exception as e:
-        raise ValueError(str(e)) from e
+    init_row = rpc.single_row(
+        rpc.call_rpc(client, "init_draft_report", {"p_draft": p_draft}),
+        "init_draft_report RPC returned empty data",
+    )
+    version_no = init_row["next_version_no"]
 
-    if not init_resp.data:
-        raise ValueError("init_draft_report RPC returned empty data")
-
-    version_no = init_resp.data[0]["next_version_no"]
-
-    # 第 4 步：上传文件
     def _upload(local_path: str | None) -> str | None:
         if not local_path:
             return None
@@ -93,7 +85,6 @@ def save_draft_report(client: Client, draft: dict) -> dict:
     pdf_file_path = _upload(draft.get("pdf_file"))
     model_file_path = _upload(draft.get("model_file"))
 
-    # 第 5 步：构建 snapshot（p_draft 已排除本地路径，加入 storage 路径）
     snapshot = dict(p_draft)
     if word_file_path:
         snapshot["word_file_path"] = word_file_path
@@ -102,27 +93,20 @@ def save_draft_report(client: Client, draft: dict) -> dict:
     if model_file_path:
         snapshot["model_file_path"] = model_file_path
 
-    # 第 6 步：调用 commit_draft_version RPC
-    try:
-        commit_resp = client.rpc("commit_draft_version", {
+    commit_row = rpc.single_row(
+        rpc.call_rpc(client, "commit_draft_version", {
             "p_report_id": report_id,
             "p_version_no": version_no,
             "p_word_path": word_file_path,
             "p_pdf_path": pdf_file_path,
             "p_model_path": model_file_path,
             "p_snapshot": snapshot,
-        }).execute()
-    except Exception as e:
-        raise ValueError(str(e)) from e
+        }),
+        "commit_draft_version RPC returned empty data",
+    )
 
-    if not commit_resp.data:
-        raise ValueError("commit_draft_version RPC returned empty data")
-
-    row = commit_resp.data[0]
-
-    # 第 7 步：返回结果
     return {
-        "report_id": str(row["report_id"]),
-        "version_no": row["version_no"],
-        "status": row["status"],
+        "report_id": str(commit_row["report_id"]),
+        "version_no": commit_row["version_no"],
+        "status": commit_row["status"],
     }

@@ -17,6 +17,12 @@ validators.py — Neolyst draft 报告提交前校验。
 from supabase import Client
 
 
+def _record_exists(client: Client, table: str, field: str, value: str) -> bool:
+    """查询表中是否存在指定字段值的记录。"""
+    resp = client.table(table).select(field).eq(field, value).execute()
+    return bool(resp.data)
+
+
 def validate_draft(client: Client, report_id: str) -> dict:
     """
     校验 draft 报告当前版本是否满足提交条件。
@@ -33,7 +39,6 @@ def validate_draft(client: Client, report_id: str) -> dict:
     """
     errors: list[str] = []
 
-    # 1. report 存在性与状态
     report_resp = (
         client.table("report")
         .select(
@@ -52,7 +57,6 @@ def validate_draft(client: Client, report_id: str) -> dict:
     if report["status"] not in ("draft", "rejected"):
         errors.append(f"报告状态为 {report['status']}，仅 draft/rejected 可提交")
 
-    # 2. 当前版本存在性
     version = None
     if current_version_no <= 0:
         errors.append("报告当前没有可校验版本")
@@ -69,14 +73,12 @@ def validate_draft(client: Client, report_id: str) -> dict:
         else:
             version = version_resp.data[0]
 
-    # 3. 文件路径
     if version:
         if not version.get("word_file_path"):
             errors.append("缺少 Word 文件路径（word_file_path）")
         if not version.get("pdf_file_path"):
             errors.append("缺少 PDF 文件路径（pdf_file_path）")
 
-    # 4. 必填字段
     required_fields = {
         "title": "标题（title）",
         "report_type": "报告类型（report_type）",
@@ -88,7 +90,6 @@ def validate_draft(client: Client, report_id: str) -> dict:
         if not report.get(field):
             errors.append(f"缺少必填字段：{label}")
 
-    # 5. 分析师列表
     analysts_resp = (
         client.table("report_analyst")
         .select("analyst_email")
@@ -99,12 +100,12 @@ def validate_draft(client: Client, report_id: str) -> dict:
     if not analyst_emails:
         errors.append("报告没有分析师（report_analyst 为空）")
 
-    # 6. contact_person 必须在分析师列表中（大小写不敏感）
+    # contact_person 必须在分析师列表中（大小写不敏感）
     contact = report.get("contact_person")
-    if contact and analyst_emails and contact.lower() not in analyst_emails:
+    if contact and analyst_emails and contact.lower() not in [e.lower() for e in analyst_emails]:
         errors.append(f"contact_person（{contact}）不在本报告分析师列表中")
 
-    # 7. 每个分析师必须存在且 is_active（批量查询，避免 N+1）
+    # 批量查询分析师存在性，避免 N+1
     if analyst_emails:
         a_resp = (
             client.table("analyst")
@@ -119,39 +120,20 @@ def validate_draft(client: Client, report_id: str) -> dict:
             elif not found[email]:
                 errors.append(f"分析师已停用：{email}")
 
-    # 8. company 类型：coverage_id 必填且存在
     if report_type == "company":
         coverage_id = report.get("coverage_id")
         if not coverage_id:
             errors.append("公司类报告（company）必须关联 coverage_id")
-        else:
-            cov_resp = (
-                client.table("coverage")
-                .select("id")
-                .eq("id", coverage_id)
-                .execute()
-            )
-            if not cov_resp.data:
-                errors.append(f"coverage 不存在：{coverage_id}")
+        elif not _record_exists(client, "coverage", "id", coverage_id):
+            errors.append(f"coverage 不存在：{coverage_id}")
 
-    # 9. sector_id 存在性（有值时）
     sector_id = report.get("sector_id")
-    if sector_id:
-        sec_resp = client.table("sector").select("id").eq("id", sector_id).execute()
-        if not sec_resp.data:
-            errors.append(f"sector 不存在：{sector_id}")
+    if sector_id and not _record_exists(client, "sector", "id", sector_id):
+        errors.append(f"sector 不存在：{sector_id}")
 
-    # 10. region_code 存在性（有值时）
     region_code = report.get("region_code")
-    if region_code:
-        reg_resp = (
-            client.table("region")
-            .select("code")
-            .eq("code", region_code)
-            .execute()
-        )
-        if not reg_resp.data:
-            errors.append(f"region 不存在：{region_code}")
+    if region_code and not _record_exists(client, "region", "code", region_code):
+        errors.append(f"region 不存在：{region_code}")
 
     if errors:
         raise ValueError("校验失败：" + "；".join(errors))
