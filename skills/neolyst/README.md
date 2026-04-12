@@ -52,6 +52,11 @@ export NEOLYST_TEST_PASSWORD="xxx"
 
 pytest 的 `conftest.py` 会将 `NEOLYST_TEST_URL` / `NEOLYST_TEST_ANON_KEY` 映射为运行时的 `NEOLYST_URL` / `NEOLYST_ANON_KEY`。
 
+## 业务常量
+
+- `report_type` 取值：`company`、`sector`、`company_flash`、`sector_flash`、`macro`、`strategy`、`quantitative`、`bond`
+- 分析师列表：最多 8 人；`author_order=1` 为第一作者
+
 ## 文件路径准源
 
 - `save_draft_report` 输入中的 `report_file`、`pdf_file`、`model_file` 仅用于上传前定位本地文件；文件路径的唯一准源是 `report_version` 表的持久化字段。
@@ -64,6 +69,9 @@ pytest 的 `conftest.py` 会将 `NEOLYST_TEST_URL` / `NEOLYST_TEST_ANON_KEY` 映
 
 ```
 connection  ←  storage, analyst, coverage, rpc
-connection + storage  ←  template, draft_report
-connection  ←  validators, submit_report
+connection + storage + rpc  ←  draft_report
+connection + rpc  ←  coverage, submit_report
+connection  ←  validators
 ```
+
+`rpc.py` 是 RPC 调用薄封装（异常转换 + 结果提取），不依赖 connection，被 coverage、draft_report、submit_report 等模块统一使用。

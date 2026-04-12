@@ -38,9 +38,7 @@ neolyst skill 是 Neolyst Supabase 数据访问层,实现位置：`skills/neolys
 - `create_coverage`：仅在 `resolve_coverage` 未命中且用户确认"Coverage 已完成审批"后调用
 - `submit_report`：只提交 `report.current_version_no` 指向的当前版本；如需完整字段校验，调用方先显式调用 `validate_draft`
 - `reuse_template`：静态路径复制；主模板重新上传后需重新执行才能同步
-- `contact_person`：必须属于 `analysts[].analyst_email`
-- 分析师列表：最多 8 人；`author_order=1` 为第一作者
-- `report_type` 取值：`company`、`sector`、`company_flash`、`sector_flash`、`macro`、`strategy`、`quantitative`、`bond`
+- `report_type` 取值和分析师列表约束见 README「业务常量」
 
 ## 参考文件
 
