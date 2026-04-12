@@ -10,17 +10,17 @@
 
 ## 运行测试
 
+首次使用，复制配置模板并按需修改：
+
 ```bash
-export NEOLYST_TEST_URL=http://127.0.0.1:54321
-export NEOLYST_TEST_ANON_KEY=...
-export NEOLYST_TEST_EMAIL=your_email@example.com
-export NEOLYST_TEST_PASSWORD=your_password
+cp skills/neolyst/tests/test_config.example.json skills/neolyst/tests/test_config.json
+# 编辑 test_config.json，填入实际的 URL、anon_key、email、password
+```
+
+运行测试：
+
+```bash
 uv run pytest skills/neolyst/tests/ -v
 ```
 
-测试入口不会直接读取 `skills/neolyst/neolyst.yaml`。`conftest.py` 会在 pytest 启动时执行以下映射：
-
-- `NEOLYST_TEST_URL` -> `NEOLYST_URL`
-- `NEOLYST_TEST_ANON_KEY` -> `NEOLYST_ANON_KEY`
-
-因此，本地联调必须显式提供以上 4 个 `NEOLYST_TEST_*` 环境变量，不能依赖 yaml 默认值。
+测试配置统一从 `tests/test_config.json` 读取，不使用环境变量。

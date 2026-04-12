@@ -1,9 +1,16 @@
+"""
+test_connection.py — connection.get_client 集成测试。
+
+从 test_config.json 读取凭据，不硬编码。
+"""
 import json
 import os
 import pytest
 from pathlib import Path
 
+_config = json.loads((Path(__file__).parent / "test_config.json").read_text())
 NEOLYST_DIR = Path(os.environ.get("NEOLYST_TEST_DIR", Path.home() / "tmp" / "neolyst_test"))
+
 
 @pytest.fixture(autouse=True)
 def clean_auth_files():
@@ -13,14 +20,15 @@ def clean_auth_files():
         (NEOLYST_DIR / filename).unlink(missing_ok=True)
     yield
 
+
 def test_get_client_with_credentials_writes_session():
     """用 email+password 登录后分别写入 user.json 和 session.json。"""
     from skills.neolyst.scripts import connection
 
     client = connection.get_client(
         neolyst_dir=str(NEOLYST_DIR),
-        email="yangxue@opendelp.com",
-        password="Admin123",
+        email=_config["email"],
+        password=_config["password"],
     )
     assert client is not None
     user_json = NEOLYST_DIR / "user.json"
@@ -30,11 +38,11 @@ def test_get_client_with_credentials_writes_session():
 
     user_data = json.loads(user_json.read_text())
     session_data = json.loads(session_json.read_text())
-    assert user_data["email"] == "yangxue@opendelp.com"
-    assert user_data["password"] == "Admin123"
+    assert user_data["email"] == _config["email"]
     assert "access_token" in session_data
     assert "refresh_token" in session_data
     assert "expires_at" in session_data
+
 
 def test_get_client_reuses_session():
     """已有有效 session 时不重新登录（access_token 相同）"""
@@ -42,8 +50,8 @@ def test_get_client_reuses_session():
 
     client1 = connection.get_client(
         neolyst_dir=str(NEOLYST_DIR),
-        email="yangxue@opendelp.com",
-        password="Admin123",
+        email=_config["email"],
+        password=_config["password"],
     )
     assert client1 is not None
     data1 = json.loads((NEOLYST_DIR / "session.json").read_text())
@@ -53,6 +61,7 @@ def test_get_client_reuses_session():
     assert client2 is not None
     data2 = json.loads((NEOLYST_DIR / "session.json").read_text())
     assert data2["access_token"] == token1
+
 
 def test_get_client_no_file_no_credentials_raises():
     """没有 user.json/session.json 且未传 credentials 时应抛出错误。"""

@@ -1,5 +1,9 @@
-"""Pytest 配置文件 - neolyst skill 测试。"""
-import os
+"""Pytest 配置文件 - neolyst skill 测试。
+
+从 tests/test_config.json 读取连接配置（不提交到版本库）。
+首次使用：cp test_config.example.json test_config.json，按需修改。
+"""
+import json
 import sys
 import pytest
 from pathlib import Path
@@ -9,21 +13,28 @@ project_root = Path(__file__).parent.parent.parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
-LOCAL_NEOLYST_URL = os.environ.get("NEOLYST_TEST_URL", "http://127.0.0.1:54321")
-LOCAL_NEOLYST_ANON_KEY = os.environ.get(
-    "NEOLYST_TEST_ANON_KEY",
-    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9."
-    "eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9."
-    "CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0",
-)
+TEST_DIR = Path(__file__).parent
+CONFIG_FILE = TEST_DIR / "test_config.json"
 
-# 测试必须显式使用本地 Supabase，不能回落到 skills/neolyst/neolyst.yaml。
-os.environ["NEOLYST_URL"] = LOCAL_NEOLYST_URL
-os.environ["NEOLYST_ANON_KEY"] = LOCAL_NEOLYST_ANON_KEY
 
-NEOLYST_TEST_DIR = Path(os.environ.get("NEOLYST_TEST_DIR", Path.home() / "tmp" / "neolyst_test"))
-NEOLYST_TEST_EMAIL = os.environ.get("NEOLYST_TEST_EMAIL", "yangxue@opendelp.com")
-NEOLYST_TEST_PASSWORD = os.environ.get("NEOLYST_TEST_PASSWORD", "Admin123")
+def _load_test_config() -> dict:
+    if not CONFIG_FILE.exists():
+        pytest.exit(
+            f"测试配置文件不存在: {CONFIG_FILE}\n"
+            f"请复制模板并修改: cp {TEST_DIR / 'test_config.example.json'} {CONFIG_FILE}"
+        )
+    return json.loads(CONFIG_FILE.read_text())
+
+
+_config = _load_test_config()
+
+# 注入环境变量供 connection.py 读取
+import os
+os.environ["NEOLYST_URL"] = _config["supabase_url"]
+os.environ["NEOLYST_ANON_KEY"] = _config["anon_key"]
+
+TEST_EMAIL = _config["email"]
+TEST_PASSWORD = _config["password"]
 
 
 @pytest.fixture(scope="session")
@@ -31,13 +42,20 @@ def neolyst_client():
     """返回已认证的 Supabase client（session 级，整个测试会话复用）。"""
     from skills.neolyst.scripts import connection
 
-    NEOLYST_TEST_DIR.mkdir(parents=True, exist_ok=True)
+    test_dir = Path.home() / "tmp" / "neolyst_test"
+    test_dir.mkdir(parents=True, exist_ok=True)
 
     return connection.get_client(
-        neolyst_dir=str(NEOLYST_TEST_DIR),
-        email=NEOLYST_TEST_EMAIL,
-        password=NEOLYST_TEST_PASSWORD,
+        neolyst_dir=str(test_dir),
+        email=TEST_EMAIL,
+        password=TEST_PASSWORD,
     )
+
+
+@pytest.fixture(scope="session")
+def test_analyst_email():
+    """测试使用的分析师邮箱（来自 test_config.json）。"""
+    return TEST_EMAIL
 
 
 @pytest.fixture(scope="session", autouse=True)

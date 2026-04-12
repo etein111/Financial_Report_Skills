@@ -7,7 +7,6 @@ import pytest
 _SUFFIX = uuid.uuid4().hex[:8]
 TEST_TICKER = f"TEST{_SUFFIX[:4].upper()}"
 TEST_ISIN = f"US{_SUFFIX.upper()[:10]}"
-TEST_ANALYST = "yangxue@opendelp.com"
 
 
 @pytest.fixture(scope="module")
@@ -19,7 +18,7 @@ def test_sector_id(neolyst_client):
 
 
 @pytest.fixture(scope="module")
-def created_coverage_id(neolyst_client, test_sector_id):
+def created_coverage_id(neolyst_client, test_sector_id, test_analyst_email):
     """
     创建测试用 coverage，模块结束后删除（coverage_analyst 随 coverage 级联删除）。
     """
@@ -31,7 +30,7 @@ def created_coverage_id(neolyst_client, test_sector_id):
         sector_id=test_sector_id,
         isin=TEST_ISIN,
         country_of_domicile="China",
-        analysts=[{"analyst_email": TEST_ANALYST, "author_order": 1}],
+        analysts=[{"analyst_email": test_analyst_email, "author_order": 1}],
     )
     yield coverage_id
     neolyst_client.table("coverage").delete().eq("id", coverage_id).execute()
@@ -66,10 +65,10 @@ class TestCreateCoverage:
             .execute()
         )
         assert len(resp.data) == 1
-        assert resp.data[0]["analyst_email"] == TEST_ANALYST
+        assert resp.data[0]["analyst_email"] == test_analyst_email
         assert resp.data[0]["author_order"] == 1
 
-    def test_create_duplicate_ticker_raises(self, neolyst_client, test_sector_id, created_coverage_id):
+    def test_create_duplicate_ticker_raises(self, neolyst_client, test_sector_id, created_coverage_id, test_analyst_email):
         """ticker 重复时抛出含"已存在"的 ValueError。"""
         from skills.neolyst.scripts import coverage as cov
         with pytest.raises(ValueError, match="已存在"):
@@ -80,10 +79,10 @@ class TestCreateCoverage:
                 sector_id=test_sector_id,
                 isin=f"US{uuid.uuid4().hex[:10].upper()}",
                 country_of_domicile="China",
-                analysts=[{"analyst_email": TEST_ANALYST, "author_order": 1}],
+                analysts=[{"analyst_email": test_analyst_email, "author_order": 1}],
             )
 
-    def test_create_duplicate_isin_raises(self, neolyst_client, test_sector_id, created_coverage_id):
+    def test_create_duplicate_isin_raises(self, neolyst_client, test_sector_id, created_coverage_id, test_analyst_email):
         """ISIN 重复时抛出含"已存在"的 ValueError。"""
         from skills.neolyst.scripts import coverage as cov
         with pytest.raises(ValueError, match="已存在"):
@@ -94,34 +93,34 @@ class TestCreateCoverage:
                 sector_id=test_sector_id,
                 isin=TEST_ISIN,
                 country_of_domicile="China",
-                analysts=[{"analyst_email": TEST_ANALYST, "author_order": 1}],
+                analysts=[{"analyst_email": test_analyst_email, "author_order": 1}],
             )
 
 
 class TestResolveCoverage:
-    def test_resolve_found(self, neolyst_client, created_coverage_id):
+    def test_resolve_found(self, neolyst_client, created_coverage_id, test_analyst_email):
         """ticker + 分析师匹配时返回正确的 coverage_id。"""
         from skills.neolyst.scripts import coverage as cov
-        result = cov.resolve_coverage(neolyst_client, TEST_TICKER, TEST_ANALYST)
+        result = cov.resolve_coverage(neolyst_client, TEST_TICKER, test_analyst_email)
         assert result == created_coverage_id
 
-    def test_resolve_case_insensitive_ticker(self, neolyst_client, created_coverage_id):
+    def test_resolve_case_insensitive_ticker(self, neolyst_client, created_coverage_id, test_analyst_email):
         """ticker 大小写不敏感，小写 ticker 同样命中。"""
         from skills.neolyst.scripts import coverage as cov
-        result = cov.resolve_coverage(neolyst_client, TEST_TICKER.lower(), TEST_ANALYST)
+        result = cov.resolve_coverage(neolyst_client, TEST_TICKER.lower(), test_analyst_email)
         assert result == created_coverage_id
 
-    def test_resolve_case_insensitive_email(self, neolyst_client, created_coverage_id):
+    def test_resolve_case_insensitive_email(self, neolyst_client, created_coverage_id, test_analyst_email):
         """analyst_email 大小写不敏感，大写 email 同样命中。"""
         from skills.neolyst.scripts import coverage as cov
-        result = cov.resolve_coverage(neolyst_client, TEST_TICKER, TEST_ANALYST.upper())
+        result = cov.resolve_coverage(neolyst_client, TEST_TICKER, test_analyst_email.upper())
         assert result == created_coverage_id
 
-    def test_resolve_not_found_ticker_raises(self, neolyst_client):
+    def test_resolve_not_found_ticker_raises(self, neolyst_client, test_analyst_email):
         """ticker 不存在时抛出含"未找到"的 ValueError。"""
         from skills.neolyst.scripts import coverage as cov
         with pytest.raises(ValueError, match="未找到"):
-            cov.resolve_coverage(neolyst_client, "GHOST_TICKER_99", TEST_ANALYST)
+            cov.resolve_coverage(neolyst_client, "GHOST_TICKER_99", test_analyst_email)
 
     def test_resolve_analyst_not_in_coverage_raises(self, neolyst_client, created_coverage_id):
         """ticker 存在但分析师不在 coverage_analyst 列表中时抛出含"未找到"的 ValueError。"""
@@ -131,7 +130,7 @@ class TestResolveCoverage:
 
 
 @pytest.fixture(scope="module")
-def history_coverage_id(neolyst_client, test_sector_id):
+def history_coverage_id(neolyst_client, test_sector_id, test_analyst_email):
     from skills.neolyst.scripts import coverage as cov
 
     suffix = uuid.uuid4().hex[:6].upper()
@@ -142,7 +141,7 @@ def history_coverage_id(neolyst_client, test_sector_id):
         sector_id=test_sector_id,
         isin=f"US{suffix}{'0' * (10 - len(suffix))}",
         country_of_domicile="United States",
-        analysts=[{"analyst_email": TEST_ANALYST, "author_order": 1}],
+        analysts=[{"analyst_email": test_analyst_email, "author_order": 1}],
     )
     yield coverage_id
     neolyst_client.table("coverage").delete().eq("id", coverage_id).execute()
@@ -214,7 +213,7 @@ class TestListCoverageHistory:
         result = cov.list_coverage_history(
             neolyst_client,
             ticker=history_dataset["ticker"],
-            first_analyst_email=TEST_ANALYST,
+            first_analyst_email=test_analyst_email,
         )
         assert len(result) == 2
         assert [r["title"] for r in result] == [
@@ -228,7 +227,7 @@ class TestListCoverageHistory:
         result = cov.list_coverage_history(
             neolyst_client,
             ticker=history_dataset["ticker"],
-            first_analyst_email=TEST_ANALYST,
+            first_analyst_email=test_analyst_email,
         )
         assert set(result[0].keys()) == {
             "report_id",
@@ -244,18 +243,18 @@ class TestListCoverageHistory:
         result = cov.list_coverage_history(
             neolyst_client,
             ticker=history_dataset["ticker"].lower(),
-            first_analyst_email=TEST_ANALYST.upper(),
+            first_analyst_email=test_analyst_email.upper(),
         )
         assert result[0]["title"] == "Newest Published Report"
 
     def test_returns_empty_list_when_no_published_history(self, neolyst_client, created_coverage_id):
         from skills.neolyst.scripts import coverage as cov
 
-        result = cov.list_coverage_history(neolyst_client, TEST_TICKER, TEST_ANALYST)
+        result = cov.list_coverage_history(neolyst_client, TEST_TICKER, test_analyst_email)
         assert result == []
 
     def test_missing_coverage_raises(self, neolyst_client):
         from skills.neolyst.scripts import coverage as cov
 
         with pytest.raises(ValueError, match="未找到匹配的 Coverage"):
-            cov.list_coverage_history(neolyst_client, "GHOST_TICKER_99", TEST_ANALYST)
+            cov.list_coverage_history(neolyst_client, "GHOST_TICKER_99", test_analyst_email)

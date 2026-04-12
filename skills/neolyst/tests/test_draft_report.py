@@ -1,13 +1,13 @@
 """
 test_draft_report.py — save_draft_report 集成测试。
 """
+import json
 import uuid
 from pathlib import Path
 
 import pytest
 
-
-TEST_ANALYST = "yangxue@opendelp.com"
+TEST_ANALYST = json.loads((Path(__file__).parent / "test_config.json").read_text())["email"]
 
 
 # ── module-level fixtures ────────────────────────────────────────────

@@ -1,12 +1,13 @@
 """
 test_submit_report.py — submit_report 集成测试（5 个）。
 """
+import json
 import uuid
 from pathlib import Path
 
 import pytest
 
-TEST_ANALYST = "yangxue@opendelp.com"
+TEST_ANALYST = json.loads((Path(__file__).parent / "test_config.json").read_text())["email"]
 
 
 def _make_files(directory: Path) -> tuple[str, str]:

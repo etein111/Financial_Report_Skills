@@ -1,0 +1,6 @@
+{
+  "supabase_url": "http://127.0.0.1:54321",
+  "anon_key": "***REMOVED-JWT***",
+  "email": "yangxue@opendelp.com",
+  "password": "Admin123"
+}
