@@ -2,7 +2,7 @@
 -- P0: 收紧 submitted 权限 + 增加 submitted/rejected → draft 撤回路径
 --
 -- 变更清单：
---   1. report_status_is_valid：新增 submitted → draft 路径
+--   1. report_status_is_valid：新增 submitted→draft、rejected→draft、rejected→submitted 路径
 --   2. report_update RLS：非对称策略（USING 允许 draft/submitted/rejected，
 --      WITH CHECK 限制 draft only）
 --   3. rv_insert RLS：analyst 仅 draft 可插入版本
@@ -11,7 +11,7 @@
 --   6. 新增 retract_report RPC
 
 -- ===================================================================
--- 1. report_status_is_valid：新增 submitted → draft (retract) 路径
+-- 1. report_status_is_valid：新增 submitted→draft、rejected→draft、rejected→submitted 路径
 -- ===================================================================
 
 create or replace function public.report_status_is_valid(from_status text, to_status text)
