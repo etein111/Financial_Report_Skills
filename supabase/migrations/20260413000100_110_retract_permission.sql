@@ -2,7 +2,8 @@
 -- P0: 收紧 submitted 权限 + 增加 submitted/rejected → draft 撤回路径
 --
 -- 变更清单：
---   1. report_status_is_valid：新增 submitted→draft、rejected→draft、rejected→submitted 路径
+--   1. report_status_is_valid：新增 submitted→draft、rejected→draft 路径
+--      （注：rejected→submitted 路径后被 111 迁移移除，rejected 必须先撤回 draft 再重提）
 --   2. report_update RLS：非对称策略（USING 允许 draft/submitted/rejected，
 --      WITH CHECK 限制 draft only）
 --   3. rv_insert RLS：analyst 仅 draft 可插入版本
@@ -11,7 +12,8 @@
 --   6. 新增 retract_report RPC
 
 -- ===================================================================
--- 1. report_status_is_valid：新增 submitted→draft、rejected→draft、rejected→submitted 路径
+-- 1. report_status_is_valid：新增 submitted→draft、rejected→draft 路径
+--    （rejected→submitted 被 111 迁移移除）
 -- ===================================================================
 
 create or replace function public.report_status_is_valid(from_status text, to_status text)
@@ -33,10 +35,11 @@ comment on function public.report_status_is_valid(text, text) is
   submitted → rejected       （sa 退回）
   submitted → draft          （analyst 撤回，由 retract_report RPC 调用）
   rejected → draft           （analyst 撤回，由 retract_report RPC 调用）
-  rejected → submitted       （analyst 重新提交）
 
 所有其他路径均为非法，report_enforce_status_transition 触发器会在
-UPDATE report 时调用本函数进行校验，非法流转将抛出异常。';
+UPDATE report 时调用本函数进行校验，非法流转将抛出异常。
+
+注意：rejected 不能直接重提为 submitted，必须先撤回为 draft 再从 draft 提交。';
 
 -- ===================================================================
 -- 2. report_update RLS：非对称策略
@@ -254,7 +257,7 @@ comment on function public.retract_report is
 返回：report_id, version_no（撤回时的版本号）, status（固定为 draft）。
 
 依赖：
-  - report_status_is_valid 函数（已新增 submitted→draft 路径）
+  - report_status_is_valid 函数（已新增 submitted→draft、rejected→draft 路径）
   - report_update RLS（非对称策略，USING 含 submitted/rejected）
   - rsl_insert RLS（已新增 analyst submitted→draft / rejected→draft）';
 

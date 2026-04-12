@@ -1,4 +1,4 @@
-> **状态：已实施** — 迁移文件 `20260413000100_110_retract_permission.sql`，Python 接口 `skills/neolyst/scripts/retract_report.py`
+> **状态：已实施** — 迁移文件 `20260413000100_110_retract_permission.sql`（补充 `20260413000200_111_remove_rejected_to_submitted.sql`），Python 接口 `skills/neolyst/scripts/retract_report.py`
 
 # P0 Schema 调整：收紧 submitted 权限 + 增加撤回路径
 
@@ -32,11 +32,15 @@ draft ──submit──→ submitted ──publish──→ published
   └────── retract ───────────────────┘
 ```
 
-新增合法路径：`submitted → draft`
+新增合法路径：`submitted → draft`、`rejected → draft`
 
 ## `report_status_is_valid` 函数变更
 
-新增条件：`(from_status = 'submitted' and to_status = 'draft')`
+新增条件：
+- `(from_status = 'submitted' and to_status = 'draft')`
+- `(from_status = 'rejected' and to_status = 'draft')`
+
+注意：rejected 不能直接重提为 submitted，必须先撤回为 draft 再从 draft 提交（由 111 迁移修正）。
 
 ## RLS 权限修正
 
