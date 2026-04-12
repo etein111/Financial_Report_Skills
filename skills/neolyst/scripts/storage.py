@@ -1,7 +1,9 @@
 """
 storage.py — Neolyst Supabase Storage 封装。
 
-只负责文件上传/下载，路径由调用方传入（来自 Supabase RPC，格式为 bucket/path）。
+只负责文件上传/下载。路径由调用方传入（来自 Supabase RPC），本模块不拼路径字符串。
+
+路径规范：数据库中存储的所有 Storage 路径必须包含 bucket 前缀，格式为 {bucket}/{path}。
 """
 
 from pathlib import Path

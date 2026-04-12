@@ -26,3 +26,13 @@ export NEOLYST_TEST_PASSWORD="xxx"
 ```
 
 pytest 的 `conftest.py` 会将 `NEOLYST_TEST_URL` / `NEOLYST_TEST_ANON_KEY` 映射为运行时的 `NEOLYST_URL` / `NEOLYST_ANON_KEY`。
+
+## 模块依赖方向
+
+依赖保持单向，`connection` 是基础设施层，不依赖任何业务模块：
+
+```
+connection  ←  storage, analyst, coverage, rpc
+connection + storage  ←  template, draft_report
+connection  ←  validators, submit_report
+```
