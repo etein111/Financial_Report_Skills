@@ -14,7 +14,6 @@
 - 业务数据一致性、状态流转、关系维护、主表/版本表同步的逻辑，均优先在 Supabase 侧实现为稳定接口。
 - 复杂读写（涉及路径规则、多表维护、跨表判断、校验+写入原子操作）默认在 Supabase 侧封装为 RPC，不在 skill 侧拼接多次底层表操作。
 - `neolyst` skill 负责认证、文件上传、参数整理和调用 Supabase 接口，不重复实现核心业务一致性规则。
-- 不用外键，跨表一致性由 RPC 负责。
 
 ### 错误语义
 
@@ -27,6 +26,10 @@
 - 报告归属和操作审计遵循"谁保存/提交，系统就记谁"；分析师身份仅用于报告署名，不影响审计记录。
 - 不做代理执行：会破坏安全性且不符合实际业务关系。
 - 系统按 `admin`、`sa`、`analyst` 三级角色控制访问权限，skill 设计必须兼容该模型。
+
+### 数据库约束
+
+- 不用外键，跨表一致性由 RPC 负责。
 
 ### 模板定位规则
 
@@ -43,9 +46,3 @@
 - draft 输入采用全打平结构，业务字段和本地文件路径都位于顶层。
 - 不携带执行上下文字段（`workspace_root`、`trace_id`、`server_url_override`、`dry_run`）。
 - `report_language` 由 `report_maker` 自动识别并向用户确认后写入 draft。
-
-### 文件路径准源
-
-- `save_draft_report` 输入中的 `report_file`、`pdf_file`、`model_file` 仅用于上传前定位本地文件；文件路径的唯一准源是 `report_version` 表的持久化字段。
-- `snapshot_json` 如保留文件字段，只作为版本快照，不作为校验和提交的判定来源。
-- 模板文件路径以 `report_template.template_file_path` 与 `report_template.schema_file_path` 为准，不由 `report_type` 公式推导。

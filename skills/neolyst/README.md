@@ -52,6 +52,12 @@ export NEOLYST_TEST_PASSWORD="xxx"
 
 pytest 的 `conftest.py` 会将 `NEOLYST_TEST_URL` / `NEOLYST_TEST_ANON_KEY` 映射为运行时的 `NEOLYST_URL` / `NEOLYST_ANON_KEY`。
 
+## 文件路径准源
+
+- `save_draft_report` 输入中的 `report_file`、`pdf_file`、`model_file` 仅用于上传前定位本地文件；文件路径的唯一准源是 `report_version` 表的持久化字段。
+- `snapshot_json` 如保留文件字段，只作为版本快照，不作为校验和提交的判定来源。
+- 模板文件路径以 `report_template.template_file_path` 与 `report_template.schema_file_path` 为准，不由 `report_type` 公式推导。
+
 ## 模块依赖方向
 
 依赖保持单向，`connection` 是基础设施层，不依赖任何业务模块：
