@@ -39,6 +39,7 @@ neolyst skill 是 Neolyst Supabase 数据访问层,实现位置：`skills/neolys
 - `submit_report`：只提交 `report.current_version_no` 指向的当前版本；如需完整字段校验，调用方先显式调用 `validate_draft`
 - `reuse_template`：静态路径复制；主模板重新上传后需重新执行才能同步
 - `report_type` 取值和分析师列表约束见 README「业务常量」
+- 接口报错时的处理策略见 `references/interfaces.md`「错误处理策略」，不要直接把异常抛给用户
 
 ## 参考文件
 

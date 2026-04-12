@@ -212,3 +212,43 @@ rows = coverage.list_coverage_history(
 # coverage 找不到：抛出 ValueError
 # coverage 找到但没有已发布历史：返回 []
 ```
+
+## 错误处理策略
+
+调用接口遇到 ValueError 时，不要直接把异常信息抛给用户。根据场景采取以下策略：
+
+### resolve_coverage 未命中
+
+报错内容："未找到匹配的 Coverage"
+
+→ 向用户说明该 ticker + 分析师组合没有对应 coverage，询问是否需要创建。只有当用户明确确认"Coverage 已完成审批"后才调用 `create_coverage`。不要自动创建。
+
+### resolve_analyst_by_email 找不到或已停用
+
+报错内容："找不到分析师" 或 "Analyst is inactive"
+
+→ 提示用户检查邮箱拼写是否正确。如果邮箱无误但报 inactive，说明该分析师账号已被停用，需要联系管理员恢复。不要尝试用其他邮箱绕过。
+
+### validate_draft 校验失败
+
+报错内容：多条错误以"；"分隔
+
+→ 将错误逐条展示给用户，明确指出缺什么字段、哪个条件不满足。用户修正后，重新调用 `save_draft_report`（传入相同 report_id）追加新版本，再重新 validate。不要尝试自动补字段。
+
+### save_draft_report 失败
+
+常见原因：title 为 None（NOT NULL 违规）、analysts 为空、RPC 内部校验不通过。
+
+→ 将具体错误信息展示给用户，让用户补充缺失信息后重试。
+
+### submit_report 失败
+
+常见原因：报告状态不是 draft/rejected、当前没有可提交版本。
+
+→ 如果是"当前没有可提交版本"，说明需要先 `save_draft_report` 保存内容。如果是状态不对，说明该报告已提交过，无需重复操作。
+
+### 认证失败
+
+报错内容："No valid session and no credentials" 或 "Authentication failed"
+
+→ 向用户索取邮箱和密码，调用 `get_client(email=..., password=...)` 重新认证。不要尝试从其他来源猜测凭据。
