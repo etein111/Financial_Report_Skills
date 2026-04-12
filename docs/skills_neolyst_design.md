@@ -289,26 +289,3 @@ neolyst/
 `submit_report.py` 负责提交已有 draft，直接调用 Supabase 侧提交 RPC。当前版本定位、最低一致性保护、状态流转和提交审计都在 RPC 侧完成；`report` 主表当前态字段和 `current_version_no` 已由 `save_draft_report` 在保存 draft 时同步更新。
 
 模块之间的依赖关系保持单向：`draft_report` 可以调用 `connection` 和 `storage`；`submit_report` 只依赖 `connection`；`validators` 可以调用 `connection` 并直接查询相关表；`template` 可以调用 `connection` 和 `storage`；`coverage`、`analyst` 与 `storage` 只依赖 `connection`；`connection` 不依赖任何业务模块。
-
-## 4. 联调与环境
-
-### 4.1 联调测试环境
-
-- `neolyst.yaml` 仅作为运行时默认连接配置，当前仓库版本可指向 staging
-- 本地测试必须显式提供 `NEOLYST_TEST_URL`、`NEOLYST_TEST_ANON_KEY`、`NEOLYST_TEST_EMAIL`、`NEOLYST_TEST_PASSWORD`
-- pytest 启动时会把 `NEOLYST_TEST_URL` / `NEOLYST_TEST_ANON_KEY` 映射到 `NEOLYST_URL` / `NEOLYST_ANON_KEY`，确保测试不会回落到 `neolyst.yaml`
-
-## 5. 后续待做
-
-- Coverage 审批链路。当前设计在用户确认"该 Coverage 已完成审批"后允许 `create_coverage` 直接创建 Coverage；后续需要补上首次覆盖场景下的正式审批流程，并与 `resolve_coverage` / `create_coverage` 的调用时机重新收口。
-
-## 6. Coverage 历史查询
-
-- 新增 `list_coverage_history(ticker, first_analyst_email)` 能力，面向"报告尚未写完、只有 ticker 和 1作信息"的前置查询场景。
-- coverage 的定位逻辑沿用现有 `resolve_coverage`：按 `ticker + coverage_analyst.analyst_email` 命中唯一 coverage。
-- 只返回 `status = 'published'` 的历史报告；`submitted`、`draft`、`rejected` 均不纳入结果。
-- 返回字段固定为：`report_id`、`title`、`rating`、`target_price`、`published_at`。
-- 结果按 `published_at desc` 排序。
-- coverage 已找到但没有历史发布记录时返回空列表，不抛错。
-- 该读取带业务判定，按仓库约定下沉到 Supabase RPC；Python 侧只做参数整理和调用。
-- 权限设计：新增 RLS policy `report_select_published`，允许 `analyst` 角色读取所有 `status = 'published'` 的报告行，无需 SECURITY DEFINER。
