@@ -120,10 +120,10 @@ def validate_draft(client: Client, report_id: str) -> dict:
             elif not found[email]:
                 errors.append(f"分析师已停用：{email}")
 
-    if report_type == "company":
+    if report_type in ("company", "company_flash"):
         coverage_id = report.get("coverage_id")
         if not coverage_id:
-            errors.append("公司类报告（company）必须关联 coverage_id")
+            errors.append(f"公司类报告（{report_type}）必须关联 coverage_id")
         elif not _record_exists(client, "coverage", "id", coverage_id):
             errors.append(f"coverage 不存在：{coverage_id}")
 
