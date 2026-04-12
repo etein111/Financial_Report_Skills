@@ -10,11 +10,17 @@
 
 `neolyst` 对上游暴露的是稳定的业务接口，而不是底层数据库操作集合。
 
+`neolyst` 明确不负责以下事项：
+
+- 与用户对话补字段
+- 替上游做业务决策
+- 对上游暴露零散的底层数据库动作
+
 ## 2. 设计决策
 
 ### 2.1 draft 与提交契约
 
-- `save_draft_report` 的输入由 `neolyst` 定义并维护，`report_maker` 依赖该契约，而不是反过来。
+- 契约主权：`save_draft_report` 的输入由 `neolyst` 定义并维护，`report_maker` 依赖该契约，而不是反过来。
 - 模板文件位于模板 bucket，最终路径以 `report_template.template_file_path` 与 `report_template.schema_file_path` 为准，不由 `report_type` 公式推导。
 - 报告文件位于报告 bucket，持久化字段中的 Storage 路径包含 bucket 前缀 `reports/`；bucket 内相对路径固定为 `{report_id}/v{version_no}/{原始文件名}`，文件名保留调用方传入的原始文件名，版本间通过版本目录隔离。
 - `report_id` 在首次保存 draft 时为空；机器处理后的 draft 和后续人工修订版都沿用同一个 `report_id` 追加新版本。
@@ -28,6 +34,7 @@
 - 模板接口在业务语义上使用 `report_type + language` 做定位；当前数据库层只有 `report_template.id` 主键，以及 `(report_type, language)` 普通索引，没有这组字段的唯一约束。实现上应以 `{report_type}_{language}` 对应的 `report_template.id` 锁定目标记录；若出现同一 `report_type + language` 的重复记录，应视为数据异常。
 - `report_template.report_type` 就是报告类型本身，不引入单独的 `template_type` 概念。
 - 多个 `report_type` 可以共用同一套模板资产；发布时先上传一次主模板，再让其他 `report_type` 复用该主模板对应的 `template_file_path` 与 `schema_file_path`。
+- `reuse_template` 的复用是静态复制当前路径，不是动态引用；若主模板后续重新上传并变更路径，需要重新执行一次 `reuse_template` 才能同步到复用方。
 
 ### 2.3 业务逻辑落点
 
@@ -52,6 +59,27 @@
 
 - Coverage 审批链路。当前设计在用户确认"该 Coverage 已完成审批"后允许 `create_coverage` 直接创建 Coverage；后续需要补上首次覆盖场景下的正式审批流程，并与 `resolve_coverage` / `create_coverage` 的调用时机重新收口。
 
-## 4. Coverage 历史查询权限
+## 4. 权限与身份规则
 
-- 权限设计：新增 RLS policy `report_select_published`，允许 `analyst` 角色读取所有 `status = 'published'` 的报告行，无需 SECURITY DEFINER。
+### 4.1 身份边界
+
+- Neolyst Supabase 的登录身份由 `neolyst` 管理和复用。
+- 报告所有者与执行审计均以当前登录身份为准。`owner_user_id`、`report_version.created_by`、`report_status_log.action_by` 等字段遵循"谁保存/提交，系统就记谁"；`resolve_analyst_by_email` 只用于确定报告分析师身份，不用于决定执行审计用户。
+- 本 skill 不做代理执行，因为这会破坏 Neolyst 的安全性，也不符合实际业务关系。
+
+### 4.2 角色模型
+
+- 当前库的 RLS 通过 `current_app_role()` 读取 `auth.jwt().app_metadata.role`，按 `admin`、`sa`、`analyst` 做权限控制；skill 设计必须与该角色模型兼容。
+
+### 4.3 Storage 权限
+
+- Storage 使用两个独立 bucket：
+  - 模板 bucket：`templates`，存放模板资产
+  - 报告 bucket：`reports`，存放报告版本资产
+- Storage RLS 策略：
+  - `templates`：所有已认证用户可下载；仅 `admin` 角色可上传/更新/删除
+  - `reports`：`admin` 可读写全部；`analyst` 可读写自己 `draft`/`submitted` 状态的报告文件；`sa` 可读 `submitted`/`published`/`rejected` 状态的报告文件
+
+### 4.4 Coverage 历史查询权限
+
+- 新增 RLS policy `report_select_published`，允许 `analyst` 角色读取所有 `status = 'published'` 的报告行，无需 SECURITY DEFINER。

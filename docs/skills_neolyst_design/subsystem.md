@@ -4,26 +4,19 @@ neolyst 子系统的实现细节与接口契约。整体规则见 [global.md](./
 
 ## 1. 设计决策
 
-### 1.1 身份与会话策略（原 §2.4）
+### 1.1 身份与会话实现（原 §2.4）
 
-- Neolyst Supabase 的登录身份由 `neolyst` 管理和复用，`save_draft_report`、`validate_draft` 与 `submit_report` 的相关读写都使用该身份。
+身份与权限全局规则见 [global.md §4](./global.md)。本节记录实现细节。
+
 - 使用 `email + password` 登录。账号和密码保存在 skill 根目录（`skills/neolyst/`）的 `user.json`；登录态保存在同目录的 `session.json`。两者都不提交到版本库。
 - `connection.py` 启动时先尝试用 `session.json` 中的 `access_token` + `refresh_token` 恢复 session；若已过期或失效，则回退到 `user.json` 中的 `email + password` 重新登录，并只回写 `session.json`。
 - `user.json` 不存在时，调用方需向用户索取邮箱和密码，使用 `get_client(email=..., password=...)` 完成首次登录。成功后自动写入 `user.json` 与 `session.json`，后续无需再次手动输入。
-- 当前库的 RLS 通过 `current_app_role()` 读取 `auth.jwt().app_metadata.role`，按 `admin`、`sa`、`analyst` 做权限控制；skill 设计必须与该角色模型兼容。
-- 报告所有者与执行审计均以当前登录身份为准。`owner_user_id`、`report_version.created_by`、`report_status_log.action_by` 等字段遵循"谁保存/提交，系统就记谁"；`resolve_analyst_by_email` 只用于确定报告分析师身份，不用于决定执行审计用户。
-- 本 skill 不做代理执行，因为这会破坏 Neolyst 的安全性，也不符合实际业务关系。
 
 ### 1.2 技术访问方式（原 §2.6）
 
 - 本 skill 使用 Python `supabase-py` 与 Neolyst Supabase 交互，并通过 `uv` 管理依赖与执行环境。
 - 数据库结构真相以本地 Supabase 实例和 `supabase/migrations/*.sql` 为准；本设计文档需要与它们保持同步。
-- Storage 使用两个独立 bucket：
-  - 模板 bucket：`templates`，存放模板资产
-  - 报告 bucket：`reports`，存放报告版本资产
-- Storage RLS 策略：
-  - `templates`：所有已认证用户可下载；仅 `admin` 角色可上传/更新/删除
-  - `reports`：`admin` 可读写全部；`analyst` 可读写自己 `draft`/`submitted` 状态的报告文件；`sa` 可读 `submitted`/`published`/`rejected` 状态的报告文件
+- Storage 全局规则（bucket 与 RLS）见 [global.md §4.3](./global.md)。本节记录路径实现细节。
 - 模板 bucket 路径规则：`templates/{report_type}/{language}/template.docx` 和 `templates/{report_type}/{language}/schema.yaml`。`template_file_path` / `schema_file_path` 字段存储含 bucket 前缀的完整路径；路径由 Supabase RPC `get_template_storage_paths` 统一生成，`storage.py` 只负责上传/下载。
 - 报告 bucket 路径规则：`reports/{report_id}/v{version_no}/{原始文件名}`。路径由 `draft_report.py` 在调用 draft 保存 RPC 前生成，文件名保留调用方传入的原始文件名（`Path(local_path).name`），版本间文件存储在独立目录下互不覆盖。
 - `resolve_template(client, report_type, language, dest_dir=".")` 将模板文件下载到 `dest_dir/templates/{report_type}/{language}/` 下，文件名与 bucket 中一致（`template.docx`、`schema.yaml`）。
@@ -35,17 +28,7 @@ neolyst 子系统的实现细节与接口契约。整体规则见 [global.md](./
 - `neolyst.yaml` 是运行时默认配置，当前仓库版本可以指向 staging，不能视为本地测试默认环境。
 - 本地测试必须通过 `NEOLYST_URL` 和 `NEOLYST_ANON_KEY` 环境变量覆盖 yaml 中的值；测试入口再由 `NEOLYST_TEST_URL` / `NEOLYST_TEST_ANON_KEY` 映射过去，禁止回落到 yaml 默认值。
 
-### 1.4 调用边界（原 §1 部分内容 + §2.1 部分内容）
-
-`neolyst` 明确不负责以下事项：
-
-- 与用户对话补字段
-- 替上游做业务决策
-- 对上游暴露零散的底层数据库动作
-
-不暴露 `upload_file` 之类的底层中间接口。
-
-### 1.5 接口清单（原 §2.1）
+### 1.4 接口清单（原 §2.1）
 
 - `neolyst` 对外只暴露业务接口：`resolve_analyst_by_email`、`resolve_template`、`upsert_template`、`reuse_template`、`resolve_coverage`、`create_coverage`、`list_coverage_history`、`save_draft_report`、`validate_draft`、`submit_report`。
 - `resolve_analyst_by_email` 校验并返回标准化后的 analyst 记录，业务主键为 `analyst_email`。
@@ -58,7 +41,7 @@ neolyst 子系统的实现细节与接口契约。整体规则见 [global.md](./
 - `validate_draft` 校验当前 draft 的当前版本是否可提交。
 - `submit_report` 提交当前 draft 的当前版本。
 
-### 1.6 接口契约（原 §2.2 部分内容 + §2.3 部分内容 + §2.5 部分内容）
+### 1.5 接口契约（原 §2.2 部分内容 + §2.3 部分内容 + §2.5 部分内容）
 
 - draft 输入采用全打平结构，业务字段和本地文件路径都位于顶层。
 - draft 输入不携带执行上下文字段，例如 `workspace_root`、`trace_id`、`server_url_override`、`dry_run`。
@@ -70,9 +53,8 @@ neolyst 子系统的实现细节与接口契约。整体规则见 [global.md](./
 - `save_draft_report` 成功时至少返回 `report_id` 和 `version_no`。
 - `save_draft_report` 不要求当前版本已经满足最终提交条件。
 - `submit_report` 仅负责将已有 draft 推进到 `submitted`。
-- `reuse_template` 的复用是静态复制当前路径，不是动态引用；若主模板后续重新上传并变更路径，需要重新执行一次 `reuse_template` 才能同步到复用方。
 
-### 1.7 校验与错误语义（原 §2.9）
+### 1.6 校验与错误语义（原 §2.9）
 
 - 提交前校验由 `neolyst` 负责，`validate_draft(report_id)` 用于校验当前 draft 的当前版本是否满足提交条件。
 - `reuse_template(report_type, language, same_as_report_type)` 约束如下：
@@ -85,7 +67,7 @@ neolyst 子系统的实现细节与接口契约。整体规则见 [global.md](./
 - `create_coverage` 创建成功时返回新的 `coverage_id`；创建失败时直接抛出具体错误。
 - `save_draft_report`、`validate_draft` 和 `submit_report` 在失败时都直接抛出具体错误；错误信息必须足够明确，让上游 LLM 或人工据此补字段、重新确认或中止流程。
 
-### 1.8 Coverage 历史查询（原 §6 部分内容）
+### 1.7 Coverage 历史查询（原 §6 部分内容）
 
 - 新增 `list_coverage_history(ticker, first_analyst_email)` 能力，面向"报告尚未写完、只有 ticker 和 1作信息"的前置查询场景。
 - coverage 的定位逻辑沿用现有 `resolve_coverage`：按 `ticker + coverage_analyst.analyst_email` 命中唯一 coverage。
