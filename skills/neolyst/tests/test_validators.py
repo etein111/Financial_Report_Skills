@@ -98,6 +98,38 @@ class TestValidateDraftHappyPath:
         assert result["version_no"] == valid_report["version_no"]
 
 
+# ── non-company types ────────────────────────────────────────────────
+
+class TestValidateDraftNonCompanyTypes:
+    def test_sector_type_passes_without_coverage_id(self, neolyst_client, tmp_path):
+        """sector 类型不要求 coverage_id，校验通过。"""
+        from skills.neolyst.scripts.validators import validate_draft
+
+        result = _save_draft(neolyst_client, tmp_path, {
+            "report_type": "sector",
+            "coverage_id": None,
+        })
+        try:
+            v = validate_draft(neolyst_client, result["report_id"])
+            assert v["report_id"] == result["report_id"]
+        finally:
+            _cleanup(neolyst_client, result["report_id"])
+
+    def test_macro_type_passes_without_coverage_id(self, neolyst_client, tmp_path):
+        """macro 类型不要求 coverage_id，校验通过。"""
+        from skills.neolyst.scripts.validators import validate_draft
+
+        result = _save_draft(neolyst_client, tmp_path, {
+            "report_type": "macro",
+            "coverage_id": None,
+        })
+        try:
+            v = validate_draft(neolyst_client, result["report_id"])
+            assert v["report_id"] == result["report_id"]
+        finally:
+            _cleanup(neolyst_client, result["report_id"])
+
+
 # ── field errors ─────────────────────────────────────────────────────
 
 class TestValidateDraftFieldErrors:

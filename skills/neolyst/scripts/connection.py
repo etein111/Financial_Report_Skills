@@ -14,12 +14,15 @@ connection.py — Neolyst Supabase 认证与 client 管理。
 """
 
 import json
+import logging
 import os
 import time
 from pathlib import Path
 
 import yaml
 from supabase import create_client, Client
+
+logger = logging.getLogger(__name__)
 
 # skill 根目录（skills/neolyst/），neolyst.yaml 和 user.json 默认存放于此
 SKILL_ROOT = Path(__file__).parent.parent
@@ -149,15 +152,15 @@ def get_client(
                 client.auth.set_session(session_data["access_token"], session_data["refresh_token"])
                 client.auth.get_user()  # 验证 token 对当前服务器是否有效
                 return client
-            except Exception:
-                pass  # token 对当前服务器无效，继续尝试 refresh/re-login
+            except Exception as exc:
+                logger.debug("set_session 失败，将尝试 refresh: %s", exc)
         # token 过期或无效，尝试 refresh
         try:
             resp = client.auth.refresh_session(session_data["refresh_token"])
             _save_session(neolyst_dir, _extract_session_data(resp.session))
             return client
-        except Exception:
-            pass  # refresh 失败，继续尝试 password 登录
+        except Exception as exc:
+            logger.debug("refresh_session 失败，将尝试密码登录: %s", exc)
 
     _email = email or (user_data.get("email") if user_data else None)
     _password = password or (user_data.get("password") if user_data else None)

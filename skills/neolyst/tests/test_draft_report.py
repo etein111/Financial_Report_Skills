@@ -193,6 +193,70 @@ class TestSaveDraftSecondVersion:
         assert "report.pdf" in names
 
 
+# ── model_file upload ──────────────────────────────────────────────────
+
+class TestSaveDraftWithModelFile:
+    def test_model_file_uploaded_and_recorded(self, neolyst_client, tmp_path):
+        """传 model_file 后 storage 有文件、report_version.model_file_path 非空。"""
+        from skills.neolyst.scripts import draft_report
+
+        word = tmp_path / "report.docx"
+        pdf = tmp_path / "report.pdf"
+        model = tmp_path / "model.xlsx"
+        word.write_bytes(b"fake docx")
+        pdf.write_bytes(b"fake pdf")
+        model.write_bytes(b"fake xlsx")
+
+        result = draft_report.save_draft_report(neolyst_client, {
+            "report_id": None,
+            "title": "Model File Test",
+            "report_type": "company",
+            "report_language": "en",
+            "analysts": [{"analyst_email": TEST_ANALYST, "author_order": 1}],
+            "ticker": None,
+            "coverage_id": None,
+            "rating": None,
+            "target_price": None,
+            "region_code": None,
+            "sector_id": None,
+            "contact_person": TEST_ANALYST,
+            "investment_thesis": "test",
+            "report_file": str(word),
+            "pdf_file": str(pdf),
+            "model_file": str(model),
+        })
+        try:
+            # report_version 中 model_file_path 非空
+            resp = (
+                neolyst_client.table("report_version")
+                .select("model_file_path")
+                .eq("report_id", result["report_id"])
+                .eq("version_no", 1)
+                .execute()
+            )
+            assert resp.data
+            model_path = resp.data[0]["model_file_path"]
+            assert model_path is not None
+            assert "/v1/model.xlsx" in model_path
+
+            # storage 中文件存在
+            report_id = result["report_id"]
+            files = neolyst_client.storage.from_("reports").list(f"{report_id}/v1")
+            names = [f["name"] for f in files]
+            assert "model.xlsx" in names
+        finally:
+            neolyst_client.table("report").delete().eq("id", result["report_id"]).execute()
+            report_id = result["report_id"]
+            try:
+                neolyst_client.storage.from_("reports").remove([
+                    f"{report_id}/v1/report.docx",
+                    f"{report_id}/v1/report.pdf",
+                    f"{report_id}/v1/model.xlsx",
+                ])
+            except Exception:
+                pass
+
+
 # ── error cases ──────────────────────────────────────────────────────
 
 class TestSaveDraftErrors:

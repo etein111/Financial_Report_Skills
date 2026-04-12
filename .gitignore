@@ -227,7 +227,5 @@ skills/neolyst/tests/output/
 # Neolyst 本地凭据和 session（不提交）
 skills/neolyst/user.json
 skills/neolyst/session.json
-skills/neolyst/tests/test_config.json
-
 # opencode 本地配置
 .opencode/
