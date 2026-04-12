@@ -8,7 +8,7 @@ validators.py — Neolyst draft 报告提交前校验。
 4. 必填字段：title / report_type / report_language / investment_thesis / contact_person
 5. 至少一个分析师；contact_person 在分析师列表中（大小写不敏感）
 6. 每个分析师在 analyst 表中存在且 is_active
-7. company 类型：coverage_id 必填且存在
+7. company / company_flash 类型：coverage_id 必填且存在
 8. sector_id / region_code：有值时验证存在性
 
 业务逻辑全部在 Python 侧实现，仅做 SELECT 查询，不调用 RPC。

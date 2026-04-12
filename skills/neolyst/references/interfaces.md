@@ -170,7 +170,7 @@ result = validate_draft(client, report_id="uuid")
 - 必填字段：title / report_type / report_language / investment_thesis / contact_person
 - 分析师列表非空，且 contact_person 在分析师列表中（大小写不敏感）
 - 每个分析师存在且 is_active
-- company 类型：coverage_id 必填且存在
+- company / company_flash 类型：coverage_id 必填且存在
 - sector_id / region_code 有值时验证存在性
 
 ## 9. submit_report
