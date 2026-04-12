@@ -10,6 +10,8 @@ submit_report.py — Neolyst 报告提交接口。
 
 from supabase import Client
 
+from . import rpc
+
 
 def submit_report(client: Client, report_id: str) -> dict:
     """
@@ -25,14 +27,9 @@ def submit_report(client: Client, report_id: str) -> dict:
     Raises:
         ValueError: RPC 调用失败
     """
-    try:
-        resp = client.rpc("submit_report", {
-            "p_report_id": report_id,
-        }).execute()
-    except Exception as e:
-        raise ValueError(str(e)) from e
-
-    row = resp.data[0]
+    row = rpc.single_row(rpc.call_rpc(client, "submit_report", {
+        "p_report_id": report_id,
+    }))
     return {
         "report_id": str(row["report_id"]),
         "version_no": row["version_no"],

@@ -6,7 +6,8 @@ template.py — Neolyst 模板管理接口。
 
 from pathlib import Path
 from supabase import Client
-from skills.neolyst.scripts import storage
+
+from . import rpc, storage
 
 
 def upsert_template(
@@ -27,15 +28,13 @@ def upsert_template(
     Returns:
         None。幂等操作，多次调用安全。
     """
-    resp = client.rpc("get_template_storage_paths", {
-        "p_report_type": report_type,
-        "p_language": language,
-    }).execute()
-
-    if not resp.data:
-        raise ValueError(f"get_template_storage_paths returned no data for {report_type}/{language}")
-
-    paths = resp.data[0]
+    paths = rpc.single_row(
+        rpc.call_rpc(client, "get_template_storage_paths", {
+            "p_report_type": report_type,
+            "p_language": language,
+        }),
+        f"get_template_storage_paths returned no data for {report_type}/{language}",
+    )
     tmpl_storage_path = paths["template_file_path"]
     schema_storage_path = paths["schema_file_path"]
 
@@ -44,10 +43,10 @@ def upsert_template(
     if schema_local_path:
         storage.upload(client, schema_storage_path, schema_local_path)
 
-    client.rpc("upsert_template_record", {
+    rpc.call_rpc(client, "upsert_template_record", {
         "p_report_type": report_type,
         "p_language": language,
-    }).execute()
+    })
 
 
 def reuse_template(
@@ -62,14 +61,11 @@ def reuse_template(
     Raises:
         ValueError: 源模板未发布、report_type 与 same_as_report_type 相同
     """
-    try:
-        client.rpc("reuse_template", {
-            "p_report_type": report_type,
-            "p_language": language,
-            "p_same_as_report_type": same_as_report_type,
-        }).execute()
-    except Exception as e:
-        raise ValueError(str(e)) from e
+    rpc.call_rpc(client, "reuse_template", {
+        "p_report_type": report_type,
+        "p_language": language,
+        "p_same_as_report_type": same_as_report_type,
+    })
 
 
 def resolve_template(
@@ -91,7 +87,12 @@ def resolve_template(
         ValueError: 模板记录不存在或 template_file_path 为空（未发布）
     """
     record_id = f"{report_type}_{language}"
-    resp = client.table("report_template").select("*").eq("id", record_id).execute()
+    resp = (
+        client.table("report_template")
+        .select("template_file_path, schema_file_path")
+        .eq("id", record_id)
+        .execute()
+    )
 
     if not resp.data:
         raise ValueError(f"Template not found: {record_id!r}")
@@ -101,26 +102,23 @@ def resolve_template(
         raise ValueError(f"Template not published (empty path): {record_id!r}")
 
     local_dir = Path(dest_dir) / "templates" / report_type / language
+    template_local = str(local_dir / "template.docx")
 
     storage.download(
         client,
         record["template_file_path"],
-        str(local_dir / "template.docx"),
+        template_local,
     )
 
     schema_local = None
     if record.get("schema_file_path"):
         try:
-            schema_local = local_dir / "schema.yaml"
-            storage.download(
-                client,
-                record["schema_file_path"],
-                str(schema_local),
-            )
-        except Exception:
+            schema_local = str(local_dir / "schema.yaml")
+            storage.download(client, record["schema_file_path"], schema_local)
+        except (FileNotFoundError, ValueError):
             schema_local = None
 
     return {
-        "template_local_path": str(local_dir / "template.docx"),
-        "schema_local_path": str(schema_local) if schema_local else None,
+        "template_local_path": template_local,
+        "schema_local_path": schema_local,
     }

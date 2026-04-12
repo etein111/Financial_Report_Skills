@@ -6,6 +6,8 @@ coverage.py — Neolyst coverage 解析与创建接口。
 
 from supabase import Client
 
+from . import rpc
+
 
 def resolve_coverage(client: Client, ticker: str, first_analyst_email: str) -> str:
     """
@@ -22,15 +24,11 @@ def resolve_coverage(client: Client, ticker: str, first_analyst_email: str) -> s
     Raises:
         ValueError: 未命中（提示创建 Coverage）或数据异常
     """
-    try:
-        resp = client.rpc("resolve_coverage", {
-            "p_ticker": ticker,
-            "p_analyst_email": first_analyst_email,
-        }).execute()
-    except Exception as e:
-        raise ValueError(str(e)) from e
-
-    return str(resp.data[0]["coverage_id"])
+    row = rpc.single_row(rpc.call_rpc(client, "resolve_coverage", {
+        "p_ticker": ticker,
+        "p_analyst_email": first_analyst_email,
+    }))
+    return str(row["coverage_id"])
 
 
 def create_coverage(
@@ -65,21 +63,17 @@ def create_coverage(
     Raises:
         ValueError: ticker 或 isin 已存在等创建失败场景
     """
-    try:
-        resp = client.rpc("create_coverage", {
-            "p_ticker": ticker,
-            "p_english_name": english_name,
-            "p_sector_id": sector_id,
-            "p_isin": isin,
-            "p_country_of_domicile": country_of_domicile,
-            "p_analysts": analysts,
-            "p_chinese_name": chinese_name,
-            "p_traditional_chinese": traditional_chinese,
-        }).execute()
-    except Exception as e:
-        raise ValueError(str(e)) from e
-
-    return str(resp.data[0]["coverage_id"])
+    row = rpc.single_row(rpc.call_rpc(client, "create_coverage", {
+        "p_ticker": ticker,
+        "p_english_name": english_name,
+        "p_sector_id": sector_id,
+        "p_isin": isin,
+        "p_country_of_domicile": country_of_domicile,
+        "p_analysts": analysts,
+        "p_chinese_name": chinese_name,
+        "p_traditional_chinese": traditional_chinese,
+    }))
+    return str(row["coverage_id"])
 
 
 def list_coverage_history(
@@ -97,14 +91,10 @@ def list_coverage_history(
     Raises:
         ValueError: coverage 未找到
     """
-    try:
-        resp = client.rpc("list_coverage_history", {
-            "p_ticker": ticker,
-            "p_analyst_email": first_analyst_email,
-        }).execute()
-    except Exception as e:
-        raise ValueError(str(e)) from e
-
+    resp = rpc.call_rpc(client, "list_coverage_history", {
+        "p_ticker": ticker,
+        "p_analyst_email": first_analyst_email,
+    })
     return [
         {
             "report_id": str(row["report_id"]),

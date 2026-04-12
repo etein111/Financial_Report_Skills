@@ -11,10 +11,10 @@ from supabase import Client
 def upload(client: Client, storage_path: str, local_path: str) -> None:
     """上传本地文件到 Storage，已存在时覆盖。storage_path 格式：{bucket}/{path}。"""
     bucket, path = _split(storage_path)
-    local = Path(local_path)
-    if not local.exists():
+    try:
+        data = Path(local_path).read_bytes()
+    except FileNotFoundError:
         raise FileNotFoundError(f"Local file not found: {local_path}")
-    data = local.read_bytes()
     try:
         client.storage.from_(bucket).upload(path, data)
     except Exception as e:
