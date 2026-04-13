@@ -120,9 +120,24 @@
       "Bash(\".venv/Scripts/python\" -c \"\nfrom docx import Document\ndoc = Document\\(''templates/company/template.docx''\\)\nprint\\(''=== Tables ===''\\)\nfor i, table in enumerate\\(doc.tables\\):\n    print\\(f''Table {i}:''\\)\n    for j, row in enumerate\\(table.rows\\):\n        row_texts = [cell.text[:40] for cell in row.cells]\n        print\\(f''  Row {j}: {row_texts}''\\)\n\")",
       "Bash(\".venv/Scripts/python\" -c \"\nfrom docx import Document\n\ndoc = Document\\(''templates/company/template.docx''\\)\n\n# 搜索所有包含 chart 或 placeholder 的内容\nfor i, para in enumerate\\(doc.paragraphs\\):\n    text = para.text.strip\\(\\)\n    if text and \\(''chart'' in text.lower\\(\\) or ''{{'' in text\\):\n        print\\(f''Para {i}: {repr\\(text\\)}''\\)\n\nfor i, table in enumerate\\(doc.tables\\):\n    for j, row in enumerate\\(table.rows\\):\n        for k, cell in enumerate\\(row.cells\\):\n            text = cell.text.strip\\(\\)\n            if text and \\(''chart'' in text.lower\\(\\) or ''{{'' in text\\):\n                print\\(f''Table {i}, Row {j}, Cell {k}: {repr\\(text[:50]\\)}''\\)\n\")",
       "Bash(\".venv/Scripts/python\" scripts/charts/recommendation_chart.py)",
-      "Skill(report_maker)"
+      "Skill(report_maker)",
+      "Bash(rm -rf ~/.claude/plugins/cache/anthropic-agent-skills/claude-api/12ab35c2eb56)",
+      "Bash(rm -rf ~/.claude/plugins/cache/anthropic-agent-skills/example-skills/12ab35c2eb56)",
+      "Bash(rm -rf ~/.claude/plugins/cache/claude-plugins-official/context7/unknown)",
+      "Bash(rm -rf ~/.claude/plugins/cache/claude-plugins-official/frontend-design/unknown)",
+      "Bash(rm -rf ~/.claude/plugins/cache/superpowers-marketplace/claude-session-driver/1.0.1)",
+      "Bash(rm -rf ~/.claude/plugins/cache/superpowers-marketplace/superpowers-dev/5.0.6)",
+      "Bash(rm -rf ~/.claude/plugins/cache/superpowers-marketplace/superpowers-lab/0.4.0)",
+      "Bash(rm -rf ~/.claude/plugins/cache/claude-plugins-official/superpowers/5.0.7)",
+      "Bash(rmdir ~/.claude/plugins/cache/claude-plugins-official/superpowers)",
+      "Bash(rmdir ~/.claude/plugins/cache/zai-coding-plugins)",
+      "Bash(rmdir ~/.claude/plugins/cache/anthropic-agent-skills/claude-api)",
+      "Bash(rmdir ~/.claude/plugins/cache/anthropic-agent-skills/example-skills)",
+      "Bash(rmdir ~/.claude/plugins/cache/superpowers-marketplace/superpowers)",
+      "Bash(rm -rf ~/.claude/plugins/cache/claude-plugins-official/frontend-design)",
+      "Bash(rmdir ~/.claude/plugins/cache/claude-plugins-official)"
     ]
   },
-  "prefersReducedMotion": true,
-  "outputStyle": "Explanatory"
+  "outputStyle": "Explanatory",
+  "prefersReducedMotion": true
 }
