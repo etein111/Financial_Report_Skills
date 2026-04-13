@@ -1,11 +1,10 @@
 # 规范索引
 
-- 当涉及代码实现、重构、调试、测试或代码评审时，查阅 [principles/CODING.md](./principles/CODING.md)。
-- 当涉及 Skill 开发、Skill 目录结构、测试目录组织或 Skill 交付形式时，查阅 [principles/SKILL.md](./principles/SKILL.md)。
-- 当涉及业务逻辑落点、Python skill 与 Supabase 的职责边界、RPC、函数、触发器，或”直接查表 / 走 RPC”的边界判断时，查阅 [principles/ARCHITECTURE.md](./principles/ARCHITECTURE.md)。
-- 当涉及 Supabase 迁移文件、schema 变更、环境管理或本地开发操作时，查阅 [principles/SUPABASE.md](./principles/SUPABASE.md)。
-- 当涉及文档写作、说明撰写、结构整理、章节拆分、表述压缩、信息组织，或 AGENTS.md 的文案整理时，查阅 [principles/WRITING.md](./principles/WRITING.md)。
-- 当涉及 AGENTS.md、提示词、规则编写、触发条件、规则整理或代理协作约束时，查阅 [principles/AGENTS_PROMPT.md](./principles/AGENTS_PROMPT.md)。
+- 代码实现、测试、调试、代码评审 → [CODING.md](./principles/CODING.md)
+- Skill 开发 → [SKILL.md](./principles/SKILL.md)
+- 业务逻辑边界、RPC、Supabase 职责划分 → [ARCHITECTURE.md](./principles/ARCHITECTURE.md)
+- Supabase 迁移、schema → [SUPABASE.md](./principles/SUPABASE.md)
+- 规则编写、提示词、触发条件 → [AGENTS_PROMPT.md](./principles/AGENTS_PROMPT.md)
 
 # 交互规范
 
@@ -14,6 +13,7 @@
 - 默认使用中文与用户沟通；产出的文档、说明、计划与总结默认使用中文。
 - 仅在用户明确要求时切换语言。
 - 语言风格必须简洁明确、主动具体、客观克制；避免浮夸修饰、空洞大词、模糊表述和情绪化表达。
+- 文档结构遵循正交性（章节独立，互不影响）和 MECE（分类不重叠、不遗漏）。
 - 向用户提问时，不能只抛问题；必须同时给出推荐方案、关键取舍，以及用户未明确回复时的默认处理方式。
 
 ## 清单格式
@@ -52,6 +52,8 @@
 - 写任何实现计划之前，特别是工作范围不清时，必须先向用户提出不确定的问题，等待确认后再动笔。
 - 当用户确认内容与现有文档不一致时，必须及时补充相关文档；补充内容先追加在文档末尾，后续再统一整理。
 - 新建或修改文档时，优先使用 `doc-coauthoring` skill 进行协作写作。
+- 创建或修改 SKILL.md 时必须调用 skill-creator
+- Python 项目的依赖管理、环境同步和执行流程优先使用 `uv`
 
 # 目录约束
 
