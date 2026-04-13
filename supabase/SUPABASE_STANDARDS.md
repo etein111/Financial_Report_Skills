@@ -1,129 +1,99 @@
-# Supabase 目录与部署约定
+# Supabase 开发规范
 
-## 1. 环境和目录结构约定
+## 环境
 
-本项目固定使用三套环境：
+| 环境 | 运行方式 | 用途 |
+|------|----------|------|
+| local | 本地 Docker（`supabase start`） | 开发与测试 |
+| staging | Zeabur 上的 PostgreSQL（裸机） | 演示与集成测试 |
+| production | 暂未部署 | — |
 
-- `local`：本地 Docker 开发环境
-- `staging`：测试/演示环境
-- `production`：正式环境
-
-统一原则：
-
-- 所有数据库结构变更只在本地完成
-- 所有 schema 变更必须进入 `supabase/migrations/`
-- 远端环境只通过 migration 同步，不直接在 Dashboard 改 schema
-- 当前 Supabase 本地项目名固定为 `project_id = "neolyst"`
-
-仓库内的标准目录：
+## 目录结构
 
 ```text
 supabase/
-├── config.toml
-├── migrations/
-├── seed.sql
+├── config.toml              # 本地 Supabase 服务配置
+├── seed.sql                 # 种子数据（db reset 时自动加载）
+├── staging.json             # Zeabur staging DB 连接信息
+├── migrations/              # Schema 迁移文件（唯一事实源）
+├── snippets/                # SQL 片段（手工执行，不自动加载）
 ├── tests/
-│   └── test_data.sql
-├── push_staging.py
-└── SUPABASE_STANDARDS.md
+│   └── test_data.sql        # 测试数据（手工导入）
+└── SUPABASE_STANDARDS.md    # 本文件
 ```
 
-目录用途：
+## 本地开发
 
-- `migrations/`：数据库结构的唯一事实源
-- `seed.sql`：默认初始化数据入口，随 `supabase db reset` 和 `db push --include-seed` 执行
-- `tests/test_data.sql`：测试数据，不默认自动执行
-- `push_staging.py`：测试环境一键推送脚本
+### 依赖
 
-## 2. 安装本地开发环境
-
-Windows 用户注意：
-
-- 不要使用 Docker Desktop 作为 Supabase 本地开发环境
-- Docker Desktop 走 Windows 网络栈，代理和翻墙链路更复杂，很多翻墙软件对它不起作用
-- Supabase 依赖的部分镜像托管在美国，使用 Docker Desktop 拉取时经常失败
-- 更稳的做法是在 WSL 中安装 Docker Engine，并在 WSL 内运行 `supabase start`
-
-本地开发依赖：
-
-- Docker
+- Docker（WSL 内安装 Docker Engine，不要用 Docker Desktop）
 - Supabase CLI
 
-初始化和启动：
+### 常用命令
 
 ```bash
-supabase start
+supabase start                        # 启动本地环境
+supabase db reset                     # 重建数据库（重放全部 migration + seed.sql）
+supabase migration new <描述>          # 创建新迁移文件（自动生成时间戳）
 ```
 
-常用命令：
+### 创建迁移文件
+
+**必须用 `supabase migration new`**，让 CLI 自动生成时间戳。不要手动创建迁移文件。
 
 ```bash
-supabase db reset
-supabase db diff -f <migration_name>
+supabase migration new add_user_table
+# 生成: supabase/migrations/20260413140000_add_user_table.sql
 ```
 
-说明：
+迁移文件规则（详见 [principles/ARCHITECTURE.md](../principles/ARCHITECTURE.md)）：
 
-- `supabase start` 用于启动本地开发环境
-- `supabase db reset` 用于重建本地数据库并验证 migration 可完整回放
-- `supabase db diff -f <migration_name>` 用于从本地改动生成新的 migration
+- 只追加，不修改已提交的迁移文件
+- `create or replace` 覆盖函数时以数据库当前版本为准，不从旧迁移复制文本
 
-本地开发的推荐流程：
-
-1. 在本地调整数据库结构
-2. 生成 migration
-3. 人工检查 SQL
-4. 执行 `supabase db reset`
-5. 提交代码
-
-## 3. 部署 Staging 环境
-
-推荐流程：
+### 导入测试数据
 
 ```bash
-supabase link --project-ref <STAGING_PROJECT_REF>
-supabase migration list --linked
-supabase db push --include-seed
+psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" \
+     -f supabase/tests/test_data.sql
 ```
 
-说明：
+## Staging 部署
 
-- 先执行 `migration list --linked`，确认远端没有漂移
-- 再执行 `db push --include-seed`，同步 migration 和默认初始化数据
+Staging 是 Zeabur 上的 PostgreSQL 实例，通过自定义脚本推送迁移。
 
-如果当前测试环境沿用仓库内置脚本，也可以直接运行：
+### 推送命令
 
 ```bash
-python supabase/push_staging.py
+python3 skills/dev_ops/scripts/push_zeabur_com.py
 ```
 
-这个脚本只适用于当前测试环境，不适用于 production。
+### 工作原理
 
-## 4. 部署 Production 环境
+1. 从 `supabase/staging.json` 读取连接信息
+2. 直连远端 PostgreSQL（`psql`），不经过 Supabase CLI
+3. 按 `supabase/migrations/*.sql` 文件名排序逐个应用
+4. 跳过已应用的迁移（通过 `supabase_migrations.schema_migrations` 表追踪）
 
-Production 的流程与 staging 相同，但必须使用 production 自己的项目配置和凭证。
+### staging.json 格式
 
-推荐流程：
-
-```bash
-supabase link --project-ref <PRODUCTION_PROJECT_REF>
-supabase migration list --linked
-supabase db push --include-seed
+```json
+{
+  "host": "IP 地址",
+  "port": "端口号",
+  "user": "supabase_admin",
+  "password": "密码",
+  "dbname": "postgres"
+}
 ```
 
-要求：
+## Production 部署
 
-- 不复用 staging 的 `project-ref`
-- 不复用 staging 的访问令牌和数据库密码
-- 推送前先确认本地 migration 与远端状态一致
+暂未部署。待生产环境确定后，建议通过 `supabase link` + `supabase db push` 管理，不复用 staging 推送脚本。
 
-如需生产环境自动化，建议单独维护 production 专用脚本或 CI 流程，不直接复用测试脚本。
+## 参考文档
 
-## 5. 参考文档
-
-- [Managing Environments](https://supabase.com/docs/guides/deployment/managing-environments)
-- [Local Development](https://supabase.com/docs/guides/local-development)
-- [Seeding Your Database](https://supabase.com/docs/guides/local-development/seeding-your-database)
-- [CLI Reference](https://supabase.com/docs/guides/cli)
+- [Supabase Local Development](https://supabase.com/docs/guides/local-development)
 - [Database Migrations](https://supabase.com/docs/guides/database/migrations)
-- [Production Readiness](https://supabase.com/docs/guides/deployment/production-readiness)
+- [Managing Environments](https://supabase.com/docs/guides/deployment/managing-environments)
+- [CLI Reference](https://supabase.com/docs/guides/cli)
