@@ -178,21 +178,17 @@
 
 ## 迁移文件规划
 
-每个迁移文件独立、可回滚：
+单个迁移文件完成所有变更：
 
-1. **`xxx_115_report_analyst_fields.sql`**
-   - `report` 表新增 `lead_analyst_email`、`analyst_emails`、`rejection_reason` 字段
-   - 更新 `init_draft_report` RPC
-   - 更新 `validate_report` RPC
+**`xxx_115_p1_schema_redesign.sql`**
 
-2. **`xxx_116_drop_report_analyst.sql`**
-   - 删除 `report_analyst` 表（含依赖的 policy、触发器、索引）
-   - 依赖 115 先执行
-
-3. **`xxx_117_status_log_metadata.sql`**
-   - `report_status_log` 新增 `metadata` 字段
-   - 新增 AFTER UPDATE 触发器函数及触发器
-   - 更新 `submit_report` RPC（删除手动 INSERT）
-   - 更新 `retract_report` RPC（删除手动 INSERT）
-
-迁移顺序：115 → 116 → 117，互不依赖可单独回滚。
+内部执行顺序：
+1. `report` 表新增 `lead_analyst_email`、`analyst_emails`、`rejection_reason` 字段
+2. `report_status_log` 表新增 `metadata` 字段
+3. 更新 `init_draft_report` RPC（写新字段，删除 report_analyst 操作）
+4. 更新 `validate_report` RPC（从 analyst_emails 读取）
+5. 新增 AFTER UPDATE 触发器函数及触发器
+6. 更新 `submit_report` RPC（删除手动 INSERT report_status_log）
+7. 更新 `retract_report` RPC（删除手动 INSERT report_status_log）
+8. 删除 `report_analyst` 表依赖（RLS policy、触发器）
+9. 删除 `report_analyst` 表
