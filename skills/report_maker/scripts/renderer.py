@@ -3088,6 +3088,10 @@ def render_report(
             _restore_jinja_in_charts(output_path, escaped_chart_files)
             print(f"  已恢复 {len(escaped_chart_files)} 个图表文件的原始内容")
 
+        # 9.5 字体约束：中文使用 GB2312，英文使用 Calibri
+        _apply_font_constraints(output_path)
+        print(f"  已应用字体约束：中文=GB2312, 英文=Calibri")
+
         # 10. 清理临时文件
         temp_path.unlink(missing_ok=True)
         fixed_template_path.unlink(missing_ok=True)
@@ -4364,3 +4368,60 @@ def expand_analyst_certification(docx_path: str, elements: Dict[str, Any]) -> in
         if os.path.exists(temp_dir):
             shutil.rmtree(temp_dir)
         return 0
+
+
+def _apply_font_constraints(docx_path: str, chinese_font: str = 'GB2312', latin_font: str = 'Calibri') -> bool:
+    """对文档中所有 run 应用字体约束：中文使用 GB2312，英文使用 Calibri
+    
+    Args:
+        docx_path: 文档路径
+        chinese_font: 中文字体名称（默认 GB2312）
+        latin_font: 拉丁字体名称（默认 Calibri）
+    
+    Returns:
+        是否成功
+    """
+    try:
+        from docx import Document
+        from docx.oxml.ns import qn
+        from copy import deepcopy
+        
+        doc = Document(docx_path)
+        
+        def set_run_font(run):
+            rPr = run.find(qn('w:rPr'))
+            if rPr is None:
+                rPr = deepcopy(run.find(qn('w:rPr')) if run.find(qn('w:rPr')) is not None else run.makeelement(qn('w:rPr'), {}))
+                run.insert(0, rPr)
+            
+            rFonts = rPr.find(qn('w:rFonts'))
+            if rFonts is None:
+                rFonts = run.makeelement(qn('w:rFonts'), {})
+                rPr.insert(0, rFonts)
+            
+            rFonts.set(qn('w:eastAsia'), chinese_font)
+            rFonts.set(qn('w:ascii'), latin_font)
+            rFonts.set(qn('w:hAnsi'), latin_font)
+            rFonts.set(qn('w:cs'), latin_font)
+        
+        def process_element(elem):
+            for run in elem.findall('.//' + qn('w:r')):
+                set_run_font(run)
+        
+        for para in doc.paragraphs:
+            process_element(para._element)
+        
+        for table in doc.tables:
+            for row in table.rows:
+                for cell in row.cells:
+                    for para in cell.paragraphs:
+                        process_element(para._element)
+        
+        doc.save(docx_path)
+        return True
+        
+    except Exception as e:
+        print(f"  字体约束应用失败: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
