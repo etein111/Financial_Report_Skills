@@ -56,7 +56,7 @@ class TestCreateCoverage:
         assert record["country_of_domicile"] == "China"
         assert record["isin"] == TEST_ISIN.upper()
 
-    def test_create_coverage_analyst_record_exists(self, neolyst_client, created_coverage_id):
+    def test_create_coverage_analyst_record_exists(self, neolyst_client, created_coverage_id, test_analyst_email):
         """coverage_analyst 表中有对应分析师记录，author_order=1。"""
         resp = (
             neolyst_client.table("coverage_analyst")
@@ -207,7 +207,7 @@ def history_dataset(neolyst_client, history_coverage_id):
 
 
 class TestListCoverageHistory:
-    def test_returns_only_published_rows(self, neolyst_client, history_dataset):
+    def test_returns_only_published_rows(self, neolyst_client, history_dataset, test_analyst_email):
         from skills.neolyst.scripts import coverage as cov
 
         result = cov.list_coverage_history(
@@ -221,7 +221,7 @@ class TestListCoverageHistory:
             "Older Published Report",
         ]
 
-    def test_returns_expected_five_fields(self, neolyst_client, history_dataset):
+    def test_returns_expected_five_fields(self, neolyst_client, history_dataset, test_analyst_email):
         from skills.neolyst.scripts import coverage as cov
 
         result = cov.list_coverage_history(
@@ -237,7 +237,7 @@ class TestListCoverageHistory:
             "published_at",
         }
 
-    def test_case_insensitive_inputs(self, neolyst_client, history_dataset):
+    def test_case_insensitive_inputs(self, neolyst_client, history_dataset, test_analyst_email):
         from skills.neolyst.scripts import coverage as cov
 
         result = cov.list_coverage_history(
@@ -247,13 +247,13 @@ class TestListCoverageHistory:
         )
         assert result[0]["title"] == "Newest Published Report"
 
-    def test_returns_empty_list_when_no_published_history(self, neolyst_client, created_coverage_id):
+    def test_returns_empty_list_when_no_published_history(self, neolyst_client, created_coverage_id, test_analyst_email):
         from skills.neolyst.scripts import coverage as cov
 
         result = cov.list_coverage_history(neolyst_client, TEST_TICKER, test_analyst_email)
         assert result == []
 
-    def test_missing_coverage_raises(self, neolyst_client):
+    def test_missing_coverage_raises(self, neolyst_client, test_analyst_email):
         from skills.neolyst.scripts import coverage as cov
 
         with pytest.raises(ValueError, match="未找到匹配的 Coverage"):
