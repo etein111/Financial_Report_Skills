@@ -88,12 +88,12 @@ class TestReuseTemplate:
 
     def test_reuse_self_raises(self, neolyst_client, uploaded_template):
         from skills.neolyst.scripts import template
-        with pytest.raises(ValueError, match="self"):
+        with pytest.raises(ValueError, match="不能复用自身"):
             template.reuse_template(neolyst_client, TEST_REPORT_TYPE, TEST_LANGUAGE, TEST_REPORT_TYPE)
 
     def test_reuse_nonexistent_source_raises(self, neolyst_client):
         from skills.neolyst.scripts import template
-        with pytest.raises(ValueError, match="not found"):
+        with pytest.raises(ValueError, match="未找到"):
             template.reuse_template(neolyst_client, f"target_{_SUFFIX}", TEST_LANGUAGE, f"ghost_{_SUFFIX}")
 
 

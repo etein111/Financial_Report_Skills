@@ -59,4 +59,4 @@
 
 # 数据库迁移约束
 
-- 迁移文件（`supabase/migrations/*.sql`）**只追加，不修改**。已提交的迁移文件不可编辑，所有变更通过新建迁移文件实现。
+- 迁移文件只追加不修改，详细约束见 [principles/ARCHITECTURE.md](./principles/ARCHITECTURE.md)。

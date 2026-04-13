@@ -13,7 +13,7 @@ record = analyst.resolve_analyst_by_email(client, "alice@neolyst.com")
 ```
 
 - 邮箱大小写不敏感，内部统一 lowercase
-- `is_active=False` 的分析师抛出 `ValueError: Analyst is inactive: {email}`
+- `is_active=False` 的分析师抛出 `ValueError: 分析师已停用：{email}`
 
 ## 2. resolve_template
 
@@ -226,7 +226,7 @@ rows = coverage.list_coverage_history(
 
 ### resolve_analyst_by_email 找不到或已停用
 
-报错内容："找不到分析师" 或 "Analyst is inactive"
+报错内容："找不到分析师" 或 "分析师已停用"
 
 → 提示用户检查邮箱拼写是否正确。如果邮箱无误但报 inactive，说明该分析师账号已被停用，需要联系管理员恢复。不要尝试用其他邮箱绕过。
 
