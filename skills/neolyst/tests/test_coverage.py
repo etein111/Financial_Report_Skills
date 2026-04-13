@@ -148,7 +148,7 @@ def history_coverage_id(neolyst_client, test_sector_id, test_analyst_email):
 
 
 @pytest.fixture(scope="module")
-def history_dataset(neolyst_client, history_coverage_id):
+def history_dataset(neolyst_client, history_coverage_id, test_analyst_email):
     user = neolyst_client.auth.get_user().user
     ticker = f"HIS{uuid.uuid4().hex[:6].upper()}"
 
@@ -169,6 +169,8 @@ def history_dataset(neolyst_client, history_coverage_id):
             "report_language": "en",
             "published_by": user.id,
             "published_at": "2026-04-09T08:00:00+00:00",
+            "lead_analyst_email": test_analyst_email,
+            "analyst_emails": [test_analyst_email],
         },
         {
             "id": str(uuid.uuid4()),
@@ -184,6 +186,8 @@ def history_dataset(neolyst_client, history_coverage_id):
             "report_language": "en",
             "published_by": user.id,
             "published_at": "2026-03-31T08:00:00+00:00",
+            "lead_analyst_email": test_analyst_email,
+            "analyst_emails": [test_analyst_email],
         },
         {
             "id": str(uuid.uuid4()),
@@ -198,6 +202,8 @@ def history_dataset(neolyst_client, history_coverage_id):
             "target_price": 80,
             "report_language": "en",
             "published_at": None,
+            "lead_analyst_email": test_analyst_email,
+            "analyst_emails": [test_analyst_email],
         },
     ]
     neolyst_client.table("report").insert(rows).execute()
