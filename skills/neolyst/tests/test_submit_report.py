@@ -91,7 +91,7 @@ class TestSubmitReport:
         assert resp.data[0]["status"] == "submitted"
 
     def test_status_log_created(self, neolyst_client, submitted_report):
-        """report_status_log 有 draft→submitted 记录，action_by_name 为邮箱。"""
+        """report_status_log 有 draft→submitted 记录，含 metadata 快照。"""
         resp = (
             neolyst_client.table("report_status_log")
             .select("*")
@@ -104,6 +104,9 @@ class TestSubmitReport:
         assert log["to_status"] == "submitted"
         assert log["version_no"] == 1
         assert "@" in (log["action_by_name"] or "")
+        assert log["metadata"]
+        assert log["metadata"]["title"] == "Submit Test Report"
+        assert log["metadata"]["lead_analyst_email"] == TEST_ANALYST
 
     def test_submit_already_submitted_raises(self, neolyst_client, submitted_report):
         """对已 submitted 的报告再次调用 submit_report 抛出 ValueError。"""

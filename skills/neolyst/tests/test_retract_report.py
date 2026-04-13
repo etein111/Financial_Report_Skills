@@ -96,7 +96,7 @@ class TestRetractSubmittedReport:
             )
             assert resp.data[0]["status"] == "draft"
 
-            # 3. 状态日志：submitted → draft
+            # 3. 状态日志：submitted → draft，含 metadata 快照
             log_resp = (
                 neolyst_client.table("report_status_log")
                 .select("*")
@@ -110,6 +110,7 @@ class TestRetractSubmittedReport:
             assert log["to_status"] == "draft"
             assert log["version_no"] == submitted["version_no"]
             assert "@" in (log["action_by_name"] or "")
+            assert log["metadata"]
         finally:
             neolyst_client.table("report").delete().eq("id", report_id).execute()
 
