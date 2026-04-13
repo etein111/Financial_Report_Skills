@@ -58,6 +58,8 @@
 ### Python 层改动
 
 - `test_draft_report.py`：`test_report_analyst_records_exist` 改为查 `report.lead_analyst_email` 和 `report.analyst_emails`，断言新字段值正确
+- `test_draft_report.py`：teardown 注释中去掉 `report_analysts` 引用
+- `draft_report.py`：模块注释（第 6 行）"替换 report_analyst" → 更新为描述新字段写入
 
 ---
 
@@ -136,8 +138,8 @@
 
 | 函数 | 改动 |
 |------|------|
-| `submit_report` | 删除手动 INSERT `report_status_log`（触发器接管） |
-| `retract_report` | 删除手动 INSERT `report_status_log`（触发器接管） |
+| `submit_report` | 删除手动 INSERT `report_status_log`（触发器接管）；UPDATE 时追加 `SET rejection_reason = NULL` |
+| `retract_report` | 删除手动 INSERT `report_status_log`（触发器接管）；UPDATE 时追加 `SET rejection_reason = NULL` |
 | 将来 publish/reject RPC | 无需手动写日志；reject RPC 需额外写 `report.rejection_reason` |
 
 ### Python 层改动
@@ -161,8 +163,8 @@
 
 - `init_draft_report`：直接写 `lead_analyst_email` / `analyst_emails`，删除 report_analyst 操作
 - `validate_report`：从 `report.analyst_emails` 读取，不再查 `report_analyst`
-- `submit_report`：删除手动 INSERT `report_status_log`
-- `retract_report`：删除手动 INSERT `report_status_log`
+- `submit_report`：删除手动 INSERT `report_status_log`；UPDATE 时追加 `SET rejection_reason = NULL`
+- `retract_report`：删除手动 INSERT `report_status_log`；UPDATE 时追加 `SET rejection_reason = NULL`
 
 ### 删除（数据库）
 
@@ -171,8 +173,14 @@
 ### 修改（Python）
 
 - `test_draft_report.py`：`test_report_analyst_records_exist` 改为验证 `report.analyst_emails`
+- `test_draft_report.py`：teardown 注释去掉 `report_analysts` 引用
 - `test_submit_report.py`：补充 `metadata` 断言
 - `test_retract_report.py`：补充 `metadata` 断言
+- `draft_report.py`：模块注释更新（去掉 `report_analyst` 引用）
+
+### 修改（文档）
+
+- `references/interfaces.md`：`save_draft_report` 描述中去掉 `report_analyst` 引用
 
 ---
 
@@ -183,12 +191,13 @@
 **`xxx_115_p1_schema_redesign.sql`**
 
 内部执行顺序：
-1. `report` 表新增 `lead_analyst_email`、`analyst_emails`、`rejection_reason` 字段
-2. `report_status_log` 表新增 `metadata` 字段
-3. 更新 `init_draft_report` RPC（写新字段，删除 report_analyst 操作）
-4. 更新 `validate_report` RPC（从 analyst_emails 读取）
-5. 新增 AFTER UPDATE 触发器函数及触发器
-6. 更新 `submit_report` RPC（删除手动 INSERT report_status_log）
-7. 更新 `retract_report` RPC（删除手动 INSERT report_status_log）
-8. 删除 `report_analyst` 表依赖（RLS policy、触发器）
-9. 删除 `report_analyst` 表
+1. `report` 表新增 `lead_analyst_email`（`text NOT NULL DEFAULT ''`）、`analyst_emails`（`text[] NOT NULL DEFAULT '{}'`）、`rejection_reason`（`text`，nullable）字段
+2. 移除临时 DEFAULT：`ALTER COLUMN lead_analyst_email DROP DEFAULT`、`ALTER COLUMN analyst_emails DROP DEFAULT`
+3. `report_status_log` 表新增 `metadata` 字段
+4. 更新 `init_draft_report` RPC（写新字段，删除 report_analyst 操作）
+5. 更新 `validate_report` RPC（从 analyst_emails 读取）
+6. 新增 AFTER UPDATE 触发器函数及触发器
+7. 更新 `submit_report` RPC（删除手动 INSERT report_status_log，SET rejection_reason = NULL）
+8. 更新 `retract_report` RPC（删除手动 INSERT report_status_log，SET rejection_reason = NULL）
+9. 删除 `report_analyst` 表依赖（RLS policy、触发器）
+10. 删除 `report_analyst` 表
