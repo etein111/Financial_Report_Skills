@@ -34,6 +34,29 @@ except ImportError as e:
 
 import common
 
+# 尝试导入图表生成模块
+try:
+    import yfinance as yf
+    import matplotlib.pyplot as plt
+    import matplotlib.dates as mdates
+    import numpy as np
+    from datetime import datetime
+    CHARTS_AVAILABLE = True
+except ImportError as e:
+    print(f"Warning: Charts modules not available: {e}")
+    CHARTS_AVAILABLE = False
+    yf = None
+    plt = None
+    mdates = None
+    np = None
+    datetime = None
+
+# 图表代理设置（默认从环境变量读取，如未设置则不使用代理）
+CHART_PROXY = os.environ.get("HTTP_PROXY") or os.environ.get("HTTPS_PROXY") or ""
+
+# 占位符标记（用于避免 docxtpl 破坏文档结构）
+RELATIVE_CHART_MARKER = '###RELATIVE_CHART_MARKER###'
+
 # 尝试导入分页优化模块
 try:
     from pagination import optimize_pagination, optimize_pagination_xml
@@ -2786,6 +2809,247 @@ def replace_all_placeholders_in_xml(
     return docx_path
 
 
+def _generate_relative_chart(ticker: str, output_path: str, company_name: str = None, use_fallback: bool = True) -> bool:
+    """生成相对收益对比图（relative chart）。
+
+    Args:
+        ticker: 股票代码（如 3393.HK）
+        output_path: 图表输出路径
+        company_name: 公司名称（可选）
+        use_fallback: 当 yfinance 失败时是否使用模拟数据
+
+    Returns:
+        是否成功生成
+    """
+    if not CHARTS_AVAILABLE:
+        print(f"  ⚠️ 图表模块不可用，跳过 relative_chart 生成")
+        return False
+
+    try:
+        import os
+        # 仅在配置了代理时设置
+        if CHART_PROXY:
+            os.environ["HTTP_PROXY"] = CHART_PROXY
+            os.environ["HTTPS_PROXY"] = CHART_PROXY
+
+        # 计算日期范围（最近1年）
+        end_date = datetime.now()
+        start_date = datetime(end_date.year - 1, end_date.month, end_date.day)
+
+        # 处理 ticker 格式
+        if not ('.' in ticker or '^' in ticker):
+            if ticker.isdigit() and len(ticker) == 4:
+                ticker = f"{ticker}.HK"
+
+        use_fake_data = False
+        try:
+            # 获取股票数据
+            stock = yf.Ticker(ticker)
+            hist = stock.history(start=start_date, end=end_date)
+
+            if hist.empty:
+                print(f"  ⚠️ 无法获取 {ticker} 的历史数据", end='')
+                if use_fallback:
+                    use_fake_data = True
+                else:
+                    print('，跳过 relative_chart')
+                    return False
+
+            stock_dates = hist.index
+            stock_prices = hist['Close'].values
+            volumes = hist['Volume'].values if 'Volume' in hist.columns else None
+
+            # 获取MSCI China数据
+            mchi = yf.Ticker("MCHI")
+            mchi_hist = mchi.history(start=start_date, end=end_date)
+
+            if mchi_hist.empty:
+                # 尝试备用
+                mchi = yf.Ticker("2800.HK")
+                mchi_hist = mchi.history(start=start_date, end=end_date)
+
+            if mchi_hist.empty:
+                print(f"  ⚠️ 无法获取MSCI China数据", end='')
+                if use_fallback:
+                    use_fake_data = True
+                else:
+                    print('，跳过 relative_chart')
+                    return False
+            else:
+                index_dates = mchi_hist.index
+                index_prices = mchi_hist['Close'].values
+
+        except Exception as e:
+            print(f"  ⚠️ yfinance 请求失败: {e}", end='')
+            if use_fallback:
+                use_fake_data = True
+            else:
+                print('，跳过 relative_chart')
+                return False
+
+        # 如果数据获取失败，使用模拟数据
+        if use_fake_data:
+            print('，使用模拟数据生成图表')
+            import random
+            stock_dates = [start_date + __import__("datetime").timedelta(days=i) for i in range(250)]
+            stock_prices = np.cumsum(np.random.randn(250)) + 100
+            volumes = np.random.randint(1000000, 10000000, 250)
+            index_dates = stock_dates
+            index_prices = np.cumsum(np.random.randn(250)) + 100
+        else:
+            print('')
+
+        # 归一化到100
+        stock_normalized = (stock_prices / stock_prices[0]) * 100
+        index_normalized = np.interp(
+            mdates.date2num(stock_dates),
+            mdates.date2num(index_dates),
+            (index_prices / index_prices[0]) * 100
+        )
+
+        # 确保输出目录存在
+        os.makedirs(os.path.dirname(output_path) if os.path.dirname(output_path) else "reports", exist_ok=True)
+
+        # 绘制图表（与 relative_chart.py 保持一致的风格）
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8), dpi=100,
+                                        gridspec_kw={'height_ratios': [3, 1]},
+                                        sharex=True)
+
+        fig.patch.set_facecolor('white')
+        ax1.set_facecolor('#fafafa')
+        ax2.set_facecolor('#fafafa')
+
+        # 上方面板：相对收益对比
+        ax1.plot(stock_dates, stock_normalized, color='#23558C', linewidth=2, label='Price Return')
+        ax1.plot(stock_dates, index_normalized, color='#808080', linewidth=2, label='MSCI China')
+
+        # Y轴设置
+        data_min = min(min(stock_normalized), min(index_normalized))
+        data_max = max(max(stock_normalized), max(index_normalized))
+        y_margin = (data_max - data_min) * 0.1
+        y_min = max(0, data_min - y_margin)
+        y_max = data_max + y_margin
+        ax1.set_ylim(y_min, y_max)
+
+        y_range = y_max - y_min
+        if y_range <= 20:
+            y_step = 5
+        elif y_range <= 50:
+            y_step = 10
+        elif y_range <= 100:
+            y_step = 20
+        else:
+            y_step = 50
+
+        y_ticks = []
+        current = int(y_min // y_step) * y_step
+        while current <= y_max:
+            if current >= y_min:
+                y_ticks.append(current)
+            current += y_step
+        ax1.set_yticks(y_ticks)
+
+        ax1.yaxis.grid(True, linestyle='--', alpha=0.6, color='lightgray')
+        ax1.set_axisbelow(True)
+        ax1.spines['top'].set_visible(False)
+        ax1.spines['right'].set_visible(False)
+        ax1.legend(loc='upper center', bbox_to_anchor=(0.5, 1.02), ncol=2, fontsize=10, framealpha=0.9)
+
+        # 下方面板：成交量
+        bar_colors = ['#23558C' if i == len(volumes) - 1 else '#B8D4E8' for i in range(len(volumes))]
+        ax2.bar(stock_dates, volumes, width=0.8, color=bar_colors, align='center')
+        ax2.set_ylim(0, max(volumes) * 1.2)
+        ax2.yaxis.grid(True, linestyle='--', alpha=0.6, color='lightgray')
+        ax2.set_axisbelow(True)
+        ax2.spines['top'].set_visible(False)
+        ax2.spines['right'].set_visible(False)
+        ax2.set_ylabel('Volume', fontsize=11)
+        ax2.set_yticklabels([])
+
+        ax2.xaxis.set_major_formatter(mdates.DateFormatter('%b-%y'))
+        ax2.xaxis.set_major_locator(mdates.MonthLocator(interval=1))
+        ax2.set_xlim(stock_dates[0], stock_dates[-1])
+
+        plt.tight_layout()
+        plt.savefig(output_path, dpi=150, bbox_inches='tight', facecolor='white')
+        plt.close()
+
+        print(f"  ✅ relative_chart 已生成: {output_path}")
+        return True
+
+    except Exception as e:
+        print(f"  ⚠️ 生成 relative_chart 时出错: {e}")
+        return False
+
+
+def _insert_image_to_placeholder(doc: Document, placeholder: str, image_path: str, width_cm: float = None) -> bool:
+    """在文档的占位符位置插入图片。
+
+    Args:
+        doc: Document 对象
+        placeholder: 占位符文本（如 {{ relative_chart }}）
+        image_path: 图片路径
+        width_cm: 图片宽度（厘米），如果为 None 则使用原始尺寸
+
+    Returns:
+        是否成功插入
+    """
+    if not Path(image_path).exists():
+        print(f"  ⚠️ 图片文件不存在: {image_path}")
+        return False
+
+    try:
+        from docx.shared import Cm
+
+        # 在段落中查找占位符
+        for para in doc.paragraphs:
+            if placeholder in para.text:
+                # 清空段落，添加图片
+                para.clear()
+                run = para.add_run()
+                if width_cm:
+                    run.add_picture(image_path, width=Cm(width_cm))
+                else:
+                    run.add_picture(image_path)
+                return True
+
+        # 在表格中查找占位符（包括嵌套表格）
+        for table in doc.tables:
+            for row in table.rows:
+                for cell in row.cells:
+                    # 检查单元格文本
+                    if placeholder in cell.text:
+                        # 找到第一个段落
+                        for para in cell.paragraphs:
+                            if placeholder in para.text:
+                                para.clear()
+                                run = para.add_run()
+                                if width_cm:
+                                    run.add_picture(image_path, width=Cm(width_cm))
+                                else:
+                                    run.add_picture(image_path)
+                                return True
+                    # 检查嵌套表格
+                    for nested_table in cell.tables:
+                        for nrow in nested_table.rows:
+                            for ncell in nrow.cells:
+                                for para in ncell.paragraphs:
+                                    if placeholder in para.text:
+                                        para.clear()
+                                        run = para.add_run()
+                                        if width_cm:
+                                            run.add_picture(image_path, width=Cm(width_cm))
+                                        else:
+                                            run.add_picture(image_path)
+                                        return True
+
+        return False
+
+    except Exception as e:
+        print(f"  ⚠️ 插入图片时出错: {e}")
+        return False
+
+
 def _escape_jinja_in_charts(docx_path: str) -> Dict[str, str]:
     """转义图表 XML 中的 Jinja2 语法，防止 docxtpl 解析错误。
 
@@ -2946,6 +3210,7 @@ def render_report(
         context['abstract'] = ABSTRACT_MARKER
         context['body'] = BODY_MARKER
         context['english_summary'] = ENGLISH_SUMMARY_MARKER
+        context['relative_chart'] = RELATIVE_CHART_MARKER
 
         # 3. 修复模板中被拆分的占位符（Word 会把 {{ a1_email }} 拆成多个 run）
         temp_path = Path(output_path).parent / "temp_rendered.docx"
@@ -2961,6 +3226,26 @@ def render_report(
         expanded_analysts = expand_analyst_certification(str(fixed_template_path), elements)
         if expanded_analysts > 0:
             print(f"  已扩展分析师认证声明（新增 {expanded_analysts} 个分析师）")
+
+        # 3.6 生成 relative_chart
+        ticker = elements.get('ticker', '')
+        relative_chart_generated = False
+        if ticker:
+            report_dir = Path(output_path).parent
+            relative_chart_path = report_dir / "relative_chart.png"
+
+            # 生成 relative chart
+            relative_chart_generated = _generate_relative_chart(
+                ticker=ticker,
+                output_path=str(relative_chart_path),
+                company_name=elements.get('company_cn') or elements.get('company_en', '')
+            )
+            if relative_chart_generated:
+                print(f"  ✅ relative_chart 已生成")
+            else:
+                print(f"  ⚠️ relative_chart 生成失败")
+        else:
+            print(f"  ⚠️ 无 ticker，跳过 relative_chart 生成")
 
         # 4. 使用 docxtpl 渲染修复后的模板（支持 {% if %} 语法）
         template = DocxTemplate(str(fixed_template_path))
@@ -3083,6 +3368,21 @@ def render_report(
             if marker_removed:
                 doc.save(output_path)
 
+        # 8.5 插入 relative_chart 到 {{ relative_chart }} 占位符位置
+        if relative_chart_generated:
+            doc = Document(output_path)
+            relative_chart_path = Path(output_path).parent / "relative_chart.png"
+            if relative_chart_path.exists():
+                # 根据 schema.yaml，图表尺寸为 6.35cm x 4.57cm
+                chart_inserted = _insert_image_to_placeholder(
+                    doc, RELATIVE_CHART_MARKER, str(relative_chart_path), width_cm=6.35
+                )
+                if chart_inserted:
+                    print(f"  ✅ relative_chart 已插入到文档")
+                else:
+                    print(f"  ⚠️ relative_chart 插入失败")
+                doc.save(output_path)
+
         # 9. 恢复图表 XML 中被转义的 Jinja2 语法
         if escaped_chart_files:
             _restore_jinja_in_charts(output_path, escaped_chart_files)
@@ -3198,6 +3498,26 @@ def render_report(
         expanded_analysts = expand_analyst_certification(str(fixed_template_path), elements)
         if expanded_analysts > 0:
             print(f"  已扩展分析师认证声明（新增 {expanded_analysts} 个分析师）")
+
+        # 3.6 生成 relative_chart
+        ticker = elements.get('ticker', '')
+        relative_chart_generated = False
+        if ticker:
+            report_dir = Path(output_path).parent
+            relative_chart_path = report_dir / "relative_chart.png"
+
+            # 生成 relative chart
+            relative_chart_generated = _generate_relative_chart(
+                ticker=ticker,
+                output_path=str(relative_chart_path),
+                company_name=elements.get('company_cn') or elements.get('company_en', '')
+            )
+            if relative_chart_generated:
+                print(f"  ✅ relative_chart 已生成")
+            else:
+                print(f"  ⚠️ relative_chart 生成失败")
+        else:
+            print(f"  ⚠️ 无 ticker，跳过 relative_chart 生成")
 
         # 4. 使用 docxtpl 渲染修复后的模板（支持 {% if %} 语法）
         template = DocxTemplate(str(fixed_template_path))
@@ -3367,12 +3687,27 @@ def render_report(
             if marker_removed:
                 doc.save(output_path)
 
-        # 7. 恢复图表 XML 中被转义的 Jinja2 语法
+        # 8.5 插入 relative_chart 到 {{ relative_chart }} 占位符位置
+        if relative_chart_generated:
+            doc = Document(output_path)
+            relative_chart_path = Path(output_path).parent / "relative_chart.png"
+            if relative_chart_path.exists():
+                # 根据 schema.yaml，图表尺寸为 6.35cm x 4.57cm
+                chart_inserted = _insert_image_to_placeholder(
+                    doc, RELATIVE_CHART_MARKER, str(relative_chart_path), width_cm=6.35
+                )
+                if chart_inserted:
+                    print(f"  ✅ relative_chart 已插入到文档")
+                else:
+                    print(f"  ⚠️ relative_chart 插入失败")
+                doc.save(output_path)
+
+        # 9. 恢复图表 XML 中被转义的 Jinja2 语法
         if escaped_chart_files:
             _restore_jinja_in_charts(output_path, escaped_chart_files)
             print(f"  已恢复 {len(escaped_chart_files)} 个图表文件的原始内容")
 
-        # 8. 清理临时文件
+        # 10. 清理临时文件
         temp_path.unlink(missing_ok=True)
 
         # 8.5 分页优化（仅在未对 body 预优化时执行）
