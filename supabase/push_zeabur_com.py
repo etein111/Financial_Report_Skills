@@ -8,7 +8,7 @@ import os
 import subprocess
 from pathlib import Path
 
-_PROJECT_ROOT = Path(__file__).resolve().parents[3]
+_PROJECT_ROOT = Path(__file__).resolve().parents[1]
 _ZEBUR_CONFIG = _PROJECT_ROOT / "supabase" / "staging.json"
 
 

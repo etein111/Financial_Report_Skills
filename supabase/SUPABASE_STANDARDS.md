@@ -65,7 +65,7 @@ Staging 是 Zeabur 上的 PostgreSQL 实例，通过自定义脚本推送迁移�
 ### 推送命令
 
 ```bash
-python3 skills/dev_ops/scripts/push_zeabur_com.py
+python3 supabase/push_zeabur_com.py
 ```
 
 ### 工作原理

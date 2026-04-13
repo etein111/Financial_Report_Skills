@@ -37,5 +37,5 @@ supabase db reset
 psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -f supabase/tests/test_data.sql
 
 # 推送 schema 到 staging
-python3 skills/dev_ops/scripts/push_zeabur_com.py
+python3 supabase/push_zeabur_com.py
 ```
