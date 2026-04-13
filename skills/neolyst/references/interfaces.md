@@ -144,16 +144,16 @@ result = draft_report.save_draft_report(client, {
 
 字段分层：
 - 保存 draft 最小字段：`title`、`report_type`、`report_language`、`analysts`、`report_file`、`pdf_file`
-- 提交前必须补齐：`contact_person`、`investment_thesis`，以及按类型要求的字段（见 `validate_draft`）
+- 提交前必须补齐：`contact_person`、`investment_thesis`，以及按类型要求的字段（见 `validate_report`）
 
-## 8. validate_draft
+## 8. validate_report
 
-校验当前 draft 的当前版本是否满足提交条件。全量收集所有错误后一次性抛出。
+调用 DB 侧 `validate_report` RPC，校验报告当前版本是否满足提交条件。全量收集所有错误后一次性返回。
 
 ```python
-from skills.neolyst.scripts.validators import validate_draft
+from skills.neolyst.scripts.validators import validate_report
 
-result = validate_draft(client, report_id="uuid")
+result = validate_report(client, report_id="uuid")
 # 通过：返回 {"report_id": "uuid", "version_no": 1}
 # 失败：抛出 ValueError（消息以"；"分隔所有失败项）
 ```
@@ -181,7 +181,8 @@ from skills.neolyst.scripts import submit_report
 
 result = submit_report.submit_report(client, report_id="uuid")
 # 返回：{"report_id": "uuid", "status": "submitted", "version_no": 1}
-# 提交前如需完整字段校验，请先显式调用 validate_draft(client, report_id="uuid")
+# RPC 内部调用 validate_report 做字段守门，字段不完整时抛出 ValueError
+# 如需提前获取全量错误展示，先显式调用 validate_report(client, report_id="uuid")
 # 数据库 RPC 内部读取 report.current_version_no，并返回真实提交版本
 ```
 
@@ -229,7 +230,7 @@ rows = coverage.list_coverage_history(
 
 → 提示用户检查邮箱拼写是否正确。如果邮箱无误但报 inactive，说明该分析师账号已被停用，需要联系管理员恢复。不要尝试用其他邮箱绕过。
 
-### validate_draft 校验失败
+### validate_report 校验失败
 
 报错内容：多条错误以"；"分隔
 

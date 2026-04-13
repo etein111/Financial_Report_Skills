@@ -24,7 +24,7 @@ Neolyst Supabase 数据访问层。实现位置：`scripts/`。
 典型提交流程：
 
 ```
-机器生成结果 → save_draft_report → [人工确认] → validate_draft → submit_report
+机器生成结果 → save_draft_report → [人工确认] → validate_report → submit_report
                   ↑                                                      │
                   └──────── 提交失败：save_draft 追加新版本 ←──────────────┘
 ```

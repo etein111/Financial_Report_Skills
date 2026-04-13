@@ -28,7 +28,7 @@ def save_draft_report(client: Client, draft: dict) -> dict:
     然后上传相关本地文件到 Storage，最后调用 commit_draft_version RPC 提交版本。
 
     服务器端仅要求 analysts 非空，其余字段均可为 None。
-    必填校验由 validate_draft 在提交前执行，不要求 draft 保存时字段完整。
+    必填校验由 validate_report 在提交前执行，不要求 draft 保存时字段完整。
 
     Args:
         client: 已认证的 Supabase client
