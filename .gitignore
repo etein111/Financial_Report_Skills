@@ -223,6 +223,8 @@ __marimo__/
 .supabase/
 supabase/.temp/
 skills/neolyst/tests/output/
+.idea/
+opencode.json
 
 # Neolyst 本地凭据和 session（不提交）
 skills/neolyst/user.json
