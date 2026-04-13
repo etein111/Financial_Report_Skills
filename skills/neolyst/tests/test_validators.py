@@ -1,5 +1,5 @@
 """
-test_validators.py — validate_draft 集成测试（11 个）。
+test_validators.py — validate_report 集成测试（11 个）。
 """
 import json
 import uuid
@@ -88,9 +88,9 @@ def valid_report(neolyst_client, test_coverage_id, tmp_path_factory):
 class TestValidateDraftHappyPath:
     def test_valid_report_passes(self, neolyst_client, valid_report):
         """完整合法 draft 通过校验，返回 {report_id, version_no}。"""
-        from skills.neolyst.scripts.validators import validate_draft
+        from skills.neolyst.scripts.validators import validate_report
 
-        result = validate_draft(
+        result = validate_report(
             neolyst_client,
             valid_report["report_id"],
         )
@@ -103,28 +103,28 @@ class TestValidateDraftHappyPath:
 class TestValidateDraftNonCompanyTypes:
     def test_sector_type_passes_without_coverage_id(self, neolyst_client, tmp_path):
         """sector 类型不要求 coverage_id，校验通过。"""
-        from skills.neolyst.scripts.validators import validate_draft
+        from skills.neolyst.scripts.validators import validate_report
 
         result = _save_draft(neolyst_client, tmp_path, {
             "report_type": "sector",
             "coverage_id": None,
         })
         try:
-            v = validate_draft(neolyst_client, result["report_id"])
+            v = validate_report(neolyst_client, result["report_id"])
             assert v["report_id"] == result["report_id"]
         finally:
             _cleanup(neolyst_client, result["report_id"])
 
     def test_macro_type_passes_without_coverage_id(self, neolyst_client, tmp_path):
         """macro 类型不要求 coverage_id，校验通过。"""
-        from skills.neolyst.scripts.validators import validate_draft
+        from skills.neolyst.scripts.validators import validate_report
 
         result = _save_draft(neolyst_client, tmp_path, {
             "report_type": "macro",
             "coverage_id": None,
         })
         try:
-            v = validate_draft(neolyst_client, result["report_id"])
+            v = validate_report(neolyst_client, result["report_id"])
             assert v["report_id"] == result["report_id"]
         finally:
             _cleanup(neolyst_client, result["report_id"])
@@ -135,7 +135,7 @@ class TestValidateDraftNonCompanyTypes:
 class TestValidateDraftFieldErrors:
     def test_missing_investment_thesis_fails(self, neolyst_client, test_coverage_id, tmp_path):
         """investment_thesis 为 None 时校验失败，错误含"投资论点"。"""
-        from skills.neolyst.scripts.validators import validate_draft
+        from skills.neolyst.scripts.validators import validate_report
 
         result = _save_draft(neolyst_client, tmp_path, {
             "investment_thesis": None,
@@ -143,13 +143,13 @@ class TestValidateDraftFieldErrors:
         })
         try:
             with pytest.raises(ValueError, match="投资论点"):
-                validate_draft(neolyst_client, result["report_id"])
+                validate_report(neolyst_client, result["report_id"])
         finally:
             _cleanup(neolyst_client, result["report_id"])
 
     def test_missing_contact_person_fails(self, neolyst_client, test_coverage_id, tmp_path):
         """contact_person 为 None 时校验失败，错误含"联系人"。"""
-        from skills.neolyst.scripts.validators import validate_draft
+        from skills.neolyst.scripts.validators import validate_report
 
         result = _save_draft(neolyst_client, tmp_path, {
             "contact_person": None,
@@ -157,13 +157,13 @@ class TestValidateDraftFieldErrors:
         })
         try:
             with pytest.raises(ValueError, match="联系人"):
-                validate_draft(neolyst_client, result["report_id"])
+                validate_report(neolyst_client, result["report_id"])
         finally:
             _cleanup(neolyst_client, result["report_id"])
 
     def test_missing_report_language_fails(self, neolyst_client, test_coverage_id, tmp_path):
         """report_language 为 None 时校验失败，错误含"报告语言"。"""
-        from skills.neolyst.scripts.validators import validate_draft
+        from skills.neolyst.scripts.validators import validate_report
 
         result = _save_draft(neolyst_client, tmp_path, {
             "report_language": None,
@@ -171,7 +171,7 @@ class TestValidateDraftFieldErrors:
         })
         try:
             with pytest.raises(ValueError, match="报告语言"):
-                validate_draft(neolyst_client, result["report_id"])
+                validate_report(neolyst_client, result["report_id"])
         finally:
             _cleanup(neolyst_client, result["report_id"])
 
@@ -181,7 +181,7 @@ class TestValidateDraftFieldErrors:
 class TestValidateDraftAnalystErrors:
     def test_contact_person_not_in_analysts_fails(self, neolyst_client, test_coverage_id, tmp_path):
         """contact_person 不在 analysts 列表中时校验失败。"""
-        from skills.neolyst.scripts.validators import validate_draft
+        from skills.neolyst.scripts.validators import validate_report
 
         result = _save_draft(neolyst_client, tmp_path, {
             "contact_person": "nobody@example.com",
@@ -189,7 +189,7 @@ class TestValidateDraftAnalystErrors:
         })
         try:
             with pytest.raises(ValueError, match="contact_person"):
-                validate_draft(neolyst_client, result["report_id"])
+                validate_report(neolyst_client, result["report_id"])
         finally:
             _cleanup(neolyst_client, result["report_id"])
 
@@ -199,12 +199,12 @@ class TestValidateDraftAnalystErrors:
 class TestValidateDraftCoverageErrors:
     def test_company_without_coverage_id_fails(self, neolyst_client, tmp_path):
         """company 类型不填 coverage_id 时校验失败，错误含"coverage_id"。"""
-        from skills.neolyst.scripts.validators import validate_draft
+        from skills.neolyst.scripts.validators import validate_report
 
         result = _save_draft(neolyst_client, tmp_path, {"coverage_id": None})
         try:
             with pytest.raises(ValueError, match="coverage_id"):
-                validate_draft(neolyst_client, result["report_id"])
+                validate_report(neolyst_client, result["report_id"])
         finally:
             _cleanup(neolyst_client, result["report_id"])
 
@@ -214,7 +214,7 @@ class TestValidateDraftCoverageErrors:
 class TestValidateDraftVersionErrors:
     def test_current_version_zero_fails(self, neolyst_client, test_coverage_id, tmp_path):
         """current_version_no=0 时校验失败，错误含"当前没有可校验版本"。"""
-        from skills.neolyst.scripts.validators import validate_draft
+        from skills.neolyst.scripts.validators import validate_report
 
         result = _save_draft(neolyst_client, tmp_path, {"coverage_id": test_coverage_id})
         try:
@@ -225,13 +225,13 @@ class TestValidateDraftVersionErrors:
                 .execute()
             )
             with pytest.raises(ValueError, match="当前没有可校验版本"):
-                validate_draft(neolyst_client, result["report_id"])
+                validate_report(neolyst_client, result["report_id"])
         finally:
             _cleanup(neolyst_client, result["report_id"])
 
     def test_current_version_missing_row_fails(self, neolyst_client, test_coverage_id, tmp_path):
         """current_version_no 指向不存在的 report_version 时校验失败。"""
-        from skills.neolyst.scripts.validators import validate_draft
+        from skills.neolyst.scripts.validators import validate_report
 
         result = _save_draft(neolyst_client, tmp_path, {"coverage_id": test_coverage_id})
         try:
@@ -242,14 +242,14 @@ class TestValidateDraftVersionErrors:
                 .execute()
             )
             with pytest.raises(ValueError, match=r"当前版本 v999 不存在"):
-                validate_draft(neolyst_client, result["report_id"])
+                validate_report(neolyst_client, result["report_id"])
         finally:
             _cleanup(neolyst_client, result["report_id"])
 
     def test_missing_pdf_file_fails(self, neolyst_client, test_coverage_id, tmp_path):
         """pdf_file 未上传（pdf_file_path 为 None）时校验失败，错误含"PDF"。"""
         from skills.neolyst.scripts import draft_report
-        from skills.neolyst.scripts.validators import validate_draft
+        from skills.neolyst.scripts.validators import validate_report
 
         word = tmp_path / "report.docx"
         word.write_bytes(b"fake docx")
@@ -273,7 +273,7 @@ class TestValidateDraftVersionErrors:
         })
         try:
             with pytest.raises(ValueError, match="PDF"):
-                validate_draft(neolyst_client, result["report_id"])
+                validate_report(neolyst_client, result["report_id"])
         finally:
             _cleanup(neolyst_client, result["report_id"])
 
@@ -283,7 +283,7 @@ class TestValidateDraftVersionErrors:
 class TestValidateDraftStatusErrors:
     def test_nonexistent_report_raises(self, neolyst_client):
         """不存在的 report_id 直接抛出 ValueError（含"报告不存在"）。"""
-        from skills.neolyst.scripts.validators import validate_draft
+        from skills.neolyst.scripts.validators import validate_report
 
         with pytest.raises(ValueError, match="报告不存在"):
-            validate_draft(neolyst_client, str(uuid.uuid4()))
+            validate_report(neolyst_client, str(uuid.uuid4()))
