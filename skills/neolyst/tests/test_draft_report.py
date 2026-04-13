@@ -50,7 +50,7 @@ def first_save_result(neolyst_client, tmp_module_dir):
         "model_file": None,
     })
     yield result
-    # Teardown: 删除 report（级联删除 report_version/report_analyst）
+    # Teardown: 删除 report（级联删除 report_version）
     neolyst_client.table("report").delete().eq("id", result["report_id"]).execute()
     # 清理 storage（v1/ v2/ 目录）
     report_id = result["report_id"]
@@ -141,17 +141,18 @@ class TestSaveDraftNewReport:
         assert "pdf_file" not in snapshot
         assert "model_file" not in snapshot
 
-    def test_report_analyst_records_exist(self, neolyst_client, first_save_result):
-        """report_analyst 表有 author_order=1 的分析师记录。"""
+    def test_report_analyst_fields_in_report(self, neolyst_client, first_save_result):
+        """report 表的 lead_analyst_email 和 analyst_emails 字段正确。"""
         resp = (
-            neolyst_client.table("report_analyst")
-            .select("*")
-            .eq("report_id", first_save_result["report_id"])
+            neolyst_client.table("report")
+            .select("lead_analyst_email, analyst_emails")
+            .eq("id", first_save_result["report_id"])
             .execute()
         )
-        assert len(resp.data) == 1
-        assert resp.data[0]["analyst_email"] == TEST_ANALYST
-        assert resp.data[0]["author_order"] == 1
+        assert resp.data
+        record = resp.data[0]
+        assert record["lead_analyst_email"] == TEST_ANALYST
+        assert record["analyst_emails"] == [TEST_ANALYST]
 
     def test_storage_files_uploaded(self, neolyst_client, first_save_result):
         """Storage reports/{report_id}/v1/ 中有 report.docx 和 report.pdf。"""

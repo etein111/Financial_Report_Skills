@@ -110,7 +110,7 @@ coverage_id = coverage.create_coverage(
 
 ## 7. save_draft_report
 
-保存机器处理后的 draft 版本。上传本地文件到 Storage，写入 `report` / `report_version` / `report_analyst`。
+保存机器处理后的 draft 版本。上传本地文件到 Storage，写入 `report` / `report_version`。
 
 ```python
 from skills.neolyst.scripts import draft_report

@@ -3,7 +3,7 @@ draft_report.py — Neolyst draft 报告保存接口。
 
 执行流程（支持 analyst 权限）：
 1. 若 report_id 为 None，用 uuid.uuid4() 生成
-2. 调用 init_draft_report RPC → 建/更新 report + 替换 report_analyst → 返回 next_version_no
+2. 调用 init_draft_report RPC → 建/更新 report（含 analyst_emails）→ 返回 next_version_no
 3. 上传本地文件到 reports/{report_id}/v{version_no}/{原始文件名}
    （此时 report 已在 DB，analyst 的 Storage 权限不受阻）
 4. 调用 commit_draft_version RPC → 插入 report_version + 更新 current_version_no
