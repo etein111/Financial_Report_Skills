@@ -186,3 +186,77 @@ class TestSubmitReport:
                 sr.submit_report(neolyst_client, draft["report_id"])
         finally:
             neolyst_client.table("report").delete().eq("id", draft["report_id"]).execute()
+
+    def test_submit_missing_investment_thesis_raises(
+        self, neolyst_client, submit_coverage_id, tmp_path
+    ):
+        """investment_thesis 置 NULL 后直接 submit_report 被 RPC 守门员拦截。"""
+        from skills.neolyst.scripts import draft_report
+        from skills.neolyst.scripts import submit_report as sr
+
+        word_path, pdf_path = _make_files(tmp_path)
+        draft = draft_report.save_draft_report(neolyst_client, {
+            "report_id": None,
+            "title": "Validate Gate Test",
+            "report_type": "company",
+            "report_language": "en",
+            "investment_thesis": "initial thesis",
+            "contact_person": TEST_ANALYST,
+            "analysts": [{"analyst_email": TEST_ANALYST, "author_order": 1}],
+            "ticker": "VGATE",
+            "coverage_id": submit_coverage_id,
+            "sector_id": None,
+            "region_code": None,
+            "rating": None,
+            "target_price": None,
+            "report_file": word_path,
+            "pdf_file": pdf_path,
+            "model_file": None,
+        })
+        try:
+            neolyst_client.table("report").update(
+                {"investment_thesis": None}
+            ).eq("id", draft["report_id"]).execute()
+            with pytest.raises(ValueError, match="投资论点"):
+                sr.submit_report(neolyst_client, draft["report_id"])
+        finally:
+            neolyst_client.table("report").delete().eq(
+                "id", draft["report_id"]
+            ).execute()
+
+    def test_submit_company_without_coverage_raises(
+        self, neolyst_client, submit_coverage_id, tmp_path
+    ):
+        """company 报告 coverage_id 置 NULL 后直接 submit_report 被 RPC 守门员拦截。"""
+        from skills.neolyst.scripts import draft_report
+        from skills.neolyst.scripts import submit_report as sr
+
+        word_path, pdf_path = _make_files(tmp_path)
+        draft = draft_report.save_draft_report(neolyst_client, {
+            "report_id": None,
+            "title": "Coverage Gate Test",
+            "report_type": "company",
+            "report_language": "en",
+            "investment_thesis": "test thesis",
+            "contact_person": TEST_ANALYST,
+            "analysts": [{"analyst_email": TEST_ANALYST, "author_order": 1}],
+            "ticker": "CGATE",
+            "coverage_id": submit_coverage_id,
+            "sector_id": None,
+            "region_code": None,
+            "rating": None,
+            "target_price": None,
+            "report_file": word_path,
+            "pdf_file": pdf_path,
+            "model_file": None,
+        })
+        try:
+            neolyst_client.table("report").update(
+                {"coverage_id": None}
+            ).eq("id", draft["report_id"]).execute()
+            with pytest.raises(ValueError, match="coverage_id"):
+                sr.submit_report(neolyst_client, draft["report_id"])
+        finally:
+            neolyst_client.table("report").delete().eq(
+                "id", draft["report_id"]
+            ).execute()
