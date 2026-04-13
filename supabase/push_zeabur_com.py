@@ -5,10 +5,11 @@ from __future__ import annotations
 import glob
 import json
 import os
+import re
 import subprocess
 from pathlib import Path
 
-_PROJECT_ROOT = Path(__file__).resolve().parents[3]
+_PROJECT_ROOT = Path(__file__).resolve().parents[1]
 _ZEBUR_CONFIG = _PROJECT_ROOT / "supabase" / "staging.json"
 
 
@@ -78,7 +79,7 @@ def exec_file(fpath: str) -> None:
 
 
 def main() -> None:
-    project_root = Path(__file__).resolve().parents[3]
+    project_root = Path(__file__).resolve().parents[1]
     migration_dir = project_root / "supabase" / "migrations"
 
     migration_files = sorted(glob.glob(str(migration_dir / "*.sql")))
@@ -100,6 +101,8 @@ def main() -> None:
     for fpath in migration_files:
         fname = Path(fpath).name
         version = fname.split("_")[0]
+        if not re.fullmatch(r"\d+", version):
+            raise ValueError(f"invalid migration version: {fname}")
 
         count = query_one(
             f"SELECT count(*) FROM supabase_migrations.schema_migrations WHERE version = '{version}'"
