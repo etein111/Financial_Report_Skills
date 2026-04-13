@@ -8,9 +8,8 @@
 --   3. 覆盖标的（Vistra Corp / Bloom Energy / VRT / 西锐飞机 / 腾讯 / GE Vernova）
 --   4. 覆盖-分析师关联
 --   5. 报告（公司报告 x4 / 公司快评 x1 / 行业快评 x1 / 宏观报告 x1）
---   6. 报告-分析师关联
---   7. 报告版本快照
---   8. 报告状态流转日志
+--   6. 报告版本快照
+--   7. 报告状态流转日志
 
 -- ============================================================
 -- 0. 密码规则：各用户密码 = 邮箱地址，方便记忆
@@ -378,34 +377,7 @@ insert into public.report (
 
 
 -- ============================================================
--- 6. 报告-分析师关联（public.report_analyst）
--- ============================================================
-
-insert into public.report_analyst (report_id, analyst_email, author_order)
-values
-    ('e0000000-0000-0000-0000-000000000001'::uuid, 'harryyang@hfisec.com.hk', 1),
-
-    ('e0000000-0000-0000-0000-000000000002'::uuid, 'harryyang@hfisec.com.hk', 1),
-
-    ('e0000000-0000-0000-0000-000000000003'::uuid, 'harryyang@hfisec.com.hk', 1),
-    ('e0000000-0000-0000-0000-000000000003'::uuid, 'dengyida@hfisec.com.hk',  2),
-
-    ('e0000000-0000-0000-0000-000000000004'::uuid, 'dengyida@hfisec.com.hk',  1),
-    ('e0000000-0000-0000-0000-000000000004'::uuid, 'mingli@hfisec.com.hk',    2),
-
-    ('e0000000-0000-0000-0000-000000000005'::uuid, 'harryyang@hfisec.com.hk', 1),
-
-    ('e0000000-0000-0000-0000-000000000006'::uuid, 'harryyang@hfisec.com.hk', 1),
-    ('e0000000-0000-0000-0000-000000000006'::uuid, 'dengyida@hfisec.com.hk',  2),
-
-    ('e0000000-0000-0000-0000-000000000007'::uuid, 'dengyida@hfisec.com.hk',  1),
-    ('e0000000-0000-0000-0000-000000000007'::uuid, 'mingli@hfisec.com.hk',    2)
-on conflict (report_id, analyst_email) do update set
-    author_order = excluded.author_order;
-
-
--- ============================================================
--- 7. 报告版本快照（public.report_version）
+-- 6. 报告版本快照（public.report_version）
 -- ============================================================
 
 -- Vistra 报告 v1（唯一版本，已发布）
@@ -487,7 +459,7 @@ values (
 
 
 -- ============================================================
--- 8. 报告状态流转日志（public.report_status_log）
+-- 7. 报告状态流转日志（public.report_status_log）
 -- ============================================================
 -- 注意：report 表有 BEFORE UPDATE 触发器校验状态流转合法性，
 -- 但 report_status_log 是普通插入，无额外触发器。
@@ -678,18 +650,7 @@ insert into public.report (
     '2025-10-25 10:00:00+00'
 ) on conflict (id) do nothing;
 
--- 9e. report_analyst
-insert into public.report_analyst (report_id, analyst_email, author_order)
-values
-    ('e0000000-0000-0000-0000-000000000008'::uuid, 'harryyang@hfisec.com.hk', 1),
-    ('e0000000-0000-0000-0000-000000000008'::uuid, 'dengyida@hfisec.com.hk',  2),
-
-    ('e0000000-0000-0000-0000-000000000009'::uuid, 'harryyang@hfisec.com.hk', 1),
-    ('e0000000-0000-0000-0000-000000000009'::uuid, 'dengyida@hfisec.com.hk',  2)
-on conflict (report_id, analyst_email) do update set
-    author_order = excluded.author_order;
-
--- 9f. report_version
+-- 9e. report_version
 insert into public.report_version (id, report_id, version_no, snapshot_json, word_file_path, created_by)
 values (
     'd0000000-0000-0000-0000-000000000008'::uuid,

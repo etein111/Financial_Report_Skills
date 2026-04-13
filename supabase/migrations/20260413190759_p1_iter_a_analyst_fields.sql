@@ -196,7 +196,7 @@ begin
             select e as analyst_email,
                    a.is_active
               from unnest(v_report.analyst_emails) as e
-              left join public.analyst a on a.email = e
+              left join public.analyst a on a.email = lower(e)
              where a.email is null or not a.is_active
         loop
             if v_bad_analyst.is_active is null then
