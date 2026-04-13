@@ -3088,9 +3088,9 @@ def render_report(
             _restore_jinja_in_charts(output_path, escaped_chart_files)
             print(f"  已恢复 {len(escaped_chart_files)} 个图表文件的原始内容")
 
-        # 9.5 字体约束：中文使用 GB2312，英文使用 Calibri
-        _apply_font_constraints(output_path)
-        print(f"  已应用字体约束：中文=GB2312, 英文=Calibri")
+        # 9.5 字体约束：中文使用楷体，英文使用 Calibri
+        _apply_font_constraints(output_path, chinese_font='楷体')
+        print(f"  已应用字体约束：中文=楷体, 英文=Calibri")
 
         # 10. 清理临时文件
         temp_path.unlink(missing_ok=True)
@@ -4370,12 +4370,12 @@ def expand_analyst_certification(docx_path: str, elements: Dict[str, Any]) -> in
         return 0
 
 
-def _apply_font_constraints(docx_path: str, chinese_font: str = 'GB2312', latin_font: str = 'Calibri') -> bool:
-    """对文档中所有 run 应用字体约束：中文使用 GB2312，英文使用 Calibri
+def _apply_font_constraints(docx_path: str, chinese_font: str = '楷体', latin_font: str = 'Calibri') -> bool:
+    """对文档中所有 run 应用字体约束：中文使用楷体，英文使用 Calibri
     
     Args:
         docx_path: 文档路径
-        chinese_font: 中文字体名称（默认 GB2312）
+        chinese_font: 中文字体名称（默认 楷体）
         latin_font: 拉丁字体名称（默认 Calibri）
     
     Returns:
@@ -4391,13 +4391,13 @@ def _apply_font_constraints(docx_path: str, chinese_font: str = 'GB2312', latin_
         def set_run_font(run):
             rPr = run.find(qn('w:rPr'))
             if rPr is None:
-                rPr = deepcopy(run.find(qn('w:rPr')) if run.find(qn('w:rPr')) is not None else run.makeelement(qn('w:rPr'), {}))
+                rPr = run.makeelement(qn('w:rPr'), {})
                 run.insert(0, rPr)
             
             rFonts = rPr.find(qn('w:rFonts'))
             if rFonts is None:
                 rFonts = run.makeelement(qn('w:rFonts'), {})
-                rPr.insert(0, rFonts)
+                rPr.append(rFonts)
             
             rFonts.set(qn('w:eastAsia'), chinese_font)
             rFonts.set(qn('w:ascii'), latin_font)
