@@ -1,5 +1,5 @@
 """
-test_submit_report.py — submit_report 集成测试（5 个）。
+test_submit_report.py — submit_report 集成测试。
 """
 import json
 import uuid
