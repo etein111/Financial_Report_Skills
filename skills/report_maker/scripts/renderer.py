@@ -1180,25 +1180,282 @@ def _apply_margins_to_sectpr(docx_path: str, margins: Dict[str, str], target_sec
         return False
 
 
+def _save_template_final_sectPr(template_path: str) -> Optional[Any]:
+    """保存模板的文档末尾 sectPr（控制附录 section 的格式）。
+
+    docxcompose 在 append 时会移除被追加文档的 body-level sectPr，
+    因此需要在合并前保存、合并后恢复。
+
+    Args:
+        template_path: 模板文件路径
+
+    Returns:
+        深拷贝的 sectPr XML 元素，或 None
+    """
+    sectPrs = _save_all_template_sectPrs(template_path)
+    return sectPrs.get('appendix') if sectPrs else None
+
+
+def _save_all_template_sectPrs(template_path: str) -> Optional[Dict[str, Any]]:
+    """保存模板中所有 sectPr，用于合并后恢复。
+
+    模板有 4 个 section，按顺序：
+    - cover: continuous sectPr
+    - body: nextPage sectPr
+    - english_summary: nextPage sectPr
+    - appendix: body-level sectPr
+
+    Args:
+        template_path: 模板文件路径
+
+    Returns:
+        {'cover': sectPr, 'body': sectPr, 'english_summary': sectPr, 'appendix': sectPr}
+        或 None
+    """
+    import zipfile
+    from lxml import etree
+
+    W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
+
+    try:
+        with zipfile.ZipFile(template_path, 'r') as z:
+            doc_xml = z.read('word/document.xml')
+
+        doc_tree = etree.fromstring(doc_xml)
+        body = doc_tree.find(f'{W}body')
+        if body is None:
+            return None
+
+        result = {}
+        para_sectPrs = []
+
+        for elem in body:
+            if elem.tag == f'{W}p':
+                pPr = elem.find(f'{W}pPr')
+                if pPr is not None:
+                    sectPr = pPr.find(f'{W}sectPr')
+                    if sectPr is not None:
+                        para_sectPrs.append(deepcopy(sectPr))
+            elif elem.tag == f'{W}sectPr':
+                result['appendix'] = deepcopy(elem)
+
+        if len(para_sectPrs) >= 1:
+            result['cover'] = para_sectPrs[0]
+        if len(para_sectPrs) >= 2:
+            result['body'] = para_sectPrs[1]
+        if len(para_sectPrs) >= 3:
+            result['english_summary'] = para_sectPrs[2]
+
+        return result
+
+    except Exception as e:
+        print(f"  保存模板 sectPrs 失败: {e}")
+        return None
+
+
+def _restore_all_sectPrs(docx_path: str, template_sectPrs: Dict[str, Any]) -> bool:
+    """将输出文档的所有 sectPrs 替换为模板版本。
+
+    Word 的 sectPr 定义的是它之前内容的页面格式。
+    因此必须按语义位置分配，而非按出现顺序。
+
+    分配策略：
+    1. continuous sectPr → 封面 sectPr
+    2. "APPENDIX 1" 段落之前的最后一个 sectPr → 正文 sectPr (left=3600)
+    3. "APPENDIX 1" 段落之后、法律附录之前的最后一个 sectPr → 英文摘要 sectPr
+    4. body-level sectPr → 附录 sectPr
+
+    Args:
+        docx_path: 输出文档路径
+        template_sectPrs: 从 _save_all_template_sectPrs 获取的模板 sectPrs
+
+    Returns:
+        是否成功
+    """
+    import zipfile
+    from lxml import etree
+
+    W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
+
+    try:
+        with zipfile.ZipFile(docx_path, 'r') as z:
+            files = {name: z.read(name) for name in z.namelist()}
+
+        if 'word/document.xml' not in files:
+            return False
+
+        doc_tree = etree.fromstring(files['word/document.xml'])
+        body = doc_tree.find(f'{W}body')
+        if body is None:
+            return False
+
+        all_elements = list(body)
+
+        # 收集所有 paragraph-level sectPr 及其索引
+        para_sectPrs = []
+        for idx, elem in enumerate(all_elements):
+            if elem.tag == f'{W}p':
+                pPr = elem.find(f'{W}pPr')
+                if pPr is not None:
+                    sectPr = pPr.find(f'{W}sectPr')
+                    if sectPr is not None:
+                        para_sectPrs.append((idx, elem, sectPr))
+
+        cover_sectPr = template_sectPrs.get('cover')
+        body_sectPr = template_sectPrs.get('body')
+        es_sectPr = template_sectPrs.get('english_summary')
+        appendix_sectPr = template_sectPrs.get('appendix')
+
+        # 找到关键内容位置
+        appendix1_idx = None
+        for idx, elem in enumerate(all_elements):
+            if elem.tag == f'{W}p':
+                text = ''.join(t.text or '' for t in elem.iter(f'{W}t')).strip()
+                if text == 'APPENDIX 1':
+                    appendix1_idx = idx
+                    break
+
+        # 找到法律附录表格位置
+        disclaimer_idx = None
+        for idx, elem in enumerate(all_elements):
+            if elem.tag == f'{W}tbl':
+                text = ''.join(t.text or '' for t in elem.iter(f'{W}t'))
+                if '附录APPENDIX' in text or 'Table_disclaimer' in text:
+                    disclaimer_idx = idx
+                    break
+
+        print(f"  关键位置: APPENDIX 1={appendix1_idx}, 法律附录={disclaimer_idx}")
+
+        for idx, para, old_sectPr in para_sectPrs:
+            pPr = para.find(f'{W}pPr')
+            sect_type = old_sectPr.find(f'{W}type')
+            type_val = sect_type.get(f'{W}val') if sect_type is not None else 'nextPage'
+
+            pPr.remove(old_sectPr)
+
+            replacement = None
+            if type_val == 'continuous':
+                replacement = cover_sectPr
+                label = 'cover'
+            elif appendix1_idx is not None and idx < appendix1_idx:
+                replacement = body_sectPr
+                label = 'body'
+            elif disclaimer_idx is not None and idx < disclaimer_idx:
+                replacement = es_sectPr
+                label = 'english_summary'
+            else:
+                label = 'dropped'
+
+            if replacement is not None:
+                pPr.append(deepcopy(replacement))
+
+            if type_val == 'continuous' or replacement is not None:
+                pgMar = (replacement or old_sectPr).find(f'{W}pgMar')
+                left = pgMar.get(f'{W}left') if pgMar is not None else '?'
+                print(f"  [{idx}] type={type_val} → {label} (left={left})")
+            else:
+                print(f"  [{idx}] type={type_val} → dropped")
+
+        # 替换 body-level sectPr (appendix)
+        if appendix_sectPr is not None:
+            for elem in list(body):
+                if elem.tag == f'{W}sectPr':
+                    body.remove(elem)
+                    break
+            body.append(deepcopy(appendix_sectPr))
+
+        files['word/document.xml'] = etree.tostring(
+            doc_tree, xml_declaration=True, encoding='UTF-8', standalone=True
+        )
+
+        import os
+        os.remove(docx_path)
+        with zipfile.ZipFile(docx_path, 'w', zipfile.ZIP_DEFLATED) as z:
+            for name, content in files.items():
+                z.writestr(name, content)
+
+        print(f"  已恢复所有 sectPrs（按位置语义分配）")
+        return True
+
+    except Exception as e:
+        print(f"  恢复 sectPrs 失败: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+
+def _restore_final_sectPr(docx_path: str, template_sectPr) -> bool:
+    """恢复文档末尾的 sectPr 为模板原始值。
+
+    Args:
+        docx_path: 输出文档路径
+        template_sectPr: 从模板保存的 sectPr 元素
+
+    Returns:
+        是否成功
+    """
+    import zipfile
+    from lxml import etree
+
+    W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
+
+    try:
+        with zipfile.ZipFile(docx_path, 'r') as z:
+            files = {name: z.read(name) for name in z.namelist()}
+
+        if 'word/document.xml' not in files:
+            return False
+
+        doc_tree = etree.fromstring(files['word/document.xml'])
+        body = doc_tree.find(f'{W}body')
+        if body is None:
+            return False
+
+        for elem in list(body):
+            if elem.tag == f'{W}sectPr':
+                body.remove(elem)
+                break
+
+        body.append(deepcopy(template_sectPr))
+
+        files['word/document.xml'] = etree.tostring(
+            doc_tree, xml_declaration=True, encoding='UTF-8', standalone=True
+        )
+
+        import os
+        os.remove(docx_path)
+        with zipfile.ZipFile(docx_path, 'w', zipfile.ZIP_DEFLATED) as z:
+            for name, content in files.items():
+                z.writestr(name, content)
+
+        print(f"  已恢复文档末尾 sectPr（来自模板）")
+        return True
+
+    except Exception as e:
+        print(f"  恢复 final sectPr 失败: {e}")
+        return False
+
+
 def insert_body_at_marker_compose(
     doc_path: str,
     body_path: str,
     marker: str,
     output_path: str,
-    header_footer_mappings: Dict[str, Dict[str, str]] = None
+    template_path: str = None
 ) -> bool:
     """使用 docxcompose 三段式合并：在 marker 位置插入 body。
 
-    将原文档拆分为 marker 之前和之后两部分，
-    然后用 docxcompose 合并：part1 + body + sectPr + part3。
-    这样可以正确处理所有图片和资源引用。
+    模板已分为 4 个 section（封面/body/英文摘要/法律披露），
+    每个 section 自带 sectPr（含 header/footer 引用）。
+    body 内容插入 body section 后自动继承该 section 的 header/footer，
+    无需额外处理页眉页脚。
 
     Args:
         doc_path: 渲染后的模板路径
         body_path: body 文档路径
         marker: 占位符标记
         output_path: 输出路径
-        header_footer_mappings: header/footer 映射配置
+        template_path: 原始模板路径（用于恢复文档末尾 sectPr）
 
     Returns:
         是否成功插入
@@ -1211,41 +1468,27 @@ def insert_body_at_marker_compose(
 
         W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
 
-        # 0. 保存 body.docx 的页边距和 header/footer 引用信息（合并后需要恢复）
-        body_margins = _get_document_sectpr_margins(body_path)
-        if body_margins:
-            print(f"  body.docx 页边距: top={body_margins.get('top')}, bottom={body_margins.get('bottom')}")
+        # 0. 保存模板的所有 sectPrs（docxcompose 会损坏它们）
+        template_sectPrs = None
+        if template_path:
+            template_sectPrs = _save_all_template_sectPrs(template_path)
 
-        body_header_footer_refs = _get_document_header_footer_refs(body_path)
-        if body_header_footer_refs:
-            print(f"  body.docx header/footer 引用: {body_header_footer_refs}")
-
-        # 1. 找到 marker 位置和其中的 sectPr
+        # 1. 找到 marker 位置
         doc = Document(doc_path)
         body_elem = doc.element.body
         all_elements = list(body_elem)
 
         marker_idx = None
-        marker_sectPr = None  # 保留 marker 段落中的 sectPr（分节符）
         for i, elem in enumerate(all_elements):
             text = ''.join(t.text or '' for t in elem.iter() if t.text)
             if marker in text:
                 marker_idx = i
-                # 检查 marker 段落中是否有 sectPr（分节符）
-                if elem.tag.endswith('}p'):
-                    pPr = elem.find(f'{W}pPr')
-                    if pPr is not None:
-                        sectPr = pPr.find(f'{W}sectPr')
-                        if sectPr is not None:
-                            # 提取 sectPr（深拷贝避免被删除）
-                            marker_sectPr = deepcopy(sectPr)
-                            print(f"  保留 marker 段落中的 sectPr 分节符")
                 break
 
         if marker_idx is None:
             return False
 
-        # 2. 创建 part1（marker 之前的内容）
+        # 2. 创建 part1（marker 之前的内容 = 封面 section）
         part1_path = Path(output_path).parent / "temp_part1.docx"
         shutil.copy(doc_path, str(part1_path))
 
@@ -1253,15 +1496,14 @@ def insert_body_at_marker_compose(
         part1_body = part1_doc.element.body
         part1_elements = list(part1_body)
 
-        # 删除 marker 及之后的所有元素
         for elem in part1_elements[marker_idx:]:
             tag = elem.tag.split('}')[-1]
-            if tag != 'sectPr':  # 保留 sectPr（页面设置）
+            if tag != 'sectPr':
                 part1_body.remove(elem)
 
         part1_doc.save(str(part1_path))
 
-        # 3. 创建 part3（marker 之后的内容）
+        # 3. 创建 part3（marker 之后的内容 = 英文摘要 + 法律披露 sections）
         part3_path = Path(output_path).parent / "temp_part3.docx"
         shutil.copy(doc_path, str(part3_path))
 
@@ -1269,14 +1511,12 @@ def insert_body_at_marker_compose(
         part3_body = part3_doc.element.body
         part3_elements = list(part3_body)
 
-        # 删除 marker 及之前的所有元素
         has_part3_content = False
         for elem in part3_elements[:marker_idx + 1]:
             tag = elem.tag.split('}')[-1]
             if tag != 'sectPr':
                 part3_body.remove(elem)
 
-        # 检查 part3 是否有实际内容
         for elem in part3_body:
             tag = elem.tag.split('}')[-1]
             if tag in ['p', 'tbl', 'sdt']:
@@ -1288,63 +1528,31 @@ def insert_body_at_marker_compose(
         if has_part3_content:
             part3_doc.save(str(part3_path))
 
-        # 4. 使用 docxcompose 合并：part1 + body + sectPr(分页符) + part3
+        # 4. 合并：part1(封面) + body + part3(英文摘要+法律披露)
         master = Document(str(part1_path))
         composer = Composer(master)
 
-        # 追加 body
         body_doc = Document(body_path)
-
-        # 如果有 marker_sectPr，在 body 末尾添加一个带有 sectPr 的段落
-        # 这样 body 和 part3（APPENDIX 1 Summary）之间就有分页符了
-        if marker_sectPr is not None and has_part3_content:
-            # 创建分页段落
-            page_break_para = body_doc.element.body.makeelement(
-                f'{W}p',
-                {}
-            )
-            pPr = etree.SubElement(page_break_para, f'{W}pPr')
-            new_sectPr = deepcopy(marker_sectPr)
-
-            # 确保 sectPr 类型为 nextPage（强制分页）
-            sectType = new_sectPr.find(f'{W}type')
-            if sectType is None:
-                sectType = etree.SubElement(new_sectPr, f'{W}type')
-            sectType.set(f'{W}val', 'nextPage')
-
-            pPr.append(new_sectPr)
-            body_doc.element.body.append(page_break_para)
-            print(f"  在 body 末尾添加分页符段落（nextPage）")
-
         composer.append(body_doc, remove_property_fields=False)
 
-        # 追加 part3（如果有内容）
         if has_part3_content:
             part3_for_merge = Document(str(part3_path))
             composer.append(part3_for_merge, remove_property_fields=False)
 
-        # 保存最终文档
         composer.save(output_path)
 
-        # 5. 复制 body 的 header/footer 文件到输出文档（docxcompose 不会自动复制）
-        # 并获取 body 原始 rId -> 输出文档新 rId 的映射
-        hf_rid_mapping = _copy_headers_footers_between_docs(body_path, output_path)
+        # 5. 恢复所有 sectPrs（docxcompose 会损坏 header/footer rId 引用）
+        if template_sectPrs is not None:
+            _restore_all_sectPrs(output_path, template_sectPrs)
 
-        # 更新 body_header_footer_refs，使用输出文档中的新 rId
-        if hf_rid_mapping and body_header_footer_refs:
-            for ref_type in ['header', 'footer']:
-                if ref_type in hf_rid_mapping and ref_type in body_header_footer_refs:
-                    body_orig_rId = body_header_footer_refs.get(ref_type, '')
-                    if body_orig_rId in hf_rid_mapping[ref_type]:
-                        body_header_footer_refs[ref_type] = hf_rid_mapping[ref_type][body_orig_rId]
-                        print(f"  更新 body_header_footer_refs[{ref_type}]: {body_orig_rId} -> {body_header_footer_refs[ref_type]}")
+        # 6. 补救：复制 body 中的图片资源
+        copied_count = _copy_media_between_docx(body_path, output_path)
+        if copied_count > 0:
+            print(f"  已补充复制 {copied_count} 张图片（修复 docxcompose 图片丢失）")
 
-        # 6. 恢复 body 的页边距（修复 docxcompose 覆盖页边距的问题）
-        if body_margins:
-            # docxcompose 会在 part1 和 body 之间插入一个 sectPr（分节符）
-            # 这个 sectPr 应该使用 body 的页边距和 header/footer
-            # 找到并修复这个 sectPr
-            _fix_docxcompose_sectpr_margins(output_path, body_margins, has_part3_content, body_header_footer_refs, header_footer_mappings)
+        fixed_rid_count = _fix_docxcompose_image_rels(body_path, output_path)
+        if fixed_rid_count > 0:
+            print(f"  已修复 {fixed_rid_count} 处图片 rId 映射错误")
 
         # 7. 清理临时文件
         part1_path.unlink(missing_ok=True)
@@ -2702,10 +2910,10 @@ def render_report(
 ) -> bool:
     """渲染报告，正确处理分析师字段、abstract、body 和 english_summary。
 
-    法律附录识别规则：
-    - 前面有分页符（单独一页）
-    - 开头必定是："附录APPENDIX"
-    - 结尾是整个文档的结尾
+    模板已分为 4 个 section（封面/body/英文摘要/法律披露），
+    每个 section 自带 sectPr（含 header/footer 引用）。
+    插入内容后自动继承对应 section 的 header/footer，
+    无需额外处理页眉页脚。
 
     Args:
         template_path: 模板文件路径
@@ -2714,22 +2922,227 @@ def render_report(
         body_path: 正文文件路径
         output_path: 输出文件路径
         english_summary_path: 英文摘要文件路径（可选）
-        optimize_pagination_enabled: 是否启用分页优化（默认 False）
+        optimize_pagination_enabled: 是否启用分页优化（默认 True）
         pagination_min_lines: 段落分页的最小行数阈值（默认 3）
-        header_footer_mappings: 从 schema.yaml 读取的 header/footer 映射配置，格式：
-            {
-                'cover': {'header_first': 'header3', 'footer_first': 'footer3', ...},
-                'body': {'header': 'header4', 'footer': 'footer2'},
-                'english_summary': {'header': 'header4', 'footer': 'footer3'},
-                'appendix': {'header': None, 'footer': 'footer4'}
-            }
-            如果未提供，使用默认配置。
+        header_footer_mappings: 已废弃，保留参数兼容性
 
     Returns:
         是否成功
     """
     if not DOCX_AVAILABLE:
         print("Error: python-docx or docxtpl not installed")
+        return False
+
+    try:
+        from docxcompose.composer import Composer
+
+        # 0.5 补全公司中英文名称（如有需要）
+        elements = enrich_company_names_with_yfinance(elements)
+
+        # 1. 准备渲染上下文
+        context = prepare_context_with_analysts(elements)
+
+        # 2. 添加 abstract、body 和 english_summary 的 MARKER 到上下文
+        context['abstract'] = ABSTRACT_MARKER
+        context['body'] = BODY_MARKER
+        context['english_summary'] = ENGLISH_SUMMARY_MARKER
+
+        # 3. 修复模板中被拆分的占位符（Word 会把 {{ a1_email }} 拆成多个 run）
+        temp_path = Path(output_path).parent / "temp_rendered.docx"
+        fixed_template_path = Path(output_path).parent / "temp_fixed_template.docx"
+        _fix_split_placeholders_in_docx(template_path, str(fixed_template_path))
+
+        # 3.1 转义图表 XML 中的 Jinja2 语法（防止 docxtpl 解析错误）
+        escaped_chart_files = _escape_jinja_in_charts(str(fixed_template_path))
+        if escaped_chart_files:
+            print(f"  已转义 {len(escaped_chart_files)} 个图表文件中的 Jinja2 语法")
+
+        # 3.5 扩展分析师认证声明（为多个分析师复制声明段落）
+        expanded_analysts = expand_analyst_certification(str(fixed_template_path), elements)
+        if expanded_analysts > 0:
+            print(f"  已扩展分析师认证声明（新增 {expanded_analysts} 个分析师）")
+
+        # 4. 使用 docxtpl 渲染修复后的模板（支持 {% if %} 语法）
+        template = DocxTemplate(str(fixed_template_path))
+        template.render(context)
+        template.save(str(temp_path))
+
+        # 5. 处理 ABSTRACT_MARKER - 在表格单元格中插入 abstract 内容
+        doc = Document(str(temp_path))
+
+        if Path(abstract_path).exists() and Path(abstract_path).stat().st_size > 0:
+            abstract_doc = Document(abstract_path)
+            abstract_inserted = insert_abstract_to_cell(doc, abstract_doc, ABSTRACT_MARKER)
+            if abstract_inserted:
+                print(f"  已在 ABSTRACT_MARKER 位置插入 abstract")
+            else:
+                abstract_inserted = _insert_abstract_at_paragraph(doc, abstract_doc, ABSTRACT_MARKER)
+                if abstract_inserted:
+                    print(f"  已在段落中插入 abstract")
+                else:
+                    print(f"  ⚠️ 未找到 ABSTRACT_MARKER，abstract 未插入")
+
+        doc.save(str(temp_path))
+
+        # 6. 分页优化（仅针对 body.docx）- 在合并前单独处理
+        body_pagination_done = False
+        if optimize_pagination_enabled and PAGINATION_AVAILABLE and Path(body_path).exists():
+            print("\n正在优化 body.docx 分页（仅处理正文，不影响封面）...")
+            pagination_result = optimize_pagination(
+                input_path=body_path,
+                output_path=body_path,
+                optimize_paragraphs=True,
+                optimize_headings=True,
+                optimize_figures=True,
+                min_lines=pagination_min_lines
+            )
+            if pagination_result["success"]:
+                body_pagination_done = True
+                total_modified = (
+                    pagination_result["paragraphs_modified"] +
+                    pagination_result["headings_modified"] +
+                    pagination_result["figures_modified"]
+                )
+                print(f"  ✅ body.docx 分页优化完成: 修改 {total_modified} 处")
+            else:
+                print(f"  LibreOffice 方案失败，使用 XML 备用方案...")
+                xml_result = optimize_pagination_xml(body_path, body_path)
+                if xml_result["success"]:
+                    body_pagination_done = True
+                    print(f"  ✅ body.docx XML 分页优化完成")
+                else:
+                    print(f"  ⚠️ body.docx 分页优化失败，继续使用未优化的 body")
+
+        # 7. 处理 BODY_MARKER - 使用 docxcompose 三段式合并
+        # 模板自带 4 section 的 sectPr，body 内容插入 body section 后自动继承 header/footer
+        if Path(body_path).exists() and Path(body_path).stat().st_size > 0:
+            body_inserted = insert_body_at_marker_compose(
+                str(temp_path), body_path, BODY_MARKER, output_path,
+                template_path=template_path
+            )
+
+            if body_inserted:
+                print(f"  已使用 docxcompose 三段式合并插入 body（保留图表和格式）")
+            else:
+                print(f"  ⚠️ 未找到 BODY_MARKER，使用 docxcompose 追加 body")
+                doc = Document(str(temp_path))
+                composer = Composer(doc)
+                composer.append(Document(body_path), remove_property_fields=False)
+                composer.save(output_path)
+
+                template_final_sectPr = _save_template_final_sectPr(template_path)
+                if template_final_sectPr is not None:
+                    _restore_final_sectPr(output_path, template_final_sectPr)
+
+                copied_count = _copy_media_between_docx(body_path, output_path)
+                if copied_count > 0:
+                    print(f"  已补充复制 {copied_count} 张图片（修复 docxcompose 图片丢失）")
+                fixed_rid_count = _fix_docxcompose_image_rels(body_path, output_path)
+                if fixed_rid_count > 0:
+                    print(f"  已修复 {fixed_rid_count} 处图片 rId 映射错误")
+
+        else:
+            doc = Document(str(temp_path))
+            body_elem = doc.element.body
+            for elem in list(body_elem):
+                text = ''.join(t.text or '' for t in elem.iter() if t.text)
+                if BODY_MARKER in text:
+                    body_elem.remove(elem)
+                    print(f"  已删除 BODY_MARKER（无 body 文件）")
+                    break
+            doc.save(output_path)
+
+        # 8. 处理 ENGLISH_SUMMARY_MARKER - 直接在标记位置插入内容
+        # 模板 english summary section 自带 sectPr，内容自动继承 header/footer 和页边距
+        if english_summary_path and Path(english_summary_path).exists() and Path(english_summary_path).stat().st_size > 0:
+            doc = Document(output_path)
+            english_summary_doc = Document(english_summary_path)
+
+            es_inserted = insert_abstract_to_cell(doc, english_summary_doc, ENGLISH_SUMMARY_MARKER)
+            if es_inserted:
+                print(f"  已在 ENGLISH_SUMMARY_MARKER 位置插入 english_summary（表格单元格）")
+            else:
+                es_inserted = _insert_abstract_at_paragraph(doc, english_summary_doc, ENGLISH_SUMMARY_MARKER)
+                if es_inserted:
+                    print(f"  已在段落中插入 english_summary")
+                else:
+                    print(f"  ⚠️ 未找到 ENGLISH_SUMMARY_MARKER，english_summary 未插入")
+
+            doc.save(output_path)
+        else:
+            doc = Document(output_path)
+            body_elem = doc.element.body
+            marker_removed = False
+            for elem in list(body_elem):
+                text = ''.join(t.text or '' for t in elem.iter() if t.text)
+                if ENGLISH_SUMMARY_MARKER in text:
+                    body_elem.remove(elem)
+                    marker_removed = True
+                    print(f"  已删除 ENGLISH_SUMMARY_MARKER（无 english_summary 文件）")
+                    break
+            if marker_removed:
+                doc.save(output_path)
+
+        # 9. 恢复图表 XML 中被转义的 Jinja2 语法
+        if escaped_chart_files:
+            _restore_jinja_in_charts(output_path, escaped_chart_files)
+            print(f"  已恢复 {len(escaped_chart_files)} 个图表文件的原始内容")
+
+        # 10. 清理临时文件
+        temp_path.unlink(missing_ok=True)
+        fixed_template_path.unlink(missing_ok=True)
+
+        # 10.5 分页优化（仅在未对 body 预优化时执行）
+        if optimize_pagination_enabled and not body_pagination_done:
+            print("\n正在优化最终输出分页...")
+            if PAGINATION_AVAILABLE:
+                pagination_result = optimize_pagination(
+                    input_path=output_path,
+                    output_path=output_path,
+                    optimize_paragraphs=True,
+                    optimize_headings=True,
+                    optimize_figures=True,
+                    min_lines=pagination_min_lines
+                )
+
+                if pagination_result["success"]:
+                    total_modified = (
+                        pagination_result["paragraphs_modified"] +
+                        pagination_result["headings_modified"] +
+                        pagination_result["figures_modified"]
+                    )
+                    print(f"  ✅ 分页优化完成: 修改 {total_modified} 处")
+                else:
+                    print(f"  UNO 方案失败，使用 XML 备用方案...")
+                    xml_result = optimize_pagination_xml(output_path, output_path)
+                    if xml_result["success"]:
+                        print(f"  ✅ XML 分页优化完成")
+                    else:
+                        print(f"  ⚠️ 分页优化失败: {xml_result.get('error', '未知错误')}")
+            else:
+                print("  ⚠️ 分页优化模块不可用，跳过")
+        elif body_pagination_done:
+            print("\n跳过最终输出分页优化（body.docx 已预优化）")
+
+        # 11. 验证输出
+        final_doc = Document(output_path)
+        image_count = sum(1 for rel in final_doc.part.rels.values() if 'image' in rel.reltype)
+
+        appendix_result = _verify_appendix_with_lxml(output_path)
+        appendix_found = appendix_result.get('found', False)
+
+        print(f"  输出: 段落={len(final_doc.paragraphs)}, 表格={len(final_doc.tables)}, 图片={image_count}")
+        if appendix_found:
+            print(f"  ✅ 法律附录已完整保留 ({appendix_result.get('location', '')})")
+        else:
+            print(f"  ⚠️ 法律附录未找到")
+
+        return True
+
+    except Exception as e:
+        print(f"渲染失败: {e}")
+        import traceback
+        traceback.print_exc()
         return False
 
     try:
