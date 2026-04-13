@@ -1,9 +1,12 @@
-# 规范索引
+# 自动加载的规范
 
-- 代码实现、测试、调试、代码评审 → [CODING.md](./principles/CODING.md)
+@principles/RULES.md
+@principles/CODING.md
+
+# 按需读取的规范
+
 - 业务逻辑边界、RPC、Supabase 职责划分 → [ARCHITECTURE.md](./principles/ARCHITECTURE.md)
 - Supabase 迁移、schema → [SUPABASE.md](./principles/SUPABASE.md)
-- 全部指令性规则的编写规范 → [RULES.md](./principles/RULES.md)
 - 问题清单、差异清单、风险清单格式 → [DIALOG.md](./principles/DIALOG.md)
 
 # 交互规范
