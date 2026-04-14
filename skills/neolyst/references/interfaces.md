@@ -108,15 +108,15 @@ coverage_id = coverage.create_coverage(
 
 必填字段：`ticker`、`english_name`、`sector_id`、`isin`、`country_of_domicile`。初始 `coverage_analyst` 与报告分析师列表一致（最多 8 人，必须包含 `author_order=1` 的第一作者）。显式创建接口，仅在 `resolve_coverage` 未命中且用户确认"Coverage 已完成审批"后调用。
 
-## 7. save_draft_report
+## 7. save_report
 
-保存机器处理后的 draft 版本。上传本地文件到 Storage，写入 `report` / `report_version`。
+保存或更新报告元数据。不操作文件、不生成版本号。
 
 ```python
-from skills.neolyst.scripts import draft_report
+from skills.neolyst.scripts import save_report
 
-result = draft_report.save_draft_report(client, {
-    "report_id": None,          # 首次保存为 None；后续版本传已有 report_id
+result = save_report.save_report(client, {
+    "report_id": None,          # 首次为 None；后续传已有 report_id
     "report_type": "company",
     "title": "Vertiv: AI demand drives earnings growth",
     "coverage_id": "57ed4bf9-...",
@@ -126,46 +126,75 @@ result = draft_report.save_draft_report(client, {
     "report_language": "en",
     "contact_person": "alice@neolyst.com",
     "investment_thesis": "AI-driven demand supports earnings growth.",
-    "sector_id": "00000000-0000-0000-0000-000000000019",    # 可选
-    "region_code": "CN",                                    # 可选
+    "sector_id": "00000000-0000-0000-0000-000000000019",
+    "region_code": "CN",
     "analysts": [
         {"analyst_email": "alice@neolyst.com", "author_order": 1},
         {"analyst_email": "bob@neolyst.com", "author_order": 2},
     ],
+    # 以下字段会被自动剥离，不影响 RPC 调用
     "report_file": "/abs/path/report.docx",
     "pdf_file": "/abs/path/report.pdf",
-    "model_file": "/abs/path/model.xlsx",   # 公司类报告必填
+    "model_file": "/abs/path/model.xlsx",
 })
-# 返回：{"report_id": "uuid", "version_no": 1, "status": "draft"}
-# 不要求当前版本满足最终提交条件
+# 返回：{"report_id": "uuid"}
 ```
 
-报告文件存储路径：`reports/{report_id}/v{version_no}/{原始文件名}`，各版本独立目录。
-
 字段分层：
-- 保存 draft 最小字段：`title`、`report_type`、`report_language`、`analysts`、`report_file`、`pdf_file`
-- 提交前必须补齐：`contact_person`、`investment_thesis`，以及按类型要求的字段（见 `validate_report`）
+- 保存最小字段：`title`、`report_type`、`analysts`
+- 提交前必须补齐：`contact_person`、`investment_thesis`、`report_language`，以及按类型要求的字段
+
+## 7a. upload_report_files
+
+上传 Word + PDF 文件，并回写 `report.word_path` / `report.pdf_path`。
+
+```python
+from skills.neolyst.scripts import upload_files
+
+result = upload_files.upload_report_files(
+    client,
+    report_id="uuid",
+    report_file="/abs/path/report.docx",
+    pdf_file="/abs/path/report.pdf",
+)
+# 返回：{"report_id": "uuid", "word_path": "reports/{id}/report/{ts}/report.docx", "pdf_path": "reports/{id}/report/{ts}/report.pdf"}
+# 路径前缀由 generate_upload_path RPC 生成，客户端只拼接文件名
+```
+
+要求 report 处于 draft 或 rejected 状态。同一报告可多次调用，每次生成新时间戳目录，旧文件保留。
+
+## 7b. upload_model_file
+
+上传 Model 文件，并回写 `report.model_path`。
+
+```python
+from skills.neolyst.scripts import upload_files
+
+result = upload_files.upload_model_file(
+    client,
+    report_id="uuid",
+    model_file="/abs/path/model.xlsx",
+)
+# 返回：{"report_id": "uuid", "model_path": "reports/{id}/model/{ts}/model.xlsx"}
+```
 
 ## 8. validate_report
 
-调用 DB 侧 `validate_report` RPC，校验报告当前版本是否满足提交条件。全量收集所有错误后一次性返回。
+调用 DB 侧 `validate_report` RPC，校验报告是否满足提交条件。全量收集所有错误后一次性返回。
 
 ```python
 from skills.neolyst.scripts.validators import validate_report
 
 result = validate_report(client, report_id="uuid")
-# 通过：返回 {"report_id": "uuid", "version_no": 1}
+# 通过：返回 {"report_id": "uuid"}
 # 失败：抛出 ValueError（消息以"；"分隔所有失败项）
 ```
 
-只负责校验，不自动补字段、不自动重试、不自动保存 draft。
-
-当前版本由 `report.current_version_no` 决定。
+只负责校验，不自动补字段、不自动重试、不自动保存。
 
 校验范围：
 - report 存在且状态为 draft/rejected
-- `report.current_version_no` 大于 0，且当前版本存在
-- word/pdf 文件路径非空
+- `word_path` 和 `pdf_path` 非空
 - 必填字段：title / report_type / report_language / investment_thesis / contact_person
 - 分析师列表非空，且 contact_person 在分析师列表中（大小写不敏感）
 - 每个分析师存在且 is_active
@@ -174,16 +203,15 @@ result = validate_report(client, report_id="uuid")
 
 ## 9. submit_report
 
-将当前 draft/rejected 版本提交为 `submitted`。
+将 draft/rejected 报告提交为 `submitted`。
 
 ```python
 from skills.neolyst.scripts import submit_report
 
 result = submit_report.submit_report(client, report_id="uuid")
-# 返回：{"report_id": "uuid", "status": "submitted", "version_no": 1}
+# 返回：{"report_id": "uuid", "status": "submitted"}
 # RPC 内部调用 validate_report 做字段守门，字段不完整时抛出 ValueError
 # 如需提前获取全量错误展示，先显式调用 validate_report(client, report_id="uuid")
-# 数据库 RPC 内部读取 report.current_version_no，并返回真实提交版本
 ```
 
 ## 10. list_coverage_history
@@ -234,9 +262,9 @@ rows = coverage.list_coverage_history(
 
 报错内容：多条错误以"；"分隔
 
-→ 将错误逐条展示给用户，明确指出缺什么字段、哪个条件不满足。用户修正后，重新调用 `save_draft_report`（传入相同 report_id）追加新版本，再重新 validate。不要尝试自动补字段。
+→ 将错误逐条展示给用户，明确指出缺什么字段、哪个条件不满足。用户修正后，重新调用 `save_report`（传入相同 report_id）更新元数据，再 `upload_report_files` 更新文件，然后重新 validate。不要尝试自动补字段。
 
-### save_draft_report 失败
+### save_report 失败
 
 常见原因：title 为 None（NOT NULL 违规）、analysts 为空、RPC 内部校验不通过。
 
@@ -244,9 +272,9 @@ rows = coverage.list_coverage_history(
 
 ### submit_report 失败
 
-常见原因：报告状态不是 draft/rejected、当前没有可提交版本。
+常见原因：报告状态不是 draft/rejected、word_path 或 pdf_path 为空。
 
-→ 如果是"当前没有可提交版本"，说明需要先 `save_draft_report` 保存内容。如果是状态不对，说明该报告已提交过，无需重复操作。
+→ 如果是路径为空，说明需要先调用 `upload_report_files` 上传文件。如果是状态不对，说明该报告已提交过，无需重复操作。
 
 ### 认证失败
 

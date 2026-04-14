@@ -8,8 +8,7 @@
 --   3. 覆盖标的（Vistra Corp / Bloom Energy / VRT / 西锐飞机 / 腾讯 / GE Vernova）
 --   4. 覆盖-分析师关联
 --   5. 报告（公司报告 x4 / 公司快评 x1 / 行业快评 x1 / 宏观报告 x1）
---   6. 报告版本快照
---   7. 报告状态流转日志
+--   6. 报告状态流转日志
 
 -- ============================================================
 -- 0. 密码规则：各用户密码 = 邮箱地址，方便记忆
@@ -234,15 +233,19 @@ on conflict (coverage_id, analyst_email) do update set
 
 -- 5a. Vistra Corp 首次覆盖 —— 已发布（英文）
 insert into public.report (
-    id, title, report_type, status, current_version_no,
+    id, title, report_type, status, word_path, pdf_path, model_path,
     owner_user_id, coverage_id, ticker,
     sector_id, region_code, rating, target_price,
     investment_thesis, report_language, contact_person,
+    lead_analyst_email, analyst_emails,
     published_by, published_at
 ) values (
     'e0000000-0000-0000-0000-000000000001'::uuid,
     'Active Response to Energy Transition and Enhancement of Low-Carbon Power Amid AI Data Center Migration and Natural Gas Demand Growth: Initiation',
-    'company', 'published', 1,
+    'company', 'published',
+    'reports/e0000000-0000-0000-0000-000000000001/report/20260104_163000/EN-Vistra_Corp20260104.docx',
+    'reports/e0000000-0000-0000-0000-000000000001/report/20260104_163000/EN-Vistra_Corp20260104.pdf',
+    'reports/e0000000-0000-0000-0000-000000000001/model/20260104_163000/EN-Vistra_Corp20260104.xlsx',
     'a0000000-0000-0000-0000-000000000010'::uuid,
     'c0000000-0000-0000-0000-000000000001'::uuid,
     'VST US',
@@ -250,21 +253,26 @@ insert into public.report (
     'US', 'OUTPERFORM', 423.72,
     'Vistra is well positioned as a leading integrated power generator benefiting from AI data center demand growth and energy transition.',
     'en', 'harryyang@hfisec.com.hk',
+    'harryyang@hfisec.com.hk', ARRAY['harryyang@hfisec.com.hk'],
     'a0000000-0000-0000-0000-000000000002'::uuid,
     '2026-01-05 10:00:00+00'
 ) on conflict (id) do nothing;
 
 -- 5b. 西锐飞机首次覆盖 —— 已发布（中文）
 insert into public.report (
-    id, title, report_type, status, current_version_no,
+    id, title, report_type, status, word_path, pdf_path, model_path,
     owner_user_id, coverage_id, ticker,
     sector_id, region_code, rating, target_price,
     investment_thesis, report_language, contact_person,
+    lead_analyst_email, analyst_emails,
     published_by, published_at
 ) values (
     'e0000000-0000-0000-0000-000000000002'::uuid,
     '首次覆盖：安全、创新与强大生态系统铸就西锐私人航空全球领导者地位',
-    'company', 'published', 1,
+    'company', 'published',
+    'reports/e0000000-0000-0000-0000-000000000002/report/20251020_180000/西锐飞机首次覆盖报告.docx',
+    'reports/e0000000-0000-0000-0000-000000000002/report/20251020_180000/西锐飞机首次覆盖报告.pdf',
+    null,
     'a0000000-0000-0000-0000-000000000010'::uuid,
     'c0000000-0000-0000-0000-000000000004'::uuid,
     '2507.HK',
@@ -272,305 +280,247 @@ insert into public.report (
     'HK', 'OUTPERFORM', 86.72,
     '西锐飞机凭借卓越的安全记录、持续创新能力及完善的私人航空生态系统，成为全球私人航空领域的领导者。',
     'zh', 'harryyang@hfisec.com.hk',
+    'harryyang@hfisec.com.hk', ARRAY['harryyang@hfisec.com.hk'],
     'a0000000-0000-0000-0000-000000000002'::uuid,
     '2025-10-21 10:00:00+00'
 ) on conflict (id) do nothing;
 
 -- 5c. Bloom Energy 公司报告 —— 待审批（submitted）
 insert into public.report (
-    id, title, report_type, status, current_version_no,
+    id, title, report_type, status, word_path, pdf_path, model_path,
     owner_user_id, coverage_id, ticker,
     sector_id, region_code, rating, target_price,
-    investment_thesis, report_language, contact_person
+    investment_thesis, report_language, contact_person,
+    lead_analyst_email, analyst_emails
 ) values (
     'e0000000-0000-0000-0000-000000000003'::uuid,
     'Bloom Energy: Solid Oxide Fuel Cell Leader Entering Multi-Year Growth Cycle',
-    'company', 'submitted', 2,
+    'company', 'submitted',
+    'reports/e0000000-0000-0000-0000-000000000003/report/20260305_110000/Bloom_Energy_v2.docx',
+    'reports/e0000000-0000-0000-0000-000000000003/report/20260305_110000/Bloom_Energy_v2.pdf',
+    'reports/e0000000-0000-0000-0000-000000000003/model/20260305_110000/Bloom_Energy_v2.xlsx',
     'a0000000-0000-0000-0000-000000000010'::uuid,
     'c0000000-0000-0000-0000-000000000002'::uuid,
     'BE US',
     '00000000-0000-0000-0000-000000000088'::uuid,
     'US', 'NEUTRAL', 28.50,
     'Bloom Energy is transitioning from a project-driven business to a recurring revenue model with its solid oxide fuel cell platform.',
-    'en', 'harryyang@hfisec.com.hk'
+    'en', 'harryyang@hfisec.com.hk',
+    'harryyang@hfisec.com.hk', ARRAY['harryyang@hfisec.com.hk']
 ) on conflict (id) do nothing;
 
 -- 5d. VRT 公司报告 —— 草稿（draft）
 insert into public.report (
-    id, title, report_type, status, current_version_no,
+    id, title, report_type, status, word_path, pdf_path, model_path,
     owner_user_id, coverage_id, ticker,
     sector_id, region_code, rating, target_price,
-    investment_thesis, report_language, contact_person
+    investment_thesis, report_language, contact_person,
+    lead_analyst_email, analyst_emails
 ) values (
     'e0000000-0000-0000-0000-000000000004'::uuid,
     'Vertiv Holdings: AI Infrastructure Enabler Poised for Accelerating Growth',
-    'company', 'draft', 0,
+    'company', 'draft',
+    null, null, null,
     'a0000000-0000-0000-0000-000000000011'::uuid,
     'c0000000-0000-0000-0000-000000000003'::uuid,
     'VRT US',
     '00000000-0000-0000-0000-000000000021'::uuid,
     'US', 'OUTPERFORM', 155.00,
     'Vertiv is a key beneficiary of AI-driven data center buildout with leading thermal management and power infrastructure solutions.',
-    'en', 'dengyida@hfisec.com.hk'
+    'en', 'dengyida@hfisec.com.hk',
+    'dengyida@hfisec.com.hk', ARRAY['dengyida@hfisec.com.hk', 'harryyang@hfisec.com.hk']
 ) on conflict (id) do nothing;
 
 -- 5e. 全球消费及互联网周报（sector_flash） —— 已发布
 insert into public.report (
-    id, title, report_type, status, current_version_no,
+    id, title, report_type, status, word_path, pdf_path, model_path,
     owner_user_id, coverage_id, ticker,
     sector_id, region_code, rating,
     investment_thesis, report_language, contact_person,
+    lead_analyst_email, analyst_emails,
     published_by, published_at
 ) values (
     'e0000000-0000-0000-0000-000000000005'::uuid,
     '周报(03/16-03/19): 消费板块：港股消费震荡，油价高企压制风险偏好；海外互联网板块：腾讯年报落地，AI长期逻辑未变',
-    'sector_flash', 'published', 1,
+    'sector_flash', 'published',
+    'reports/e0000000-0000-0000-0000-000000000005/report/20260319_170000/全球消费及互联网周报.docx',
+    'reports/e0000000-0000-0000-0000-000000000005/report/20260319_170000/全球消费及互联网周报.pdf',
+    null,
     'a0000000-0000-0000-0000-000000000010'::uuid,
     null, null,
     '00000000-0000-0000-0000-000000000033'::uuid,
     'HK', 'NON_RATED',
     '港股消费板块震荡反弹，海外互联网板块腾讯年报落地，AI长期逻辑持续强化。',
     'zh', 'harryyang@hfisec.com.hk',
+    'harryyang@hfisec.com.hk', ARRAY['harryyang@hfisec.com.hk'],
     'a0000000-0000-0000-0000-000000000002'::uuid,
     '2026-03-20 10:00:00+00'
 ) on conflict (id) do nothing;
 
 -- 5f. 斯卡吉特河水电项目宏观报告（macro） —— 已发布
 insert into public.report (
-    id, title, report_type, status, current_version_no,
+    id, title, report_type, status, word_path, pdf_path, model_path,
     owner_user_id, coverage_id, ticker,
     sector_id, region_code, rating,
     investment_thesis, report_language, contact_person,
+    lead_analyst_email, analyst_emails,
     published_by, published_at
 ) values (
     'e0000000-0000-0000-0000-000000000006'::uuid,
     '斯卡吉特河水电项目重新许可：和解达成的里程碑与ESG三方博弈的深度透视',
-    'macro', 'published', 1,
+    'macro', 'published',
+    'reports/e0000000-0000-0000-0000-000000000006/report/20260316_200000/0317斯卡吉特河水电项目.docx',
+    'reports/e0000000-0000-0000-0000-000000000006/report/20260316_200000/0317斯卡吉特河水电项目.pdf',
+    null,
     'a0000000-0000-0000-0000-000000000010'::uuid,
     null, null,
     '00000000-0000-0000-0000-000000000076'::uuid,
     'US', 'NON_RATED',
     '斯卡吉特河水电项目重新许可标志北美公用事业资产估值发生结构性重塑，水电资产从低成本能源向高合规资产转型。',
     'zh', 'harryyang@hfisec.com.hk',
+    'harryyang@hfisec.com.hk', ARRAY['harryyang@hfisec.com.hk'],
     'a0000000-0000-0000-0000-000000000002'::uuid,
     '2026-03-17 10:00:00+00'
 ) on conflict (id) do nothing;
 
 -- 5g. 腾讯 Q4 业绩快评（company_flash） —— 被退回（rejected）
 insert into public.report (
-    id, title, report_type, status, current_version_no,
+    id, title, report_type, status, word_path, pdf_path, model_path,
     owner_user_id, coverage_id, ticker,
     sector_id, region_code, rating, target_price,
-    investment_thesis, report_language, contact_person
+    investment_thesis, report_language, contact_person,
+    lead_analyst_email, analyst_emails
 ) values (
     'e0000000-0000-0000-0000-000000000007'::uuid,
     'Tencent Q4 FY2025 Earnings Flash: Revenue Beat but AI Capex Guidance Disappoints',
-    'company_flash', 'rejected', 1,
+    'company_flash', 'rejected',
+    'reports/e0000000-0000-0000-0000-000000000007/report/20260320_150000/Tencent_Q4_Flash.docx',
+    'reports/e0000000-0000-0000-0000-000000000007/report/20260320_150000/Tencent_Q4_Flash.pdf',
+    null,
     'a0000000-0000-0000-0000-000000000011'::uuid,
     'c0000000-0000-0000-0000-000000000005'::uuid,
     '0700.HK',
     '00000000-0000-0000-0000-000000000035'::uuid,
     'HK', 'OUTPERFORM', 520.00,
     '腾讯Q4收入超预期但AI资本开支指引低于市场预期，短期承压但长期AI商业化逻辑不变。',
-    'en', 'dengyida@hfisec.com.hk'
+    'en', 'dengyida@hfisec.com.hk',
+    'dengyida@hfisec.com.hk', ARRAY['dengyida@hfisec.com.hk']
 ) on conflict (id) do nothing;
 
 
 -- ============================================================
--- 6. 报告版本快照（public.report_version）
--- ============================================================
-
--- Vistra 报告 v1（唯一版本，已发布）
-insert into public.report_version (id, report_id, version_no, snapshot_json, word_file_path, created_by)
-values (
-    'd0000000-0000-0000-0000-000000000001'::uuid,
-    'e0000000-0000-0000-0000-000000000001'::uuid,
-    1,
-    '{"title": "Active Response to Energy Transition...", "rating": "OUTPERFORM", "target_price": 423.72, "current_price": 356.36, "market_cap": "17.842bn", "ticker": "VST US"}'::jsonb,
-    'reports/e0000000-0000-0000-0000-000000000001/v1/EN-Vistra_Corp20260104.docx',
-    'a0000000-0000-0000-0000-000000000010'::uuid
-) on conflict (id) do nothing;
-
--- 西锐飞机报告 v1
-insert into public.report_version (id, report_id, version_no, snapshot_json, word_file_path, created_by)
-values (
-    'd0000000-0000-0000-0000-000000000002'::uuid,
-    'e0000000-0000-0000-0000-000000000002'::uuid,
-    1,
-    '{"title": "首次覆盖：安全、创新与强大生态系统铸就西锐私人航空全球领导者地位", "rating": "OUTPERFORM", "target_price": 86.72, "current_price": "60.40", "ticker": "2507.HK"}'::jsonb,
-    'reports/e0000000-0000-0000-0000-000000000002/v1/西锐飞机首次覆盖报告.docx',
-    'a0000000-0000-0000-0000-000000000010'::uuid
-) on conflict (id) do nothing;
-
--- Bloom Energy 报告 v1（初稿）
-insert into public.report_version (id, report_id, version_no, snapshot_json, word_file_path, created_by)
-values (
-    'd0000000-0000-0000-0000-000000000003'::uuid,
-    'e0000000-0000-0000-0000-000000000003'::uuid,
-    1,
-    '{"title": "Bloom Energy: Initiation of Coverage", "rating": "NEUTRAL", "target_price": 25.00, "ticker": "BE US"}'::jsonb,
-    'reports/e0000000-0000-0000-0000-000000000003/v1/Bloom_Energy_1231.docx',
-    'a0000000-0000-0000-0000-000000000010'::uuid
-) on conflict (id) do nothing;
-
--- Bloom Energy 报告 v2（修改后重新提交）
-insert into public.report_version (id, report_id, version_no, snapshot_json, word_file_path, created_by)
-values (
-    'd0000000-0000-0000-0000-000000000004'::uuid,
-    'e0000000-0000-0000-0000-000000000003'::uuid,
-    2,
-    '{"title": "Bloom Energy: Solid Oxide Fuel Cell Leader Entering Multi-Year Growth Cycle", "rating": "NEUTRAL", "target_price": 28.50, "ticker": "BE US"}'::jsonb,
-    'reports/e0000000-0000-0000-0000-000000000003/v2/Bloom_Energy_v2.docx',
-    'a0000000-0000-0000-0000-000000000010'::uuid
-) on conflict (id) do nothing;
-
--- 行业快报 v1
-insert into public.report_version (id, report_id, version_no, snapshot_json, word_file_path, created_by)
-values (
-    'd0000000-0000-0000-0000-000000000005'::uuid,
-    'e0000000-0000-0000-0000-000000000005'::uuid,
-    1,
-    '{"title_ch": "周报(03/16-03/19): 消费板块", "title_en": "HK consumption rebounds amid volatility", "theme_ch": "全球消费及互联网", "theme_en": "Global Consumption & Internet Sector"}'::jsonb,
-    'reports/e0000000-0000-0000-0000-000000000005/v1/全球消费及互联网周报.docx',
-    'a0000000-0000-0000-0000-000000000010'::uuid
-) on conflict (id) do nothing;
-
--- 宏观报告 v1
-insert into public.report_version (id, report_id, version_no, snapshot_json, word_file_path, created_by)
-values (
-    'd0000000-0000-0000-0000-000000000006'::uuid,
-    'e0000000-0000-0000-0000-000000000006'::uuid,
-    1,
-    '{"title_ch": "斯卡吉特河水电项目重新许可", "title_en": "Skagit River Hydropower Project Re-licensing", "type_ch": "全球宏观", "type_en": "World Macro"}'::jsonb,
-    'reports/e0000000-0000-0000-0000-000000000006/v1/0317斯卡吉特河水电项目.docx',
-    'a0000000-0000-0000-0000-000000000010'::uuid
-) on conflict (id) do nothing;
-
--- 腾讯快评 v1（被退回）
-insert into public.report_version (id, report_id, version_no, snapshot_json, word_file_path, created_by)
-values (
-    'd0000000-0000-0000-0000-000000000007'::uuid,
-    'e0000000-0000-0000-0000-000000000007'::uuid,
-    1,
-    '{"title": "Tencent Q4 FY2025 Earnings Flash", "rating": "OUTPERFORM", "target_price": 520.00, "ticker": "0700.HK"}'::jsonb,
-    'reports/e0000000-0000-0000-0000-000000000007/v1/Tencent_Q4_Flash.docx',
-    'a0000000-0000-0000-0000-000000000011'::uuid
-) on conflict (id) do nothing;
-
-
--- ============================================================
--- 7. 报告状态流转日志（public.report_status_log）
+-- 6. 报告状态流转日志（public.report_status_log）
 -- ============================================================
 -- 注意：report 表有 BEFORE UPDATE 触发器校验状态流转合法性，
 -- 但 report_status_log 是普通插入，无额外触发器。
 -- rejected 状态的 reason 字段不能为空。
 
 -- Vistra: draft -> submitted -> published
-insert into public.report_status_log (id, report_id, from_status, to_status, action_by, action_by_name, version_no, action_at)
+insert into public.report_status_log (id, report_id, from_status, to_status, action_by, action_by_name, action_at)
 values
     ('b0000000-0000-0000-0000-000000000001'::uuid,
      'e0000000-0000-0000-0000-000000000001'::uuid,
      'draft', 'submitted',
-     'a0000000-0000-0000-0000-000000000010'::uuid, 'Bin Yang', 1,
+     'a0000000-0000-0000-0000-000000000010'::uuid, 'Bin Yang',
      '2026-01-04 16:30:00+00'),
 
     ('b0000000-0000-0000-0000-000000000002'::uuid,
      'e0000000-0000-0000-0000-000000000001'::uuid,
      'submitted', 'published',
-     'a0000000-0000-0000-0000-000000000002'::uuid, '测试审批员', 1,
+     'a0000000-0000-0000-0000-000000000002'::uuid, '测试审批员',
       '2026-01-05 10:00:00+00')
 on conflict (id) do nothing;
 
 -- 西锐飞机: draft -> submitted -> published
-insert into public.report_status_log (id, report_id, from_status, to_status, action_by, action_by_name, version_no, action_at)
+insert into public.report_status_log (id, report_id, from_status, to_status, action_by, action_by_name, action_at)
 values
     ('b0000000-0000-0000-0000-000000000003'::uuid,
      'e0000000-0000-0000-0000-000000000002'::uuid,
      'draft', 'submitted',
-     'a0000000-0000-0000-0000-000000000010'::uuid, 'Bin Yang', 1,
+     'a0000000-0000-0000-0000-000000000010'::uuid, 'Bin Yang',
      '2025-10-20 18:00:00+00'),
 
     ('b0000000-0000-0000-0000-000000000004'::uuid,
      'e0000000-0000-0000-0000-000000000002'::uuid,
      'submitted', 'published',
-     'a0000000-0000-0000-0000-000000000002'::uuid, '测试审批员', 1,
+     'a0000000-0000-0000-0000-000000000002'::uuid, '测试审批员',
       '2025-10-21 10:00:00+00')
 on conflict (id) do nothing;
 
 -- Bloom Energy: draft -> submitted (v1) -> rejected -> draft -> submitted (v2)
-insert into public.report_status_log (id, report_id, from_status, to_status, action_by, action_by_name, version_no, reason, action_at)
+insert into public.report_status_log (id, report_id, from_status, to_status, action_by, action_by_name, reason, action_at)
 values
     ('b0000000-0000-0000-0000-000000000005'::uuid,
      'e0000000-0000-0000-0000-000000000003'::uuid,
      'draft', 'submitted',
-     'a0000000-0000-0000-0000-000000000010'::uuid, 'Bin Yang', 1, null,
+     'a0000000-0000-0000-0000-000000000010'::uuid, 'Bin Yang', null,
      '2026-03-01 09:00:00+00'),
 
     ('b0000000-0000-0000-0000-000000000006'::uuid,
      'e0000000-0000-0000-0000-000000000003'::uuid,
      'submitted', 'rejected',
-     'a0000000-0000-0000-0000-000000000002'::uuid, '测试审批员', 1,
+     'a0000000-0000-0000-0000-000000000002'::uuid, '测试审批员',
      '目标价格缺少估值方法论说明，请补充 DCF 假设。',
      '2026-03-02 14:00:00+00'),
 
     ('b0000000-0000-0000-0000-000000000007'::uuid,
      'e0000000-0000-0000-0000-000000000003'::uuid,
      'rejected', 'draft',
-     'a0000000-0000-0000-0000-000000000010'::uuid, 'Bin Yang', 1, null,
+     'a0000000-0000-0000-0000-000000000010'::uuid, 'Bin Yang', null,
      '2026-03-03 10:00:00+00'),
 
     ('b0000000-0000-0000-0000-000000000008'::uuid,
      'e0000000-0000-0000-0000-000000000003'::uuid,
      'draft', 'submitted',
-     'a0000000-0000-0000-0000-000000000010'::uuid, 'Bin Yang', 2, null,
+     'a0000000-0000-0000-0000-000000000010'::uuid, 'Bin Yang', null,
       '2026-03-05 11:00:00+00')
 on conflict (id) do nothing;
 
 -- 行业快报: draft -> submitted -> published
-insert into public.report_status_log (id, report_id, from_status, to_status, action_by, action_by_name, version_no, action_at)
+insert into public.report_status_log (id, report_id, from_status, to_status, action_by, action_by_name, action_at)
 values
     ('b0000000-0000-0000-0000-000000000009'::uuid,
      'e0000000-0000-0000-0000-000000000005'::uuid,
      'draft', 'submitted',
-     'a0000000-0000-0000-0000-000000000010'::uuid, 'Bin Yang', 1,
+     'a0000000-0000-0000-0000-000000000010'::uuid, 'Bin Yang',
      '2026-03-19 17:00:00+00'),
 
     ('b0000000-0000-0000-0000-000000000010'::uuid,
      'e0000000-0000-0000-0000-000000000005'::uuid,
      'submitted', 'published',
-     'a0000000-0000-0000-0000-000000000002'::uuid, '测试审批员', 1,
+     'a0000000-0000-0000-0000-000000000002'::uuid, '测试审批员',
       '2026-03-20 10:00:00+00')
 on conflict (id) do nothing;
 
 -- 宏观报告: draft -> submitted -> published
-insert into public.report_status_log (id, report_id, from_status, to_status, action_by, action_by_name, version_no, action_at)
+insert into public.report_status_log (id, report_id, from_status, to_status, action_by, action_by_name, action_at)
 values
     ('b0000000-0000-0000-0000-000000000011'::uuid,
      'e0000000-0000-0000-0000-000000000006'::uuid,
      'draft', 'submitted',
-     'a0000000-0000-0000-0000-000000000010'::uuid, 'Bin Yang', 1,
+     'a0000000-0000-0000-0000-000000000010'::uuid, 'Bin Yang',
      '2026-03-16 20:00:00+00'),
 
     ('b0000000-0000-0000-0000-000000000012'::uuid,
      'e0000000-0000-0000-0000-000000000006'::uuid,
      'submitted', 'published',
-     'a0000000-0000-0000-0000-000000000002'::uuid, '测试审批员', 1,
+     'a0000000-0000-0000-0000-000000000002'::uuid, '测试审批员',
       '2026-03-17 10:00:00+00')
 on conflict (id) do nothing;
 
 -- 腾讯快评: draft -> submitted -> rejected
-insert into public.report_status_log (id, report_id, from_status, to_status, action_by, action_by_name, version_no, reason, action_at)
+insert into public.report_status_log (id, report_id, from_status, to_status, action_by, action_by_name, reason, action_at)
 values
     ('b0000000-0000-0000-0000-000000000013'::uuid,
      'e0000000-0000-0000-0000-000000000007'::uuid,
      'draft', 'submitted',
-     'a0000000-0000-0000-0000-000000000011'::uuid, 'Yida Deng', 1, null,
+     'a0000000-0000-0000-0000-000000000011'::uuid, 'Yida Deng', null,
      '2026-03-20 15:00:00+00'),
 
     ('b0000000-0000-0000-0000-000000000014'::uuid,
      'e0000000-0000-0000-0000-000000000007'::uuid,
      'submitted', 'rejected',
-     'a0000000-0000-0000-0000-000000000002'::uuid, '测试审批员', 1,
+     'a0000000-0000-0000-0000-000000000002'::uuid, '测试审批员',
      '快评篇幅过长，请精简至两页以内并补充关键财务指标对比表。',
       '2026-03-21 09:30:00+00')
 on conflict (id) do nothing;
@@ -608,15 +558,19 @@ on conflict (coverage_id, analyst_email) do update set
 
 -- 9c. 报告 1：威胜控股首次覆盖 —— 已发布（2025-07-25, 目标价 120, OUTPERFORM）
 insert into public.report (
-    id, title, report_type, status, current_version_no,
+    id, title, report_type, status, word_path, pdf_path, model_path,
     owner_user_id, coverage_id, ticker,
     sector_id, region_code, rating, target_price,
     investment_thesis, report_language, contact_person,
+    lead_analyst_email, analyst_emails,
     published_by, published_at
 ) values (
     'e0000000-0000-0000-0000-000000000008'::uuid,
     '威胜控股（3393.HK）首次覆盖：配网投资与AI算力双轮驱动，能源计量龙头再启航',
-    'company', 'published', 1,
+    'company', 'published',
+    'reports/e0000000-0000-0000-0000-000000000008/report/20250724_180000/威胜控股首次覆盖.docx',
+    'reports/e0000000-0000-0000-0000-000000000008/report/20250724_180000/威胜控股首次覆盖.pdf',
+    'reports/e0000000-0000-0000-0000-000000000008/model/20250724_180000/威胜控股首次覆盖.xlsx',
     'a0000000-0000-0000-0000-000000000010'::uuid,
     'c0000000-0000-0000-0000-000000000007'::uuid,
     '3393.HK',
@@ -624,21 +578,26 @@ insert into public.report (
     'HK', 'OUTPERFORM', 120.00,
     '配网投资高景气叠加AI算力用电需求爆发，威胜作为能源计量龙头，智能电表海外拓展加速，业绩进入新一轮增长周期。',
     'zh', 'harryyang@hfisec.com.hk',
+    'harryyang@hfisec.com.hk', ARRAY['harryyang@hfisec.com.hk', 'dengyida@hfisec.com.hk'],
     'a0000000-0000-0000-0000-000000000002'::uuid,
     '2025-07-25 10:00:00+00'
 ) on conflict (id) do nothing;
 
 -- 9d. 报告 2：威胜控股更新报告 —— 已发布（2025-10-25, 目标价 140, NEUTRAL）
 insert into public.report (
-    id, title, report_type, status, current_version_no,
+    id, title, report_type, status, word_path, pdf_path, model_path,
     owner_user_id, coverage_id, ticker,
     sector_id, region_code, rating, target_price,
     investment_thesis, report_language, contact_person,
+    lead_analyst_email, analyst_emails,
     published_by, published_at
 ) values (
     'e0000000-0000-0000-0000-000000000009'::uuid,
     '威胜控股（3393.HK）更新：海外订单放缓拖累短期增速，下调评级至中性',
-    'company', 'published', 1,
+    'company', 'published',
+    'reports/e0000000-0000-0000-0000-000000000009/report/20251024_180000/威胜控股更新.docx',
+    'reports/e0000000-0000-0000-0000-000000000009/report/20251024_180000/威胜控股更新.pdf',
+    null,
     'a0000000-0000-0000-0000-000000000010'::uuid,
     'c0000000-0000-0000-0000-000000000007'::uuid,
     '3393.HK',
@@ -646,60 +605,40 @@ insert into public.report (
     'HK', 'NEUTRAL', 140.00,
     '海外市场拓展节奏放缓，国内配网招标竞争加剧，短期增速承压；上调目标价至140港元反映估值切换，但下调评级至中性。',
     'zh', 'harryyang@hfisec.com.hk',
+    'harryyang@hfisec.com.hk', ARRAY['harryyang@hfisec.com.hk', 'dengyida@hfisec.com.hk'],
     'a0000000-0000-0000-0000-000000000002'::uuid,
     '2025-10-25 10:00:00+00'
 ) on conflict (id) do nothing;
 
--- 9e. report_version
-insert into public.report_version (id, report_id, version_no, snapshot_json, word_file_path, created_by)
-values (
-    'd0000000-0000-0000-0000-000000000008'::uuid,
-    'e0000000-0000-0000-0000-000000000008'::uuid,
-    1,
-    '{"title": "威胜控股（3393.HK）首次覆盖", "rating": "OUTPERFORM", "target_price": 120.00, "ticker": "3393.HK"}'::jsonb,
-    'reports/e0000000-0000-0000-0000-000000000008/v1/威胜控股首次覆盖.docx',
-    'a0000000-0000-0000-0000-000000000010'::uuid
-) on conflict (id) do nothing;
-
-insert into public.report_version (id, report_id, version_no, snapshot_json, word_file_path, created_by)
-values (
-    'd0000000-0000-0000-0000-000000000009'::uuid,
-    'e0000000-0000-0000-0000-000000000009'::uuid,
-    1,
-    '{"title": "威胜控股（3393.HK）更新", "rating": "NEUTRAL", "target_price": 140.00, "ticker": "3393.HK"}'::jsonb,
-    'reports/e0000000-0000-0000-0000-000000000009/v1/威胜控股更新.docx',
-    'a0000000-0000-0000-0000-000000000010'::uuid
-) on conflict (id) do nothing;
-
 -- 9g. report_status_log
 -- 威胜首次覆盖: draft -> submitted -> published (2025-07-25)
-insert into public.report_status_log (id, report_id, from_status, to_status, action_by, action_by_name, version_no, action_at)
+insert into public.report_status_log (id, report_id, from_status, to_status, action_by, action_by_name, action_at)
 values
     ('b0000000-0000-0000-0000-000000000015'::uuid,
      'e0000000-0000-0000-0000-000000000008'::uuid,
      'draft', 'submitted',
-     'a0000000-0000-0000-0000-000000000010'::uuid, 'Bin Yang', 1,
+     'a0000000-0000-0000-0000-000000000010'::uuid, 'Bin Yang',
      '2025-07-24 18:00:00+00'),
 
     ('b0000000-0000-0000-0000-000000000016'::uuid,
      'e0000000-0000-0000-0000-000000000008'::uuid,
      'submitted', 'published',
-     'a0000000-0000-0000-0000-000000000002'::uuid, '测试审批员', 1,
+     'a0000000-0000-0000-0000-000000000002'::uuid, '测试审批员',
      '2025-07-25 10:00:00+00')
 on conflict (id) do nothing;
 
 -- 威胜更新报告: draft -> submitted -> published (2025-10-25)
-insert into public.report_status_log (id, report_id, from_status, to_status, action_by, action_by_name, version_no, action_at)
+insert into public.report_status_log (id, report_id, from_status, to_status, action_by, action_by_name, action_at)
 values
     ('b0000000-0000-0000-0000-000000000017'::uuid,
      'e0000000-0000-0000-0000-000000000009'::uuid,
      'draft', 'submitted',
-     'a0000000-0000-0000-0000-000000000010'::uuid, 'Bin Yang', 1,
+     'a0000000-0000-0000-0000-000000000010'::uuid, 'Bin Yang',
      '2025-10-24 18:00:00+00'),
 
     ('b0000000-0000-0000-0000-000000000018'::uuid,
      'e0000000-0000-0000-0000-000000000009'::uuid,
      'submitted', 'published',
-     'a0000000-0000-0000-0000-000000000002'::uuid, '测试审批员', 1,
+     'a0000000-0000-0000-0000-000000000002'::uuid, '测试审批员',
      '2025-10-25 10:00:00+00')
 on conflict (id) do nothing;
