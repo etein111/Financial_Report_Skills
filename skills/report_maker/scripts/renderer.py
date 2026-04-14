@@ -2953,14 +2953,15 @@ def _generate_relative_chart(ticker: str, output_path: str, company_name: str = 
         return False
 
 
-def _generate_recommendation_chart(ticker: str, output_path: str, company_name: str = None, elements: Dict[str, Any] = None) -> bool:
+def _generate_recommendation_chart(ticker: str, output_path: str, company_name: str = None, elements: Dict[str, Any] = None, neolyst_client=None) -> bool:
     """生成推荐走势图（recommendation chart）。
 
     Args:
         ticker: 股票代码（如 3393.HK）
         output_path: 图表输出路径
         company_name: 公司名称（可选）
-        elements: 要素字典（可选，用于获取 recommendations 数据）
+        elements: 要素字典（可选，用于获取 recommendations 数据及 a1_email）
+        neolyst_client: 已认证的 Supabase client（可选，用于从 Neolyst 获取历史推荐）
 
     Returns:
         是否成功生成
@@ -3003,6 +3004,23 @@ def _generate_recommendation_chart(ticker: str, output_path: str, company_name: 
         recommendations = []
         if elements:
             recommendations = elements.get('recommendations', [])
+
+        # 优先从 Neolyst 获取历史推荐数据
+        if not recommendations and neolyst_client and elements:
+            first_analyst_email = elements.get('a1_email', '')
+            if first_analyst_email:
+                try:
+                    import importlib
+                    _opencode_root = str(Path(__file__).resolve().parents[3])
+                    if _opencode_root not in sys.path:
+                        sys.path.insert(0, _opencode_root)
+                    _cov_mod = importlib.import_module("skills.neolyst.scripts.coverage")
+                    neolyst_recs = _cov_mod.fetch_recommendation_history(neolyst_client, ticker, first_analyst_email)
+                    if neolyst_recs:
+                        recommendations = neolyst_recs
+                        print(f"  ✅ 从 Neolyst 获取到 {len(recommendations)} 条历史推荐")
+                except Exception as e:
+                    print(f"  ⚠️ 从 Neolyst 获取推荐历史失败: {e}")
 
         # 如果没有 recommendations，使用基于历史价格的默认值
         if not recommendations:
@@ -3311,7 +3329,8 @@ def render_report(
     english_summary_path: str = None,
     optimize_pagination_enabled: bool = True,
     pagination_min_lines: int = 3,
-    header_footer_mappings: Dict[str, Dict[str, str]] = None
+    header_footer_mappings: Dict[str, Dict[str, str]] = None,
+    neolyst_client=None,
 ) -> bool:
     """渲染报告，正确处理分析师字段、abstract、body 和 english_summary。
 
@@ -3330,6 +3349,7 @@ def render_report(
         optimize_pagination_enabled: 是否启用分页优化（默认 True）
         pagination_min_lines: 段落分页的最小行数阈值（默认 3）
         header_footer_mappings: 已废弃，保留参数兼容性
+        neolyst_client: 已认证的 Neolyst Supabase client（可选，用于 recommendation chart 数据）
 
     Returns:
         是否成功
@@ -3399,8 +3419,9 @@ def render_report(
             recommendation_chart_generated = _generate_recommendation_chart(
                 ticker=ticker,
                 output_path=str(recommendation_chart_path),
-                company_name=elements.get('company_cn') or elements.get('company_en', ''),
-                elements=elements
+                company_name=elements.get('company_en') or elements.get('company_cn', ''),
+                elements=elements,
+                neolyst_client=neolyst_client,
             )
             if recommendation_chart_generated:
                 print(f"  ✅ recommendation_chart 已生成")
@@ -3705,8 +3726,9 @@ def render_report(
             recommendation_chart_generated = _generate_recommendation_chart(
                 ticker=ticker,
                 output_path=str(recommendation_chart_path),
-                company_name=elements.get('company_cn') or elements.get('company_en', ''),
-                elements=elements
+                company_name=elements.get('company_en') or elements.get('company_cn', ''),
+                elements=elements,
+                neolyst_client=neolyst_client,
             )
             if recommendation_chart_generated:
                 print(f"  ✅ recommendation_chart 已生成")
