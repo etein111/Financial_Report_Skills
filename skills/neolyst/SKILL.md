@@ -24,6 +24,8 @@ Neolyst Supabase 数据访问层，实现位置：`skills/neolyst/scripts/`。�
 | 10 | `validate_report(client, report_id)` | `validators` | 调用 DB 侧 RPC 校验报告是否满足提交条件，全量收集错误 |
 | 11 | `submit_report(client, report_id)` | `submit_report` | 将 draft/rejected 报告提交为 submitted |
 | 12 | `list_coverage_history(client, ticker, first_analyst_email)` | `coverage` | 返回 coverage 下已发布的历史报告 |
+| 13 | `publish_report(client, report_id)` | `report` | 将 submitted 报告发布为 published |
+| 14 | `reject_report(client, report_id, reason)` | `report` | 将 submitted 报告退回为 rejected |
 
 完整签名、参数、返回值和代码示例见 `references/interfaces.md`。
 
@@ -40,10 +42,11 @@ Neolyst Supabase 数据访问层，实现位置：`skills/neolyst/scripts/`。�
 - `create_coverage`：仅在 `resolve_coverage` 未命中且用户确认"Coverage 已完成审批"后调用
 - `submit_report`：RPC 内部已调用 `validate_report` 做字段守门；如需提前获取全量错误展示，先显式调用 `validate_report`
 - `reuse_template`：静态路径复制；主模板重新上传后需重新执行才能同步
+- `publish_report` / `reject_report`：SA 角色操作，报告必须处于 submitted 状态
 - `report_type` 取值和分析师列表约束见 README「业务常量」
 - 接口报错处理见 `references/interfaces.md`「错误处理策略」
 
 ## 参考文件
 
-- **`references/interfaces.md`** — 全部 12 个接口的完整签名、参数、返回值和代码示例
+- **`references/interfaces.md`** — 全部 14 个接口的完整签名、参数、返回值和代码示例
 - **`references/authentication.md`** — 认证流程、配置文件、凭据管理、首次使用、测试连接约束

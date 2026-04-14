@@ -242,6 +242,37 @@ rows = coverage.list_coverage_history(
 # coverage 找到但没有已发布历史：返回 []
 ```
 
+## 13. publish_report
+
+将 submitted 报告发布为 published。
+
+```python
+from skills.neolyst.scripts.report import publish_report
+
+result = publish_report(client, report_id)
+# 返回：{"report_id": str, "status": "published"}
+# 报告不存在或非 submitted 状态：抛出 ValueError
+```
+
+- 自动记录 `published_by`（当前用户）和 `published_at`（当前时间）
+- 仅 SA 或 admin 角色可执行
+
+## 14. reject_report
+
+将 submitted 报告退回为 rejected。
+
+```python
+from skills.neolyst.scripts.report import reject_report
+
+result = reject_report(client, report_id, reason="数据不完整，请补充")
+# 返回：{"report_id": str, "status": "rejected"}
+# 退回原因为空：抛出 ValueError
+# 报告不存在或非 submitted 状态：抛出 ValueError
+```
+
+- `reason`：退回原因，必填
+- 仅 SA 或 admin 角色可执行
+
 ## 错误处理策略
 
 调用接口遇到 ValueError 时，不要直接把异常信息抛给用户。根据场景采取以下策略：

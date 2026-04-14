@@ -87,20 +87,20 @@ def resolve_template(
     Raises:
         ValueError: 模板记录不存在或 template_file_path 为空（未发布）
     """
-    record_id = f"{report_type}_{language}"
     resp = (
         client.table("report_template")
         .select("template_file_path, schema_file_path")
-        .eq("id", record_id)
+        .eq("report_type", report_type)
+        .eq("language", language)
         .execute()
     )
 
     if not resp.data:
-        raise ValueError(f"模板不存在: {record_id!r}")
+        raise ValueError(f"模板不存在: report_type={report_type!r}, language={language!r}")
 
     record = resp.data[0]
     if not record.get("template_file_path"):
-        raise ValueError(f"模板未发布（路径为空）: {record_id!r}")
+        raise ValueError(f"模板未发布（路径为空）: report_type={report_type!r}, language={language!r}")
 
     local_dir = Path(dest_dir) / "templates" / report_type / language
     template_local = str(local_dir / "template.docx")

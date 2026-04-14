@@ -70,3 +70,26 @@ def retract_report(client: Client, report_id: str) -> dict:
         "report_id": str(row["report_id"]),
         "status": row["status"],
     }
+
+
+def publish_report(client: Client, report_id: str) -> dict:
+    """发布报告，返回 {"report_id": str, "status": "published"}。"""
+    row = rpc.single_row(rpc.call_rpc(client, "publish_report", {
+        "p_report_id": report_id,
+    }))
+    return {
+        "report_id": str(row["report_id"]),
+        "status": row["status"],
+    }
+
+
+def reject_report(client: Client, report_id: str, reason: str) -> dict:
+    """退回报告，返回 {"report_id": str, "status": "rejected"}。"""
+    row = rpc.single_row(rpc.call_rpc(client, "reject_report", {
+        "p_report_id": report_id,
+        "p_rejection_reason": reason,
+    }))
+    return {
+        "report_id": str(row["report_id"]),
+        "status": row["status"],
+    }
