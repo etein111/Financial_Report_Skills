@@ -10,12 +10,10 @@ from supabase import Client
 from . import rpc
 
 
-def validate_report(client: Client, report_id: str) -> dict:
+def validate_report(client: Client, report_id: str) -> None:
     """
     调用 validate_report RPC，校验报告是否满足提交条件。
 
-    Returns:
-        dict: {"report_id": str}
+    校验不通过时 RPC 抛出 ValueError；通过时无返回值。
     """
     rpc.call_rpc(client, "validate_report", {"p_report_id": report_id})
-    return {"report_id": report_id}

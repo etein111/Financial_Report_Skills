@@ -10,14 +10,6 @@ TEST_ISIN = f"US{_SUFFIX.upper()[:10]}"
 
 
 @pytest.fixture(scope="module")
-def test_sector_id(neolyst_client):
-    """获取第一个可用的 sector id（测试用）。"""
-    resp = neolyst_client.table("sector").select("id").eq("is_active", True).limit(1).execute()
-    assert resp.data, "需要至少一条 sector 记录，请先运行 supabase db reset"
-    return resp.data[0]["id"]
-
-
-@pytest.fixture(scope="module")
 def created_coverage_id(neolyst_client, test_sector_id, test_analyst_email):
     """
     创建测试用 coverage，模块结束后删除（coverage_analyst 随 coverage 级联删除）。

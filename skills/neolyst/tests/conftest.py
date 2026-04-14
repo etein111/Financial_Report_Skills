@@ -5,6 +5,7 @@
 """
 import json
 import sys
+import uuid
 import pytest
 from pathlib import Path
 
@@ -66,3 +67,63 @@ def ensure_buckets(neolyst_client):
             neolyst_client.storage.create_bucket(bucket, options={"public": False})
         except Exception:
             pass  # 已存在则忽略
+
+
+@pytest.fixture(scope="session")
+def test_sector_id(neolyst_client):
+    """第一个可用的 sector id。"""
+    resp = neolyst_client.table("sector").select("id").eq("is_active", True).limit(1).execute()
+    assert resp.data, "需要至少一条 sector 记录，请先运行 supabase db reset"
+    return resp.data[0]["id"]
+
+
+# ── shared test helpers ────────────────────────────────────────────────
+
+
+def _make_files(directory: Path, prefix: str = "report") -> tuple[str, str]:
+    """创建最小化 docx 和 pdf 测试文件。"""
+    directory.mkdir(parents=True, exist_ok=True)
+    word = directory / f"{prefix}.docx"
+    pdf = directory / f"{prefix}.pdf"
+    word.write_bytes(b"fake docx")
+    pdf.write_bytes(b"fake pdf")
+    return str(word), str(pdf)
+
+
+def _base_report_payload(analyst_email: str, **overrides) -> dict:
+    """构造 save_report 所需的标准 payload 字典。"""
+    payload = {
+        "report_id": None,
+        "title": "Test Report",
+        "report_type": "company",
+        "report_language": "en",
+        "analysts": [{"analyst_email": analyst_email, "author_order": 1}],
+        "ticker": "TEST001",
+        "coverage_id": None,
+        "rating": None,
+        "target_price": None,
+        "region_code": None,
+        "sector_id": None,
+        "contact_person": analyst_email,
+        "investment_thesis": None,
+    }
+    payload.update(overrides)
+    return payload
+
+
+def _create_submitted_report(client, coverage_id, tmp_dir, title, analyst_email, **payload_overrides):
+    """创建并提交一份报告，返回 submit_report 的返回值。"""
+    from skills.neolyst.scripts import save_report, upload_files, submit_report as sr
+
+    word_path, pdf_path = _make_files(tmp_dir)
+    saved = save_report.save_report(client, _base_report_payload(
+        analyst_email,
+        title=title,
+        coverage_id=coverage_id,
+        investment_thesis=f"{title} thesis",
+        rating="OUTPERFORM",
+        target_price=100.0,
+        **payload_overrides,
+    ))
+    upload_files.upload_report_files(client, saved["report_id"], word_path, pdf_path)
+    return sr.submit_report(client, saved["report_id"])
