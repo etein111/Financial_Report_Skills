@@ -242,7 +242,22 @@ rows = coverage.list_coverage_history(
 # coverage 找到但没有已发布历史：返回 []
 ```
 
-## 13. publish_report
+## 11. retract_report
+
+将 submitted/rejected 报告撤回为 draft。
+
+```python
+from skills.neolyst.scripts.report import retract_report
+
+result = retract_report(client, report_id="uuid")
+# 返回：{"report_id": str, "status": "draft"}
+# 报告不存在或非 submitted/rejected 状态：抛出 ValueError
+```
+
+- 撤回后报告回到 draft 状态，可重新编辑和提交
+- `report_status_log` 由数据库触发器自动记录
+
+## 12. publish_report
 
 将 submitted 报告发布为 published。
 
@@ -257,7 +272,7 @@ result = publish_report(client, report_id)
 - 自动记录 `published_by`（当前用户）和 `published_at`（当前时间）
 - 仅 SA 或 admin 角色可执行
 
-## 14. reject_report
+## 13. reject_report
 
 将 submitted 报告退回为 rejected。
 

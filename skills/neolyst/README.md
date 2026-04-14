@@ -12,10 +12,11 @@ Neolyst Supabase 数据访问层。实现位置：`scripts/`。
 ## 报告生命周期
 
 ```
-                    publish
+                         publish
   draft ──submit──→ submitted ────→ published
     ↑                  │
-    │      retract     ↓ reject
+    │←── retract ──────┤
+    │                  ↓ reject
     │              rejected
     │                  │
     └── retract ←─────┘
@@ -54,7 +55,7 @@ DB 中存储的路径包含 bucket 前缀。`storage.py` 只负责上传/下载�
 依赖保持单向，`connection` 是基础设施层，不依赖任何业务模块：
 
 ```
-connection  ←  storage, analyst, coverage, rpc
+connection  ←  storage, analyst, rpc
 connection + storage + rpc  ←  save_report, upload_files
 connection + rpc  ←  coverage, submit_report, retract_report, publish_report, reject_report
 connection  ←  validators

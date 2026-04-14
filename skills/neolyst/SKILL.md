@@ -22,10 +22,11 @@ Neolyst Supabase 数据访问层，实现位置：`skills/neolyst/scripts/`。�
 | 8 | `upload_report_files(client, report_id, report_file, pdf_file)` | `upload_files` | 上传 Word+PDF，回写路径 |
 | 9 | `upload_model_file(client, report_id, model_file)` | `upload_files` | 上传 Model，回写路径 |
 | 10 | `validate_report(client, report_id)` | `validators` | 调用 DB 侧 RPC 校验报告是否满足提交条件，全量收集错误 |
-| 11 | `submit_report(client, report_id)` | `submit_report` | 将 draft/rejected 报告提交为 submitted |
-| 12 | `list_coverage_history(client, ticker, first_analyst_email)` | `coverage` | 返回 coverage 下已发布的历史报告 |
-| 13 | `publish_report(client, report_id)` | `report` | 将 submitted 报告发布为 published |
-| 14 | `reject_report(client, report_id, reason)` | `report` | 将 submitted 报告退回为 rejected |
+| 11 | `submit_report(client, report_id)` | `report` | 将 draft/rejected 报告提交为 submitted |
+| 12 | `retract_report(client, report_id)` | `report` | 将 submitted/rejected 报告撤回为 draft |
+| 13 | `list_coverage_history(client, ticker, first_analyst_email)` | `coverage` | 返回 coverage 下已发布的历史报告 |
+| 14 | `publish_report(client, report_id)` | `report` | 将 submitted 报告发布为 published |
+| 15 | `reject_report(client, report_id, reason)` | `report` | 将 submitted 报告退回为 rejected |
 
 完整签名、参数、返回值和代码示例见 `references/interfaces.md`。
 
@@ -48,5 +49,5 @@ Neolyst Supabase 数据访问层，实现位置：`skills/neolyst/scripts/`。�
 
 ## 参考文件
 
-- **`references/interfaces.md`** — 全部 14 个接口的完整签名、参数、返回值和代码示例
+- **`references/interfaces.md`** — 所有接口的完整签名、参数、返回值和代码示例
 - **`references/authentication.md`** — 认证流程、配置文件、凭据管理、首次使用、测试连接约束
