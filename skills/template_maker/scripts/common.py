@@ -29,7 +29,6 @@ MIN_CONTINUATION_LENGTH = 20
 
 # 文件名常量
 FILE_SCHEMA = "schema.yaml"
-FILE_META = "meta.yaml"
 FILE_ROUTER = "router.yaml"
 FILE_TEMPLATE = "template.docx"
 FILE_ELEMENTS = "elements.yaml"

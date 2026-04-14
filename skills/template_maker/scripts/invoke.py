@@ -570,18 +570,7 @@ def create_template(
     schema_path = template_dir / "schema.yaml"
     save_schema(schema_path, schema)
 
-    # 3. 生成 meta.yaml
-    meta = {
-        "name": name,
-        "display_name": f"{name} 模板",
-        "version": "1.0.0",
-        "status": "active",
-        "sample_source": str(word_path)
-    }
-    meta_path = template_dir / "meta.yaml"
-    meta_path.write_text(yaml.dump(meta, allow_unicode=True, sort_keys=False))
-
-    # 4. 处理 Word 文档
+    # 3. 处理 Word 文档
     doc = load_document(str(word_path))
 
     # 先处理分析师字段（特殊处理：组合格式 + 空位置占位符）
