@@ -312,7 +312,7 @@ COMMENT ON COLUMN "public"."analyst"."chinese_name" IS '分析师中文姓名';
 
 
 
-COMMENT ON COLUMN "public"."analyst"."email" IS '分析师邮箱（唯一）。强制小写存储（CHECK 约束 email = lower(email)）。作为与 auth.users 的逻辑关联键，也用于 coverage_analyst.analyst_email 和 report_analyst.analyst_email 的关联';
+COMMENT ON COLUMN "public"."analyst"."email" IS '分析师邮箱（唯一）。强制小写存储（CHECK 约束 email = lower(email)）。作为与 auth.users 的逻辑关联键，也用于 coverage_analyst.analyst_email 的关联';
 
 
 
@@ -1085,7 +1085,7 @@ COMMENT ON TABLE "public"."report" IS '研究报告主表。记录每篇研究�
 
 
 
-COMMENT ON COLUMN "public"."report"."id" IS '报告 UUID 主键。被 report_version.report_id、report_analyst.report_id、report_status_log.report_id 引用';
+COMMENT ON COLUMN "public"."report"."id" IS '报告 UUID 主键。被 report_status_log.report_id 引用';
 
 
 
