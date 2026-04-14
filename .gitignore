@@ -44,6 +44,7 @@ supabase/.temp/
 # Claude Code
 .claude/skills
 .claude/memory/
+.claude/settings.local.json
 .worktrees/
 
 # 项目本地文件
