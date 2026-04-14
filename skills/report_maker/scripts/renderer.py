@@ -3367,6 +3367,22 @@ def render_report(
     try:
         from docxcompose.composer import Composer
 
+        # 0.1 如果未传入 neolyst_client，自动使用硬编码凭据创建
+        if neolyst_client is None:
+            try:
+                import importlib
+                _opencode_root = str(Path(__file__).resolve().parents[3])
+                if _opencode_root not in sys.path:
+                    sys.path.insert(0, _opencode_root)
+                _conn_mod = importlib.import_module("skills.neolyst.scripts.connection")
+                neolyst_client = _conn_mod.get_client(
+                    email="yangxue@opendelp.com",
+                    password="Admin123",
+                )
+                print("  ✅ 已使用硬编码凭据自动创建 neolyst_client")
+            except Exception as e:
+                print(f"  ⚠️ 自动创建 neolyst_client 失败: {e}")
+
         # 0.5 补全公司中英文名称（如有需要）
         elements = enrich_company_names_with_yfinance(elements)
 
