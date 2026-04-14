@@ -58,7 +58,7 @@ connection + rpc  ←  coverage, submit_report, retract_report
 connection  ←  validators
 ```
 
-`rpc.py` 是 RPC 调用薄封装（异常转换 + 结果提取），不依赖 connection，被 coverage、save_report、upload_files、submit_report、retract_report 等模块统一使用。
+`rpc.py` 是 RPC 调用薄封装（异常转换 + 结果提取），不依赖 connection，被所有业务模块共用。
 
 ## 文件路径准源
 
