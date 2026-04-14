@@ -24,6 +24,7 @@ Neolyst Supabase 数据访问层，实现位置：`skills/neolyst/scripts/`。�
 | 10 | `validate_report(client, report_id)` | `validators` | 调用 DB 侧 RPC 校验报告是否满足提交条件，全量收集错误 |
 | 11 | `submit_report(client, report_id)` | `submit_report` | 将 draft/rejected 报告提交为 submitted |
 | 12 | `list_coverage_history(client, ticker, first_analyst_email)` | `coverage` | 返回 coverage 下已发布的历史报告 |
+| 13 | `fetch_recommendation_history(client, ticker, first_analyst_email)` | `coverage` | 获取历史推荐数据，转换为 recommendation chart 格式 |
 
 完整签名、参数、返回值和代码示例见 `references/interfaces.md`。
 
@@ -45,5 +46,5 @@ Neolyst Supabase 数据访问层，实现位置：`skills/neolyst/scripts/`。�
 
 ## 参考文件
 
-- **`references/interfaces.md`** — 全部 12 个接口的完整签名、参数、返回值和代码示例
+- **`references/interfaces.md`** — 全部 13 个接口的完整签名、参数、返回值和代码示例
 - **`references/authentication.md`** — 认证流程、配置文件、凭据管理、首次使用、测试连接约束
