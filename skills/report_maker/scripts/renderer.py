@@ -3102,7 +3102,8 @@ def _generate_recommendation_chart(ticker: str, output_path: str, company_name: 
         ax1.spines['top'].set_visible(False)
         ax1.spines['right'].set_visible(False)
 
-        ax1.set_title(f'{company_name or ticker} - {ticker}', fontsize=20, fontweight='bold', pad=20)
+        ticker_display = ticker.replace('.HK', ' HK').replace('.', ' ')
+        ax1.set_title(f'{company_name or ticker} - {ticker_display}', fontsize=20, fontweight='bold', pad=20)
 
         # 横坐标设置：根据数据长度自动调整间隔，避免重叠
         num_ticks = 6  # 横坐标刻度数量
