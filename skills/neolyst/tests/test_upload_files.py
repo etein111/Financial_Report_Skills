@@ -1,15 +1,13 @@
 """
 test_upload_files.py — upload_report_files / upload_model_file 集成测试。
 """
-import json
 import re
 import time
 from pathlib import Path
 
-TEST_ANALYST = json.loads((Path(__file__).parent / "test_config.json").read_text())["email"]
 
-
-def _make_files(directory: Path, prefix: str = "report") -> tuple[str, str, str]:
+def _make_three_files(directory: Path, prefix: str = "report") -> tuple[str, str, str]:
+    """创建 docx、pdf、xlsx 三个测试文件。"""
     directory.mkdir(parents=True, exist_ok=True)
     word = directory / f"{prefix}.docx"
     pdf = directory / f"{prefix}.pdf"
@@ -20,35 +18,26 @@ def _make_files(directory: Path, prefix: str = "report") -> tuple[str, str, str]
     return str(word), str(pdf), str(model)
 
 
-def _create_report(client):
+def _create_report(client, analyst_email):
     from skills.neolyst.scripts import save_report
 
-    return save_report.save_report(client, {
-        "report_id": None,
-        "title": "Upload Files Test",
-        "report_type": "company",
-        "report_language": "en",
-        "analysts": [{"analyst_email": TEST_ANALYST, "author_order": 1}],
-        "ticker": "UPLD001",
-        "coverage_id": None,
-        "rating": None,
-        "target_price": None,
-        "region_code": None,
-        "sector_id": None,
-        "contact_person": TEST_ANALYST,
-        "investment_thesis": "upload test thesis",
-    })["report_id"]
+    return save_report.save_report(client, _base_report_payload(
+        analyst_email,
+        title="Upload Files Test",
+        ticker="UPLD001",
+        investment_thesis="upload test thesis",
+    ))["report_id"]
 
 
 def _strip_bucket(storage_path: str) -> str:
     return storage_path.split("/", 1)[1]
 
 
-def test_upload_report_files_updates_report_and_storage(neolyst_client, tmp_path):
+def test_upload_report_files_updates_report_and_storage(neolyst_client, test_analyst_email, tmp_path):
     from skills.neolyst.scripts import upload_files
 
-    report_id = _create_report(neolyst_client)
-    word, pdf, _ = _make_files(tmp_path / "docs")
+    report_id = _create_report(neolyst_client, test_analyst_email)
+    word, pdf, _ = _make_three_files(tmp_path / "docs")
     try:
         result = upload_files.upload_report_files(neolyst_client, report_id, word, pdf)
         assert re.match(rf"^reports/{report_id}/report/\d{{8}}_\d{{6}}/report\.docx$", result["word_path"])
@@ -73,11 +62,11 @@ def test_upload_report_files_updates_report_and_storage(neolyst_client, tmp_path
         neolyst_client.table("report").delete().eq("id", report_id).execute()
 
 
-def test_upload_model_file_updates_only_model_path(neolyst_client, tmp_path):
+def test_upload_model_file_updates_only_model_path(neolyst_client, test_analyst_email, tmp_path):
     from skills.neolyst.scripts import upload_files
 
-    report_id = _create_report(neolyst_client)
-    word, pdf, model = _make_files(tmp_path / "model")
+    report_id = _create_report(neolyst_client, test_analyst_email)
+    word, pdf, model = _make_three_files(tmp_path / "model")
     try:
         docs = upload_files.upload_report_files(neolyst_client, report_id, word, pdf)
         uploaded_model = upload_files.upload_model_file(neolyst_client, report_id, model)
@@ -97,12 +86,12 @@ def test_upload_model_file_updates_only_model_path(neolyst_client, tmp_path):
         neolyst_client.table("report").delete().eq("id", report_id).execute()
 
 
-def test_reupload_keeps_old_storage_objects(neolyst_client, tmp_path):
+def test_reupload_keeps_old_storage_objects(neolyst_client, test_analyst_email, tmp_path):
     from skills.neolyst.scripts import upload_files
 
-    report_id = _create_report(neolyst_client)
-    first_word, first_pdf, _ = _make_files(tmp_path / "first", "first_report")
-    second_word, second_pdf, _ = _make_files(tmp_path / "second", "second_report")
+    report_id = _create_report(neolyst_client, test_analyst_email)
+    first_word, first_pdf, _ = _make_three_files(tmp_path / "first", "first_report")
+    second_word, second_pdf, _ = _make_three_files(tmp_path / "second", "second_report")
     try:
         first = upload_files.upload_report_files(neolyst_client, report_id, first_word, first_pdf)
         time.sleep(1.1)

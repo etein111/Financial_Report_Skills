@@ -25,9 +25,7 @@ def resolve_analyst_by_email(client: Client, email: str) -> dict:
     Raises:
         ValueError: 找不到对应的 analyst，或 analyst 已停用（is_active=False）
     """
-    resp = rpc.call_rpc(client, "resolve_analyst_by_email", {"p_email": email})
-
-    if not resp.data:
-        raise ValueError(f"找不到分析师：{email!r}")
-
-    return resp.data
+    return rpc.single_row(
+        rpc.call_rpc(client, "resolve_analyst_by_email", {"p_email": email}),
+        f"找不到分析师：{email!r}",
+    )
