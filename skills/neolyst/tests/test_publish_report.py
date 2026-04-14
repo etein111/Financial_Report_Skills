@@ -4,6 +4,8 @@ test_publish_report.py — publish_report 集成测试。
 import uuid
 import pytest
 
+from .conftest import _create_submitted_report, _base_report_payload
+
 
 @pytest.fixture(scope="module")
 def publish_coverage_id(neolyst_client, test_sector_id, test_analyst_email):
@@ -83,6 +85,22 @@ class TestPublishEdgeCases:
                 pr(neolyst_client, saved["report_id"])
         finally:
             neolyst_client.table("report").delete().eq("id", saved["report_id"]).execute()
+
+    def test_publish_already_published_raises(self, neolyst_client, publish_coverage_id, test_analyst_email, tmp_path):
+        from skills.neolyst.scripts.report import publish_report as pr
+
+        submitted = _create_submitted_report(
+            neolyst_client, publish_coverage_id, tmp_path / "double_publish",
+            "Double Publish Test", test_analyst_email,
+        )
+        report_id = submitted["report_id"]
+
+        try:
+            pr(neolyst_client, report_id)
+            with pytest.raises(ValueError, match="无法发布"):
+                pr(neolyst_client, report_id)
+        finally:
+            neolyst_client.table("report").delete().eq("id", report_id).execute()
 
     def test_publish_nonexistent_report_raises(self, neolyst_client):
         from skills.neolyst.scripts.report import publish_report as pr
