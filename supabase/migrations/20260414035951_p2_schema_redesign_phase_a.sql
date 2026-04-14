@@ -409,10 +409,10 @@ as $$
 declare
     v_current_status text;
 begin
-    select status
+    select r.status
       into v_current_status
-      from public.report
-     where id = p_report_id;
+      from public.report r
+     where r.id = p_report_id;
 
     if not found then
         raise exception '报告不存在: %', p_report_id;
@@ -451,10 +451,10 @@ as $$
 declare
     v_current_status text;
 begin
-    select status
+    select r.status
       into v_current_status
-      from public.report
-     where id = p_report_id;
+      from public.report r
+     where r.id = p_report_id;
 
     if not found then
         raise exception '报告不存在: %', p_report_id;

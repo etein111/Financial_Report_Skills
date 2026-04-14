@@ -28,6 +28,10 @@ def _generate_prefix(client: Client, report_id: str, category: str) -> str:
     if not resp.data:
         raise ValueError("generate_upload_path RPC returned empty data")
 
+    # scalar RETURNS text: resp.data is the string directly
+    if isinstance(resp.data, str):
+        return resp.data
+
     first = resp.data[0]
     if isinstance(first, dict):
         return str(first.get("generate_upload_path") or next(iter(first.values())))
