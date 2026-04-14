@@ -1,119 +1,217 @@
-# 迁移文件 Squash V2 设计：逐文件增量合并
+# 迁移文件 Squash V2 设计：dump snapshot 方案
 
-将 24 个本地迁移文件逐个合并为 5 个按关注点组织的文件，每合并一个测试一次，每 5 轮做一次 dump 对比。
+将 24 个本地迁移文件合并为 1 个 dump-based 迁移文件，通过 dump-diff 验证零信息丢失。
 
-## 前提
+## 背景
 
-- 所有 24 个迁移未推送到远端，可安全 squash
-- 本地 Supabase 服务运行正常（`supabase start`）
-- 在 worktree 中执行，main 分支不受影响
+当前 `supabase/migrations/` 下有 24 个迁移文件（时间戳 20260409000100 ~ 20260414035951），全部未推送到远端。文件包含迭代过程中的 ALTER TABLE 链、函数版本替换（v1→v2→v3）、DROP + CREATE 交替操作。目标不是"合并变更历史"，而是"得到最终数据库快照"。
 
-## 目标结构
+## 方案选择
 
-| 序号 | 目标文件 | 内容 | 执行顺序 |
-|------|----------|------|----------|
-| 1 | `000_bootstrap.sql` | extensions、timezone、utility 函数 | 最先 |
-| 2 | `010_tables.sql` | 所有表的 DDL | 第二 |
-| 3 | `020_triggers.sql` | trigger 函数 + trigger 绑定 | 第三 |
-| 4 | `030_security.sql` | RLS enable/policies + storage policies | 第四 |
-| 5 | `040_functions.sql` | 所有 RPC 函数（含后续 schema 变更） | 最后 |
+| 方案 | 做法 | 不选原因 |
+|------|------|----------|
+| A: CLI squash | `supabase migration squash` | 已知 bug：混入 auth/storage 托管 schema (#4574)、删除 storage schema (#1493)、丢失 SQL 语句 (#1618) |
+| B: Declarative Schemas | `supabase/schemas/*.sql` 声明目标状态 | `migra` diff 工具无法追踪 COMMENT ON 语句；本项目有 156 条注释 |
+| **C: 手动 dump** | `supabase db dump` 导出最终状态，手动补充 dump 未捕获的 2 项 | **选定方案** |
 
-## 逐文件合并计划
+## 信息捕获分析
 
-### 第 0 轮：基线
+### dump 自动捕获（无需处理）
+
+| 对象类型 | 数量 | 说明 |
+|---------|------|------|
+| 表 DDL | 全部 | 最终 CREATE TABLE 定义，含所有列、约束、索引 |
+| 函数 | 全部 | 最新版本，中间版本自然丢弃（squash 目的） |
+| 触发器 | 2 个 CREATE TRIGGER | 绑定关系 + 触发函数 |
+| public schema RLS policy | 全部 | CREATE POLICY 完整定义 |
+| COMMENT ON | **156 条**（20 个文件） | 表、列、函数注释全部保留 |
+| Extension | pgcrypto | 含 schema 限定 |
+| CREATE SCHEMA | extensions | 自动包含 |
+
+### dump 不捕获（必须手动补充）
+
+| 缺失项 | 来源 | 补充方式 |
+|--------|------|----------|
+| `ALTER DATABASE postgres SET timezone TO 'Asia/Shanghai'` | `bootstrap.sql:5` | 手动追加到 dump 文件末尾；`pg_dump` 不导出数据库级配置（属于 `pg_database` 系统目录） |
+| storage bucket policies（`storage.objects` 上 9 条 policy） | `055_storage_policies.sql` 创建全部 9 条；`110_retract_permission.sql` 覆盖其中 `reports_insert` 和 `reports_update` | 从原始迁移文件取最终版本（以 055 为基础，用 110 中对应 2 条替换），追加到 dump 文件。不从 storage schema dump 中提取，因为该 dump 包含桶定义等 Supabase 托管内容 |
+
+### 不受影响（无需处理）
+
+| 内容 | 原因 |
+|------|------|
+| seed.sql | `supabase db reset` 在 migrations 之后独立执行 |
+| storage bucket 定义（templates、reports） | 定义在 `supabase/config.toml`，由 CLI 创建，不在迁移文件中 |
+| auth schema | 由 Supabase 托管，不属于 public schema |
+| GRANT / REVOKE | 全部 24 个迁移文件中 0 条 GRANT/REVOKE 语句 |
+
+## 执行步骤
+
+### 第 1 步：建立基线
 
 ```bash
+# 记录 CLI 版本（验证时必须使用同一版本）
+supabase --version > /tmp/cli_version.txt
+
+# 用全部 24 个原始迁移文件重建数据库
 supabase db reset
-supabase db dump --local --schema public > /tmp/baseline.sql
+
+# 导出 public schema 最终状态
+supabase db dump --local --schema public > /tmp/baseline_public.sql
+
+# 导出 storage schema 最终状态（仅用于后续 diff 对比，不用于拼接）
+supabase db dump --local --schema storage > /tmp/baseline_storage.sql
+
+# 记录 RPC 烟雾测试基线值（用于第 3 步对比）
+psql -c "SELECT public.report_status_is_valid('draft', 'submitted');" > /tmp/baseline_rpc.txt
+psql -c "SELECT public.report_status_is_valid('draft', 'published');" >> /tmp/baseline_rpc.txt
+psql -c "SELECT public.current_app_role();" >> /tmp/baseline_rpc.txt
+psql -c "SELECT tgname FROM pg_trigger WHERE tgrelid = 'public.report'::regclass ORDER BY tgname;" >> /tmp/baseline_rpc.txt
+
+# 记录 seed 数据行数基线
+psql -c "SELECT 'report_template' AS tbl, count(*) FROM report_template
+         UNION ALL SELECT 'rating', count(*) FROM rating
+         UNION ALL SELECT 'region', count(*) FROM region
+         UNION ALL SELECT 'report_type', count(*) FROM report_type
+         UNION ALL SELECT 'sector', count(*) FROM sector
+         UNION ALL SELECT 'analyst', count(*) FROM analyst" > /tmp/baseline_counts.txt
 ```
 
-### 第 1-5 轮
+### 第 2 步：生成 squash 迁移
 
-| 轮次 | 原始文件 | 操作 | 归入目标 |
-|------|----------|------|----------|
-| 1 | `000_bootstrap` | 直接作为目标文件 | `000_bootstrap.sql` |
-| 2 | `010_reference_tables` | 创建目标文件 | `010_tables.sql` |
-| 3 | `020_core_tables` | 追加到已有目标 | `010_tables.sql` |
-| 4 | `030_table_functions_and_triggers` | 创建目标文件 | `020_triggers.sql` |
-| 5 | `040_security` | 创建目标文件 | `030_security.sql` |
+```bash
+# 删除全部 24 个原始迁移文件
+rm supabase/migrations/*.sql
 
-第 5 轮后验证：
-- `supabase db reset`（每轮都做）
-- `supabase db dump --local --schema public > /tmp/dump_5.sql`
-- `diff /tmp/baseline.sql /tmp/dump_5.sql` — 零差异
-
-### 第 6-10 轮
-
-| 轮次 | 原始文件 | 操作 | 归入目标 |
-|------|----------|------|----------|
-| 6 | `045_analyst_functions` | 创建目标文件 | `040_functions.sql` |
-| 7 | `050_template_functions` | 追加 | `040_functions.sql` |
-| 8 | `055_storage_policies` | 追加 | `030_security.sql` |
-| 9 | `056_template_path_prefix` | 追加 | `040_functions.sql` |
-| 10 | `060_coverage_functions` | 追加 | `040_functions.sql` |
-
-第 10 轮后 dump 对比。
-
-### 第 11-15 轮
-
-| 轮次 | 原始文件 | 操作 | 归入目标 |
-|------|----------|------|----------|
-| 11 | `070_draft_report_functions` | 追加 | `040_functions.sql` |
-| 12 | `080_submit_report_function` | 追加 | `040_functions.sql` |
-| 13 | `090_coverage_history_function` | 追加 | `040_functions.sql` |
-| 14 | `100_submit_report_current_version` | 追加 | `040_functions.sql` |
-| 15 | `105_remove_analyst_security_definer` | 追加 | `040_functions.sql` |
-
-第 15 轮后 dump 对比。
-
-### 第 16-20 轮
-
-| 轮次 | 原始文件 | 操作 | 归入目标 |
-|------|----------|------|----------|
-| 16 | `110_retract_permission` | 追加 | `040_functions.sql` |
-| 17 | `111_remove_rejected_to_submitted` | 追加 | `040_functions.sql` |
-| 18 | `112_validate_report_rpc` | 追加 | `040_functions.sql` |
-| 19 | `113_submit_report_call_validate` | 追加 | `040_functions.sql` |
-| 20 | `114_validate_report_all_analysts` | 追加 | `040_functions.sql` |
-
-第 20 轮后 dump 对比。
-
-### 第 21-24 轮
-
-| 轮次 | 原始文件 | 操作 | 归入目标 |
-|------|----------|------|----------|
-| 21 | `114_sql_error_messages_cn` | 追加 | `040_functions.sql` |
-| 22 | `p1_iter_a_analyst_fields` | 追加 | `040_functions.sql` |
-| 23 | `p1_iter_b_status_log_trigger` | 追加 | `040_functions.sql` |
-| 24 | `p2_schema_redesign_phase_a` | 追加 | `040_functions.sql` |
-
-第 24 轮后最终 dump 对比。
-
-## 每轮执行流程
-
-```
-1. 读取原始迁移文件内容
-2. 确定目标文件归属
-3. 追加内容到目标文件（首个文件则创建）
-4. 删除原始迁移文件
-5. supabase db reset — 无错误则继续
-6. 每 5 轮：supabase db dump + diff baseline — 零差异则继续
+# 用 supabase migration new 创建带时间戳的新迁移文件
+supabase migration new squash_all
+# 得到类似 supabase/migrations/20260414HHMMSS_squash_all.sql
 ```
 
-## 验证标准
+将 `/tmp/baseline_public.sql` 内容写入新迁移文件，然后追加手动补充项：
 
-| 验证类型 | 频率 | 通过标准 |
-|----------|------|----------|
-| `supabase db reset` | 每轮 | 无错误 |
-| `db dump` diff baseline | 每 5 轮 + 最终 | 零差异 |
-| seed 数据 | 最终 | 表计数一致 |
+```sql
+-- ===== 以下为 dump 未捕获的补充项 =====
+
+-- 1. 数据库时区设置（ALTER DATABASE 不在 pg_dump 范围内）
+-- supabase db reset 的执行顺序：重建空库 → 运行 migrations → 运行 seed
+-- 因此 ALTER DATABASE 在每次 reset 时随迁移文件重新执行，持久生效
+ALTER DATABASE postgres SET timezone TO 'Asia/Shanghai';
+
+-- 2. storage bucket policies
+-- 从原始迁移文件取最终版本：以 055_storage_policies.sql 为基础，
+-- 用 110_retract_permission.sql 中的 reports_insert 和 reports_update 替换对应条目
+-- 注意：只粘贴 CREATE POLICY 语句，不粘贴 DROP POLICY IF EXISTS（首次执行无需 DROP）
+```
+
+### 第 3 步：验证（见下节）
+
+## 验证流程
+
+### 核心验证：dump-diff
+
+验证原理：`supabase db dump` 内部调用 `pg_dump`，导出数据库的声明式当前状态。同版本 `pg_dump` + 同参数对同一数据库的输出完全确定（pg_dump 从 PostgreSQL 12 起不在输出中包含 OID，输出纯文本完全由 schema 内容决定）。**两个数据库的 dump 输出文本完全相同，则两个数据库逻辑上完全等价。**
+
+注意：diff 比较的是**数据库状态**（两侧均为 pg_dump 输出），不是迁移文件内容。只要迁移文件产生了相同的数据库状态，diff 就会通过。
+
+```bash
+# squash 后重建
+supabase db reset
+
+# 确认 CLI 版本与基线一致
+supabase --version | diff - /tmp/cli_version.txt
+
+# 导出 squash 后状态
+supabase db dump --local --schema public > /tmp/after_squash_public.sql
+supabase db dump --local --schema storage > /tmp/after_squash_storage.sql
+
+# 对比——零差异即通过
+diff /tmp/baseline_public.sql /tmp/after_squash_public.sql
+diff /tmp/baseline_storage.sql /tmp/after_squash_storage.sql
+```
+
+通过标准：
+- `diff` 输出为空（零差异）
+- `supabase db reset` 过程无错误
+
+### 补充验证 1：seed 数据
+
+```bash
+# 检查关键表行数并与基线对比
+psql -c "SELECT 'report_template' AS tbl, count(*) FROM report_template
+         UNION ALL SELECT 'rating', count(*) FROM rating
+         UNION ALL SELECT 'region', count(*) FROM region
+         UNION ALL SELECT 'report_type', count(*) FROM report_type
+         UNION ALL SELECT 'sector', count(*) FROM sector
+         UNION ALL SELECT 'analyst', count(*) FROM analyst" | diff - /tmp/baseline_counts.txt
+```
+
+通过标准：diff 为空（行数一致）。
+
+### 补充验证 2：RPC 烟雾测试
+
+dump-diff 验证结构一致性，不验证运行时行为。必须调用关键 RPC 并与第 1 步记录的基线对比：
+
+```bash
+# 执行与第 1 步相同的查询，对比基线
+psql -c "SELECT public.report_status_is_valid('draft', 'submitted');" > /tmp/after_rpc.txt
+psql -c "SELECT public.report_status_is_valid('draft', 'published');" >> /tmp/after_rpc.txt
+psql -c "SELECT public.current_app_role();" >> /tmp/after_rpc.txt
+psql -c "SELECT tgname FROM pg_trigger WHERE tgrelid = 'public.report'::regclass ORDER BY tgname;" >> /tmp/after_rpc.txt
+diff /tmp/baseline_rpc.txt /tmp/after_rpc.txt
+```
+
+通过标准：diff 为空（返回值一致）。
+
+### 补充验证 3：时区设置
+
+```sql
+-- 确认数据库级时区已正确设置
+SHOW timezone;  -- 期望 'Asia/Shanghai'
+```
+
+## 验证盲区
+
+dump-diff 验证存在以下无法覆盖的场景：
+
+### 盲区 1：storage bucket 定义依赖 config.toml
+
+- **现象**：storage policies 引用 `templates` 和 `reports` 两个 bucket，bucket 定义在 `config.toml` 而非迁移文件中
+- **风险**：如果 `config.toml` 中 bucket 定义被删除，policies 会指向不存在的 bucket，但 dump-diff 不会发现（因为 dump 只检查 SQL 对象，不检查 bucket 是否存在）
+- **缓解**：squash 前确认 `config.toml` 中 `[storage.buckets.templates]` 和 `[storage.buckets.reports]` 配置完整
+
+### 盲区 2：dump-diff 验证结构一致性，不验证运行时行为
+
+- **现象**：diff 为零只证明两张数据库的 schema 定义文本相同，不证明函数逻辑在业务场景下正确执行
+- **风险**：如果 dump 过程中函数定义被截断或损坏（极低概率），diff 仍可通过（因为两边截断方式相同）
+- **缓解**：补充验证 2 中的 RPC 烟雾测试覆盖关键路径
+
+### 盲区 3：seed.sql 中的 auth.users 依赖
+
+- **现象**：`seed.sql` 向 `auth.users` 插入管理员账户，auth schema 由 Supabase 托管，不在 dump 范围内
+- **风险**：如果 Supabase 版本升级导致 `auth.users` 表结构变化，seed 中的 INSERT 可能失败。此风险与 squash 无关（squash 不改变 seed.sql），但容易误归因到 squash
+- **缓解**：squash 验证时记录 Supabase CLI 版本，问题排查时排除 squash 因素
+
+### 盲区 4：pg_dump 版本一致性
+
+- **现象**：不同版本的 `pg_dump` 对同一数据库可能产生格式不同的输出（注释位置、空白、引用方式）
+- **风险**：如果基线和 squash 使用不同 CLI 版本，diff 会产生大量格式差异，掩盖真实问题或制造假阳性
+- **缓解**：记录基线 dump 时的 CLI 版本（`supabase --version`），验证时使用同一版本
+
+### 盲区 5：migrations 元数据表
+
+- **现象**：`supabase_migrations.schema_migrations` 表记录已执行的迁移列表，squash 前有 24 条记录，squash 后只有 1 条
+- **风险**：如果外部工具或 CI 脚本依赖此表的记录数或文件名，squash 后行为变化
+- **缓解**：全局搜索代码库中对 `schema_migrations` 的引用，确认无依赖
+
+## 前提条件
+
+- 所有 24 个迁移未推送到远端，可安全替换
+- 本地 Supabase 服务运行正常（`supabase start`）
+- 在 worktree 中执行，main 分支不受影响
+- 记录当前 `supabase --version` 输出
 
 ## 回滚方案
 
 - worktree 隔离，main 分支不受影响
-- 每轮可 `git checkout .` 恢复到该轮开始前状态
+- squash 失败可 `git checkout .` 恢复全部 24 个原始文件
 - 整体失败可删除 worktree，从 main 重新开始
-
-## 文件命名
-
-使用 `supabase migration new <name>` 生成带时间戳的文件名，创建后立即用目标名称内容填充。五个文件的时间戳顺序必须保持正确（bootstrap < tables < triggers < security < functions）。
