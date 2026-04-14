@@ -33,6 +33,10 @@ Neolyst Supabase 数据访问层，实现位置：`skills/neolyst/scripts/`。�
 
 完整签名、参数、返回值和代码示例见 `references/interfaces.md`。
 
+## 字典表
+
+`region`、`sector`、`rating`、`report_type` 直接用 `client.table()` 读写。其他表禁止直接写入，走专用接口或 RPC。详情和示例见 `references/interfaces.md`「字典表直接操作」。
+
 ## 认证
 
 通过 `connection.get_client()` 获取 client。
