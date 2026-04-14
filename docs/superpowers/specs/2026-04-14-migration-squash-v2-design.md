@@ -203,6 +203,41 @@ dump-diff 验证存在以下无法覆盖的场景：
 - **风险**：如果外部工具或 CI 脚本依赖此表的记录数或文件名，squash 后行为变化
 - **缓解**：全局搜索代码库中对 `schema_migrations` 的引用，确认无依赖
 
+### 盲区 6（执行中发现）：Supabase 默认权限导致 anon 函数泄露
+
+- **现象**：Supabase 通过 `ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON FUNCTIONS TO anon` 为 anon 角色自动授权所有函数。`pg_dump` 输出的 `REVOKE ALL ON FUNCTION ... FROM PUBLIC` 只撤销 PUBLIC 伪角色的权限，不撤销直接授予 `anon` 角色的权限。squash 后 RPC 函数（create_coverage、submit_report 等）对 anon 意外暴露
+- **影响**：squash 后多出 14 条 `GRANT ALL ON FUNCTION ... TO anon`（对比 baseline），均为不应被 anon 访问的 RPC 函数
+- **缓解**：在 squash 迁移文件末尾追加 `REVOKE ALL ON ALL FUNCTIONS IN SCHEMA public FROM anon;` 然后仅对 6 个安全辅助函数（current_app_role、report_enforce_status_transition、report_status_is_valid、report_write_status_log、set_updated_at_utc、validate_sector_hierarchy）重新 GRANT
+- **根因**：原始迁移文件用 `REVOKE EXECUTE ON FUNCTION ... FROM public, anon` 显式移除 anon 权限，但 dump 只输出 `REVOKE ALL FROM PUBLIC`，丢失了对 `anon` 角色的撤销
+
+### 盲区 7（执行中发现）：GRANT 语句排序不稳定
+
+- **现象**：`pg_dump` 按对象 OID 排序输出 GRANT 语句。squash 后数据库重建，OID 与 baseline 不同，导致 GRANT 语句顺序变化。逐行 `diff` 会报告差异，但语义完全等价
+- **影响**：核心验证的 `diff baseline.sql after_squash.sql` 不会得到零差异，需要用排序后的 GRANT 集合对比
+- **缓解**：核心验证改为两步：1) 排除 GRANT/REVOKE 后 diff（零差异 = 结构一致）；2) 排序后对比 GRANT/REVOKE 集合（零差异 = 权限一致）
+
+### 盲区 8（执行中发现）：FK 触发器名含 OID
+
+- **现象**：PostgreSQL 外键约束触发器名格式为 `RI_ConstraintTrigger_a_XXXXX`（XXXXX 为 OID），每次数据库重建 OID 不同
+- **影响**：RPC 烟雾测试中 `pg_trigger` 查询结果包含 FK 触发器名，与 baseline 不匹配
+- **缓解**：RPC 烟雾测试对比时过滤掉 `RI_ConstraintTrigger_*` 前缀的触发器，只比较业务触发器
+
+## 执行结果
+
+已完成 squash，验证全部通过：
+
+| 验证项 | 结果 |
+|--------|------|
+| public dump（排除 GRANT/REVOKE） | 零差异 |
+| public dump（GRANT/REVOKE 排序后集合） | 零差异 |
+| storage dump | 零差异 |
+| seed 数据行数（6 张表） | 零差异 |
+| RPC 烟雾测试（业务触发器） | 零差异 |
+| 时区设置 | `Asia/Shanghai` |
+
+squash 迁移文件：`supabase/migrations/20260414090824_squash_all.sql`（2052 行）
+原始文件：24 个迁移文件已删除
+
 ## 前提条件
 
 - 所有 24 个迁移未推送到远端，可安全替换
