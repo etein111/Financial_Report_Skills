@@ -15,6 +15,62 @@ record = analyst.resolve_analyst_by_email(client, "alice@neolyst.com")
 - Python 侧做 `strip().lower()` 标准化
 - `is_active=False` 的分析师抛出 `ValueError: 分析师已停用：{email}`
 
+## 1a. search_analyst_by_name
+
+按姓名模糊查询活跃分析师，返回精简字段（直接查表）。
+
+```python
+from skills.neolyst.scripts import analyst
+
+results = analyst.search_analyst_by_name(client, "Alice")
+# 返回：[{"email": "alice@neolyst.com", "english_name": "Alice Chen", "chinese_name": "陈小明"}, ...]
+# 无匹配：返回 []
+```
+
+- 同时匹配 `english_name` 和 `chinese_name`（ilike 模糊匹配）
+- 只返回 `is_active=True` 的分析师
+- 返回字段：`email`、`english_name`、`chinese_name`
+- `name` 中的 `%` 和 `_` 在 Python 侧 escape，防止通配符注入
+- 受 `dict_select` RLS 约束，所有认证用户可调用
+
+## 1b. upsert_analyst
+
+以 email 为键创建或更新分析师记录（需 admin 角色）。
+
+```python
+from skills.neolyst.scripts import analyst
+
+record = analyst.upsert_analyst(
+    client,
+    email="alice@neolyst.com",
+    english_name="Alice Chen",
+    chinese_name="陈小明",
+    suffix="CFA",
+    sfc="S12345",
+    region_code="CN",
+)
+# 返回：dict，完整 analyst 记录（含 email, english_name, chinese_name, suffix, sfc, region_code, is_active, created_at, updated_at）
+```
+
+- email 自动做 `strip().lower()` 标准化
+- 已存在时更新，不存在时创建
+- 受 `dict_write` RLS 约束，仅 admin 角色可执行
+
+## 1c. set_analyst_active
+
+更新分析师的在职状态（需 admin 角色）。
+
+```python
+from skills.neolyst.scripts import analyst
+
+record = analyst.set_analyst_active(client, "alice@neolyst.com", is_active=False)
+# 返回：dict，更新后的完整 analyst 记录
+# 邮箱不存在：抛出 ValueError（"找不到分析师：{email}"）
+```
+
+- email 自动做 `strip().lower()` 标准化
+- 受 `dict_write` RLS 约束，仅 admin 角色可执行
+
 ## 2. resolve_template
 
 按 `report_type + language` 查询模板记录，将模板文件和 schema 下载到本地并返回路径。
