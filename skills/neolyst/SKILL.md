@@ -5,9 +5,8 @@ description: 当用户提到“neolyst"、"查询分析师"、"上传模板"、"
 
 # neolyst
 
-neolyst skill 是 Neolyst Supabase 数据访问层,实现位置：`skills/neolyst/scripts/`
-前置条件：已安装 `uv`（Python 由 `uv` 自动管理）。执行接口时使用 `uv run python ...`。
-所有接口必须先通过 `connection.get_client()` 获取已认证的 client。
+Neolyst Supabase 数据访问层，实现位置：`skills/neolyst/scripts/`。执行接口时用 `uv run python ...`。
+所有接口依赖 `connection.get_client()` 返回的已认证 client。
 
 ## 接口
 
@@ -40,10 +39,10 @@ neolyst skill 是 Neolyst Supabase 数据访问层,实现位置：`skills/neolys
 - `save_report`：`report_id` 首次为 `None`，后续沿用同一 ID；只保存元数据，不操作文件
 - `upload_report_files` / `upload_model_file`：需在 `save_report` 之后调用，report 必须处于 draft 或 rejected 状态
 - `create_coverage`：仅在 `resolve_coverage` 未命中且用户确认"Coverage 已完成审批"后调用
-- `submit_report`：RPC 内部已调用 `validate_report` 做字段守门，如需提前获取友好的全量错误展示，调用方先显式调用 `validate_report`
+- `submit_report`：RPC 内部已调用 `validate_report` 做字段守门；如需提前获取全量错误展示，先显式调用 `validate_report`
 - `reuse_template`：静态路径复制；主模板重新上传后需重新执行才能同步
 - `report_type` 取值和分析师列表约束见 README「业务常量」
-- 接口报错时的处理策略见 `references/interfaces.md`「错误处理策略」，不要直接把异常抛给用户
+- 接口报错处理见 `references/interfaces.md`「错误处理策略」
 
 ## 参考文件
 
