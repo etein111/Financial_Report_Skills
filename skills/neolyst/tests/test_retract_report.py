@@ -25,7 +25,7 @@ def retract_coverage_id(neolyst_client, test_sector_id, test_analyst_email):
 
 class TestRetractSubmittedReport:
     def test_retract_submitted_report(self, neolyst_client, retract_coverage_id, test_analyst_email, tmp_path):
-        from skills.neolyst.scripts import retract_report as rr
+        from skills.neolyst.scripts.report import retract_report as rr
 
         submitted = _create_submitted_report(
             neolyst_client, retract_coverage_id, tmp_path / "retract_happy",
@@ -34,7 +34,7 @@ class TestRetractSubmittedReport:
         report_id = submitted["report_id"]
 
         try:
-            result = rr.retract_report(neolyst_client, report_id)
+            result = rr(neolyst_client, report_id)
 
             assert result["status"] == "draft"
             uuid.UUID(result["report_id"])
@@ -66,10 +66,10 @@ class TestRetractSubmittedReport:
 
 class TestRetractEdgeCases:
     def test_retract_draft_raises(self, neolyst_client, retract_coverage_id, test_analyst_email, tmp_path):
-        from skills.neolyst.scripts import save_report
-        from skills.neolyst.scripts import retract_report as rr
+        from skills.neolyst.scripts.report import save_report
+        from skills.neolyst.scripts.report import retract_report as rr
 
-        saved = save_report.save_report(neolyst_client, _base_report_payload(
+        saved = save_report(neolyst_client, _base_report_payload(
             test_analyst_email,
             title="Retract Draft Test",
             ticker="RETDRAFT",
@@ -80,12 +80,12 @@ class TestRetractEdgeCases:
         ))
         try:
             with pytest.raises(ValueError, match="无法撤回"):
-                rr.retract_report(neolyst_client, saved["report_id"])
+                rr(neolyst_client, saved["report_id"])
         finally:
             neolyst_client.table("report").delete().eq("id", saved["report_id"]).execute()
 
     def test_retract_already_retracted_raises(self, neolyst_client, retract_coverage_id, test_analyst_email, tmp_path):
-        from skills.neolyst.scripts import retract_report as rr
+        from skills.neolyst.scripts.report import retract_report as rr
 
         submitted = _create_submitted_report(
             neolyst_client, retract_coverage_id, tmp_path / "double_retract",
@@ -94,14 +94,14 @@ class TestRetractEdgeCases:
         report_id = submitted["report_id"]
 
         try:
-            rr.retract_report(neolyst_client, report_id)
+            rr(neolyst_client, report_id)
             with pytest.raises(ValueError, match="无法撤回"):
-                rr.retract_report(neolyst_client, report_id)
+                rr(neolyst_client, report_id)
         finally:
             neolyst_client.table("report").delete().eq("id", report_id).execute()
 
     def test_retract_nonexistent_report_raises(self, neolyst_client):
-        from skills.neolyst.scripts import retract_report as rr
+        from skills.neolyst.scripts.report import retract_report as rr
 
         with pytest.raises(ValueError, match="报告不存在"):
-            rr.retract_report(neolyst_client, str(uuid.uuid4()))
+            rr(neolyst_client, str(uuid.uuid4()))

@@ -113,10 +113,11 @@ def _base_report_payload(analyst_email: str, **overrides) -> dict:
 
 def _create_submitted_report(client, coverage_id, tmp_dir, title, analyst_email, **payload_overrides):
     """创建并提交一份报告，返回 submit_report 的返回值。"""
-    from skills.neolyst.scripts import save_report, upload_files, submit_report as sr
+    from skills.neolyst.scripts import upload_files
+    from skills.neolyst.scripts.report import save_report, submit_report as sr
 
     word_path, pdf_path = _make_files(tmp_dir)
-    saved = save_report.save_report(client, _base_report_payload(
+    saved = save_report(client, _base_report_payload(
         analyst_email,
         title=title,
         coverage_id=coverage_id,
@@ -126,4 +127,4 @@ def _create_submitted_report(client, coverage_id, tmp_dir, title, analyst_email,
         **payload_overrides,
     ))
     upload_files.upload_report_files(client, saved["report_id"], word_path, pdf_path)
-    return sr.submit_report(client, saved["report_id"])
+    return sr(client, saved["report_id"])

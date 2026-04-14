@@ -25,7 +25,7 @@ def submit_coverage_id(neolyst_client, test_sector_id, test_analyst_email):
 
 @pytest.fixture(scope="module")
 def submitted_report(neolyst_client, submit_coverage_id, test_analyst_email, tmp_path_factory):
-    from skills.neolyst.scripts import submit_report as sr
+    from skills.neolyst.scripts.report import submit_report as sr
 
     d = tmp_path_factory.mktemp("submit_test")
     result = _create_submitted_report(
@@ -66,20 +66,21 @@ class TestSubmitReport:
         assert log["metadata"]["pdf_path"]
 
     def test_submit_already_submitted_raises(self, neolyst_client, submitted_report):
-        from skills.neolyst.scripts import submit_report as sr
+        from skills.neolyst.scripts.report import submit_report as sr
 
         with pytest.raises(ValueError):
-            sr.submit_report(
+            sr(
                 neolyst_client,
                 submitted_report["report_id"],
             )
 
     def test_submit_without_word_path_raises(self, neolyst_client, submit_coverage_id, test_analyst_email, tmp_path):
-        from skills.neolyst.scripts import save_report, upload_files
-        from skills.neolyst.scripts import submit_report as sr
+        from skills.neolyst.scripts.report import save_report
+        from skills.neolyst.scripts import upload_files
+        from skills.neolyst.scripts.report import submit_report as sr
 
         word_path, pdf_path = _make_files(tmp_path)
-        saved = save_report.save_report(neolyst_client, _base_report_payload(
+        saved = save_report(neolyst_client, _base_report_payload(
             test_analyst_email,
             title="Submit Missing Word",
             ticker="SUBWORD",
@@ -90,16 +91,17 @@ class TestSubmitReport:
             upload_files.upload_report_files(neolyst_client, saved["report_id"], word_path, pdf_path)
             neolyst_client.table("report").update({"word_path": None}).eq("id", saved["report_id"]).execute()
             with pytest.raises(ValueError, match="Word"):
-                sr.submit_report(neolyst_client, saved["report_id"])
+                sr(neolyst_client, saved["report_id"])
         finally:
             neolyst_client.table("report").delete().eq("id", saved["report_id"]).execute()
 
     def test_submit_without_pdf_path_raises(self, neolyst_client, submit_coverage_id, test_analyst_email, tmp_path):
-        from skills.neolyst.scripts import save_report, upload_files
-        from skills.neolyst.scripts import submit_report as sr
+        from skills.neolyst.scripts.report import save_report
+        from skills.neolyst.scripts import upload_files
+        from skills.neolyst.scripts.report import submit_report as sr
 
         word_path, pdf_path = _make_files(tmp_path)
-        saved = save_report.save_report(neolyst_client, _base_report_payload(
+        saved = save_report(neolyst_client, _base_report_payload(
             test_analyst_email,
             title="Submit Missing PDF",
             ticker="SUBPDF",
@@ -110,18 +112,19 @@ class TestSubmitReport:
             upload_files.upload_report_files(neolyst_client, saved["report_id"], word_path, pdf_path)
             neolyst_client.table("report").update({"pdf_path": None}).eq("id", saved["report_id"]).execute()
             with pytest.raises(ValueError, match="PDF"):
-                sr.submit_report(neolyst_client, saved["report_id"])
+                sr(neolyst_client, saved["report_id"])
         finally:
             neolyst_client.table("report").delete().eq("id", saved["report_id"]).execute()
 
     def test_submit_missing_investment_thesis_raises(
         self, neolyst_client, submit_coverage_id, test_analyst_email, tmp_path
     ):
-        from skills.neolyst.scripts import save_report, upload_files
-        from skills.neolyst.scripts import submit_report as sr
+        from skills.neolyst.scripts.report import save_report
+        from skills.neolyst.scripts import upload_files
+        from skills.neolyst.scripts.report import submit_report as sr
 
         word_path, pdf_path = _make_files(tmp_path)
-        saved = save_report.save_report(neolyst_client, _base_report_payload(
+        saved = save_report(neolyst_client, _base_report_payload(
             test_analyst_email,
             title="Validate Gate Test",
             ticker="VGATE",
@@ -134,7 +137,7 @@ class TestSubmitReport:
                 {"investment_thesis": None}
             ).eq("id", saved["report_id"]).execute()
             with pytest.raises(ValueError, match="投资论点"):
-                sr.submit_report(neolyst_client, saved["report_id"])
+                sr(neolyst_client, saved["report_id"])
         finally:
             neolyst_client.table("report").delete().eq(
                 "id", saved["report_id"]
@@ -143,11 +146,12 @@ class TestSubmitReport:
     def test_submit_company_without_coverage_raises(
         self, neolyst_client, submit_coverage_id, test_analyst_email, tmp_path
     ):
-        from skills.neolyst.scripts import save_report, upload_files
-        from skills.neolyst.scripts import submit_report as sr
+        from skills.neolyst.scripts.report import save_report
+        from skills.neolyst.scripts import upload_files
+        from skills.neolyst.scripts.report import submit_report as sr
 
         word_path, pdf_path = _make_files(tmp_path)
-        saved = save_report.save_report(neolyst_client, _base_report_payload(
+        saved = save_report(neolyst_client, _base_report_payload(
             test_analyst_email,
             title="Coverage Gate Test",
             ticker="CGATE",
@@ -160,7 +164,7 @@ class TestSubmitReport:
                 {"coverage_id": None}
             ).eq("id", saved["report_id"]).execute()
             with pytest.raises(ValueError, match="coverage_id"):
-                sr.submit_report(neolyst_client, saved["report_id"])
+                sr(neolyst_client, saved["report_id"])
         finally:
             neolyst_client.table("report").delete().eq(
                 "id", saved["report_id"]

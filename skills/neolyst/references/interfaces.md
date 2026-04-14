@@ -113,9 +113,9 @@ coverage_id = coverage.create_coverage(
 保存或更新报告元数据。不操作文件、不生成版本号。
 
 ```python
-from skills.neolyst.scripts import save_report
+from skills.neolyst.scripts.report import save_report
 
-result = save_report.save_report(client, {
+result = save_report(client, {
     "report_id": None,          # 首次为 None；后续传已有 report_id
     "report_type": "company",
     "title": "Vertiv: AI demand drives earnings growth",
@@ -183,7 +183,7 @@ result = upload_files.upload_model_file(
 调用 DB 侧 `validate_report` RPC，校验报告是否满足提交条件。全量收集所有错误后一次性返回。
 
 ```python
-from skills.neolyst.scripts.validators import validate_report
+from skills.neolyst.scripts.report import validate_report
 
 result = validate_report(client, report_id="uuid")
 # 通过：返回 {"report_id": "uuid"}
@@ -206,9 +206,9 @@ result = validate_report(client, report_id="uuid")
 将 draft/rejected 报告提交为 `submitted`。
 
 ```python
-from skills.neolyst.scripts import submit_report
+from skills.neolyst.scripts.report import submit_report
 
-result = submit_report.submit_report(client, report_id="uuid")
+result = submit_report(client, report_id="uuid")
 # 返回：{"report_id": "uuid", "status": "submitted"}
 # RPC 内部调用 validate_report 做字段守门，字段不完整时抛出 ValueError
 # 如需提前获取全量错误展示，先显式调用 validate_report(client, report_id="uuid")

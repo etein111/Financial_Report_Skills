@@ -19,9 +19,9 @@ def _make_three_files(directory: Path, prefix: str = "report") -> tuple[str, str
 
 
 def _create_report(client, analyst_email):
-    from skills.neolyst.scripts import save_report
+    from skills.neolyst.scripts.report import save_report
 
-    return save_report.save_report(client, _base_report_payload(
+    return save_report(client, _base_report_payload(
         analyst_email,
         title="Upload Files Test",
         ticker="UPLD001",

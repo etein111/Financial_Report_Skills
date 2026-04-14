@@ -6,7 +6,8 @@ import pytest
 
 
 def _save_report_with_files(client, directory, analyst_email, overrides=None):
-    from skills.neolyst.scripts import save_report, upload_files
+    from skills.neolyst.scripts.report import save_report
+    from skills.neolyst.scripts import upload_files
 
     word_path, pdf_path = _make_files(directory)
     payload = _base_report_payload(
@@ -18,7 +19,7 @@ def _save_report_with_files(client, directory, analyst_email, overrides=None):
     if overrides:
         payload.update(overrides)
 
-    saved = save_report.save_report(client, payload)
+    saved = save_report(client, payload)
     upload_files.upload_report_files(client, saved["report_id"], word_path, pdf_path)
     return saved
 
@@ -59,7 +60,7 @@ def valid_report(neolyst_client, test_coverage_id, test_analyst_email, tmp_path_
 
 class TestValidateDraftHappyPath:
     def test_valid_report_passes(self, neolyst_client, valid_report):
-        from skills.neolyst.scripts.validators import validate_report
+        from skills.neolyst.scripts.report import validate_report
 
         validate_report(neolyst_client, valid_report["report_id"])
 
@@ -68,7 +69,7 @@ class TestValidateDraftHappyPath:
 
 class TestValidateDraftNonCompanyTypes:
     def test_sector_type_passes_without_coverage_id(self, neolyst_client, test_analyst_email, tmp_path):
-        from skills.neolyst.scripts.validators import validate_report
+        from skills.neolyst.scripts.report import validate_report
 
         result = _save_report_with_files(neolyst_client, tmp_path, test_analyst_email, {
             "report_type": "sector",
@@ -80,7 +81,7 @@ class TestValidateDraftNonCompanyTypes:
             _cleanup(neolyst_client, result["report_id"])
 
     def test_macro_type_passes_without_coverage_id(self, neolyst_client, test_analyst_email, tmp_path):
-        from skills.neolyst.scripts.validators import validate_report
+        from skills.neolyst.scripts.report import validate_report
 
         result = _save_report_with_files(neolyst_client, tmp_path, test_analyst_email, {
             "report_type": "macro",
@@ -96,7 +97,7 @@ class TestValidateDraftNonCompanyTypes:
 
 class TestValidateDraftFieldErrors:
     def test_missing_investment_thesis_fails(self, neolyst_client, test_coverage_id, test_analyst_email, tmp_path):
-        from skills.neolyst.scripts.validators import validate_report
+        from skills.neolyst.scripts.report import validate_report
 
         result = _save_report_with_files(neolyst_client, tmp_path, test_analyst_email, {
             "investment_thesis": None,
@@ -109,7 +110,7 @@ class TestValidateDraftFieldErrors:
             _cleanup(neolyst_client, result["report_id"])
 
     def test_missing_contact_person_fails(self, neolyst_client, test_coverage_id, test_analyst_email, tmp_path):
-        from skills.neolyst.scripts.validators import validate_report
+        from skills.neolyst.scripts.report import validate_report
 
         result = _save_report_with_files(neolyst_client, tmp_path, test_analyst_email, {
             "contact_person": None,
@@ -122,7 +123,7 @@ class TestValidateDraftFieldErrors:
             _cleanup(neolyst_client, result["report_id"])
 
     def test_missing_report_language_fails(self, neolyst_client, test_coverage_id, test_analyst_email, tmp_path):
-        from skills.neolyst.scripts.validators import validate_report
+        from skills.neolyst.scripts.report import validate_report
 
         result = _save_report_with_files(neolyst_client, tmp_path, test_analyst_email, {
             "report_language": None,
@@ -139,7 +140,7 @@ class TestValidateDraftFieldErrors:
 
 class TestValidateDraftAnalystErrors:
     def test_contact_person_not_in_analysts_fails(self, neolyst_client, test_coverage_id, test_analyst_email, tmp_path):
-        from skills.neolyst.scripts.validators import validate_report
+        from skills.neolyst.scripts.report import validate_report
 
         result = _save_report_with_files(neolyst_client, tmp_path, test_analyst_email, {
             "contact_person": "nobody@example.com",
@@ -156,7 +157,7 @@ class TestValidateDraftAnalystErrors:
 
 class TestValidateDraftCoverageErrors:
     def test_company_without_coverage_id_fails(self, neolyst_client, test_analyst_email, tmp_path):
-        from skills.neolyst.scripts.validators import validate_report
+        from skills.neolyst.scripts.report import validate_report
 
         result = _save_report_with_files(neolyst_client, tmp_path, test_analyst_email, {"coverage_id": None})
         try:
@@ -170,7 +171,7 @@ class TestValidateDraftCoverageErrors:
 
 class TestValidateDraftPathErrors:
     def test_missing_word_path_fails(self, neolyst_client, test_coverage_id, test_analyst_email, tmp_path):
-        from skills.neolyst.scripts.validators import validate_report
+        from skills.neolyst.scripts.report import validate_report
 
         result = _save_report_with_files(neolyst_client, tmp_path, test_analyst_email, {"coverage_id": test_coverage_id})
         try:
@@ -181,7 +182,7 @@ class TestValidateDraftPathErrors:
             _cleanup(neolyst_client, result["report_id"])
 
     def test_missing_pdf_path_fails(self, neolyst_client, test_coverage_id, test_analyst_email, tmp_path):
-        from skills.neolyst.scripts.validators import validate_report
+        from skills.neolyst.scripts.report import validate_report
 
         result = _save_report_with_files(neolyst_client, tmp_path, test_analyst_email, {"coverage_id": test_coverage_id})
         try:
@@ -196,7 +197,7 @@ class TestValidateDraftPathErrors:
 
 class TestValidateDraftStatusErrors:
     def test_nonexistent_report_raises(self, neolyst_client):
-        from skills.neolyst.scripts.validators import validate_report
+        from skills.neolyst.scripts.report import validate_report
 
         with pytest.raises(ValueError, match="报告不存在"):
             validate_report(neolyst_client, str(uuid.uuid4()))
