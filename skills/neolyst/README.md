@@ -27,6 +27,8 @@ Neolyst Supabase 数据访问层。实现位置：`scripts/`。
 机器生成结果 → save_report → upload_report_files → [人工确认] → validate_report → submit_report
                   ↑                                                           │
                   └────────── 提交失败：修改后重新 save_report ←───────────────┘
+                                                          ↓ [SA 审批]
+                                                    publish_report 或 reject_report
 ```
 
 - draft 驱动：机器结果先存 draft，不要求满足提交条件；人工确认后再提交
@@ -54,7 +56,7 @@ DB 中存储的路径包含 bucket 前缀。`storage.py` 只负责上传/下载�
 ```
 connection  ←  storage, analyst, coverage, rpc
 connection + storage + rpc  ←  save_report, upload_files
-connection + rpc  ←  coverage, submit_report, retract_report
+connection + rpc  ←  coverage, submit_report, retract_report, publish_report, reject_report
 connection  ←  validators
 ```
 

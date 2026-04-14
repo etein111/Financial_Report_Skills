@@ -1,6 +1,6 @@
 ---
 name: neolyst
-description: 当用户提到“neolyst"、"查询分析师"、"上传模板"、"发布模板"、"创建 coverage"、"查询 coverage"、"保存 draft"、"提交报告"、"校验报告"、"查询历史报告"，或任何需要读写 Neolyst 数据库的操作时，使用此 skill。
+description: 当用户提到”neolyst”、”查询分析师”、”上传模板”、”发布模板”、”创建 coverage”、”查询 coverage”、”保存 draft”、”提交报告”、”校验报告”、”查询历史报告”、”发布报告”、”退回报告”、”reject”，或任何需要读写 Neolyst 数据库的操作时，使用此 skill。
 ---
 
 # neolyst
