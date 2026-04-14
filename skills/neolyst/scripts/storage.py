@@ -16,7 +16,7 @@ def upload(client: Client, storage_path: str, local_path: str) -> None:
     try:
         data = Path(local_path).read_bytes()
     except FileNotFoundError:
-        raise FileNotFoundError(f"Local file not found: {local_path}")
+        raise FileNotFoundError(f"本地文件不存在: {local_path}")
     try:
         client.storage.from_(bucket).upload(path, data)
     except Exception as e:
@@ -38,5 +38,5 @@ def _split(storage_path: str) -> tuple[str, str]:
     """将 'bucket/path/to/file' 拆分为 ('bucket', 'path/to/file')。"""
     bucket, _, path = storage_path.partition("/")
     if not bucket or not path:
-        raise ValueError(f"Invalid storage_path (expected 'bucket/path'): {storage_path!r}")
+        raise ValueError(f"无效的 storage_path（格式应为 'bucket/path'）: {storage_path!r}")
     return bucket, path

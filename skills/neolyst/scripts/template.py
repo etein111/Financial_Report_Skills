@@ -33,7 +33,7 @@ def upsert_template(
             "p_report_type": report_type,
             "p_language": language,
         }),
-        f"get_template_storage_paths returned no data for {report_type}/{language}",
+        f"get_template_storage_paths 未返回数据: {report_type}/{language}",
     )
     tmpl_storage_path = paths["template_file_path"]
     schema_storage_path = paths["schema_file_path"]
@@ -96,11 +96,11 @@ def resolve_template(
     )
 
     if not resp.data:
-        raise ValueError(f"Template not found: {record_id!r}")
+        raise ValueError(f"模板不存在: {record_id!r}")
 
     record = resp.data[0]
     if not record.get("template_file_path"):
-        raise ValueError(f"Template not published (empty path): {record_id!r}")
+        raise ValueError(f"模板未发布（路径为空）: {record_id!r}")
 
     local_dir = Path(dest_dir) / "templates" / report_type / language
     template_local = str(local_dir / "template.docx")

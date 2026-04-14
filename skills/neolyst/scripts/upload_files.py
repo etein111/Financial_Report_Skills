@@ -16,7 +16,7 @@ from . import rpc, storage
 
 def _join_prefix(prefix: str, local_path: str) -> str:
     if not prefix.endswith("/"):
-        raise ValueError(f"Invalid upload prefix: {prefix!r}")
+        raise ValueError(f"无效的上传路径前缀: {prefix!r}")
     return f"{prefix}{Path(local_path).name}"
 
 
@@ -26,9 +26,9 @@ def _generate_prefix(client: Client, report_id: str, category: str) -> str:
         "p_file_category": category,
     })
     if not resp.data:
-        raise ValueError("generate_upload_path RPC returned empty data")
+        raise ValueError("generate_upload_path RPC 未返回数据")
 
-    # scalar RETURNS text: resp.data is the string directly
+    # 标量返回 text：resp.data 直接是字符串
     if isinstance(resp.data, str):
         return resp.data
 

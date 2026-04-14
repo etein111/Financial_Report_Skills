@@ -17,7 +17,7 @@ def call_rpc(client: Client, fn_name: str, params: dict | None = None) -> Any:
         raise ValueError(str(e)) from e
 
 
-def single_row(resp, message: str = "RPC returned no data") -> dict:
+def single_row(resp, message: str = "RPC 未返回数据") -> dict:
     """从 RPC 响应中提取唯一一行，空数据时抛 ValueError。"""
     if not resp.data:
         raise ValueError(message)

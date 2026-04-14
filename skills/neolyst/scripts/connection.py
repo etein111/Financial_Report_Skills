@@ -54,7 +54,7 @@ def _supabase_url(config: dict) -> str:
         return env.strip()
     url = config.get("supabase_url", "")
     if not url:
-        raise ValueError("supabase_url not found. Check skills/neolyst/neolyst.yaml.")
+        raise ValueError("未找到 supabase_url，请检查 skills/neolyst/neolyst.yaml。")
     return url
 
 
@@ -65,7 +65,7 @@ def _anon_key(config: dict) -> str:
         return env.strip()
     key = config.get("anon_key", "")
     if not key:
-        raise ValueError("anon_key not found. Check skills/neolyst/neolyst.yaml.")
+        raise ValueError("未找到 anon_key，请检查 skills/neolyst/neolyst.yaml。")
     return key
 
 
@@ -166,16 +166,16 @@ def get_client(
     _password = password or (user_data.get("password") if user_data else None)
     if not _email or not _password:
         raise ValueError(
-            "No valid session and no credentials provided. "
-            "Pass email+password, or ensure user.json has valid credentials."
+            "无可用 session 且未提供凭据。请传入 email+password，"
+            "或确保 user.json 包含有效凭据。"
         )
 
     try:
         resp = client.auth.sign_in_with_password({"email": _email, "password": _password})
     except Exception as e:
         raise ValueError(
-            f"Authentication failed for {_email!r}: {e}. "
-            "Please call get_client(email=..., password=...) with valid credentials."
+            f"认证失败（{_email!r}）: {e}。"
+            "请使用有效凭据调用 get_client(email=..., password=...)。"
         ) from e
     _save_user(neolyst_dir, {"email": _email, "password": _password})
     _save_session(neolyst_dir, _extract_session_data(resp.session))

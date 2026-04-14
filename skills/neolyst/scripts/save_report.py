@@ -41,6 +41,6 @@ def save_report(client: Client, draft: dict) -> dict:
 
     row = rpc.single_row(
         rpc.call_rpc(client, "upsert_report", {"p_draft": payload}),
-        "upsert_report RPC returned empty data",
+        "upsert_report RPC 未返回数据",
     )
     return {"report_id": str(row["report_id"])}
