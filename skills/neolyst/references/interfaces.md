@@ -242,31 +242,6 @@ rows = coverage.list_coverage_history(
 # coverage 找到但没有已发布历史：返回 []
 ```
 
-## 11. fetch_recommendation_history
-
-从 Neolyst 获取历史推荐数据，转换为 recommendation chart 所需格式。内部调用 `list_coverage_history` 获取已发布历史报告，然后用 yfinance 补全每个发布日期的收盘价。
-
-```python
-from skills.neolyst.scripts import coverage
-
-recs = coverage.fetch_recommendation_history(
-    client,
-    ticker="3393.HK",
-    first_analyst_email="harryyang@hfisec.com.hk",
-)
-# 返回（按 date asc 排序）：
-# [
-#   {"date": "2024-06-15", "rating": "OUTPERFORM", "price": 22.50, "target": 28.0},
-#   {"date": "2025-03-20", "rating": "OUTPERFORM", "price": 30.10, "target": 35.5},
-#   ...
-# ]
-# 无历史数据或出错时返回空列表（不抛异常）
-```
-
-- `price`：该报告 published_at 当日（或最近交易日）的 yfinance 收盘价
-- `target`：来自报告的 `target_price`
-- 此函数为 recommendation chart 专用，不修改数据库
-
 ## 错误处理策略
 
 调用接口遇到 ValueError 时，不要直接把异常信息抛给用户。根据场景采取以下策略：

@@ -3016,7 +3016,10 @@ def _generate_recommendation_chart(ticker: str, output_path: str, company_name: 
                     if _opencode_root not in sys.path:
                         sys.path.insert(0, _opencode_root)
                     _cov_mod = importlib.import_module("skills.neolyst.scripts.coverage")
-                    neolyst_recs = _cov_mod.fetch_recommendation_history(neolyst_client, ticker, first_analyst_email)
+                    import market_data as _md
+                    neolyst_recs = _md.fetch_recommendation_history(
+                        lambda t, e: _cov_mod.list_coverage_history(neolyst_client, t, e),
+                        ticker, first_analyst_email)
                     if neolyst_recs:
                         recommendations = neolyst_recs
                         neolyst_fetched = True
