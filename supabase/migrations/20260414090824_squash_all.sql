@@ -1563,19 +1563,19 @@ ALTER TABLE ONLY "public"."report_status_log"
 ALTER TABLE "public"."analyst" ENABLE ROW LEVEL SECURITY;
 
 
-CREATE POLICY "cov_analyst_delete" ON "public"."coverage_analyst" FOR DELETE TO "authenticated" USING (("public"."current_app_role"() = 'admin'::"text"));
+CREATE POLICY "coverage_analyst_delete" ON "public"."coverage_analyst" FOR DELETE TO "authenticated" USING (("public"."current_app_role"() = 'admin'::"text"));
 
 
 
-CREATE POLICY "cov_analyst_insert" ON "public"."coverage_analyst" FOR INSERT TO "authenticated" WITH CHECK (("public"."current_app_role"() = ANY (ARRAY['admin'::"text", 'sa'::"text", 'analyst'::"text"])));
+CREATE POLICY "coverage_analyst_insert" ON "public"."coverage_analyst" FOR INSERT TO "authenticated" WITH CHECK (("public"."current_app_role"() = ANY (ARRAY['admin'::"text", 'sa'::"text", 'analyst'::"text"])));
 
 
 
-CREATE POLICY "cov_analyst_select" ON "public"."coverage_analyst" FOR SELECT TO "authenticated" USING (true);
+CREATE POLICY "coverage_analyst_select" ON "public"."coverage_analyst" FOR SELECT TO "authenticated" USING (true);
 
 
 
-CREATE POLICY "cov_analyst_update" ON "public"."coverage_analyst" FOR UPDATE TO "authenticated" USING (("public"."current_app_role"() = 'admin'::"text")) WITH CHECK (("public"."current_app_role"() = 'admin'::"text"));
+CREATE POLICY "coverage_analyst_update" ON "public"."coverage_analyst" FOR UPDATE TO "authenticated" USING (("public"."current_app_role"() = 'admin'::"text")) WITH CHECK (("public"."current_app_role"() = 'admin'::"text"));
 
 
 
@@ -1687,13 +1687,13 @@ CREATE POLICY "report_update" ON "public"."report" FOR UPDATE TO "authenticated"
 
 
 
-CREATE POLICY "rsl_insert" ON "public"."report_status_log" FOR INSERT TO "authenticated" WITH CHECK ((("public"."current_app_role"() = 'admin'::"text") OR (("public"."current_app_role"() = 'sa'::"text") AND ("from_status" = ANY (ARRAY['submitted'::"text", 'rejected'::"text"]))) OR (("public"."current_app_role"() = 'analyst'::"text") AND ((("from_status" = 'draft'::"text") AND ("to_status" = 'submitted'::"text")) OR (("from_status" = 'submitted'::"text") AND ("to_status" = 'draft'::"text")) OR (("from_status" = 'rejected'::"text") AND ("to_status" = 'draft'::"text"))) AND (EXISTS ( SELECT 1
+CREATE POLICY "report_status_log_insert" ON "public"."report_status_log" FOR INSERT TO "authenticated" WITH CHECK ((("public"."current_app_role"() = 'admin'::"text") OR (("public"."current_app_role"() = 'sa'::"text") AND ("from_status" = ANY (ARRAY['submitted'::"text", 'rejected'::"text"]))) OR (("public"."current_app_role"() = 'analyst'::"text") AND ((("from_status" = 'draft'::"text") AND ("to_status" = 'submitted'::"text")) OR (("from_status" = 'submitted'::"text") AND ("to_status" = 'draft'::"text")) OR (("from_status" = 'rejected'::"text") AND ("to_status" = 'draft'::"text"))) AND (EXISTS ( SELECT 1
    FROM "public"."report" "r"
   WHERE (("r"."id" = "report_status_log"."report_id") AND ("r"."owner_user_id" = "auth"."uid"())))))));
 
 
 
-CREATE POLICY "rsl_select" ON "public"."report_status_log" FOR SELECT TO "authenticated" USING ((EXISTS ( SELECT 1
+CREATE POLICY "report_status_log_select" ON "public"."report_status_log" FOR SELECT TO "authenticated" USING ((EXISTS ( SELECT 1
    FROM "public"."report" "r"
   WHERE (("r"."id" = "report_status_log"."report_id") AND (("public"."current_app_role"() = 'admin'::"text") OR (("public"."current_app_role"() = 'sa'::"text") AND ("r"."status" = ANY (ARRAY['submitted'::"text", 'published'::"text", 'rejected'::"text"]))) OR (("public"."current_app_role"() = 'analyst'::"text") AND ("r"."owner_user_id" = "auth"."uid"())))))));
 
