@@ -42,9 +42,7 @@ opencode.json
 supabase/.temp/
 
 # Claude Code
-.claude/skills
-.claude/memory/
-.claude/settings.local.json
+.claude/
 .worktrees/
 
 # 项目本地文件
