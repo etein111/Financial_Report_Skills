@@ -3006,7 +3006,8 @@ def _generate_recommendation_chart(ticker: str, output_path: str, company_name: 
             recommendations = elements.get('recommendations', [])
 
         # 优先从 Neolyst 获取历史推荐数据
-        if not recommendations and neolyst_client and elements:
+        neolyst_fetched = False
+        if neolyst_client and elements:
             first_analyst_email = elements.get('a1_email', '')
             if first_analyst_email:
                 try:
@@ -3018,18 +3019,23 @@ def _generate_recommendation_chart(ticker: str, output_path: str, company_name: 
                     neolyst_recs = _cov_mod.fetch_recommendation_history(neolyst_client, ticker, first_analyst_email)
                     if neolyst_recs:
                         recommendations = neolyst_recs
+                        neolyst_fetched = True
                         print(f"  ✅ 从 Neolyst 获取到 {len(recommendations)} 条历史推荐")
+                    else:
+                        # Neolyst 有 coverage 但没有历史推荐数据，这是有效情况，不报错
+                        print(f"  ⚠️ Neolyst 中该股票没有历史推荐数据")
                 except Exception as e:
                     print(f"  ⚠️ 从 Neolyst 获取推荐历史失败: {e}")
+                    # 如果传入了 neolyst_client 但获取失败，必须报错，不使用默认数据
+                    print(f"  ❌ recommendation_chart 生成失败：无法从 Neolyst 获取数据")
+                    return False
+        elif not recommendations:
+            # 没有传入 neolyst_client，且 elements 中也没有 recommendations，才使用默认值（仅价格线）
+            print(f"  ⚠️ 未传入 neolyst_client 且 elements 中无 recommendations，将生成仅含价格线的图表")
 
-        # 如果没有 recommendations，使用基于历史价格的默认值
+        # 如果没有 recommendations，生成仅含价格线的图表（不显示推荐点）
         if not recommendations:
-            mid_idx = len(stock_dates) // 2 if len(stock_dates) > 200 else len(stock_dates) // 2
-            recommendations = [
-                {"date": "2020-08-24", "rating": "OUTPERFORM", "price": float(stock_prices[100]) if len(stock_prices) > 100 else 100, "target": float(stock_prices[100] * 1.1) if len(stock_prices) > 100 else 110},
-                {"date": "2021-03-03", "rating": "OUTPERFORM", "price": float(stock_prices[mid_idx]) if len(stock_prices) > mid_idx else 100, "target": float(stock_prices[mid_idx] * 1.15) if len(stock_prices) > mid_idx else 115},
-                {"date": "2023-04-26", "rating": "OUTPERFORM", "price": float(stock_prices[-1]) if len(stock_prices) > 0 else 100, "target": float(stock_prices[-1] * 1.2) if len(stock_prices) > 0 else 120},
-            ]
+            recommendations = []
 
         # 转换推荐日期为 datetime
         recs = []
