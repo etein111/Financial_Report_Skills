@@ -2,7 +2,7 @@
 
 ## 1. resolve_analyst_by_email
 
-按邮箱查询并返回标准化的 analyst 记录。
+按邮箱查询 analyst 记录（直接查表，非 RPC）。
 
 ```python
 from skills.neolyst.scripts import analyst
@@ -12,7 +12,7 @@ record = analyst.resolve_analyst_by_email(client, "alice@neolyst.com")
 # 找不到或已停用：抛出 ValueError（含具体原因）
 ```
 
-- 邮箱大小写不敏感，内部统一 lowercase
+- Python 侧做 `strip().lower()` 标准化
 - `is_active=False` 的分析师抛出 `ValueError: 分析师已停用：{email}`
 
 ## 2. resolve_template

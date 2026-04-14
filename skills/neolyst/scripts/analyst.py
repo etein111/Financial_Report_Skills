@@ -1,18 +1,17 @@
 """
 analyst.py — Neolyst analyst 查询模块。
+
+通过 Supabase 表查询获取 analyst 记录，校验逻辑在 Python 侧完成。
 """
 
 from supabase import Client
 
-from . import rpc
-
 
 def resolve_analyst_by_email(client: Client, email: str) -> dict:
     """
-    根据邮箱查询并返回标准化的 analyst 记录。
+    根据邮箱查询并返回 analyst 记录。
 
-    业务主键为 analyst_email（表中强制小写存储）。
-    is_active 校验在 Supabase RPC 侧执行。
+    按 analyst 表主键 email 直接查询。is_active 校验在 Python 侧完成。
 
     Args:
         client: 已认证的 Supabase client
@@ -25,7 +24,11 @@ def resolve_analyst_by_email(client: Client, email: str) -> dict:
     Raises:
         ValueError: 找不到对应的 analyst，或 analyst 已停用（is_active=False）
     """
-    return rpc.single_row(
-        rpc.call_rpc(client, "resolve_analyst_by_email", {"p_email": email}),
-        f"找不到分析师：{email!r}",
-    )
+    email_lower = email.strip().lower()
+    resp = client.table("analyst").select("*").eq("email", email_lower).execute()
+    if not resp.data:
+        raise ValueError(f"找不到分析师：{email}")
+    record = resp.data[0]
+    if not record.get("is_active", True):
+        raise ValueError(f"分析师已停用：{email}")
+    return record

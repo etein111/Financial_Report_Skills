@@ -12,7 +12,7 @@ Neolyst Supabase 数据访问层，实现位置：`skills/neolyst/scripts/`。�
 
 | # | 接口 | 模块 | 说明 |
 |---|------|------|------|
-| 1 | `resolve_analyst_by_email(client, email)` | `analyst` | 按邮箱查询标准化 analyst 记录 |
+| 1 | `resolve_analyst_by_email(client, email)` | `analyst` | 按邮箱查询 analyst 记录（直接查表） |
 | 2 | `resolve_template(client, report_type, language, dest_dir=".")` | `template` | 下载模板 + schema 到本地路径 |
 | 3 | `upsert_template(client, report_type, language, template_local_path, schema_local_path=None)` | `template` | 上传模板文件并 upsert `report_template` 记录 |
 | 4 | `reuse_template(client, report_type, language, same_as_report_type)` | `template` | 静态复制另一个 report_type 的模板路径 |
