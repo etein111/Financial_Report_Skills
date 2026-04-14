@@ -1051,8 +1051,12 @@ CREATE TABLE IF NOT EXISTS "public"."report" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "title" "text" NOT NULL,
     "report_type" "text" NOT NULL,
+    "report_language" "text",
     "status" "text" DEFAULT 'draft'::"text" NOT NULL,
     "owner_user_id" "uuid" NOT NULL,
+    "lead_analyst_email" "text" NOT NULL,
+    "analyst_emails" "text"[] NOT NULL,
+    "contact_person" "text",
     "coverage_id" "uuid",
     "ticker" "text",
     "sector_id" "uuid",
@@ -1060,18 +1064,14 @@ CREATE TABLE IF NOT EXISTS "public"."report" (
     "rating" "text",
     "target_price" numeric,
     "investment_thesis" "text",
-    "report_language" "text",
-    "contact_person" "text",
-    "published_by" "uuid",
-    "published_at" timestamp with time zone,
-    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
-    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
-    "lead_analyst_email" "text" NOT NULL,
-    "analyst_emails" "text"[] NOT NULL,
-    "rejection_reason" "text",
     "word_path" "text",
     "pdf_path" "text",
     "model_path" "text",
+    "published_by" "uuid",
+    "published_at" timestamp with time zone,
+    "rejection_reason" "text",
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     CONSTRAINT "report_language_check" CHECK ((("report_language" IS NULL) OR ("report_language" = ANY (ARRAY['zh'::"text", 'en'::"text"])))),
     CONSTRAINT "report_status_check" CHECK (("status" = ANY (ARRAY['draft'::"text", 'submitted'::"text", 'published'::"text", 'rejected'::"text"]))),
     CONSTRAINT "report_target_price_check" CHECK ((("target_price" IS NULL) OR ("target_price" > (0)::numeric)))
@@ -1157,6 +1157,18 @@ COMMENT ON COLUMN "public"."report"."updated_at" IS '记录最后更新时间（
 
 
 
+COMMENT ON COLUMN "public"."report"."lead_analyst_email" IS '主分析师邮箱，报告署名的第一作者。引用 analyst.email';
+
+
+
+COMMENT ON COLUMN "public"."report"."analyst_emails" IS '所有合著分析师邮箱数组，包含 lead_analyst_email 在内。用于 RLS 策略中判断分析师是否关联该报告';
+
+
+
+COMMENT ON COLUMN "public"."report"."rejection_reason" IS '退回原因。仅当 status = rejected 时有值，由 sa 在退回操作时填写';
+
+
+
 COMMENT ON COLUMN "public"."report"."word_path" IS '当前 Word 文件在 Storage 中的完整路径。上传新 Word 后直接覆盖为最新路径。';
 
 
@@ -1219,6 +1231,10 @@ COMMENT ON COLUMN "public"."report_status_log"."action_at" IS '操作时间（UT
 
 
 COMMENT ON COLUMN "public"."report_status_log"."reason" IS '退回/审批意见。当 to_status = rejected 时 CHECK 约束要求非空且非空白';
+
+
+
+COMMENT ON COLUMN "public"."report_status_log"."metadata" IS '状态变更时的快照数据（JSONB），记录报告当前文件路径等上下文信息';
 
 
 
@@ -2044,6 +2060,4 @@ GRANT ALL ON FUNCTION public.report_status_is_valid(text, text) TO anon;
 GRANT ALL ON FUNCTION public.report_write_status_log() TO anon;
 GRANT ALL ON FUNCTION public.set_updated_at_utc() TO anon;
 GRANT ALL ON FUNCTION public.validate_sector_hierarchy() TO anon;
-
-
 
