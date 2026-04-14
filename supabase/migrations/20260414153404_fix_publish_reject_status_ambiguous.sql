@@ -1,6 +1,6 @@
 -- 修复 publish_report / reject_report 中 status 列引用歧义
 -- RETURNS TABLE(report_id, status) 的 status 与 report.status 冲突
--- 解决方式：对 report 表使用别名 r，用 r.status 消歧
+-- 解决方式：与 submit_report / retract_report 一致，使用表别名消歧
 
 CREATE OR REPLACE FUNCTION public.publish_report(p_report_id uuid)
 RETURNS TABLE(report_id uuid, status text)

@@ -4,6 +4,8 @@ test_reject_report.py — reject_report 集成测试。
 import uuid
 import pytest
 
+from .conftest import _base_report_payload, _create_submitted_report
+
 
 @pytest.fixture(scope="module")
 def reject_coverage_id(neolyst_client, test_sector_id, test_analyst_email):
