@@ -24,13 +24,13 @@ Neolyst Supabase 数据访问层。实现位置：`scripts/`。
 典型提交流程：
 
 ```
-机器生成结果 → save_draft_report → [人工确认] → validate_report → submit_report
-                  ↑                                                      │
-                  └──────── 提交失败：save_draft 追加新版本 ←──────────────┘
+机器生成结果 → save_report → upload_report_files → [人工确认] → validate_report → submit_report
+                  ↑                                                           │
+                  └────────── 提交失败：修改后重新 save_report ←───────────────┘
 ```
 
 - draft 驱动：机器结果先存 draft，不要求满足提交条件；人工确认后再提交
-- 提交失败后沿用原 report_id 追加新版本，重新走 validate → submit
+- 提交失败后沿用原 report_id 重新 save_report + upload_report_files，重新走 validate → submit
 - 撤回（retract）：submitted 或 rejected 的报告可撤回为 draft 重新编辑；rejected 不能直接重提，必须先撤回 draft 再提交
 - 整体行为对齐 Neolyst Web 的 Analyst Submit
 
@@ -43,7 +43,7 @@ Neolyst Supabase 数据访问层。实现位置：`scripts/`。
 | Bucket | 用途 | 路径规则 |
 |--------|------|---------|
 | `templates` | 模板资产 | `templates/{report_type}/{language}/template.docx` / `schema.yaml`（RPC `get_template_storage_paths` 生成） |
-| `reports` | 报告版本资产 | `reports/{report_id}/v{version_no}/{原始文件名}`（draft_report.py 生成，版本间独立目录） |
+| `reports` | 报告版本资产 | Word+PDF: `reports/{report_id}/report/{timestamp}/{原始文件名}`；Model: `reports/{report_id}/model/{timestamp}/{原始文件名}`（timestamp 由 `generate_upload_path` RPC 生成） |
 
 DB 中存储的路径包含 bucket 前缀。`storage.py` 只负责上传/下载，不拼路径。
 
@@ -53,17 +53,16 @@ DB 中存储的路径包含 bucket 前缀。`storage.py` 只负责上传/下载�
 
 ```
 connection  ←  storage, analyst, coverage, rpc
-connection + storage + rpc  ←  draft_report
+connection + storage + rpc  ←  save_report, upload_files
 connection + rpc  ←  coverage, submit_report, retract_report
 connection  ←  validators
 ```
 
-`rpc.py` 是 RPC 调用薄封装（异常转换 + 结果提取），不依赖 connection，被 coverage、draft_report、submit_report、retract_report 等模块统一使用。
+`rpc.py` 是 RPC 调用薄封装（异常转换 + 结果提取），不依赖 connection，被 coverage、save_report、upload_files、submit_report、retract_report 等模块统一使用。
 
 ## 文件路径准源
 
-- `save_draft_report` 输入中的 `report_file`、`pdf_file`、`model_file` 仅用于上传前定位本地文件；文件路径的唯一准源是 `report_version` 表的持久化字段。
-- `snapshot_json` 如保留文件字段，只作为版本快照，不作为校验和提交的判定来源。
+- `save_report` 输入中的 `report_file`、`pdf_file`、`model_file` 会被自动剥离，不影响 RPC 调用；文件路径的唯一准源是 `report` 表的 `word_path`、`pdf_path`、`model_path` 字段。
 - 模板文件路径以 `report_template.template_file_path` 与 `report_template.schema_file_path` 为准，不由 `report_type` 公式推导。
 
 ## 开发与测试
