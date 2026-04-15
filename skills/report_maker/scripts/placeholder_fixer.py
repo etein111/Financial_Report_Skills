@@ -7,7 +7,6 @@ Word 有时会将 {{ a1_email }} 这样的连续文本拆分成多个 run，
 
 import zipfile
 from lxml import etree
-from copy import deepcopy
 
 import common
 W = common.W_NS

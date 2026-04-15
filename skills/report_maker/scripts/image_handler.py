@@ -3,7 +3,6 @@
 提供图表插入、Jinja2 转义、图片复制等功能。
 """
 
-import zipfile
 import hashlib
 from typing import Dict, Any
 from pathlib import Path

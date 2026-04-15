@@ -16,8 +16,6 @@ sys.path.insert(0, str(SCRIPTS_DIR))
 import common
 import field_extractor
 
-W = common.W_NS
-
 
 # ==================== LLM 调用接口 ====================
 

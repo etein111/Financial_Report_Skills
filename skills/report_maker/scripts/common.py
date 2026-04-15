@@ -99,6 +99,25 @@ def get_element_text(elem) -> str:
     return ''.join(t.text or '' for t in elem.iter(f'{W_NS}t'))
 
 
+def extract_margins_from_pgMar(pgMar_elem) -> Dict[str, str]:
+    """从 w:pgMar 元素提取页边距属性。
+
+    Args:
+        pgMar_elem: lxml 的 w:pgMar 元素
+
+    Returns:
+        页边距字典 {'top': ..., 'bottom': ..., ...}，空字典表示无属性
+    """
+    if pgMar_elem is None:
+        return {}
+    margins = {}
+    for attr in ['top', 'bottom', 'left', 'right', 'header', 'footer', 'gutter']:
+        val = pgMar_elem.get(f'{W_NS}{attr}')
+        if val is not None:
+            margins[attr] = val
+    return margins
+
+
 # ==================== YAML 工具函数 ====================
 
 def load_yaml(path: Union[str, Path]) -> Dict[str, Any]:

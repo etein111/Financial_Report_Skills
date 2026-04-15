@@ -4,7 +4,6 @@
 docxcompose 在合并文档时会破坏 sectPr，本模块用于修复这些问题。
 """
 
-import zipfile
 from lxml import etree
 from copy import deepcopy
 from typing import Dict, Any, Optional
@@ -47,8 +46,8 @@ def _save_all_template_sectPrs(template_path: str) -> Optional[Dict[str, Any]]:
         或 None
     """
     try:
-        with zipfile.ZipFile(template_path, 'r') as z:
-            doc_xml = z.read('word/document.xml')
+        files = common.read_docx_zip(template_path)
+        doc_xml = files['word/document.xml']
 
         doc_tree = etree.fromstring(doc_xml)
         body = doc_tree.find(f'{W}body')
@@ -256,11 +255,10 @@ def _get_template_english_summary_margins(template_path: str) -> Dict[str, str]:
     margins = {}
 
     try:
-        with zipfile.ZipFile(template_path, 'r') as z:
-            with z.open('word/document.xml') as f:
-                tree = etree.parse(f)
+        files = common.read_docx_zip(template_path)
+        tree = etree.fromstring(files['word/document.xml'])
 
-        body = tree.getroot().find(f'.//{W}body')
+        body = tree.find(f'{W}body')
         if body is None:
             return margins
 
@@ -292,10 +290,7 @@ def _get_template_english_summary_margins(template_path: str) -> Dict[str, str]:
                         if sectPr is not None:
                             pgMar = sectPr.find(f'{W}pgMar')
                             if pgMar is not None:
-                                for attr in ['top', 'bottom', 'left', 'right', 'header', 'footer', 'gutter']:
-                                    val = pgMar.get(f'{W}{attr}')
-                                    if val:
-                                        margins[attr] = val
+                                margins = common.extract_margins_from_pgMar(pgMar)
                                 if margins:
                                     print(f"  从模板 ENGLISH_SUMMARY_MARKER 位置获取页边距: {margins}")
                                 return margins
@@ -312,10 +307,7 @@ def _get_template_english_summary_margins(template_path: str) -> Dict[str, str]:
                     if sectPr is not None:
                         pgMar = sectPr.find(f'{W}pgMar')
                         if pgMar is not None:
-                            for attr in ['top', 'bottom', 'left', 'right', 'header', 'footer', 'gutter']:
-                                val = pgMar.get(f'{W}{attr}')
-                                if val:
-                                    margins[attr] = val
+                            margins = common.extract_margins_from_pgMar(pgMar)
                             if margins:
                                 print(f"  从模板 marker 之前获取页边距: {margins}")
                             return margins

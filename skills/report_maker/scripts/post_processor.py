@@ -3,7 +3,6 @@
 提供渲染完成后的处理功能：验证附录、字体约束、分析师认证扩展等。
 """
 
-import zipfile
 from copy import deepcopy
 from typing import Dict, Any
 from lxml import etree
@@ -34,9 +33,8 @@ def _verify_appendix_with_lxml(doc_path: str) -> Dict[str, Any]:
     appendix_keywords = ['附录APPENDIX', 'IMPORTANT DISCLOSURE']
 
     try:
-        with zipfile.ZipFile(doc_path, 'r') as z:
-            with z.open('word/document.xml') as f:
-                tree = etree.parse(f)
+        files = common.read_docx_zip(doc_path)
+        tree = etree.fromstring(files['word/document.xml'])
 
         # 搜索段落中的附录标记
         for idx, p in enumerate(tree.iter(f'{W}p')):
