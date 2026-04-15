@@ -8,6 +8,7 @@
 - 业务逻辑边界、RPC、Supabase 职责划分 → [ARCHITECTURE.md](./principles/ARCHITECTURE.md)
 - Supabase 迁移、schema → [SUPABASE.md](./principles/SUPABASE.md)
 - 问题清单、差异清单、风险清单格式 → [DIALOG.md](./principles/DIALOG.md)
+- 编码实现、代码审查、重构时的行为准则（避免过度设计、精准修改、先思考再动手） → [KARPATHY.md](./principles/KARPATHY.md)
 
 # 交互规范
 
