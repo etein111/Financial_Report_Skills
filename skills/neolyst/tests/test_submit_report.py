@@ -4,6 +4,8 @@ test_submit_report.py — submit_report 集成测试。
 import uuid
 import pytest
 
+from .conftest import _make_files, _base_report_payload, _create_submitted_report
+
 
 @pytest.fixture(scope="module")
 def submit_coverage_id(neolyst_client, test_sector_id, test_analyst_email):
