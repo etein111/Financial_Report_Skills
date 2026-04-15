@@ -15,7 +15,6 @@ from field_extractor import (
     _find_title_in_lines,
     _is_field_label_match,
     _clean_field_value,
-    _format_analysts_value,
 )
 
 
@@ -182,32 +181,6 @@ class TestCleanFieldValue:
         result = _clean_field_value(value, field_def)
 
         assert result == ""
-
-
-class TestFormatAnalystsValue:
-    """测试 _format_analysts_value 函数。"""
-
-    def test_preserves_simple_value(self):
-        """测试：保留简单值。"""
-        value = "杨斌"
-        result = _format_analysts_value(value)
-
-        assert result == "杨斌"
-
-    def test_handles_comma_separated(self):
-        """测试：处理逗号分隔的值。"""
-        value = "杨斌, SFC:BSQ313"
-        result = _format_analysts_value(value)
-
-        # 逗号分隔的情况下返回原始值
-        assert "," in result
-
-    def test_strips_whitespace(self):
-        """测试：去除空白。"""
-        value = "  杨斌  "
-        result = _format_analysts_value(value)
-
-        assert result == "杨斌"
 
 
 class TestWithRealDocument:

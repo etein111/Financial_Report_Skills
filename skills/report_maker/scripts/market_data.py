@@ -56,13 +56,8 @@ def fetch_recommendation_history(
         if ticker.isdigit() and len(ticker) == 4:
             yf_ticker = f"{ticker}.HK"
 
-    try:
-        stock = yf.Ticker(yf_ticker)
-    except Exception as exc:
-        logger.warning("fetch_recommendation_history: yf.Ticker 失败: %s", exc)
-        return []
-
-    recommendations = []
+    # 解析所有发布日期，确定最早日期
+    parsed_rows = []
     for row in reversed(history):
         published_at = row.get("published_at")
         rating = row.get("rating")
@@ -80,14 +75,39 @@ def fetch_recommendation_history(
         except Exception:
             continue
 
+        pub_date_only = pub_dt.date() if hasattr(pub_dt, 'date') else pub_dt
+        parsed_rows.append((date_str, pub_date_only, rating, target_price))
+
+    if not parsed_rows:
+        return []
+
+    # 一次性下载整个日期范围的行情数据，避免 N+1 API 调用
+    earliest = min(r[1] for r in parsed_rows)
+    start_dt = datetime(earliest.year, earliest.month, earliest.day) - timedelta(days=7)
+    end_dt = datetime.now() + timedelta(days=1)
+
+    try:
+        stock = yf.Ticker(yf_ticker)
+        full_hist = stock.history(start=start_dt, end=end_dt)
+    except Exception as exc:
+        logger.warning("fetch_recommendation_history: 下载行情失败: %s", exc)
+        return []
+
+    if full_hist.empty:
+        return []
+
+    # 为每个发布日期查找最近的交易日的收盘价
+    recommendations = []
+    for date_str, pub_date_only, rating, target_price in parsed_rows:
         try:
-            pub_date_only = pub_dt.date() if hasattr(pub_dt, 'date') else pub_dt
-            start_dt = datetime(pub_date_only.year, pub_date_only.month, pub_date_only.day)
-            end_dt = start_dt + timedelta(days=7)
-            hist = stock.history(start=start_dt, end=end_dt)
-            if hist.empty:
+            target_date = pub_date_only if hasattr(pub_date_only, 'year') else pub_date_only
+            start = target_date - timedelta(days=3)
+            end = target_date + timedelta(days=7)
+            mask = (full_hist.index.date >= start) & (full_hist.index.date <= end)
+            window = full_hist.loc[mask]
+            if window.empty:
                 continue
-            price = float(hist['Close'].iloc[0])
+            price = float(window['Close'].iloc[0])
         except Exception as exc:
             logger.warning("fetch_recommendation_history: 获取 %s 价格失败: %s", date_str, exc)
             continue

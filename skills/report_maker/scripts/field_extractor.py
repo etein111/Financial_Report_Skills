@@ -8,6 +8,7 @@
 import re
 import json
 from typing import Dict, Any, List, Optional
+import common
 import docx_reader
 
 
@@ -88,9 +89,9 @@ def extract_fields_from_docx(
 
     # 设置 fragment 字段
     if 'abstract' in schema:
-        elements['abstract'] = 'abstract.docx'
+        elements['abstract'] = common.FILE_ABSTRACT
     if 'body' in schema:
-        elements['body'] = 'body.docx'
+        elements['body'] = common.FILE_BODY
 
     # 从主表格中提取基本信息（首页表格）
     basic_fields = _extract_basic_fields_from_main_tables(tables, schema)
@@ -418,36 +419,8 @@ def _clean_field_value(value: str, field_def: Dict[str, Any]) -> str:
     # 注意：不再移除单位后缀（bn, mn 等），因为它们是值的一部分
     # 例如：22.11bn, 365.99mn
 
-    # 特殊处理：analysts 字段
-    if field_def.get('description') == 'analysts':
-        value = _format_analysts_value(value)
-
     return value
 
-
-def _format_analysts_value(value: str) -> str:
-    """格式化 analysts 字段值。
-
-    将各种格式的分析师信息转换为标准格式。
-
-    Args:
-        value: 原始值
-
-    Returns:
-        格式化后的值
-    """
-    # 简单的格式化，可以根据实际情况扩展
-    # 例如：从 "杨斌 Bin Yang, SFC:BSQ313" 提取结构化数据
-    value = value.strip()
-
-    # 如果包含逗号分隔的信息，尝试解析
-    if ',' in value:
-        parts = [p.strip() for p in value.split(',')]
-        # 这里可以添加更复杂的解析逻辑
-        # 暂时返回原始值
-        return value
-
-    return value
 
 
 # ==================== 辅助函数 ====================
@@ -506,9 +479,8 @@ def _extract_analysts_from_tables(
 
             for line in lines:
                 # 提取中文姓名
-                if PATTERN_CHINESE_NAME.search(line):
-                    chinese_match = PATTERN_CHINESE_NAME.search(line)
-                    if chinese_match:
+                chinese_match = PATTERN_CHINESE_NAME.search(line)
+                if chinese_match:
                         chinese_name = chinese_match.group(1)
 
                 # 提取英文姓名

@@ -36,17 +36,6 @@ import common
 W = common.W_NS
 
 
-def _get_para_text(para_elem) -> str:
-    """获取段落的所有文本。
-
-    Args:
-        para_elem: 段落元素
-
-    Returns:
-        段落文本
-    """
-    return ''.join(t.text or '' for t in para_elem.iter(f'{W}t'))
-
 
 def _get_all_tables_lxml(doc_path: str) -> List[etree._Element]:
     """使用 lxml 获取文档中所有表格（包括嵌套表格）。
@@ -64,21 +53,6 @@ def _get_all_tables_lxml(doc_path: str) -> List[etree._Element]:
             tree = etree.parse(f).getroot()
     return list(tree.iter(f'{W}tbl'))
 
-
-def _get_cell_text_lxml(tc_elem) -> str:
-    """获取单元格的文本（包括嵌套内容）。
-
-    Args:
-        tc_elem: 单元格元素
-
-    Returns:
-        单元格文本
-    """
-    texts = []
-    for t in tc_elem.iter(f'{W}t'):
-        if t.text:
-            texts.append(t.text)
-    return ''.join(texts)
 
 
 def extract_fragment_by_markers(
@@ -278,7 +252,7 @@ def extract_abstract(draft_path: str, scope: str, output_path: Optional[str] = N
             candidate_cells = []
             for row_idx, row in enumerate(first_table.findall(f'{W}tr')):
                 for col_idx, tc in enumerate(row.findall(f'{W}tc')):
-                    cell_text = _get_cell_text_lxml(tc).strip()
+                    cell_text = common.get_element_text(tc).strip()
 
                     # 跳过模板占位符单元格
                     if '[Table_' in cell_text:
@@ -304,7 +278,7 @@ def extract_abstract(draft_path: str, scope: str, output_path: Optional[str] = N
 
                 # 复制单元格内容
                 for para_elem in best_tc.findall(f'{W}p'):
-                    if _get_para_text(para_elem).strip():
+                    if common.get_element_text(para_elem).strip():
                         new_para = deepcopy(para_elem)
                         abstract_doc.element.body.append(new_para)
                 abstract_found = True
@@ -314,7 +288,7 @@ def extract_abstract(draft_path: str, scope: str, output_path: Optional[str] = N
             in_abstract = False
             body = doc.element.body
             for para in body.iter(f'{W}p'):
-                text = _get_para_text(para).strip()
+                text = common.get_element_text(para).strip()
 
                 if any(marker in text for marker in ['摘要', '投资亮点', '核心观点']):
                     in_abstract = True

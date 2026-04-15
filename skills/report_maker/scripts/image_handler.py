@@ -38,18 +38,18 @@ def _escape_jinja_in_charts(docx_path: str) -> Dict[str, str]:
     escaped_files = {}
 
     try:
-        with zipfile.ZipFile(docx_path, 'r') as z:
-            chart_files = [name for name in z.namelist() if name.startswith('word/charts/') and name.endswith('.xml')]
+        files = common.read_docx_zip(docx_path)
+        chart_files = [name for name in files if name.startswith('word/charts/') and name.endswith('.xml')]
 
-            for chart_file in chart_files:
-                content = z.read(chart_file).decode('utf-8')
-                # 转义 {{ 和 }} 为临时标记
-                escaped = content.replace('{{', '__JINJA_LBRACE__').replace('}}', '__JINJA_RBRACE__')
-                if escaped != content:
-                    escaped_files[chart_file] = content
-                    # 写入转义后的内容
-                    with zipfile.ZipFile(docx_path, 'a') as z_out:
-                        z_out.writestr(chart_file, escaped.encode('utf-8'))
+        for chart_file in chart_files:
+            content = files[chart_file].decode('utf-8')
+            escaped = content.replace('{{', '__JINJA_LBRACE__').replace('}}', '__JINJA_RBRACE__')
+            if escaped != content:
+                escaped_files[chart_file] = content
+                files[chart_file] = escaped.encode('utf-8')
+
+        if escaped_files:
+            common.write_docx_zip(docx_path, files)
 
     except Exception as e:
         print(f"  转义图表 Jinja2 语法时出错: {e}")

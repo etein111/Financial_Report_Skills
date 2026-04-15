@@ -168,7 +168,7 @@ class TestExpandAnalystCertification:
             pytest.skip("python-docx not installed")
 
         doc = Document()
-        doc.add_paragraph("普通段落，没有分析师认证")
+        doc.add_paragraph("普通段落，没有相关内容")
 
         doc_path = tmp_path / "no_certification.docx"
         doc.save(str(doc_path))
