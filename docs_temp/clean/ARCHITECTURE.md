@@ -5,26 +5,17 @@
 
 ## 1. 系统总览
 
-```text
-Browser
-  -> Next.js (App Router)
-      - Server Components / Server Actions / Route Handlers
-      - Request boundary gate: proxy.ts（会话刷新 + 轻量门禁）
-      -> Supabase Auth
-      -> Supabase PostgREST + RLS
-      -> Supabase Storage（模板/报告文件）
-```
-
-核心原则：
 - Next.js 是唯一应用入口。
-- Supabase 承担认证、数据访问与数据权限兜底。
-- 应用层权限控制 + RLS 双层防护。
+### neolyst-db(Superbase)
 
-## 2. 技术栈与边界
+- Supabase Auth 承担认证、数据访问与数据权限兜底。
+- Supabase PostgREST + RLS
+- Supabase Storage（模板/报告文件）
 
+## web技术栈
 - 前端：Next.js App Router + React + TypeScript。
 - 后端能力：Supabase（Auth / Postgres / RLS / PostgREST / Storage）。
-- 当前不使用：Edge Functions、Realtime（除非后续 change 明确引入）。
+- 当前不使用：Supabase Edge Functions、Realtime（除非后续 change 明确引入）。
 
 ## 3. 分层架构（系统层）
 
