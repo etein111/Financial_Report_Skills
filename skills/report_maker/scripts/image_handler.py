@@ -81,6 +81,107 @@ def _restore_jinja_in_charts(docx_path: str, escaped_files: Dict[str, str]) -> N
         print(f"  恢复图表 Jinja2 语法时出错: {e}")
 
 
+def _replace_placeholder_in_element(doc, elem, placeholder, image_path, width_cm=None):
+    """搜索并替换元素中的占位符为图片。"""
+    from docx.oxml.ns import qn
+    
+    replaced = False
+    
+    # 只处理直接子元素，不递归处理嵌套表格
+    # 处理 run
+    for r_elem in elem.iter(qn('w:r')):
+        # 获取这个 run 的完整文本内容
+        texts = [t.text for t in r_elem.iter(qn('w:t')) if t.text]
+        combined = ''.join(texts)
+        
+        if placeholder in combined:
+            # 找到包含占位符的 run
+            # 通过 parent 找到 paragraph
+            p_elem = r_elem.getparent()
+            while p_elem is not None and p_elem.tag != qn('w:p'):
+                p_elem = p_elem.getparent()
+            
+            if p_elem is not None:
+                # 找到 paragraph，创建 Run 对象
+                from docx.text.paragraph import Paragraph
+                para_obj = Paragraph(p_elem, doc)
+                
+                # 找到对应的 Run 对象
+                for run_obj in para_obj.runs:
+                    run_texts = [t.text for t in run_obj._element.iter(qn('w:t')) if t.text]
+                    run_combined = ''.join(run_texts)
+                    if placeholder in run_combined:
+                        # 清除文本中的占位符
+                        run_obj.text = run_obj.text.replace(placeholder, '')
+                        # 添加图片
+                        run_obj.add_picture(image_path)
+                        if width_cm:
+                            from docx.shared import Cm
+                            # 设置图片宽度
+                            for shape in run_obj._element.iter(qn('wp:inline')):
+                                extent = shape.find(qn('wp:extent'))
+                                if extent is not None:
+                                    cx = int(width_cm * 914400)
+                                    cy = int(width_cm * 914400 * 0.75)
+                                    extent.set('cx', str(cx))
+                                    extent.set('cy', str(cy))
+                        replaced = True
+                        break
+            break
+    
+    return replaced
+
+
+def _replace_in_nested_tables(doc, elem, placeholder, image_path, width_cm=None):
+    """处理嵌套表格中的占位符，直接遍历不递归。"""
+    from docx.oxml.ns import qn
+    
+    replaced = False
+    processed_runs = set()  # 避免重复处理同一个 run
+    
+    # 直接遍历 body 中所有的 w:r 元素
+    for r_elem in elem.iter(qn('w:r')):
+        # 跳过已处理的
+        if id(r_elem) in processed_runs:
+            continue
+        
+        texts = [t.text for t in r_elem.iter(qn('w:t')) if t.text]
+        combined = ''.join(texts)
+        
+        if placeholder in combined:
+            # 找到包含占位符的 run
+            p_elem = r_elem.getparent()
+            while p_elem is not None and p_elem.tag != qn('w:p'):
+                p_elem = p_elem.getparent()
+            
+            if p_elem is not None:
+                from docx.text.paragraph import Paragraph
+                para_obj = Paragraph(p_elem, doc)
+                
+                for run_obj in para_obj.runs:
+                    run_texts = [t.text for t in run_obj._element.iter(qn('w:t')) if t.text]
+                    run_combined = ''.join(run_texts)
+                    if placeholder in run_combined:
+                        # 标记为已处理
+                        processed_runs.add(id(run_obj._element))
+                        
+                        run_obj.text = run_obj.text.replace(placeholder, '')
+                        run_obj.add_picture(image_path)
+                        if width_cm:
+                            from docx.shared import Cm
+                            for shape in run_obj._element.iter(qn('wp:inline')):
+                                extent = shape.find(qn('wp:extent'))
+                                if extent is not None:
+                                    cx = int(width_cm * 914400)
+                                    cy = int(width_cm * 914400 * 0.75)
+                                    extent.set('cx', str(cx))
+                                    extent.set('cy', str(cy))
+                        replaced = True
+                        break
+    
+    return replaced
+
+
 def _insert_image_to_placeholder(
     doc: Document,
     placeholder: str,
@@ -105,34 +206,26 @@ def _insert_image_to_placeholder(
         from docx.oxml import OxmlElement
         from docx.oxml.ns import qn
 
+        # 1. 先在段落中查找
         for para in doc.paragraphs:
             if placeholder in para.text:
-                # 找到包含占位符的 run
                 for run in para.runs:
                     if placeholder in run.text:
                         run.text = run.text.replace(placeholder, '')
-
-                        # 添加图片
                         run.add_picture(image_path)
                         if width_cm:
-                            # 设置图片宽度
                             last_picture = run._element.getparent().findall('.//{http://schemas.openxmlformats.org/drawingml/2006/picture}pic')
                             if last_picture:
                                 size = last_picture[-1].find('.//{http://schemas.openxmlformats.org/drawingml/2006/main}ext')
                                 if size is not None:
                                     size.set('{http://schemas.openxmlformats.org/drawingml/2006/main}cx', str(int(width_cm * 914400)))
                                     size.set('{http://schemas.openxmlformats.org/drawingml/2006/main}cy', str(int(width_cm * 914400 * 0.75)))
-
                         return True
 
-        # 尝试在表格中查找
-        for table in doc.tables:
-            for row in table.rows:
-                for cell in row.cells:
-                    if placeholder in cell.text:
-                        # 简化处理：清除占位符文本
-                        cell.text = cell.text.replace(placeholder, '')
-                        return True
+        # 2. 在文档 body 中递归搜索所有嵌套表格
+        body = doc.element.body
+        if _replace_in_nested_tables(doc, body, placeholder, image_path, width_cm):
+            return True
 
         return False
 
