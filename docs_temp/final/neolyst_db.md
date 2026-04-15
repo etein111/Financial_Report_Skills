@@ -22,7 +22,7 @@
 - 模板文件与报告文件统一使用 Supabase Storage。
 - 文件范文权限由rls控制。
 
-### 迁移与演进原则
+### 迁移与演进原则(todo)
 
 - 所有 Schema/RLS 变更必须走 `supabase/migrations/*.sql`。
 - 字典表等初始化数据在`supabase/seed.sql`
@@ -30,7 +30,8 @@
 
 ## neolyst-db
 
-### RLS权限矩阵
+### 存储路径规则(todo)
 
-### 存储路径规则
+### 数据库模型
 
+* 以neoskills/supabase/migrations/ 为准
