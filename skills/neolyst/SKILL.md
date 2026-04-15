@@ -1,6 +1,6 @@
 ---
 name: neolyst
-description: 当用户提到”neolyst”、”查询分析师”、”上传模板”、”发布模板”、”创建 coverage”、”查询 coverage”、”保存 draft”、”提交报告”、”校验报告”、”查询历史报告”、”发布报告”、”退回报告”、”reject”，或任何需要读写 Neolyst 数据库的操作时，使用此 skill。
+description: 当用户提到”neolyst”、”查询分析师”、”上传模板”、”发布模板”、”创建 coverage”、”查询 coverage”、”查询报告”、”我的报告”、”查看报告”、”报告审计”、”报告状态日志”、”保存 draft”、”提交报告”、”校验报告”、”查询历史报告”、”发布报告”、”退回报告”、”reject”，或任何需要读写 Neolyst 数据库的操作时，使用此 skill。
 ---
 
 # neolyst
@@ -36,12 +36,31 @@ Neolyst 数据库的唯一访问入口。用户和其他 skill 通过它完成�
 | 13 | `list_coverage_history(client, ticker, first_analyst_email)` | `coverage` | 返回 coverage 下已发布的历史报告 |
 | 14 | `publish_report(client, report_id)` | `report` | 将 submitted 报告发布为 published |
 | 15 | `reject_report(client, report_id, reason)` | `report` | 将 submitted 报告退回为 rejected |
+| 16 | `deactivate_report(client, report_id)` | `report` | 将报告标记为废弃（is_active=false，admin only） |
 
 完整签名、参数、返回值和代码示例见 `references/interfaces.md`。
 
+## 报告表直接查询
+
+用户通常不会提供 report_id（UUID）。根据用户意图选择查询入口，从结果中获取 report_id 后再调用操作接口。
+
+| 用户意图 | 查询条件 |
+|----------|----------|
+| 某只股票的报告 | `.eq("ticker", ...)` |
+| 某个状态的报告 | `.eq("status", ...)` — draft / submitted / published / rejected |
+| 某分析师的报告 | `.eq("lead_analyst_email", ...)` |
+| 按标题搜索 | `.ilike("title", "%关键词%")` |
+| 某段时间内的报告 | `.gte("created_at", ...)` / `.lte("created_at", ...)` |
+
+多条件可组合；默认加 `.eq("is_active", True)` 排除废弃报告。
+
+RLS 可见范围：admin 全部；SA 可见 submitted / published / rejected；analyst 可见自己 owned 的 + 所有 published。
+
+查询示例、report_status_log 审计日志查询、报告文件下载，以及字典表操作，统一见 `references/direct-queries.md`。
+
 ## 字典表
 
-`region`、`sector`、`rating`、`report_type` 直接用 `client.table()` 读写。其他表禁止直接写入，走专用接口或 RPC。详情和示例见 `references/interfaces.md`「字典表直接操作」。
+`region`、`sector`、`rating`、`report_type` 直接用 `client.table()` 读写。其他表禁止直接写入，走专用接口或 RPC。详情和示例见 `references/direct-queries.md`「字典表」。
 
 ## 认证
 
@@ -64,3 +83,4 @@ Neolyst 数据库的唯一访问入口。用户和其他 skill 通过它完成�
 
 - **`references/interfaces.md`** — 所有接口的完整签名、参数、返回值和代码示例
 - **`references/authentication.md`** — 认证流程、配置文件、凭据管理、首次使用、测试连接约束
+- **`references/direct-queries.md`** — 直接查表操作（report / report_status_log / coverage / analyst / 字典表等），含查询示例、文件下载、RLS 约束速查
