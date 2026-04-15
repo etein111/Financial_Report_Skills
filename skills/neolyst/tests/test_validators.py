@@ -4,6 +4,8 @@ test_validators.py — validate_report 集成测试。
 import uuid
 import pytest
 
+from .conftest import _make_files, _base_report_payload
+
 
 def _save_report_with_files(client, directory, analyst_email, overrides=None):
     from skills.neolyst.scripts.report import save_report
