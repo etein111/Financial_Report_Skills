@@ -344,6 +344,23 @@ result = reject_report(client, report_id, reason="数据不完整，请补充")
 - `reason`：退回原因，必填
 - 仅 SA 或 admin 角色可执行
 
+## 16. deactivate_report
+
+将报告标记为废弃（is_active = false），不影响 status 状态机。
+
+```python
+from skills.neolyst.scripts.report import deactivate_report
+
+result = deactivate_report(client, report_id)
+# 返回：{"report_id": str, "is_active": False}
+# 报告不存在：抛出 ValueError（"报告不存在：{report_id}"）
+# 报告已废弃：抛出 ValueError（"报告已废弃：{report_id}"）
+```
+
+- 直接查表 update，不走 RPC
+- admin only（受 report 表 RLS 约束）
+- 废弃后查询报告需加 `.eq("is_active", True)` 过滤
+
 ## 错误处理策略
 
 调用接口遇到 ValueError 时，不要直接把异常信息抛给用户。根据场景采取以下策略：
