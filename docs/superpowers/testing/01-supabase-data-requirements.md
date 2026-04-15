@@ -4,6 +4,31 @@
 
 ---
 
+## 测试文件信息
+
+**测试报告文件：**
+- `samples\0402威胜控股（3393.HK）首次覆盖：配网投资与AI算力双轮驱动，能源计量龙头再启航.docx`
+
+**elements.yaml 关键信息（来自 `reports\威胜控股(3393)_20250402\elements.yaml`）：**
+
+| 字段 | 值 | 说明 |
+|------|-----|------|
+| `title` | 首次覆盖：配网投资与AI算力双轮驱动，能源计量龙头再启航 | 报告标题 |
+| `company_cn` | 威胜控股 | 公司中文名 |
+| `company_en` | Wasion Holdings | 公司英文名 |
+| `ticker` | 3393.HK | 股票代码 |
+| `rating` | OUTPERFORM | 评级 |
+| `target_price` | 40.94 | 目标价 |
+| `a1_email` | harryyang@hfisec.com.hk | 1作分析师邮箱 |
+| `a1_cn` | 杨斌 | 1作中文名 |
+| `a2_email` | dengyida@hfisec.com.hk | 2作分析师邮箱 |
+| `a2_cn` | 邓轶达 | 2作中文名 |
+
+**报告类型：** `company`（公司报告）
+**报告语言：** `zh`（标题含中文，ord > 127）
+
+---
+
 ## 一、必须准备的数据
 
 ### 1. analyst 表（分析师）
@@ -19,14 +44,18 @@
 | `region_code` | text | ❌ | 所属区域编码 |
 | `is_active` | boolean | ✅ | 是否在职，默认 true |
 
-**测试数据示例：**
+**针对威胜控股报告的测试数据（必须插入）：**
 
 ```sql
-INSERT INTO analyst (id, email, english_name, chinese_name, is_active) VALUES
-  ('a1111111-1111-1111-1111-111111111111', 'zhangsan@example.com', 'Zhang San', '张三', true),
-  ('a2222222-2222-2222-2222-222222222222', 'lisi@example.com', 'Li Si', '李四', true),
-  ('a3333333-3333-3333-3333-333333333333', 'wangwu@example.com', 'Wang Wu', '王五', true);
+INSERT INTO analyst (id, email, english_name, chinese_name, suffix, sfc, region_code, is_active) VALUES
+  ('a1111111-1111-1111-1111-111111111111', 'harryyang@hfisec.com.hk', 'Bin Yang', '杨斌', NULL, 'BSQ313', 'HK', true),
+  ('a2222222-2222-2222-2222-222222222222', 'dengyida@hfisec.com.hk', 'Yida Deng', '邓轶达', NULL, 'BVF321', 'HK', true);
 ```
+
+**注意事项：**
+- 邮箱必须与 elements.yaml 中的 `a1_email`、`a2_email` 完全匹配
+- `is_active` 必须为 `true`
+- `sfc` 字段应与 elements.yaml 中的 `a1_sfc`、`a2_sfc` 匹配
 
 ---
 
@@ -52,17 +81,17 @@ INSERT INTO analyst (id, email, english_name, chinese_name, is_active) VALUES
 - `bond` — 债券报告
 - `flash` — 快讯（通用）
 
-**测试数据示例：**
+**针对威胜控股报告的测试数据（必须插入）：**
 
 ```sql
 INSERT INTO report_template (id, report_type, language, template_file_path, schema_file_path, is_published) VALUES
-  ('company_en', 'company', 'en', 'templates/company/en/template.docx', 'templates/company/en/schema.yaml', true),
-  ('company_zh', 'company', 'zh', 'templates/company/zh/template.docx', 'templates/company/zh/schema.yaml', true),
-  ('macro_en', 'macro', 'en', 'templates/macro/en/template.docx', 'templates/macro/en/schema.yaml', true),
-  ('macro_zh', 'macro', 'zh', 'templates/macro/zh/template.docx', 'templates/macro/zh/schema.yaml', true);
+  ('company_zh', 'company', 'zh', 'templates/company/zh/template.docx', 'templates/company/zh/schema.yaml', true);
 ```
 
-**注意：** `template_file_path` 和 `schema_file_path` 仅为字符串路径，实际文件需上传到 Supabase Storage。
+**说明：**
+- `company_zh` 对应中文公司报告模板
+- 威胜控股报告是中文报告，所以只需要 `company_zh` 模板
+- `template_file_path` 和 `schema_file_path` 仅为字符串路径，**实际文件需上传到 Supabase Storage**
 
 ---
 
@@ -97,12 +126,11 @@ INSERT INTO report_template (id, report_type, language, template_file_path, sche
 | `isin` | text | ❌ | ISIN 码 |
 | `country_of_domicile` | text | ❌ | 注册国家/地区 |
 
-**测试数据示例：**
+**针对威胜控股报告的测试数据（必须插入）：**
 
 ```sql
 INSERT INTO coverage (id, ticker, english_name, chinese_name, sector_id, isin, country_of_domicile) VALUES
-  ('c1111111-1111-1111-1111-111111111111', '2507.HK', 'Cirrus Aircraft', '西锐飞机', NULL, 'US1234567890', 'US'),
-  ('c2222222-2222-2222-2222-222222222222', '9988.HK', 'Alibaba Group', '阿里巴巴', NULL, 'US0169Y10895', 'CN');
+  ('c3333333-3333-3333-3333-333333333333', '3393.HK', 'Wasion Holdings', '威胜控股', NULL, 'BMG9716Z1081', 'HK');
 ```
 
 ### 5. coverage_analyst 表（覆盖范围-分析师关联）
@@ -114,13 +142,12 @@ INSERT INTO coverage (id, ticker, english_name, chinese_name, sector_id, isin, c
 | `author_order` | integer | ✅ | 作者顺序，1 代表 1 作 |
 | `is_primary` | boolean | ❌ | 是否为主要分析师 |
 
-**测试数据示例：**
+**针对威胜控股报告的测试数据（必须插入）：**
 
 ```sql
 INSERT INTO coverage_analyst (coverage_id, analyst_email, author_order, is_primary) VALUES
-  ('c1111111-1111-1111-1111-111111111111', 'zhangsan@example.com', 1, true),
-  ('c1111111-1111-1111-1111-111111111111', 'lisi@example.com', 2, false),
-  ('c2222222-2222-2222-2222-222222222222', 'zhangsan@example.com', 1, true);
+  ('c3333333-3333-3333-3333-333333333333', 'harryyang@hfisec.com.hk', 1, true),
+  ('c3333333-3333-3333-3333-333333333333', 'dengyida@hfisec.com.hk', 2, false);
 ```
 
 ---
@@ -196,14 +223,16 @@ SUPABASE_ANON_KEY=your-anon-key
 
 ---
 
-## 六、最小测试数据集快速检查清单
+## 六、威胜控股报告测试最小数据集快速检查清单
 
-- [ ] `analyst` 表至少有 1 条活跃分析师记录（测试 `resolve_analyst_by_email`）
-- [ ] `analyst` 表至少有 2 条活跃分析师记录（测试多人作者）
-- [ ] `report_template` 表有 `company_en` 和 `macro_en` 两条记录
-- [ ] 对应的模板文件已上传到 Storage
-- [ ] 若测试公司报告：`coverage` 表有对应 ticker 的记录，`coverage_analyst` 关联正确
-- [ ] 若测试行业报告：`sector` 表有记录
+针对测试文件 `0402威胜控股（3393.HK）首次覆盖...docx`，必须准备以下数据：
+
+- [ ] `analyst` 表有 `harryyang@hfisec.com.hk`（杨斌）且 `is_active=true`
+- [ ] `analyst` 表有 `dengyida@hfisec.com.hk`（邓轶达）且 `is_active=true`
+- [ ] `report_template` 表有 `company_zh` 记录
+- [ ] 对应的中文公司报告模板文件已上传到 Storage（`templates/company/zh/template.docx`）
+- [ ] `coverage` 表有 ticker=`3393.HK` 的记录
+- [ ] `coverage_analyst` 表有关联：`harryyang@hfisec.com.hk` 为 author_order=1
 
 ---
 
