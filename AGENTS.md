@@ -2,6 +2,7 @@
 
 @principles/RULES.md
 @principles/CODING.md
+@principles/KARPATHY.md
 
 # 按需读取的规范
 
