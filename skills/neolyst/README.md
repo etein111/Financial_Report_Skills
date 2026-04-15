@@ -1,6 +1,6 @@
 # neolyst
 
-Neolyst Supabase 数据访问层。实现位置：`scripts/`。
+Neolyst 数据库的唯一访问入口，用户和其他 skill 共用。实现位置：`scripts/`。
 
 技术栈：Python `supabase-py` + `uv` 管理依赖与执行环境。数据库结构真相以 `supabase/migrations/*.sql` 为准。
 

@@ -5,7 +5,13 @@ description: 当用户提到”neolyst”、”查询分析师”、”上传模
 
 # neolyst
 
-Neolyst Supabase 数据访问层，实现位置：`skills/neolyst/scripts/`。执行接口时用 `uv run python ...`。
+Neolyst 数据库的唯一访问入口。用户和其他 skill 通过它完成所有 Neolyst 数据库操作——查询、写入、文件上传、状态流转。
+
+两类调用场景共享同一套接口：
+- **用户直接调用**：用户在对话中提到分析师、模板、coverage、报告等操作时，Claude 直接调用对应接口
+- **skill 程序化调用**：report_maker 等上游 skill 在生成报告后，通过本 skill 的接口完成提交、上传和发布
+
+实现位置：`skills/neolyst/scripts/`。执行接口时用 `uv run python ...`。
 所有接口依赖 `connection.get_client()` 返回的已认证 client。
 
 ## 接口
