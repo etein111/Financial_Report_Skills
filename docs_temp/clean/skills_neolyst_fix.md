@@ -1,16 +1,32 @@
-需要做一些设计上的调整：
-主要解决所谓版本问题：文件编辑和审批工作分开。
+# Schema 调整设想（待讨论）
 
-1）report_analyst没必要有两个time，因为report_analyst本质上只是report的一个列表字段。
-甚至可以考虑把这个表删了，report上加两个字段，一个是1作email，一个是所有作者email的列表。有助于简化整体结构，包括存储过程
-2）report_status_log里要加一个json字段，保存report的元数据（包括分析师，包括文件路径）。
+核心目标：将文件编辑与审批工作分离，简化版本模型。
 
-3）文件版本存储：在报告id目录下，文档类型目录report/model，时间目录（区分版本）
-4）report_version表删除，代之以report_log表：report_id, word_file_path, pdf_file_path,create_by, created_at
-    model_log表：report_id, model_file_path,create_by, created_at
-    用file_log表替代？还是索性现在不要log表
-    需要保存elements，abstract，body吗？
-5）report表，删掉version，直接记录word_path和pdf_path
-6）梳理一遍状态和权限。
-   原则是只有在draft状态下才能修改report信息。
-   文件可以随时保存？
+## 1. report_analyst 简化
+
+`report_analyst` 本质是 `report` 的列表字段，无需两个时间戳。
+可选方案：删除该表，在 `report` 上加两个字段——主作 email 和全部作者 email 列表。
+
+## 2. report_status_log 增加元数据
+
+新增 JSON 字段，保存状态流转时的 report 元数据（分析师、文件路径等）。
+
+## 3. 文件版本存储
+
+在 `reports/{report_id}/` 下按文档类型（report/model）和时间分目录。
+
+## 4. 版本表替代方案
+
+考虑用 `report_log` + `model_log` 替代 `report_version`：
+- `report_log`: report_id, word_file_path, pdf_file_path, created_by, created_at
+- `model_log`: report_id, model_file_path, created_by, created_at
+
+待定：是否需要统一 file_log？是否需要保存 elements/abstract/body？
+
+## 5. report 表精简
+
+删除 `current_version_no`，直接记录 `word_path` 和 `pdf_path`。
+
+## 6. 状态与权限梳理
+
+原则：仅 `draft` 状态可修改 report 信息。文件可随时保存。

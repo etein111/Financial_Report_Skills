@@ -1,7 +1,7 @@
 # Requirements (Project-Wide)
 
 本文件定义项目级业务需求（WHAT）。
-不承载代码分层、数据库字段细节、迁移命令等实现内容。
+代码分层、数据库字段、迁移命令等实现内容不在本文件范围。
 
 ## 1. 目标与范围
 
@@ -44,12 +44,12 @@
 - 无权限访问管理页面 MUST 进入 `/403`（文案包含 `No permission`）。
 
 ### 3.2 Desktop 导航契约
-- 契约长期约束遵循 `docs/DECISIONS.md` 的 `D-005`。
+- 长期约束遵循 `docs/DECISIONS.md` D-005。
 - `/desktop` MUST 为登录后默认落地页。
 - Desktop 功能卡片 MUST 在新标签页打开。
-- 功能页 MUST NOT 提供“返回 Desktop”主导航入口。
-- Desktop `Reports` 分组 MUST 保留独立 `Analyst Submit` 入口（原 `Add Report`），且排序为分组第一项。
-- Desktop `Analyst Submit` MUST 仅对 Admin/Analyst 可见（SA 不可见），并在新标签打开 `/reports/new`。
+- 功能页 MUST NOT 提供”返回 Desktop”主导航入口。
+- Desktop `Reports` 分组 MUST 保留独立 `Analyst Submit` 入口（原 `Add Report`），排序为分组第一项。
+- Desktop `Analyst Submit` MUST 仅对 Admin/Analyst 可见（SA 不可见），在新标签打开 `/reports/new`。
 
 ### 3.3 Users 管理（Admin-only）
 - MUST 支持列表、搜索、分页（固定 12 条/页）。

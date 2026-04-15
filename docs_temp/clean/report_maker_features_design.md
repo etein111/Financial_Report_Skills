@@ -11,17 +11,16 @@
 - **正文 (body)**: 正文内容（从目录/第一章到最后附录之前）
 - **法律附录 (appendix)**: 保留在最终输出中
 
-### 1.2 核心问题与解决
+### 1.2 嵌套表格读取
 
-**问题**: python-docx 的 `doc.tables` 会漏读嵌套表格。
+python-docx 的 `doc.tables` 会漏读嵌套表格。改用 lxml 直接解析 `document.xml`：
 
-**解决**: 使用 lxml 直接解析 `document.xml`：
 ```python
 from lxml import etree
 with zipfile.ZipFile(doc_path, 'r') as z:
     with z.open('word/document.xml') as f:
         tree = etree.parse(f)
-# 可以访问所有 <w:tbl> 元素，包括嵌套在单元格中的
+# 访问所有 <w:tbl> 元素，包括嵌套在单元格中的
 ```
 
 ### 1.3 提取策略
@@ -42,16 +41,13 @@ with zipfile.ZipFile(doc_path, 'r') as z:
 **核心策略**: "复制整个文档 → 删除范围外元素"
 
 ```
-步骤1: shutil.copy(draft_path, body.docx)  # 复制整个文档
-步骤2: 打开复制的文档，找到正文范围
-步骤3: 删除范围外的元素
-步骤4: 保存
+shutil.copy(draft_path, body.docx)   # 复制整个文档（保留图片引用和格式）
+doc = Document(output_path)
+# 找到正文范围，删除范围外元素
+doc.save(output_path)
 ```
 
-**为什么这样做？**
-- 保留所有图片引用关系（word/_rels/document.xml.rels）
-- 保留所有格式信息
-- 避免手动重建文档结构
+复制而非重建，保留图片引用关系（`word/_rels/document.xml.rels`）和全部格式。
 
 **正文范围判定**:
 - **起始位置**: 目录位置 或 第一章标题
@@ -96,13 +92,12 @@ def extract_body(draft_path, output_path):
 
 将渲染后的模板（已填充短字段）与摘要片段、正文片段合并，生成最终报告。
 
-### 2.2 核心挑战与解决
+### 2.2 核心挑战
 
-**挑战1**: docxtpl 会破坏嵌套表格结构
-**解决**: 使用 MARKER 机制分步处理
-
-**挑战2**: docxcompose 合并时可能丢失图片和破坏页边距
-**解决**: 补救措施（`_copy_media_between_docx`、`_remove_docxcompose_extra_sectPr`）
+| 挑战 | 解决方案 |
+|------|----------|
+| docxtpl 破坏嵌套表格 | MARKER 机制分步处理 |
+| docxcompose 丢失图片/破坏页边距 | `_copy_media_between_docx` + `_remove_docxcompose_extra_sectPr` |
 
 ### 2.3 渲染流程
 
@@ -133,9 +128,9 @@ def extract_body(draft_path, output_path):
               └─────────────────┘
 ```
 
-### 2.4 MARKER 机制详解
+### 2.4 MARKER 机制
 
-**目的**: 避免 docxtpl 破坏嵌套表格结构
+用文本标记替代 Jinja2 占位符，避免 docxtpl 破坏嵌套表格：
 
 ```python
 ABSTRACT_MARKER = '###ABSTRACT_MARKER###'
@@ -149,21 +144,11 @@ context['body'] = BODY_MARKER
 # 然后在 MARKER 位置插入实际的 fragment 内容
 ```
 
-### 2.5 三段式合并 (Three-Way Merge)
+### 2.5 三段式合并
 
-使用 docxcompose 将文档分为三部分合并：
+docxcompose 将文档分为三部分合并：Part1（marker 前）+ Body（draft）+ Part3（marker 后）。
 
-```
-┌────────────┐     ┌────────────┐     ┌────────────┐
-│   Part1    │  +  │    Body    │  +  │   Part3    │
-│ (marker前) │     │ (draft)    │     │ (marker后) │
-└────────────┘     └────────────┘     └────────────┘
-        ↓                                    ↓
-   删除 marker                           删除 marker
-   及之后内容                           及之前内容
-```
-
-**代码位置**: `insert_body_at_marker_compose()` (renderer.py:844-950)
+代码位置：`insert_body_at_marker_compose()` (renderer.py:844-950)
 
 ### 2.6 图表 Jinja2 语法处理
 
@@ -197,9 +182,7 @@ _restore_jinja_in_charts(output_path, escaped_chart_files)
 
 ### 3.1 功能概述
 
-研究报告支持最多 8 位分析师，需要：
-1. 在模板中渲染每位分析师的信息
-2. 扩展分析师认证声明段落
+报告支持最多 8 位分析师，需在模板中渲染每位分析师信息并扩展认证声明。
 
 ### 3.2 分析师数据结构
 
@@ -231,9 +214,9 @@ a2_en: "..."
 
 这种方式无需后端清理，空分析师自然不显示。
 
-### 3.4 上下文准备 (`prepare_context_with_analysts`)
+### 3.4 上下文准备
 
-展平字段用于模板渲染，并收集分析师列表：
+`prepare_context_with_analysts` 展平字段并收集分析师列表：
 
 ```python
 context['analyst_chinese_name'] = elements.get('a1_cn', '')
@@ -255,16 +238,11 @@ for i in range(1, 9):
 context['analysts'] = analysts
 ```
 
-### 3.5 认证声明扩展 (`expand_analyst_certification`)
+### 3.5 认证声明扩展
 
-**问题**: 模板中只有一份分析师声明（使用 `a1_cn`, `a1_en`），多分析师时需要扩展。
+模板中只有一份声明（`a1_cn`, `a1_en`），多分析师时需扩展。声明格式：`我，{{ a1_cn }}，在此保证... I, {{ a1_en }}, certify that...`
 
-**声明格式**:
-```
-我，{{ a1_cn }}，在此保证... I, {{ a1_en }}, certify that...
-```
-
-**扩展策略**:
+扩展策略：
 1. 解压 docx 到临时目录
 2. 在 XML 中找到分析师声明单元格（包含"在此保证"和"a1_cn"）
 3. 选择文本长度较短的单元格（独立声明 vs 大附录）

@@ -1,7 +1,7 @@
 # Architecture (Project-Wide)
 
 本文件定义系统架构与技术边界（HOW-系统级）。
-不承载业务需求细节（见 `REQUIREMENTS.md`）和代码级规则（见 `LOGIC.md`）。
+业务需求见 `REQUIREMENTS.md`，代码级规则见 `LOGIC.md`。
 
 ## 1. 系统总览
 
@@ -34,8 +34,7 @@ Browser
 - 基础 UI：`web/components`
 - 基础设施：`web/lib`
 
-说明：
-- 详细依赖方向、触库规则、Server Actions 约束统一以 `docs/LOGIC.md` 为准。
+依赖方向、触库规则、Server Actions 约束见 `docs/LOGIC.md`。
 
 ## 4. 认证与授权架构
 

@@ -157,11 +157,11 @@
 - `created_at` / `updated_at`
 
 关键约束：
-- owner 一经创建不可转移
-- 报告不做物理删除（`DELETE` 关闭）
-- `submitted` 状态允许 owner 继续编辑
-- 仅 `submitted -> published` 时更新发布快照（`published_by`/`published_at`），其余状态流转不改动
-- 提交门禁在服务端校验：字段矩阵必填、文件必填、模板有效性、Coverage 关联、Certificate 勾选
+- owner 创建后不可转移
+- 禁止物理删除报告
+- `submitted` 状态 owner 可继续编辑
+- 仅 `submitted -> published` 时更新发布快照（`published_by`/`published_at`）
+- 提交门禁（服务端）：字段矩阵必填、文件必填、模板有效、Coverage 关联、Certificate 勾选
 
 ### 3.8 `report_version`（已归档）
 
@@ -221,7 +221,7 @@
 
 ## 5. RLS 矩阵（目标态）
 
-说明：以下为业务目标口径；实现需在 migration 中严格落地。
+说明：以下为业务目标口径，实现需在 migration 中落地。
 
 | 表 | Admin | SA | Analyst |
 |----|-------|----|---------|

@@ -26,7 +26,7 @@
 ### D-003：角色事实源固定为 `app_metadata.role`
 - 状态：Accepted
 - 结论：RBAC 统一以 Auth 元数据角色为准。
-- 影响：禁止以客户端传入角色作为授权依据。
+- 影响：禁止用客户端传入角色做授权。
 - 变更条件：认证系统替换。
 
 ### D-004：账号启用/禁用只用 ban/unban
@@ -37,8 +37,8 @@
 
 ### D-005：Desktop-as-Launcher 导航契约长期保留
 - 状态：Accepted
-- 结论：`/desktop` 为默认落地页，功能卡片新标签页打开。
-- 影响：功能页不承担返回 Desktop 导航。
+- 结论：`/desktop` 为默认落地页，功能卡片在新标签页打开。
+- 影响：功能页不提供返回 Desktop 导航。
 - 变更条件：整体信息架构重构。
 
 ### D-006：数据时间语义统一
@@ -113,7 +113,7 @@
 
 ### D-016：Archive 历史冲突口径收敛（2026-02-19）
 - 状态：Accepted
-- 结论：针对已归档 change 中存在的历史口径冲突，统一采用以下收敛规则：
+- 结论：已归档 change 中存在的历史口径冲突，采用以下收敛规则：
   - 有效模板定义固定为：`is_active=true` 且 `file_path` 非空。
   - `report.report_type` 合法值由 `template.report_type` 驱动，不恢复固定枚举 check。
   - `template.uploaded_by` 允许为空，仅用于占位模板初始化场景。
