@@ -32,6 +32,17 @@ FILE_APPENDIX = "appendix.docx"
 FILE_OUTPUT_DOCX = "output.docx"  # 默认输出文件名（备用）
 FILE_OUTPUT_PDF = "output.pdf"
 
+# Word XML 命名空间
+W_NS = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
+R_NS = '{http://schemas.openxmlformats.org/officeDocument/2006/relationships}'
+
+# 占位符标记（docxtpl 渲染时替换为特殊文本，后续步骤插入实际内容）
+ABSTRACT_MARKER = '###ABSTRACT_MARKER###'
+BODY_MARKER = '###BODY_MARKER###'
+ENGLISH_SUMMARY_MARKER = '###ENGLISH_SUMMARY_MARKER###'
+RELATIVE_CHART_MARKER = '###RELATIVE_CHART_MARKER###'
+RECOMMENDATION_CHART_MARKER = '###RECOMMENDATION_CHART_MARKER###'
+
 # Windows 文件名禁止字符
 INVALID_FILENAME_CHARS = r'\/:*?"<>|'
 

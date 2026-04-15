@@ -10,7 +10,8 @@ from typing import Dict, Any
 from pathlib import Path
 from lxml import etree
 
-W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
+import common
+W = common.W_NS
 
 # 尝试导入 docx
 try:
@@ -227,58 +228,3 @@ def _copy_media_between_docx(source_path: str, target_path: str) -> int:
         print(f"  复制媒体文件时出错: {e}")
 
     return copied_count
-
-
-def _fix_docxcompose_image_rels(body_path: str, output_path: str) -> int:
-    """修复 docxcompose 合并后图片 rId 映射错误。
-
-    docxcompose 合并时可能会改变图片的 rId，导致图片显示错误。
-    本函数检查并修复这些 rId 映射问题。
-
-    Args:
-        body_path: body 文档路径
-        output_path: 输出文档路径
-
-    Returns:
-        修复的 rId 数量
-    """
-    fixed_count = 0
-
-    try:
-        with zipfile.ZipFile(body_path, 'r') as z:
-            body_rels = {}
-            if 'word/_rels/document.xml.rels' in z.namelist():
-                rels_xml = z.read('word/_rels/document.xml.rels')
-                rels_tree = etree.fromstring(rels_xml)
-                ns = {'r': 'http://schemas.openxmlformats.org/package/2006/relationships'}
-                for rel in rels_tree.findall('r:Relationship', ns):
-                    rid = rel.get('Id')
-                    target = rel.get('Target', '')
-                    rel_type = rel.get('Type')
-                    if 'image' in rel_type:
-                        body_rels[rid] = target
-
-        with zipfile.ZipFile(output_path, 'r') as z:
-            output_rels = {}
-            output_files = {name: z.read(name) for name in z.namelist()}
-            if 'word/_rels/document.xml.rels' in output_files:
-                rels_xml = output_files['word/_rels/document.xml.rels']
-                rels_tree = etree.fromstring(rels_xml)
-                ns = {'r': 'http://schemas.openxmlformats.org/package/2006/relationships'}
-                for rel in rels_tree.findall('r:Relationship', ns):
-                    rid = rel.get('Id')
-                    output_rels[rid] = rel.get('Target', '')
-
-        # 检查图片引用
-        for rid, target in output_rels.items():
-            if target and 'media/' in target:
-                # 检查图片是否存在
-                media_name = f'word/{target}'
-                if media_name not in output_files:
-                    # 尝试找到正确的图片
-                    pass
-
-    except Exception as e:
-        print(f"  修复图片 rId 映射时出错: {e}")
-
-    return fixed_count

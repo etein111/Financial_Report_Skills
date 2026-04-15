@@ -43,11 +43,11 @@ except ImportError:
     optimize_pagination_xml = None
 
 # 占位符标记（用于避免 docxtpl 破坏文档结构）
-ABSTRACT_MARKER = '###ABSTRACT_MARKER###'
-BODY_MARKER = '###BODY_MARKER###'
-ENGLISH_SUMMARY_MARKER = '###ENGLISH_SUMMARY_MARKER###'
-RELATIVE_CHART_MARKER = '###RELATIVE_CHART_MARKER###'
-RECOMMENDATION_CHART_MARKER = '###RECOMMENDATION_CHART_MARKER###'
+ABSTRACT_MARKER = common.ABSTRACT_MARKER
+BODY_MARKER = common.BODY_MARKER
+ENGLISH_SUMMARY_MARKER = common.ENGLISH_SUMMARY_MARKER
+RELATIVE_CHART_MARKER = common.RELATIVE_CHART_MARKER
+RECOMMENDATION_CHART_MARKER = common.RECOMMENDATION_CHART_MARKER
 
 # 从各模块导入函数
 from context import (
@@ -65,7 +65,6 @@ from image_handler import (
     _restore_jinja_in_charts,
     _insert_image_to_placeholder,
     _copy_media_between_docx,
-    _fix_docxcompose_image_rels,
 )
 
 from placeholder_fixer import _fix_split_placeholders_in_docx
@@ -272,9 +271,6 @@ def render_report(
                 copied_count = _copy_media_between_docx(body_path, output_path)
                 if copied_count > 0:
                     print(f"  已补充复制 {copied_count} 张图片")
-                fixed_rid_count = _fix_docxcompose_image_rels(body_path, output_path)
-                if fixed_rid_count > 0:
-                    print(f"  已修复 {fixed_rid_count} 处图片 rId 映射错误")
 
         else:
             doc = Document(str(temp_path))

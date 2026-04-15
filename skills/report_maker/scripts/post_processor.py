@@ -14,11 +14,12 @@ except ImportError:
     DOCX_AVAILABLE = False
     Document = None
 
-W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
+import common
+W = common.W_NS
 
 # 占位符标记
-RELATIVE_CHART_MARKER = '###RELATIVE_CHART_MARKER###'
-RECOMMENDATION_CHART_MARKER = '###RECOMMENDATION_CHART_MARKER###'
+RELATIVE_CHART_MARKER = common.RELATIVE_CHART_MARKER
+RECOMMENDATION_CHART_MARKER = common.RECOMMENDATION_CHART_MARKER
 
 
 def _verify_appendix_with_lxml(doc_path: str) -> Dict[str, Any]:
@@ -175,21 +176,6 @@ def set_run_font(run, font_name: str, font_type: str = 'ascii'):
         rFonts = etree.SubElement(rPr, f'{W}rFonts')
 
     rFonts.set(f'{W}{font_type}', font_name)
-
-
-def process_element(elem, chinese_font: str, latin_font: str, has_cjk: bool):
-    """递归处理元素，设置字体。"""
-    if elem.tag == f'{W}r':
-        rFonts = elem.find(f'{W}rFonts')
-        if rFonts is None:
-            rFonts = etree.SubElement(elem, f'{W}rFonts')
-
-        if has_cjk:
-            rFonts.set(f'{W}eastAsia', chinese_font)
-            rFonts.set(f'{W}cs', chinese_font)
-        else:
-            rFonts.set(f'{W}ascii', latin_font)
-            rFonts.set(f'{W}hAnsi', latin_font)
 
 
 def expand_analyst_certification(docx_path: str, elements: Dict[str, Any]) -> int:

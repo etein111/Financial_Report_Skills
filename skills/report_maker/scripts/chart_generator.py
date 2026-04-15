@@ -134,7 +134,7 @@ def _generate_recommendation_chart(
                 stock = yf.Ticker(ticker)
                 info = stock.info
                 current_price = info.get('currentPrice') or info.get('previousClose')
-            except:
+            except Exception:
                 pass
 
         # 如果有当前价格和目标价格，计算潜在涨幅
@@ -142,7 +142,7 @@ def _generate_recommendation_chart(
         if current_price and target_price:
             try:
                 potential_upside = (float(target_price) - float(current_price)) / float(current_price) * 100
-            except:
+            except Exception:
                 pass
 
         # 绘图
@@ -174,7 +174,7 @@ def _generate_recommendation_chart(
 
                     # 绘制目标价格标记
                     ax.axvline(x=100, color='#2ecc71', linewidth=2, linestyle='--', label=f'Target: {tp:.2f}')
-            except:
+            except Exception:
                 pass
 
         # 设置图表样式

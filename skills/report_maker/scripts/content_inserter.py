@@ -13,11 +13,12 @@ except ImportError:
     DOCX_AVAILABLE = False
     Document = None
 
-W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
+import common
+W = common.W_NS
 
 # 占位符标记
-ABSTRACT_MARKER = '###ABSTRACT_MARKER###'
-ENGLISH_SUMMARY_MARKER = '###ENGLISH_SUMMARY_MARKER###'
+ABSTRACT_MARKER = common.ABSTRACT_MARKER
+ENGLISH_SUMMARY_MARKER = common.ENGLISH_SUMMARY_MARKER
 
 
 def _find_marker_in_cells(table, marker: str):

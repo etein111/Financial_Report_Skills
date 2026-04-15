@@ -11,8 +11,8 @@ from typing import List, Dict, Any, Optional
 from pathlib import Path
 from lxml import etree
 
-
-W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
+import common
+W = common.W_NS
 
 
 def read_docx_tables(docx_path: str) -> List[Dict[str, Any]]:

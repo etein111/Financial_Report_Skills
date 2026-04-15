@@ -31,7 +31,8 @@ a8_email: ''
 a8_en: ''
 a8_sfc: ''
 report_date: 21 Oct 2025
-company: 西锐飞机
+company_cn: 西锐飞机
+company_en: Cirrus Aircraft
 ticker: 2507.HK
 title: 首次覆盖：安全、创新与强大生态系统铸就西锐私人航空全球领导者地位
 rating: OUTPERFORM
@@ -43,3 +44,13 @@ one_year_high: "73.40"
 one_year_low: "20.50"
 current_price_date: 2026 年 01 月 15 日
 source: xxx
+abstract: abstract.docx
+body: body.docx
+english_summary: ''
+appendix: ''
+compare_chart: ''
+volume_chart: ''
+recommendation_chart: ''
+compare_chart_generated: ''
+volume_chart_generated: ''
+recommendation_chart_generated: ''

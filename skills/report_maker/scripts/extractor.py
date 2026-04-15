@@ -14,12 +14,12 @@ SCRIPTS_DIR = Path(__file__).parent
 sys.path.insert(0, str(SCRIPTS_DIR))
 
 import common
-from . import field_extractor
+import field_extractor
 
 import zipfile
 from lxml import etree
 
-W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
+W = common.W_NS
 
 
 def _read_full_text_lxml(docx_path: str) -> str:

@@ -9,8 +9,9 @@ from lxml import etree
 from copy import deepcopy
 from typing import Dict, Any, Optional
 
-W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
-R = '{http://schemas.openxmlformats.org/officeDocument/2006/relationships}'
+import common
+W = common.W_NS
+R = common.R_NS
 
 
 def _save_template_final_sectPr(template_path: str) -> Optional[Any]:

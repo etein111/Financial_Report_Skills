@@ -40,30 +40,25 @@ def enrich_company_names_with_yfinance(elements: Dict[str, Any]) -> Dict[str, An
     if not ticker:
         return elements
 
-    # 如果 company_en 为空，尝试用 yfinance 补全
-    if not elements.get('company_en'):
+    # 如果 company_en 或 company_cn 为空，尝试用 yfinance 补全
+    if not elements.get('company_en') or not elements.get('company_cn'):
         try:
             stock = yf.Ticker(ticker)
             info = stock.info
-            company_en = info.get('longName') or info.get('shortName', '')
-            if company_en:
-                elements['company_en'] = company_en
-                print(f"  [yfinance] 补全 company_en: {company_en}")
-        except Exception as e:
-            print(f"  [yfinance] 查询 company_en 失败: {e}")
 
-    # 如果 company_cn 为空，尝试用 yfinance 补全
-    if not elements.get('company_cn'):
-        try:
-            stock = yf.Ticker(ticker)
-            info = stock.info
-            company_cn = info.get('longName') or info.get('shortName', '')
-            # yfinance 通常不返回中文名，这里仅作为备用
-            if company_cn:
-                elements['company_cn'] = company_cn
-                print(f"  [yfinance] 补全 company_cn: {company_cn}")
-        except Exception:
-            pass
+            if not elements.get('company_en'):
+                company_en = info.get('longName') or info.get('shortName', '')
+                if company_en:
+                    elements['company_en'] = company_en
+                    print(f"  [yfinance] 补全 company_en: {company_en}")
+
+            if not elements.get('company_cn'):
+                company_cn = info.get('longName') or info.get('shortName', '')
+                if company_cn:
+                    elements['company_cn'] = company_cn
+                    print(f"  [yfinance] 补全 company_cn: {company_cn}")
+        except Exception as e:
+            print(f"  [yfinance] 查询公司名称失败: {e}")
 
     return elements
 

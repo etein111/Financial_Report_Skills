@@ -4,6 +4,7 @@
 """
 
 import shutil
+import zipfile
 from pathlib import Path
 from copy import deepcopy
 from typing import Dict, Any, Optional
@@ -21,16 +22,17 @@ import sys
 SCRIPTS_DIR = Path(__file__).parent
 sys.path.insert(0, str(SCRIPTS_DIR))
 
+import common
 from sectpr_manager import (
     _save_all_template_sectPrs,
     _restore_all_sectPrs,
     _restore_final_sectPr,
     _save_template_final_sectPr,
 )
-from image_handler import _copy_media_between_docx, _fix_docxcompose_image_rels
+from image_handler import _copy_media_between_docx
 
 # 占位符标记
-BODY_MARKER = '###BODY_MARKER###'
+BODY_MARKER = common.BODY_MARKER
 
 
 def insert_body_at_marker_compose(
@@ -146,10 +148,6 @@ def insert_body_at_marker_compose(
         if copied_count > 0:
             print(f"  已补充复制 {copied_count} 张图片（修复 docxcompose 图片丢失）")
 
-        fixed_rid_count = _fix_docxcompose_image_rels(body_path, output_path)
-        if fixed_rid_count > 0:
-            print(f"  已修复 {fixed_rid_count} 处图片 rId 映射错误")
-
         # 7. 清理临时文件
         part1_path.unlink(missing_ok=True)
         if has_part3_content:
@@ -199,7 +197,3 @@ def _copy_headers_footers_between_docs(body_path: str, output_path: str) -> Dict
         print(f"  复制 headers/footers 时出错: {e}")
 
     return mapping
-
-
-# 需要导入 zipfile
-import zipfile

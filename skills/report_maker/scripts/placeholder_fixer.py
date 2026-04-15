@@ -9,7 +9,8 @@ import zipfile
 from lxml import etree
 from copy import deepcopy
 
-W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
+import common
+W = common.W_NS
 
 try:
     from docx import Document
@@ -53,8 +54,6 @@ def fix_element(elem, current_placeholder, collected_runs):
     Returns:
         处理完成后剩余的未完成占位符（以 {{ 开头但未找到 }}）
     """
-    global PLACEHOLDER_START, PLACEHOLDER_END
-
     if elem.tag == f'{W}r':
         text = elem.text or ''
 

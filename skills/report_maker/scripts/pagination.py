@@ -18,6 +18,8 @@ import os
 import tempfile
 import shutil
 
+import common
+
 
 # ============================================================================
 # LibreOffice UNO 连接管理
@@ -859,7 +861,7 @@ def optimize_pagination_xml(input_path: str, output_path: str = None) -> Dict[st
         "error": None
     }
 
-    W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
+    W = common.W_NS
 
     try:
         # 读取文档

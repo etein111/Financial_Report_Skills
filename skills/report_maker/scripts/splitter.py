@@ -33,7 +33,7 @@ from lxml import etree
 import common
 
 
-W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
+W = common.W_NS
 
 
 def _get_para_text(para_elem) -> str:
