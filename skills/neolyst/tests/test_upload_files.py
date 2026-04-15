@@ -5,6 +5,8 @@ import re
 import time
 from pathlib import Path
 
+from .conftest import _base_report_payload
+
 
 def _make_three_files(directory: Path, prefix: str = "report") -> tuple[str, str, str]:
     """创建 docx、pdf、xlsx 三个测试文件。"""
