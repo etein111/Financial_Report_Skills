@@ -1,6 +1,6 @@
 ---
 name: neolyst
-description: 当用户提到”neolyst”、”查询分析师”、”上传模板”、”发布模板”、”创建 coverage”、”查询 coverage”、”查询报告”、”我的报告”、”查看报告”、”报告审计”、”报告状态日志”、”保存 draft”、”提交报告”、”校验报告”、”查询历史报告”、”发布报告”、”退回报告”、”reject”，或任何需要读写 Neolyst 数据库的操作时，使用此 skill。
+description: 当用户提到”neolyst”、”研报”、”查询分析师”、”上传模板”、”发布模板”、”创建 coverage”、”查询 coverage”、”查询报告”、”我的报告”、”查看报告”、”报告审计”、”报告状态日志”、”下载报告”、”下载模板”、”停用报告”、”编辑报告”、”修改报告”、”保存 draft”、”提交报告”、”校验报告”、”查询历史报告”、”发布报告”、”退回报告”、”reject”、”行业”、”sector”、”区域”、”region”，或任何需要读写 Neolyst 数据库的操作时，使用此 skill。
 ---
 
 # neolyst
@@ -16,29 +16,76 @@ Neolyst 数据库的唯一访问入口。用户和其他 skill 通过它完成�
 
 ## 接口
 
-| # | 接口 | 模块 | 说明 |
-|---|------|------|------|
-| 1 | `resolve_analyst_by_email(client, email)` | `analyst` | 按邮箱精确查询 analyst 记录（直接查表） |
-| 1a | `search_analyst_by_name(client, name)` | `analyst` | 按姓名模糊查询活跃分析师，返回精简字段 |
-| 1b | `upsert_analyst(client, email, english_name, ...)` | `analyst` | 以 email 为键创建或更新分析师（需 admin） |
-| 1c | `set_analyst_active(client, email, is_active)` | `analyst` | 更新分析师在职状态（需 admin） |
-| 2 | `resolve_template(client, report_type, language, dest_dir=".")` | `template` | 下载模板 + schema 到本地路径 |
-| 3 | `upsert_template(client, report_type, language, template_local_path, schema_local_path=None)` | `template` | 上传模板文件并 upsert `report_template` 记录 |
-| 4 | `reuse_template(client, report_type, language, same_as_report_type)` | `template` | 静态复制另一个 report_type 的模板路径 |
-| 5 | `resolve_coverage(client, ticker, first_analyst_email)` | `coverage` | 按 ticker + 分析师定位唯一 coverage |
-| 6 | `create_coverage(client, ticker, english_name, sector_id, ...)` | `coverage` | 创建 coverage 及初始分析师关系 |
-| 7 | `save_report(client, draft_input)` | `save_report` | 保存/更新 report 元数据，返回 report_id |
-| 8 | `upload_report_files(client, report_id, report_file, pdf_file)` | `upload_files` | 上传 Word+PDF，回写路径 |
-| 9 | `upload_model_file(client, report_id, model_file)` | `upload_files` | 上传 Model，回写路径 |
-| 10 | `validate_report(client, report_id)` | `validators` | 调用 DB 侧 RPC 校验报告是否满足提交条件，全量收集错误 |
-| 11 | `submit_report(client, report_id)` | `report` | 将 draft/rejected 报告提交为 submitted |
-| 12 | `retract_report(client, report_id)` | `report` | 将 submitted/rejected 报告撤回为 draft |
-| 13 | `list_coverage_history(client, ticker, first_analyst_email)` | `coverage` | 返回 coverage 下已发布的历史报告 |
-| 14 | `publish_report(client, report_id)` | `report` | 将 submitted 报告发布为 published |
-| 15 | `reject_report(client, report_id, reason)` | `report` | 将 submitted 报告退回为 rejected |
-| 16 | `deactivate_report(client, report_id)` | `report` | 将报告标记为废弃（is_active=false，admin only） |
+完整签名、参数、返回值和代码示例见 `references/interfaces.md`。接口调用失败时，参考「错误处理策略」决定响应方式——不要把 ValueError 原文直接展示给用户。
 
-完整签名、参数、返回值和代码示例见 `references/interfaces.md`。
+### 报告生命周期
+
+| 接口 | 模块 | 说明 |
+|------|------|------|
+| `save_report(client, draft_input)` | `report` | 创建新报告或更新已有报告的元数据 |
+| `upload_report_files(client, report_id, report_file, pdf_file)` | `upload_files` | 上传报告正文（Word + PDF） |
+| `upload_model_file(client, report_id, model_file)` | `upload_files` | 上传财务模型文件 |
+| `validate_report(client, report_id)` | `report` | 提交前检查报告是否完整 |
+| `submit_report(client, report_id)` | `report` | 将报告提交审批 |
+| `retract_report(client, report_id)` | `report` | 撤回已提交的报告以便修改 |
+| `publish_report(client, report_id)` | `report` | 审批通过后发布报告（SA/admin） |
+| `reject_report(client, report_id, reason)` | `report` | 退回不合格的报告要求修改（SA/admin） |
+| `deactivate_report(client, report_id)` | `report` | 废弃不再使用的报告（admin） |
+
+### Coverage
+
+| 接口 | 模块 | 说明 |
+|------|------|------|
+| `resolve_coverage(client, ticker, first_analyst_email)` | `coverage` | 确认某股票是否已被分析师覆盖 |
+| `create_coverage(client, ticker, english_name, sector_id, ...)` | `coverage` | 为新股票建立覆盖关系 |
+| `list_coverage_history(client, ticker, first_analyst_email)` | `coverage` | 查看某股票的历史研报记录 |
+
+### 分析师
+
+| 接口 | 模块 | 说明 |
+|------|------|------|
+| `resolve_analyst_by_email(client, email)` | `analyst` | 通过邮箱获取分析师完整信息 |
+| `search_analyst_by_name(client, name)` | `analyst` | 按姓名搜索分析师 |
+| `upsert_analyst(client, email, english_name, ...)` | `analyst` | 新增或更新分析师档案（admin） |
+| `set_analyst_active(client, email, is_active)` | `analyst` | 启用或停用分析师账号（admin） |
+
+### 模板
+
+| 接口 | 模块 | 说明 |
+|------|------|------|
+| `resolve_template(client, report_type, language, dest_dir=".")` | `template` | 获取指定类型的报告模板 |
+| `upsert_template(client, report_type, language, template_local_path, ...)` | `template` | 发布或更新报告模板 |
+| `reuse_template(client, report_type, language, same_as_report_type)` | `template` | 让多种报告类型共用同一套模板 |
+
+## 报告状态机
+
+```
+  draft ──submit──→ submitted ──publish──→ published
+    ↑                  │
+    └── retract ←──────┤
+                       ↓ reject
+                    rejected
+                       │
+    └── retract ←──────┘
+```
+
+- `submit_report`：draft / rejected → submitted
+- `retract_report`：submitted / rejected → draft
+- `publish_report`：submitted → published（SA/admin）
+- `reject_report`：submitted → rejected（SA/admin，需 reason）
+- `deactivate_report`：任何状态，设 is_active=false（admin）
+
+## 典型工作流
+
+新建并提交报告：
+
+1. `resolve_coverage` → 获得 coverage_id（未命中则询问用户是否 `create_coverage`）
+2. `save_report` → 获得 report_id
+3. `upload_report_files` → 上传 Word + PDF
+4. `validate_report` → 校验完整性（可选；submit 内部自动调用）
+5. `submit_report` → 提交审批
+
+提交失败后沿用原 report_id，重新 `save_report` + `upload_report_files`，再 validate → submit。
 
 ## 报告表直接查询
 
@@ -73,11 +120,8 @@ RLS 可见范围：admin 全部；SA 可见 submitted / published / rejected；a
 - `save_report`：`report_id` 首次为 `None`，后续沿用同一 ID；只保存元数据，不操作文件
 - `upload_report_files` / `upload_model_file`：需在 `save_report` 之后调用，report 必须处于 draft 或 rejected 状态
 - `create_coverage`：仅在 `resolve_coverage` 未命中且用户确认"Coverage 已完成审批"后调用
-- `submit_report`：RPC 内部已调用 `validate_report` 做字段守门；如需提前获取全量错误展示，先显式调用 `validate_report`
 - `reuse_template`：静态路径复制；主模板重新上传后需重新执行才能同步
-- `publish_report` / `reject_report`：SA 角色操作，报告必须处于 submitted 状态
 - `report_type` 取值和分析师列表约束见 README「业务常量」
-- 接口报错处理见 `references/interfaces.md`「错误处理策略」
 
 ## 参考文件
 
