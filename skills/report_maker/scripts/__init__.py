@@ -1,6 +1,6 @@
 """report_maker scripts 包初始化文件。"""
 
-from report_maker.scripts.neolyst_integration import (
+from .neolyst_integration import (
     resolve_template_for_report,
     resolve_analysts_from_elements,
     get_contact_person_options,
@@ -15,7 +15,7 @@ from report_maker.scripts.neolyst_integration import (
     upload_model,
 )
 
-from report_maker.scripts.workflow import (
+from .workflow import (
     prepare_and_save_draft,
     submit_report_workflow,
     is_company_report,
