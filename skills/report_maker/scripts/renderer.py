@@ -155,7 +155,7 @@ def render_report(
             relative_chart_generated = _generate_relative_chart(
                 ticker=ticker,
                 output_path=str(relative_chart_path),
-                company_name=elements.get('company_cn') or elements.get('company_en', '')
+                company_name=elements.get('company_en')
             )
             if relative_chart_generated:
                 print(f"  ✅ relative_chart 已生成")
