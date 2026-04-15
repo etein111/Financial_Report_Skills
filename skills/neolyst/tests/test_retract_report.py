@@ -4,6 +4,8 @@ test_retract_report.py — retract_report 集成测试。
 import uuid
 import pytest
 
+from .conftest import _base_report_payload, _create_submitted_report
+
 
 @pytest.fixture(scope="module")
 def retract_coverage_id(neolyst_client, test_sector_id, test_analyst_email):
