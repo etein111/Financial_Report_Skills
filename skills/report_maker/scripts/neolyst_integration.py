@@ -18,7 +18,7 @@ from supabase import Client
 from neolyst.connection import get_client
 from neolyst.template import resolve_template
 from neolyst.report import save_report, validate_report, submit_report
-from neolyst.coverage import resolve_coverage, create_coverage
+from neolyst.coverage import resolve_coverage
 from neolyst.analyst import resolve_analyst_by_email
 from neolyst.upload_files import upload_report_files, upload_model_file
 
