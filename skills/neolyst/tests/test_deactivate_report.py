@@ -4,9 +4,29 @@ test_deactivate_report.py — deactivate_report 集成测试。
 import uuid
 import pytest
 
+from .conftest import _base_report_payload
+
+
+@pytest.fixture(scope="module")
+def deactivate_coverage_id(neolyst_client, test_sector_id, test_analyst_email):
+    from skills.neolyst.scripts import coverage as cov
+
+    _suffix = uuid.uuid4().hex[:6].upper()
+    cov_id = cov.create_coverage(
+        neolyst_client,
+        ticker=f"DEACT{_suffix}",
+        english_name=f"Deactivate Test Co {_suffix}",
+        sector_id=test_sector_id,
+        isin=f"HK{_suffix}{'0' * (10 - len(_suffix))}",
+        country_of_domicile="Hong Kong",
+        analysts=[{"analyst_email": test_analyst_email, "author_order": 1}],
+    )
+    yield cov_id
+    neolyst_client.table("coverage").delete().eq("id", cov_id).execute()
+
 
 class TestDeactivateReport:
-    def test_deactivate_draft_report(self, neolyst_client, retract_coverage_id, test_analyst_email):
+    def test_deactivate_draft_report(self, neolyst_client, deactivate_coverage_id, test_analyst_email):
         from skills.neolyst.scripts.report import save_report
         from skills.neolyst.scripts.report import deactivate_report
 
@@ -15,7 +35,7 @@ class TestDeactivateReport:
             title="Deactivate Draft Test",
             ticker="DEACT01",
             investment_thesis="Test thesis",
-            coverage_id=retract_coverage_id,
+            coverage_id=deactivate_coverage_id,
             rating="OUTPERFORM",
             target_price=100.0,
         ))
@@ -43,7 +63,7 @@ class TestDeactivateReport:
         with pytest.raises(ValueError, match="报告不存在"):
             deactivate_report(neolyst_client, str(uuid.uuid4()))
 
-    def test_deactivate_already_inactive_raises(self, neolyst_client, retract_coverage_id, test_analyst_email):
+    def test_deactivate_already_inactive_raises(self, neolyst_client, deactivate_coverage_id, test_analyst_email):
         from skills.neolyst.scripts.report import save_report
         from skills.neolyst.scripts.report import deactivate_report
 
@@ -52,7 +72,7 @@ class TestDeactivateReport:
             title="Deactivate Twice Test",
             ticker="DEACT02",
             investment_thesis="Test thesis",
-            coverage_id=retract_coverage_id,
+            coverage_id=deactivate_coverage_id,
             rating="OUTPERFORM",
             target_price=100.0,
         ))
