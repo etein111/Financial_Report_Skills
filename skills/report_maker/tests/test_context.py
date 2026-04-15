@@ -4,12 +4,6 @@
 """
 
 import pytest
-from pathlib import Path
-from unittest.mock import patch, MagicMock
-
-import sys
-sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
-
 
 class TestEnrichCompanyNamesWithYfinance:
     """测试 enrich_company_names_with_yfinance 函数。"""
@@ -172,6 +166,29 @@ class TestPrepareContextWithAnalysts:
 
         assert result["abstract"] == "Some abstract text"
         assert "a1_name" in result
+
+    def test_analyst_display_empty_list(self):
+        """测试：空 analysts 列表不生成 analyst_display。"""
+        from context import prepare_context_with_analysts
+
+        elements = {
+            "analysts": [],
+        }
+
+        result = prepare_context_with_analysts(elements)
+
+        assert "analyst_display" not in result
+
+    def test_immutability(self):
+        """测试：不修改原始 elements。"""
+        from context import prepare_context_with_analysts
+
+        elements = {"rating": "BUY", "target_price": "100"}
+
+        result = prepare_context_with_analysts(elements)
+
+        assert elements["rating"] == "BUY"
+        assert elements["target_price"] == "100"
 
 
 class TestContextModuleAvailability:

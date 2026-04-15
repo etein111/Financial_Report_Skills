@@ -8,10 +8,6 @@ from pathlib import Path
 import zipfile
 from unittest.mock import patch
 
-import sys
-sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
-
-
 class TestVerifyAppendixWithLxml:
     """测试 _verify_appendix_with_lxml 函数。"""
 

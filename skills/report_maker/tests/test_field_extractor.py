@@ -4,10 +4,6 @@
 """
 
 import pytest
-from pathlib import Path
-
-import sys
-sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
 
 from field_extractor import (
     _find_date_in_text,
@@ -186,33 +182,6 @@ class TestCleanFieldValue:
 class TestWithRealDocument:
     """使用真实研报文档测试 field_extractor。"""
 
-    @pytest.fixture
-    def real_doc_parsed(self):
-        """解析真实研报文档。"""
-        from docx_reader import read_docx_tables, flatten_table_text, extract_nested_tables_only
-
-        # fixtures 目录在 tests/fixtures/
-        fixtures_dir = Path(__file__).parent / "fixtures"
-        docx_path = fixtures_dir / "real_research_report.docx"
-        tables = read_docx_tables(str(docx_path))
-        nested = extract_nested_tables_only(tables)
-        lines = flatten_table_text(tables)
-        return {"tables": tables, "nested": nested, "lines": lines}
-
-    @pytest.fixture
-    def schema(self):
-        """加载真实的 schema.yaml。"""
-        import yaml
-        schema_path = Path(__file__).parent.parent.parent.parent / "templates" / "company" / "schema.yaml"
-        with open(schema_path, 'r', encoding='utf-8') as f:
-            return yaml.safe_load(f)
-
-    @pytest.fixture
-    def real_docx_path(self):
-        """真实文档路径。"""
-        fixtures_dir = Path(__file__).parent / "fixtures"
-        return str(fixtures_dir / "real_research_report.docx")
-
     def test_find_date_in_real_document(self, real_doc_parsed):
         """测试：从真实文档中找到日期。"""
         full_text = ' '.join(real_doc_parsed["lines"])
@@ -237,7 +206,6 @@ class TestWithRealDocument:
 
         assert title is not None
         assert "首次覆盖" in title
-        # 标题不包含"威胜"，但lines中有"威胜控股 (3393.HK)"
         assert "配网" in title or "AI算力" in title
 
     def test_flatten_table_contains_rating_info(self, real_doc_parsed):
@@ -253,7 +221,6 @@ class TestWithRealDocument:
         nested = real_doc_parsed["nested"]
 
         assert len(nested) > 0
-        # 第一个嵌套表格应该包含公司信息
         first_nested_text = ' '.join([c['text'] for row in nested[0]['rows'] for c in row['cells']])
         assert len(first_nested_text) > 0
 
@@ -262,55 +229,38 @@ class TestWithRealDocument:
         lines = real_doc_parsed["lines"]
         full_text = ' '.join(lines)
 
-        # 真实文档包含分析师信息
         assert "杨斌" in full_text or "Bin Yang" in full_text
 
 
 class TestExtractFieldsFromDocx:
     """测试 extract_fields_from_docx 主函数。"""
 
-    @pytest.fixture
-    def schema(self):
-        """加载真实的 schema.yaml。"""
-        import yaml
-        schema_path = Path(__file__).parent.parent.parent.parent / "templates" / "company" / "schema.yaml"
-        with open(schema_path, 'r', encoding='utf-8') as f:
-            return yaml.safe_load(f)
-
-    @pytest.fixture
-    def real_docx_path(self):
-        """真实文档路径。"""
-        fixtures_dir = Path(__file__).parent / "fixtures"
-        return str(fixtures_dir / "real_research_report.docx")
-
-    def test_extract_fields_from_docx_returns_dict(self, real_docx_path, schema):
+    def test_extract_fields_from_docx_returns_dict(self, real_docx_path, company_schema):
         """测试：extract_fields_from_docx 返回字典。"""
         from field_extractor import extract_fields_from_docx
 
-        result = extract_fields_from_docx(real_docx_path, schema)
+        result = extract_fields_from_docx(real_docx_path, company_schema)
 
         assert isinstance(result, dict)
         assert 'abstract' in result
         assert 'body' in result
 
-    def test_extract_fields_from_docx_has_basic_fields(self, real_docx_path, schema):
+    def test_extract_fields_from_docx_has_basic_fields(self, real_docx_path, company_schema):
         """测试：extract_fields_from_docx 包含基本字段。"""
         from field_extractor import extract_fields_from_docx
 
-        result = extract_fields_from_docx(real_docx_path, schema)
+        result = extract_fields_from_docx(real_docx_path, company_schema)
 
-        # 基本字段应该被提取
         assert result.get('report_date') is not None
         assert result.get('ticker') is not None
         assert '3393' in result.get('ticker', '')
 
-    def test_extract_fields_from_docx_has_fragment_fields(self, real_docx_path, schema):
+    def test_extract_fields_from_docx_has_fragment_fields(self, real_docx_path, company_schema):
         """测试：extract_fields_from_docx 设置了 fragment 字段。"""
         from field_extractor import extract_fields_from_docx
 
-        result = extract_fields_from_docx(real_docx_path, schema)
+        result = extract_fields_from_docx(real_docx_path, company_schema)
 
-        # abstract 和 body 应该是 fragment 文件名
         assert result.get('abstract') == 'abstract.docx'
         assert result.get('body') == 'body.docx'
 
@@ -320,126 +270,82 @@ class TestExtractFieldsFromDocx:
 
         result = extract_fields_from_docx(real_docx_path, {})
 
-        # 空 schema 时返回空字典（没有 abstract/body 定义）
         assert result == {} or (result.get('abstract') == '' and result.get('body') == '')
 
-    def test_extract_fields_from_docx_with_context(self, real_docx_path, schema):
+    def test_extract_fields_from_docx_with_context(self, real_docx_path, company_schema):
         """测试：extract_fields_from_docx 接受 context 参数。"""
         from field_extractor import extract_fields_from_docx
 
-        result = extract_fields_from_docx(real_docx_path, schema, context="extra info")
+        result = extract_fields_from_docx(real_docx_path, company_schema, context="extra info")
 
-        # context 不影响基本功能
         assert isinstance(result, dict)
 
 
 class TestExtractBasicFieldsFromMainTables:
     """测试 _extract_basic_fields_from_main_tables 函数。"""
 
-    @pytest.fixture
-    def schema(self):
-        """加载真实的 schema.yaml。"""
-        import yaml
-        schema_path = Path(__file__).parent.parent.parent.parent / "templates" / "company" / "schema.yaml"
-        with open(schema_path, 'r', encoding='utf-8') as f:
-            return yaml.safe_load(f)
-
-    def test_extracts_from_first_table_only(self, schema):
+    def test_extracts_from_first_table_only(self, real_doc_parsed, company_schema):
         """测试：只从第一个表格提取。"""
-        from docx_reader import read_docx_tables
         from field_extractor import _extract_basic_fields_from_main_tables
 
-        fixtures_dir = Path(__file__).parent / "fixtures"
-        docx_path = fixtures_dir / "real_research_report.docx"
-        tables = read_docx_tables(str(docx_path))
-
-        result = _extract_basic_fields_from_main_tables(tables, schema)
+        result = _extract_basic_fields_from_main_tables(real_doc_parsed["tables"], company_schema)
 
         assert isinstance(result, dict)
-        # 应该提取到 report_date
         assert 'report_date' in result
 
-    def test_handles_empty_tables(self, schema):
+    def test_handles_empty_tables(self, company_schema):
         """测试：空表格列表返回空字典。"""
         from field_extractor import _extract_basic_fields_from_main_tables
 
-        result = _extract_basic_fields_from_main_tables([], schema)
+        result = _extract_basic_fields_from_main_tables([], company_schema)
 
         assert result == {}
 
-    def test_extracts_company_and_ticker(self, schema):
+    def test_extracts_company_and_ticker(self, real_doc_parsed, company_schema):
         """测试：提取公司和股票代码。"""
-        from docx_reader import read_docx_tables
         from field_extractor import _extract_basic_fields_from_main_tables
 
-        fixtures_dir = Path(__file__).parent / "fixtures"
-        docx_path = fixtures_dir / "real_research_report.docx"
-        tables = read_docx_tables(str(docx_path))
+        result = _extract_basic_fields_from_main_tables(real_doc_parsed["tables"], company_schema)
 
-        result = _extract_basic_fields_from_main_tables(tables, schema)
-
-        # 应该提取到 ticker
         assert 'ticker' in result
 
 
 class TestExtractFinancialFieldsFromNestedTables:
     """测试 _extract_financial_fields_from_nested_tables 函数。"""
 
-    @pytest.fixture
-    def schema(self):
-        """加载真实的 schema.yaml。"""
-        import yaml
-        schema_path = Path(__file__).parent.parent.parent.parent / "templates" / "company" / "schema.yaml"
-        with open(schema_path, 'r', encoding='utf-8') as f:
-            return yaml.safe_load(f)
-
-    def test_extracts_rating(self, schema):
+    def test_extracts_rating(self, real_doc_parsed, company_schema):
         """测试：提取评级。"""
-        from docx_reader import read_docx_tables
         from field_extractor import _extract_financial_fields_from_nested_tables
 
-        fixtures_dir = Path(__file__).parent / "fixtures"
-        docx_path = fixtures_dir / "real_research_report.docx"
-        tables = read_docx_tables(str(docx_path))
+        result = _extract_financial_fields_from_nested_tables(real_doc_parsed["tables"], company_schema)
 
-        result = _extract_financial_fields_from_nested_tables(tables, schema)
-
-        # 可能提取到评级
         assert isinstance(result, dict)
 
-    def test_extracts_current_price_date(self, schema):
+    def test_extracts_current_price_date(self, real_doc_parsed, company_schema):
         """测试：提取现价日期。"""
-        from docx_reader import read_docx_tables
         from field_extractor import _extract_financial_fields_from_nested_tables
 
-        fixtures_dir = Path(__file__).parent / "fixtures"
-        docx_path = fixtures_dir / "real_research_report.docx"
-        tables = read_docx_tables(str(docx_path))
+        result = _extract_financial_fields_from_nested_tables(real_doc_parsed["tables"], company_schema)
 
-        result = _extract_financial_fields_from_nested_tables(tables, schema)
+        if 'current_price_date' in result:
+            assert isinstance(result['current_price_date'], str)
+            assert len(result['current_price_date']) > 0
 
-        # current_price_date 是特殊字段
-        assert 'current_price_date' in result or 'current_price_date' not in result
-
-    def test_extracts_analysts(self, schema):
+    def test_extracts_analysts(self, real_doc_parsed, company_schema):
         """测试：提取分析师信息。"""
-        from docx_reader import read_docx_tables
         from field_extractor import _extract_financial_fields_from_nested_tables
 
-        fixtures_dir = Path(__file__).parent / "fixtures"
-        docx_path = fixtures_dir / "real_research_report.docx"
-        tables = read_docx_tables(str(docx_path))
+        result = _extract_financial_fields_from_nested_tables(real_doc_parsed["tables"], company_schema)
 
-        result = _extract_financial_fields_from_nested_tables(tables, schema)
+        if 'analysts' in result:
+            assert isinstance(result['analysts'], (str, list))
+            assert len(result['analysts']) > 0
 
-        # analysts 是特殊字段
-        assert 'analysts' in result or 'analysts' not in result
-
-    def test_handles_empty_tables(self, schema):
+    def test_handles_empty_tables(self, company_schema):
         """测试：空表格列表返回空字典。"""
         from field_extractor import _extract_financial_fields_from_nested_tables
 
-        result = _extract_financial_fields_from_nested_tables([], schema)
+        result = _extract_financial_fields_from_nested_tables([], company_schema)
 
         assert result == {}
 
@@ -504,30 +410,16 @@ class TestHandleSplitFields:
 class TestExtractFieldFromTables:
     """测试 _extract_field_from_tables 函数。"""
 
-    @pytest.fixture
-    def schema(self):
-        """加载真实的 schema.yaml。"""
-        import yaml
-        schema_path = Path(__file__).parent.parent.parent.parent / "templates" / "company" / "schema.yaml"
-        with open(schema_path, 'r', encoding='utf-8') as f:
-            return yaml.safe_load(f)
-
-    def test_extracts_rating_from_nested_tables(self, schema):
+    def test_extracts_rating_from_nested_tables(self, real_doc_parsed, company_schema):
         """测试：从嵌套表格提取评级。"""
-        from docx_reader import read_docx_tables, extract_nested_tables_only
         from field_extractor import _extract_field_from_tables
 
-        fixtures_dir = Path(__file__).parent / "fixtures"
-        docx_path = fixtures_dir / "real_research_report.docx"
-        tables = read_docx_tables(str(docx_path))
-        nested = extract_nested_tables_only(tables)
+        value = _extract_field_from_tables(
+            real_doc_parsed["nested"], 'rating', company_schema.get('rating', {}))
 
-        value = _extract_field_from_tables(nested, 'rating', schema.get('rating', {}))
-
-        # 可能找到评级值
         assert value is None or isinstance(value, str)
 
-    def test_returns_none_when_not_found(self, schema):
+    def test_returns_none_when_not_found(self, company_schema):
         """测试：未找到时返回 None。"""
         from field_extractor import _extract_field_from_tables
 
@@ -539,19 +431,12 @@ class TestExtractFieldFromTables:
 class TestExtractCurrentPriceDateFromNotes:
     """测试 _extract_current_price_date_from_notes 函数。"""
 
-    def test_finds_date_in_notes(self):
+    def test_finds_date_in_notes(self, real_doc_parsed):
         """测试：在注释中找到日期。"""
-        from docx_reader import read_docx_tables, extract_nested_tables_only
         from field_extractor import _extract_current_price_date_from_notes
 
-        fixtures_dir = Path(__file__).parent / "fixtures"
-        docx_path = fixtures_dir / "real_research_report.docx"
-        tables = read_docx_tables(str(docx_path))
-        nested = extract_nested_tables_only(tables)
+        result = _extract_current_price_date_from_notes(real_doc_parsed["nested"])
 
-        result = _extract_current_price_date_from_notes(nested)
-
-        # 可能找到日期
         assert result is None or isinstance(result, str)
 
     def test_handles_empty_list(self):
@@ -566,19 +451,12 @@ class TestExtractCurrentPriceDateFromNotes:
 class TestExtractAnalystsFromTables:
     """测试 _extract_analysts_from_tables 函数。"""
 
-    def test_finds_analyst_info(self):
+    def test_finds_analyst_info(self, real_doc_parsed):
         """测试：找到分析师信息。"""
-        from docx_reader import read_docx_tables, extract_nested_tables_only
         from field_extractor import _extract_analysts_from_tables
 
-        fixtures_dir = Path(__file__).parent / "fixtures"
-        docx_path = fixtures_dir / "real_research_report.docx"
-        tables = read_docx_tables(str(docx_path))
-        nested = extract_nested_tables_only(tables)
+        result = _extract_analysts_from_tables(real_doc_parsed["nested"])
 
-        result = _extract_analysts_from_tables(nested)
-
-        # 应该找到分析师信息（真实文档有杨斌的信息）
         assert result is None or isinstance(result, str)
 
     def test_handles_empty_list(self):

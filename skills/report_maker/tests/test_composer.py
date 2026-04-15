@@ -7,10 +7,6 @@ import pytest
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
-import sys
-sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
-
-
 class TestInsertBodyAtMarkerCompose:
     """测试 insert_body_at_marker_compose 函数。"""
 

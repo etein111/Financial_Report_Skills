@@ -1,9 +1,5 @@
 """测试 extractor.py 模块的函数。"""
 import pytest
-from pathlib import Path
-
-import sys
-sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
 
 from extractor import extract_elements, format_extraction_prompt, merge_llm_results
 

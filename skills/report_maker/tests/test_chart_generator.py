@@ -5,12 +5,7 @@
 
 import pytest
 from pathlib import Path
-from unittest.mock import Mock, MagicMock, patch
-import os
-
-import sys
-sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
-
+from unittest.mock import MagicMock, patch
 
 class TestGenerateRelativeChart:
     """测试 _generate_relative_chart 函数。"""
@@ -68,21 +63,27 @@ class TestGenerateRecommendationChart:
 
             assert result is False
 
-    def test_handles_empty_elements(self):
+    def test_handles_empty_elements(self, tmp_path):
         """测试：处理空的 elements 字典。"""
         from chart_generator import _generate_recommendation_chart
 
         with patch('chart_generator.CHARTS_AVAILABLE', True):
-            # 创建一个空的 elements
-            result = _generate_recommendation_chart(
-                "3393.HK",
-                "/tmp/output.png",
-                "Test Company",
-                {}
-            )
+            with patch('chart_generator.plt') as mock_plt:
+                mock_fig = MagicMock()
+                mock_ax = MagicMock()
+                mock_plt.subplots.return_value = (mock_fig, mock_ax)
+                mock_plt.style.use = MagicMock()
+                mock_plt.FuncFormatter = MagicMock()
 
-            # 应该能处理而不崩溃
-            assert isinstance(result, bool)
+                output_path = tmp_path / "rec_chart.png"
+                result = _generate_recommendation_chart(
+                    "3393.HK",
+                    str(output_path),
+                    "Test Company",
+                    {}
+                )
+
+                assert isinstance(result, bool)
 
     @patch('chart_generator.CHARTS_AVAILABLE', True)
     @patch('chart_generator.plt')
@@ -112,13 +113,12 @@ class TestGenerateRecommendationChart:
             elements
         )
 
-        # 应该尝试绘制图表
-        assert isinstance(result, bool)
+        assert result is True
 
     @patch('chart_generator.CHARTS_AVAILABLE', True)
     @patch('chart_generator.plt')
     def test_calculates_potential_upside(self, mock_plt, tmp_path):
-        """测试：计算潜在涨幅。"""
+        """测试：有 current_price 和 target_price 时成功生成图表。"""
         from chart_generator import _generate_recommendation_chart
 
         mock_fig = MagicMock()
@@ -132,7 +132,7 @@ class TestGenerateRecommendationChart:
         elements = {
             "rating": "增持",
             "current_price": 10.0,
-            "target_price": 12.0  # 20% upside
+            "target_price": 12.0
         }
 
         result = _generate_recommendation_chart(
@@ -142,10 +142,7 @@ class TestGenerateRecommendationChart:
             elements
         )
 
-        # 验证计算逻辑正确
-        # (12.0 - 10.0) / 10.0 * 100 = 20%
-        potential_upside = (12.0 - 10.0) / 10.0 * 100
-        assert potential_upside == 20.0
+        assert result is True
 
 
 class TestChartModuleAvailability:

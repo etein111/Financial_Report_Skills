@@ -5,11 +5,6 @@
 
 import pytest
 from pathlib import Path
-import tempfile
-import zipfile
-
-import sys
-sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
 
 from docx_reader import (
     read_docx_tables,
@@ -268,15 +263,15 @@ class TestSearchInTables:
         assert len(matches) == 1
         assert matches[0]['text'] == '西锐飞机'
 
-    def test_case_insensitive_search(self, sample_tables):
-        """测试：搜索不区分大小写。"""
+    def test_substring_search(self, sample_tables):
+        """测试：支持子串搜索。"""
         matches = search_in_tables(sample_tables, '西锐')
 
         assert len(matches) == 1
 
-        matches_upper = search_in_tables(sample_tables, '西锐飞机')
+        matches_full = search_in_tables(sample_tables, '西锐飞机')
 
-        assert len(matches_upper) == 1
+        assert len(matches_full) == 1
 
     def test_returns_empty_for_no_match(self, sample_tables):
         """测试：无匹配时返回空列表。"""

@@ -4,9 +4,6 @@ from pathlib import Path
 import tempfile
 import shutil
 
-import sys
-sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
-
 from splitter import (
     extract_abstract, extract_body, get_split_instructions,
     locate_fragment_by_content, extract_fragment_by_table_range,

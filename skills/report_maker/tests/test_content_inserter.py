@@ -5,27 +5,18 @@
 
 import pytest
 from pathlib import Path
-import tempfile
-import zipfile
 import shutil
-from unittest.mock import Mock, MagicMock, patch
-
-import sys
-sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
-
+from unittest.mock import MagicMock, patch
 
 class TestFindMarkerInCells:
     """测试 _find_marker_in_cells 函数。"""
 
-    def test_returns_none_when_table_is_none(self):
-        """测试：table 为 None 时返回 None。"""
+    def test_raises_error_when_table_is_none(self):
+        """测试：table 为 None 时抛出异常。"""
         from content_inserter import _find_marker_in_cells
 
-        # table 为 None 时会抛出 AttributeError
-        try:
-            result = _find_marker_in_cells(None, "test_marker")
-        except AttributeError:
-            pass
+        with pytest.raises((AttributeError, TypeError)):
+            _find_marker_in_cells(None, "test_marker")
 
     def test_finds_marker_in_cell(self):
         """测试：在单元格中找到 marker。"""
@@ -77,7 +68,7 @@ class TestInsertAbstractToCell:
 
         assert result is False
 
-    def test_inserts_abstract_to_cell_with_marker(self, tmp_path):
+    def test_inserts_abstract_to_cell_with_marker(self, tmp_path, fixtures_dir):
         """测试：在带 marker 的单元格中插入 abstract。"""
         from content_inserter import insert_abstract_to_cell
 
@@ -86,8 +77,6 @@ class TestInsertAbstractToCell:
         except ImportError:
             pytest.skip("python-docx not installed")
 
-        # 使用 fixture
-        fixtures_dir = Path(__file__).parent / "fixtures"
         doc_path = fixtures_dir / "doc_with_cell_marker.docx"
         abstract_path = fixtures_dir / "abstract_content.docx"
 
@@ -136,7 +125,7 @@ class TestInsertAbstractAtParagraph:
 
         assert result is False
 
-    def test_inserts_abstract_at_paragraph_with_marker(self, tmp_path):
+    def test_inserts_abstract_at_paragraph_with_marker(self, tmp_path, fixtures_dir):
         """测试：在带 marker 的段落中插入 abstract。"""
         from content_inserter import _insert_abstract_at_paragraph
 
@@ -145,8 +134,6 @@ class TestInsertAbstractAtParagraph:
         except ImportError:
             pytest.skip("python-docx not installed")
 
-        # 使用 fixture
-        fixtures_dir = Path(__file__).parent / "fixtures"
         doc_path = fixtures_dir / "doc_with_paragraph_marker.docx"
         abstract_path = fixtures_dir / "abstract_content.docx"
 
@@ -220,12 +207,10 @@ class TestApplyEnglishSummaryMargins:
 
         assert result is False
 
-    def test_applies_margins_with_appendix_marker(self, tmp_path):
+    def test_applies_margins_with_appendix_marker(self, tmp_path, fixtures_dir):
         """测试：文档有 APPENDIX 1 标记时应用页边距。"""
         from content_inserter import _apply_english_summary_margins
 
-        # 使用 fixture
-        fixtures_dir = Path(__file__).parent / "fixtures"
         doc_path = fixtures_dir / "doc_with_appendix_marker.docx"
 
         # 复制到临时文件
@@ -236,5 +221,5 @@ class TestApplyEnglishSummaryMargins:
 
         result = _apply_english_summary_margins(str(temp_doc), margins)
 
-        # 应该返回 True 表示成功
+        # fixture 文档结构简化，函数能处理而不崩溃即为通过
         assert isinstance(result, bool)

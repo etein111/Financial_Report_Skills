@@ -7,10 +7,6 @@ import pytest
 from pathlib import Path
 import zipfile
 
-import sys
-sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
-
-
 class TestFixRunsInParent:
     """测试 fix_runs_in_parent 函数。"""
 

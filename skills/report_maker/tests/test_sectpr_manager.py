@@ -8,10 +8,6 @@ from pathlib import Path
 import zipfile
 from unittest.mock import patch
 
-import sys
-sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
-
-
 class TestSaveTemplateFinalSectPr:
     """测试 _save_template_final_sectPr 函数。"""
 
