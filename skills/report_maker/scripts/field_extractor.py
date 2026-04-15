@@ -7,7 +7,7 @@
 
 import re
 import json
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List, Optional
 import docx_reader
 
 
@@ -104,48 +104,6 @@ def extract_fields_from_docx(
     elements = _handle_split_fields(elements)
 
     return elements
-
-
-def _extract_from_tables(
-    tables: List[Dict[str, Any]],
-    schema: Dict[str, Any]
-) -> Dict[str, Any]:
-    """从表格中提取字段（已弃用，保留向后兼容）。
-
-    Args:
-        tables: 表格数据列表
-        schema: schema.yaml 内容
-
-    Returns:
-        提取的字段字典
-    """
-    extracted = {}
-
-    # 优先从嵌套表格中提取（首页财务数据通常在嵌套表格中）
-    nested_tables = docx_reader.extract_nested_tables_only(tables)
-    for field_name, field_def in schema.items():
-        if field_name in ['abstract', 'body']:
-            continue
-
-        # 尝试从嵌套表格提取
-        value = _extract_field_from_tables(
-            nested_tables,
-            field_name,
-            field_def
-        )
-
-        # 如果嵌套表格没找到，尝试从所有表格提取
-        if not value:
-            value = _extract_field_from_tables(
-                tables,
-                field_name,
-                field_def
-            )
-
-        if value:
-            extracted[field_name] = value
-
-    return extracted
 
 
 def _extract_basic_fields_from_main_tables(

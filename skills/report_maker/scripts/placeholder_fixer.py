@@ -12,13 +12,6 @@ from copy import deepcopy
 import common
 W = common.W_NS
 
-try:
-    from docx import Document
-    DOCX_AVAILABLE = True
-except ImportError:
-    DOCX_AVAILABLE = False
-    Document = None
-
 
 def fix_runs_in_parent(parent, collected_runs):
     """在父元素中合并收集的 runs。
@@ -114,13 +107,8 @@ def _fix_split_placeholders_in_docx(docx_path: str, output_path: str = None) -> 
     if output_path is None:
         output_path = docx_path
 
-    if not DOCX_AVAILABLE:
-        return output_path
-
     try:
-        # 读取文档
-        with zipfile.ZipFile(docx_path, 'r') as z:
-            files = {name: z.read(name) for name in z.namelist()}
+        files = common.read_docx_zip(docx_path)
 
         if 'word/document.xml' not in files:
             return output_path
@@ -130,7 +118,6 @@ def _fix_split_placeholders_in_docx(docx_path: str, output_path: str = None) -> 
         if body is None:
             return output_path
 
-        # 处理每个段落
         for para in body.findall(f'.//{W}p'):
             current_placeholder = None
             collected_runs = []
@@ -138,16 +125,11 @@ def _fix_split_placeholders_in_docx(docx_path: str, output_path: str = None) -> 
             for child in para:
                 current_placeholder = fix_element(child, current_placeholder, collected_runs)
 
-        # 保存修复后的文档
         files['word/document.xml'] = etree.tostring(
             doc_tree, xml_declaration=True, encoding='UTF-8', standalone=True
         )
 
-        import os
-        os.remove(output_path) if os.path.exists(output_path) else None
-        with zipfile.ZipFile(output_path, 'w', zipfile.ZIP_DEFLATED) as z:
-            for name, content in files.items():
-                z.writestr(name, content)
+        common.write_docx_zip(output_path, files)
 
     except Exception as e:
         print(f"  修复拆分占位符时出错: {e}")

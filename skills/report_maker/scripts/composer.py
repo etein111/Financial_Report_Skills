@@ -6,7 +6,6 @@
 import shutil
 import zipfile
 from pathlib import Path
-from copy import deepcopy
 from typing import Dict, Any, Optional
 
 try:
@@ -30,9 +29,6 @@ from sectpr_manager import (
     _save_template_final_sectPr,
 )
 from image_handler import _copy_media_between_docx
-
-# 占位符标记
-BODY_MARKER = common.BODY_MARKER
 
 
 def insert_body_at_marker_compose(
@@ -78,7 +74,7 @@ def insert_body_at_marker_compose(
 
         marker_idx = None
         for i, elem in enumerate(all_elements):
-            text = ''.join(t.text or '' for t in elem.iter() if t.text)
+            text = common.get_element_text(elem)
             if marker in text:
                 marker_idx = i
                 break
@@ -118,7 +114,7 @@ def insert_body_at_marker_compose(
         for elem in part3_body:
             tag = elem.tag.split('}')[-1]
             if tag in ['p', 'tbl', 'sdt']:
-                text = ''.join(t.text or '' for t in elem.iter() if t.text)
+                text = common.get_element_text(elem)
                 if text.strip():
                     has_part3_content = True
                     break
@@ -160,40 +156,3 @@ def insert_body_at_marker_compose(
         import traceback
         traceback.print_exc()
         return False
-
-
-def _copy_headers_footers_between_docs(body_path: str, output_path: str) -> Dict[str, str]:
-    """从 body 文档复制 header/footer 文件到输出文档。
-
-    Args:
-        body_path: body 文档路径
-        output_path: 输出文档路径
-
-    Returns:
-        rId 映射字典
-    """
-    mapping = {}
-
-    try:
-        with zipfile.ZipFile(body_path, 'r') as z:
-            body_files = {name: z.read(name) for name in z.namelist() if 'header' in name.lower() or 'footer' in name.lower()}
-
-        with zipfile.ZipFile(output_path, 'r') as z:
-            output_files = {name: z.read(name) for name in z.namelist()}
-
-        # 复制 header/footer 文件
-        for name, content in body_files.items():
-            target_name = name
-            if target_name not in output_files:
-                output_files[target_name] = content
-
-        import os
-        os.remove(output_path)
-        with zipfile.ZipFile(output_path, 'w', zipfile.ZIP_DEFLATED) as z:
-            for name, content in output_files.items():
-                z.writestr(name, content)
-
-    except Exception as e:
-        print(f"  复制 headers/footers 时出错: {e}")
-
-    return mapping

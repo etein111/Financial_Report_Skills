@@ -42,13 +42,6 @@ except ImportError:
     optimize_pagination = None
     optimize_pagination_xml = None
 
-# 占位符标记（用于避免 docxtpl 破坏文档结构）
-ABSTRACT_MARKER = common.ABSTRACT_MARKER
-BODY_MARKER = common.BODY_MARKER
-ENGLISH_SUMMARY_MARKER = common.ENGLISH_SUMMARY_MARKER
-RELATIVE_CHART_MARKER = common.RELATIVE_CHART_MARKER
-RECOMMENDATION_CHART_MARKER = common.RECOMMENDATION_CHART_MARKER
-
 # 从各模块导入函数
 from context import (
     enrich_company_names_with_yfinance,
@@ -138,11 +131,11 @@ def render_report(
         context = prepare_context_with_analysts(elements)
 
         # 2. 添加 abstract、body 和 english_summary 的 MARKER 到上下文
-        context['abstract'] = ABSTRACT_MARKER
-        context['body'] = BODY_MARKER
-        context['english_summary'] = ENGLISH_SUMMARY_MARKER
-        context['relative_chart'] = RELATIVE_CHART_MARKER
-        context['recommendation_chart'] = RECOMMENDATION_CHART_MARKER
+        context['abstract'] = common.ABSTRACT_MARKER
+        context['body'] = common.BODY_MARKER
+        context['english_summary'] = common.ENGLISH_SUMMARY_MARKER
+        context['relative_chart'] = common.RELATIVE_CHART_MARKER
+        context['recommendation_chart'] = common.RECOMMENDATION_CHART_MARKER
 
         # 3. 修复模板中被拆分的占位符
         temp_path = Path(output_path).parent / "temp_rendered.docx"
@@ -201,20 +194,20 @@ def render_report(
         template.render(context)
         template.save(str(temp_path))
 
-        # 5. 处理 ABSTRACT_MARKER
+        # 5. 处理 common.ABSTRACT_MARKER
         doc = Document(str(temp_path))
 
         if Path(abstract_path).exists() and Path(abstract_path).stat().st_size > 0:
             abstract_doc = Document(abstract_path)
-            abstract_inserted = insert_abstract_to_cell(doc, abstract_doc, ABSTRACT_MARKER)
+            abstract_inserted = insert_abstract_to_cell(doc, abstract_doc, common.ABSTRACT_MARKER)
             if abstract_inserted:
-                print(f"  已在 ABSTRACT_MARKER 位置插入 abstract")
+                print(f"  已在 common.ABSTRACT_MARKER 位置插入 abstract")
             else:
-                abstract_inserted = _insert_abstract_at_paragraph(doc, abstract_doc, ABSTRACT_MARKER)
+                abstract_inserted = _insert_abstract_at_paragraph(doc, abstract_doc, common.ABSTRACT_MARKER)
                 if abstract_inserted:
                     print(f"  已在段落中插入 abstract")
                 else:
-                    print(f"  ⚠️ 未找到 ABSTRACT_MARKER，abstract 未插入")
+                    print(f"  ⚠️ 未找到 common.ABSTRACT_MARKER，abstract 未插入")
 
         doc.save(str(temp_path))
 
@@ -247,17 +240,17 @@ def render_report(
                 else:
                     print(f"  ⚠️ body.docx 分页优化失败")
 
-        # 7. 处理 BODY_MARKER - 使用 docxcompose 三段式合并
+        # 7. 处理 common.BODY_MARKER - 使用 docxcompose 三段式合并
         if Path(body_path).exists() and Path(body_path).stat().st_size > 0:
             body_inserted = insert_body_at_marker_compose(
-                str(temp_path), body_path, BODY_MARKER, output_path,
+                str(temp_path), body_path, common.BODY_MARKER, output_path,
                 template_path=template_path
             )
 
             if body_inserted:
                 print(f"  已使用 docxcompose 三段式合并插入 body")
             else:
-                print(f"  ⚠️ 未找到 BODY_MARKER，使用 docxcompose 追加 body")
+                print(f"  ⚠️ 未找到 common.BODY_MARKER，使用 docxcompose 追加 body")
                 from docxcompose.composer import Composer
                 doc = Document(str(temp_path))
                 composer = Composer(doc)
@@ -277,13 +270,13 @@ def render_report(
             body_elem = doc.element.body
             for elem in list(body_elem):
                 text = ''.join(t.text or '' for t in elem.iter() if t.text)
-                if BODY_MARKER in text:
+                if common.BODY_MARKER in text:
                     body_elem.remove(elem)
-                    print(f"  已删除 BODY_MARKER（无 body 文件）")
+                    print(f"  已删除 common.BODY_MARKER（无 body 文件）")
                     break
             doc.save(output_path)
 
-        # 8. 处理 ENGLISH_SUMMARY_MARKER
+        # 8. 处理 common.ENGLISH_SUMMARY_MARKER
         if english_summary_path and Path(english_summary_path).exists() and Path(english_summary_path).stat().st_size > 0:
             doc = Document(output_path)
             english_summary_doc = Document(english_summary_path)
@@ -292,15 +285,15 @@ def render_report(
             if es_margins:
                 print(f"  模板 ENGLISH_SUMMARY 页边距: top={es_margins.get('top')}, bottom={es_margins.get('bottom')}, left={es_margins.get('left')}")
 
-            es_inserted = insert_abstract_to_cell(doc, english_summary_doc, ENGLISH_SUMMARY_MARKER)
+            es_inserted = insert_abstract_to_cell(doc, english_summary_doc, common.ENGLISH_SUMMARY_MARKER)
             if es_inserted:
-                print(f"  已在 ENGLISH_SUMMARY_MARKER 位置插入 english_summary")
+                print(f"  已在 common.ENGLISH_SUMMARY_MARKER 位置插入 english_summary")
             else:
-                es_inserted = _insert_abstract_at_paragraph(doc, english_summary_doc, ENGLISH_SUMMARY_MARKER)
+                es_inserted = _insert_abstract_at_paragraph(doc, english_summary_doc, common.ENGLISH_SUMMARY_MARKER)
                 if es_inserted:
                     print(f"  已在段落中插入 english_summary")
                 else:
-                    print(f"  ⚠️ 未找到 ENGLISH_SUMMARY_MARKER，english_summary 未插入")
+                    print(f"  ⚠️ 未找到 common.ENGLISH_SUMMARY_MARKER，english_summary 未插入")
 
             doc.save(output_path)
 
@@ -312,10 +305,10 @@ def render_report(
             marker_removed = False
             for elem in list(body_elem):
                 text = ''.join(t.text or '' for t in elem.iter() if t.text)
-                if ENGLISH_SUMMARY_MARKER in text:
+                if common.ENGLISH_SUMMARY_MARKER in text:
                     body_elem.remove(elem)
                     marker_removed = True
-                    print(f"  已删除 ENGLISH_SUMMARY_MARKER（无 english_summary 文件）")
+                    print(f"  已删除 common.ENGLISH_SUMMARY_MARKER（无 english_summary 文件）")
                     break
             if marker_removed:
                 doc.save(output_path)
@@ -326,7 +319,7 @@ def render_report(
             relative_chart_path = Path(output_path).parent / "relative_chart.png"
             if relative_chart_path.exists():
                 chart_inserted = _insert_image_to_placeholder(
-                    doc, RELATIVE_CHART_MARKER, str(relative_chart_path), width_cm=6.35
+                    doc, common.RELATIVE_CHART_MARKER, str(relative_chart_path), width_cm=6.35
                 )
                 if chart_inserted:
                     print(f"  ✅ relative_chart 已插入到文档")
@@ -340,7 +333,7 @@ def render_report(
             recommendation_chart_path = Path(output_path).parent / "recommendation_chart.png"
             if recommendation_chart_path.exists():
                 chart_inserted = _insert_image_to_placeholder(
-                    doc, RECOMMENDATION_CHART_MARKER, str(recommendation_chart_path), width_cm=18
+                    doc, common.RECOMMENDATION_CHART_MARKER, str(recommendation_chart_path), width_cm=18
                 )
                 if chart_inserted:
                     print(f"  ✅ recommendation_chart 已插入到文档")

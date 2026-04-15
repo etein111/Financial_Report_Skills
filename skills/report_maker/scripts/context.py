@@ -6,7 +6,6 @@
 """
 
 from typing import Dict, Any
-from pathlib import Path
 
 # 尝试导入 yfinance
 try:

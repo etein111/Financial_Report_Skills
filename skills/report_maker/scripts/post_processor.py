@@ -4,7 +4,7 @@
 """
 
 import zipfile
-from typing import Dict, Any, Set
+from typing import Dict, Any
 from lxml import etree
 
 try:
@@ -16,10 +16,6 @@ except ImportError:
 
 import common
 W = common.W_NS
-
-# 占位符标记
-RELATIVE_CHART_MARKER = common.RELATIVE_CHART_MARKER
-RECOMMENDATION_CHART_MARKER = common.RECOMMENDATION_CHART_MARKER
 
 
 def _verify_appendix_with_lxml(doc_path: str) -> Dict[str, Any]:
@@ -43,7 +39,7 @@ def _verify_appendix_with_lxml(doc_path: str) -> Dict[str, Any]:
 
         # 搜索段落中的附录标记
         for idx, p in enumerate(tree.iter(f'{W}p')):
-            text = ''.join(t.text or '' for t in p.iter(f'{W}t'))
+            text = common.get_element_text(p)
             text_upper = text.upper()
             for kw in appendix_keywords:
                 if kw.upper() in text_upper:
@@ -57,7 +53,7 @@ def _verify_appendix_with_lxml(doc_path: str) -> Dict[str, Any]:
         for tbl_idx, tbl in enumerate(tree.iter(f'{W}tbl')):
             for row_idx, tr in enumerate(tbl.findall(f'{W}tr')):
                 for col_idx, tc in enumerate(tr.findall(f'{W}tc')):
-                    cell_text = ''.join(t.text or '' for t in tc.iter(f'{W}t'))
+                    cell_text = common.get_element_text(tc)
                     text_upper = cell_text.upper()
                     for kw in appendix_keywords:
                         if kw.upper() in text_upper:
@@ -91,8 +87,7 @@ def _apply_font_constraints(docx_path: str, chinese_font: str = '楷体', latin_
         return False
 
     try:
-        with zipfile.ZipFile(docx_path, 'r') as z:
-            files = {name: z.read(name) for name in z.namelist()}
+        files = common.read_docx_zip(docx_path)
 
         if 'word/document.xml' not in files:
             return False
@@ -100,7 +95,6 @@ def _apply_font_constraints(docx_path: str, chinese_font: str = '楷体', latin_
         doc_tree = etree.fromstring(files['word/document.xml'])
 
         def process_element(elem):
-            """递归处理每个元素，设置字体。"""
             if elem.tag == f'{W}r':
                 # Run 元素
                 rFonts = elem.find(f'{W}rFonts')
@@ -149,11 +143,7 @@ def _apply_font_constraints(docx_path: str, chinese_font: str = '楷体', latin_
             doc_tree, xml_declaration=True, encoding='UTF-8', standalone=True
         )
 
-        import os
-        os.remove(docx_path)
-        with zipfile.ZipFile(docx_path, 'w', zipfile.ZIP_DEFLATED) as z:
-            for name, content in files.items():
-                z.writestr(name, content)
+        common.write_docx_zip(docx_path, files)
 
         return True
 
@@ -197,8 +187,7 @@ def expand_analyst_certification(docx_path: str, elements: Dict[str, Any]) -> in
     certification_keywords = ['分析师', 'analyst', '认证', 'certification']
 
     try:
-        with zipfile.ZipFile(docx_path, 'r') as z:
-            files = {name: z.read(name) for name in z.namelist()}
+        files = common.read_docx_zip(docx_path)
 
         if 'word/document.xml' not in files:
             return 0
@@ -206,7 +195,6 @@ def expand_analyst_certification(docx_path: str, elements: Dict[str, Any]) -> in
         doc_tree = etree.fromstring(files['word/document.xml'])
         body = doc_tree.find(f'{W}body')
 
-        # 收集分析师数量
         analyst_count = 0
         for i in range(1, 9):
             if elements.get(f'a{i}_name') or elements.get(f'a{i}_cn') or elements.get(f'a{i}_en'):
@@ -215,10 +203,9 @@ def expand_analyst_certification(docx_path: str, elements: Dict[str, Any]) -> in
         if analyst_count <= 1:
             return 0  # 只有一个分析师，不需要扩展
 
-        # 找到认证声明段落
         certification_paras = []
         for p in body.findall(f'{W}p'):
-            text = ''.join(t.text or '' for t in p.iter(f'{W}t'))
+            text = common.get_element_text(p)
             text_lower = text.lower()
             if any(kw in text_lower for kw in certification_keywords):
                 certification_paras.append(p)
@@ -239,11 +226,7 @@ def expand_analyst_certification(docx_path: str, elements: Dict[str, Any]) -> in
                 doc_tree, xml_declaration=True, encoding='UTF-8', standalone=True
             )
 
-            import os
-            os.remove(docx_path)
-            with zipfile.ZipFile(docx_path, 'w', zipfile.ZIP_DEFLATED) as z:
-                for name, content in files.items():
-                    z.writestr(name, content)
+            common.write_docx_zip(docx_path, files)
 
         return copied_count
 

@@ -5,7 +5,6 @@
 
 import zipfile
 import hashlib
-import re
 from typing import Dict, Any
 from pathlib import Path
 from lxml import etree
@@ -69,23 +68,14 @@ def _restore_jinja_in_charts(docx_path: str, escaped_files: Dict[str, str]) -> N
         return
 
     try:
-        # 重新读取，打包所有文件
-        with zipfile.ZipFile(docx_path, 'r') as z:
-            files = {name: z.read(name) for name in z.namelist()}
+        files = common.read_docx_zip(docx_path)
 
-        # 恢复被转义的文件
         for chart_file, original_content in escaped_files.items():
             if chart_file in files:
-                # 恢复 {{ 和 }}
                 restored = original_content.replace('__JINJA_LBRACE__', '{{').replace('__JINJA_RBRACE__', '}}')
                 files[chart_file] = restored.encode('utf-8')
 
-        # 写回
-        import os
-        os.remove(docx_path)
-        with zipfile.ZipFile(docx_path, 'w', zipfile.ZIP_DEFLATED) as z:
-            for name, content in files.items():
-                z.writestr(name, content)
+        common.write_docx_zip(docx_path, files)
 
     except Exception as e:
         print(f"  恢复图表 Jinja2 语法时出错: {e}")
@@ -209,8 +199,7 @@ def _copy_media_between_docx(source_path: str, target_path: str) -> int:
                 missing_media.append((media_name, media_bytes))
 
         if missing_media:
-            with zipfile.ZipFile(target_path, 'r') as z:
-                files = {name: z.read(name) for name in z.namelist()}
+            files = common.read_docx_zip(target_path)
 
             for media_name, media_bytes in missing_media:
                 target_media_name = f'word/media/{Path(media_name).name}'
@@ -218,11 +207,7 @@ def _copy_media_between_docx(source_path: str, target_path: str) -> int:
                     files[target_media_name] = media_bytes
                     copied_count += 1
 
-            import os
-            os.remove(target_path)
-            with zipfile.ZipFile(target_path, 'w', zipfile.ZIP_DEFLATED) as z:
-                for name, content in files.items():
-                    z.writestr(name, content)
+            common.write_docx_zip(target_path, files)
 
     except Exception as e:
         print(f"  复制媒体文件时出错: {e}")

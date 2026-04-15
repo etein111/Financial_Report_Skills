@@ -102,8 +102,7 @@ def _restore_all_sectPrs(docx_path: str, template_sectPrs: Dict[str, Any]) -> bo
         是否成功
     """
     try:
-        with zipfile.ZipFile(docx_path, 'r') as z:
-            files = {name: z.read(name) for name in z.namelist()}
+        files = common.read_docx_zip(docx_path)
 
         if 'word/document.xml' not in files:
             return False
@@ -115,7 +114,6 @@ def _restore_all_sectPrs(docx_path: str, template_sectPrs: Dict[str, Any]) -> bo
 
         all_elements = list(body)
 
-        # 收集所有段落级 sectPr 及其索引
         para_sectPrs = []
         for idx, elem in enumerate(all_elements):
             if elem.tag == f'{W}p':
@@ -130,20 +128,18 @@ def _restore_all_sectPrs(docx_path: str, template_sectPrs: Dict[str, Any]) -> bo
         es_sectPr = template_sectPrs.get('english_summary')
         appendix_sectPr = template_sectPrs.get('appendix')
 
-        # 找到关键内容位置
         appendix1_idx = None
         for idx, elem in enumerate(all_elements):
             if elem.tag == f'{W}p':
-                text = ''.join(t.text or '' for t in elem.iter(f'{W}t')).strip()
+                text = common.get_element_text(elem).strip()
                 if text == 'APPENDIX 1':
                     appendix1_idx = idx
                     break
 
-        # 找到法律附录表格位置
         disclaimer_idx = None
         for idx, elem in enumerate(all_elements):
             if elem.tag == f'{W}tbl':
-                text = ''.join(t.text or '' for t in elem.iter(f'{W}t'))
+                text = common.get_element_text(elem)
                 if '附录APPENDIX' in text or 'Table_disclaimer' in text:
                     disclaimer_idx = idx
                     break
@@ -190,11 +186,7 @@ def _restore_all_sectPrs(docx_path: str, template_sectPrs: Dict[str, Any]) -> bo
             doc_tree, xml_declaration=True, encoding='UTF-8', standalone=True
         )
 
-        import os
-        os.remove(docx_path)
-        with zipfile.ZipFile(docx_path, 'w', zipfile.ZIP_DEFLATED) as z:
-            for name, content in files.items():
-                z.writestr(name, content)
+        common.write_docx_zip(docx_path, files)
 
         print(f"  已恢复所有 sectPrs（按位置语义分配）")
         return True
@@ -217,8 +209,7 @@ def _restore_final_sectPr(docx_path: str, template_sectPr) -> bool:
         是否成功
     """
     try:
-        with zipfile.ZipFile(docx_path, 'r') as z:
-            files = {name: z.read(name) for name in z.namelist()}
+        files = common.read_docx_zip(docx_path)
 
         if 'word/document.xml' not in files:
             return False
@@ -239,11 +230,7 @@ def _restore_final_sectPr(docx_path: str, template_sectPr) -> bool:
             doc_tree, xml_declaration=True, encoding='UTF-8', standalone=True
         )
 
-        import os
-        os.remove(docx_path)
-        with zipfile.ZipFile(docx_path, 'w', zipfile.ZIP_DEFLATED) as z:
-            for name, content in files.items():
-                z.writestr(name, content)
+        common.write_docx_zip(docx_path, files)
 
         print(f"  已恢复文档末尾 sectPr（来自模板）")
         return True
@@ -281,7 +268,7 @@ def _get_template_english_summary_margins(template_path: str) -> Dict[str, str]:
         all_elements = list(body)
         marker_idx = None
         for idx, elem in enumerate(all_elements):
-            text = ''.join(t.text or '' for t in elem.iter(f'{W}t'))
+            text = common.get_element_text(elem)
             if ENGLISH_SUMMARY_MARKER in text:
                 marker_idx = idx
                 print(f"  找到 ENGLISH_SUMMARY_MARKER 在元素 {idx}")

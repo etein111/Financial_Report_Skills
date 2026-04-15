@@ -5,7 +5,6 @@
 
 import os
 from typing import Dict, Any, Optional
-from pathlib import Path
 
 # 尝试导入图表依赖
 try:
@@ -17,11 +16,6 @@ try:
     CHARTS_AVAILABLE = True
 except ImportError as e:
     CHARTS_AVAILABLE = False
-    yf = None
-    plt = None
-    mdates = None
-    np = None
-    datetime = None
 
 # 图表代理设置
 CHART_PROXY = os.environ.get("HTTP_PROXY") or os.environ.get("HTTPS_PROXY") or ""

@@ -4,8 +4,11 @@
 遵循函数式编程原则：纯函数、无副作用、I/O 分离。
 """
 
+import os
+import zipfile
 from pathlib import Path
 from typing import Dict, Any, List, Union, Optional
+from lxml import etree
 import yaml
 
 
@@ -45,6 +48,55 @@ RECOMMENDATION_CHART_MARKER = '###RECOMMENDATION_CHART_MARKER###'
 
 # Windows 文件名禁止字符
 INVALID_FILENAME_CHARS = r'\/:*?"<>|'
+
+
+# ==================== Docx Zip 工具函数 ====================
+
+def read_docx_zip(path: str) -> Dict[str, bytes]:
+    """读取 docx (zip) 文件中的所有条目。
+
+    Args:
+        path: docx 文件路径
+
+    Returns:
+        文件名 -> 内容的字节数据字典
+    """
+    with zipfile.ZipFile(path, 'r') as z:
+        return {name: z.read(name) for name in z.namelist()}
+
+
+def write_docx_zip(path: str, files: Dict[str, bytes]) -> None:
+    """将文件字典写回 docx (zip)，覆盖原文件。
+
+    先写入临时文件，成功后替换原文件，避免写入中断导致文件损坏。
+
+    Args:
+        path: docx 文件路径
+        files: 文件名 -> 内容的字节数据字典
+    """
+    tmp_path = path + '.tmp'
+    try:
+        with zipfile.ZipFile(tmp_path, 'w', zipfile.ZIP_DEFLATED) as z:
+            for name, content in files.items():
+                z.writestr(name, content)
+        os.replace(tmp_path, path)
+    except BaseException:
+        # 写入失败时清理临时文件
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
+        raise
+
+
+def get_element_text(elem) -> str:
+    """提取 XML 元素中所有 w:t 子元素的文本内容。
+
+    Args:
+        elem: lxml 元素
+
+    Returns:
+        拼接后的文本字符串
+    """
+    return ''.join(t.text or '' for t in elem.iter(f'{W_NS}t'))
 
 
 # ==================== YAML 工具函数 ====================
