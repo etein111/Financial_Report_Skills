@@ -113,7 +113,7 @@ def render_report(
     无需额外处理页眉页脚。
 
     Args:
-        template_path: 模板文件路径
+        template_path: 模板文件路径（由调用方负责解析后传入）
         elements: 要素字典
         abstract_path: 摘要文件路径
         body_path: 正文文件路径
