@@ -1,4 +1,4 @@
-# Karpathy 编码行为准则
+# 行为准则
 
 减少 LLM 编程常见错误的行为准则。源自 [Andrej Karpathy 的观察](https://x.com/karpathy/status/2015883857489522876)。
 
