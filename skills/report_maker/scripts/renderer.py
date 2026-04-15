@@ -234,7 +234,7 @@ def render_report(
             doc = Document(str(temp_path))
             body_elem = doc.element.body
             for elem in list(body_elem):
-                text = ''.join(t.text or '' for t in elem.iter() if t.text)
+                text = common.get_element_text(elem)
                 if BODY_MARKER in text:
                     body_elem.remove(elem)
                     print(f"  已删除 BODY_MARKER（无 body 文件）")
@@ -269,7 +269,7 @@ def render_report(
             body_elem = doc.element.body
             marker_removed = False
             for elem in list(body_elem):
-                text = ''.join(t.text or '' for t in elem.iter() if t.text)
+                text = common.get_element_text(elem)
                 if ENGLISH_SUMMARY_MARKER in text:
                     body_elem.remove(elem)
                     marker_removed = True

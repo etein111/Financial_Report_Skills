@@ -4,6 +4,7 @@
 """
 
 import zipfile
+from copy import deepcopy
 from typing import Dict, Any
 from lxml import etree
 
