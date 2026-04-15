@@ -152,22 +152,6 @@ def _apply_font_constraints(docx_path: str, chinese_font: str = '楷体', latin_
         return False
 
 
-def set_run_font(run, font_name: str, font_type: str = 'ascii'):
-    """设置 run 的字体。
-
-    Args:
-        run: run 元素
-        font_name: 字体名称
-        font_type: 字体类型 (ascii, hAnsi, eastAsia, cs)
-    """
-    rPr = run.get_or_add_rPr()
-    rFonts = rPr.find(f'{W}rFonts')
-    if rFonts is None:
-        rFonts = etree.SubElement(rPr, f'{W}rFonts')
-
-    rFonts.set(f'{W}{font_type}', font_name)
-
-
 def expand_analyst_certification(docx_path: str, elements: Dict[str, Any]) -> int:
     """扩展分析师认证声明段落。
 

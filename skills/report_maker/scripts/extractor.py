@@ -16,34 +16,7 @@ sys.path.insert(0, str(SCRIPTS_DIR))
 import common
 import field_extractor
 
-import zipfile
-from lxml import etree
-
 W = common.W_NS
-
-
-def _read_full_text_lxml(docx_path: str) -> str:
-    """使用 lxml 读取文档完整文本（包括嵌套表格内容）。
-
-    解决 python-docx 漏读嵌套表格的问题，确保 LLM 能看到完整内容。
-
-    Args:
-        docx_path: docx 文件路径
-
-    Returns:
-        文档所有文本组成的字符串
-    """
-    texts = []
-    with zipfile.ZipFile(docx_path, 'r') as z:
-        with z.open('word/document.xml') as f:
-            tree = etree.parse(f).getroot()
-
-    # 遍历所有 w:t 元素获取所有文本
-    for t in tree.iter(f'{W}t'):
-        if t.text:
-            texts.append(t.text)
-
-    return '\n'.join(texts)
 
 
 # ==================== LLM 调用接口 ====================
@@ -60,7 +33,7 @@ def call_llm_extraction(
         draft_path: 草稿文件路径
         schema: schema.yaml 内容
         missing_fields: 缺失字段列表
-        llm_provider: 可选的 LLM 调用函数（默认使用内置实现）
+        llm_provider: 可选的 LLM 调用函数
 
     Returns:
         LLM 提取的字段字典
@@ -68,67 +41,8 @@ def call_llm_extraction(
     if llm_provider is not None:
         return llm_provider(draft_path, schema, missing_fields)
 
-    # 内置 LLM 调用实现（需要配置 LLM API）
-    try:
-        # 使用 lxml 读取完整文档文本（包括嵌套表格）
-        full_text = _read_full_text_lxml(draft_path)
-
-        # 构建缺失字段的提取 prompt
-        prompt = _build_llm_extraction_prompt(schema, missing_fields, full_text)
-
-        # 调用 LLM（这里需要接入实际的 LLM API）
-        # 示例：使用 anthropic 或 openai API
-        llm_result = _call_llm_api(prompt)
-
-        return llm_result
-    except Exception as e:
-        print(f"警告: LLM fallback 失败: {e}")
-        return {}
-
-
-def _build_llm_extraction_prompt(
-    schema: Dict[str, Any],
-    missing_fields: List[str],
-    document_text: str
-) -> str:
-    """构建 LLM 提取提示词。
-
-    Args:
-        schema: schema.yaml 内容
-        missing_fields: 缺失字段列表
-        document_text: 文档文本内容
-
-    Returns:
-        提示词字符串
-    """
-    prompt = f"""请从以下研究报告中提取这些缺失的字段：
-
-缺失字段：{', '.join(missing_fields)}
-
-文档内容：
-{'-' * 50}
-{document_text[:8000]}  # 限制文本长度
-{'-' * 50}
-
-请以 YAML 格式返回提取的字段，只返回你找到的字段，不要返回空值。
-
-格式：
-field_name: "提取的值"
-another_field: "提取的值"
-"""
-    return prompt
-
-
-def _call_llm_api(prompt: str) -> Dict[str, Any]:
-    """调用 LLM API。
-
-    Args:
-        prompt: 提示词
-
-    Returns:
-        LLM 返回的字段字典
-    """
-    raise NotImplementedError("LLM API 调用未实现")
+    # 无 LLM provider 时返回空字典
+    return {}
 
 
 # ==================== 主要提取函数 ====================
