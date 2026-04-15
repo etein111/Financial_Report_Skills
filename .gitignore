@@ -45,6 +45,9 @@ supabase/.temp/
 .claude/
 .worktrees/
 
+# 产出文件
+reports/
+
 # 项目本地文件
 skills/neolyst/tests/output/
 skills/neolyst/user.json
