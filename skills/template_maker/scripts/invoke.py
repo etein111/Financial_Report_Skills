@@ -26,6 +26,9 @@ from document import find_abstract_by_elements, find_body_range_by_sections, fin
 from router import load_router, update_mapping, save_router, get_all_router_mappings
 import yaml
 
+from neolyst.connection import get_client
+from neolyst.template import upsert_template, reuse_template
+
 
 DEFAULT_APPENDIX_SCOPE = "正文之后，报告末尾"
 
@@ -714,59 +717,118 @@ def create_template(
     }
 
 
+def publish_template(
+    report_type: str,
+    language: str,
+    template_local_path: str,
+    schema_local_path: str | None = None,
+) -> None:
+    """发布本地模板到 neolyst。
+
+    Args:
+        report_type: 报告类型（如 "company", "macro"）
+        language: 语言（如 "en", "zh"）
+        template_local_path: 本地 template.docx 文件路径
+        schema_local_path: 本地 schema.yaml 文件路径（可选）
+    """
+    client = get_client()
+    upsert_template(client, report_type, language, template_local_path, schema_local_path)
+    print(f"模板已发布: {report_type}/{language}")
+
+
+def reuse_template_cmd(
+    report_type: str,
+    language: str,
+    same_as_report_type: str,
+) -> None:
+    """让 report_type 复用 same_as_report_type 的模板文件。
+
+    Args:
+        report_type: 目标报告类型
+        language: 语言
+        same_as_report_type: 源报告类型（模板已发布）
+    """
+    client = get_client()
+    reuse_template(client, report_type, language, same_as_report_type)
+    print(f"模板已复用: {report_type}/{language} -> {same_as_report_type}/{language}")
+
+
 def main():
     parser = argparse.ArgumentParser(
-        description="创建分析师报告模板",
+        description="分析师报告模板工具",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-示例:
-  # 交互式创建模板
-  python invoke.py --name common --word inbox/samples/macro/docx --elements inbox/samples/macro_elements.yaml
-
-  # 自动化模式（跳过确认）
-  python invoke.py --name company --word inbox/samples/company/docx --elements inbox/samples/company_elements.yaml --auto-confirm
-
-  # 快讯报告（无正文，无附录）
-  python invoke.py --name flash --word inbox/samples/flash/docx --elements inbox/samples/flash_elements.yaml --no-body --no-appendix --auto-confirm
-        """
     )
+    subparsers = parser.add_subparsers(dest="command", help="可用命令")
 
-    parser.add_argument("--name", required=True, help="模板名称")
-    parser.add_argument("--word", required=True, help="Word 样本文件路径")
-    parser.add_argument("--elements", required=True, help="elements.yaml 配置文件路径")
-    parser.add_argument("--abstract-scope", default=None, help="摘要位置描述（默认: 询问用户）")
-    parser.add_argument("--body-scope", default=None, help="正文位置描述（默认: 询问用户）")
-    parser.add_argument("--no-body", action="store_true", help="快讯报告，没有正文部分")
-    parser.add_argument("--appendix-scope", default=DEFAULT_APPENDIX_SCOPE, help="法律披露附录位置描述")
-    parser.add_argument("--no-appendix", action="store_true", help="没有法律披露附录")
-    parser.add_argument("--output-dir", default="templates", help="输出目录（默认: templates）")
-    parser.add_argument("--auto-confirm", "-y", action="store_true", help="跳过确认，直接创建")
+    # create 子命令
+    create_parser = subparsers.add_parser(
+        "create", help="从样本文档创建模板"
+    )
+    create_parser.add_argument("--name", required=True, help="模板名称")
+    create_parser.add_argument("--word", required=True, help="Word 样本文件路径")
+    create_parser.add_argument("--elements", required=True, help="elements.yaml 配置文件路径")
+    create_parser.add_argument("--abstract-scope", default=None, help="摘要位置描述（默认: 询问用户）")
+    create_parser.add_argument("--body-scope", default=None, help="正文位置描述（默认: 询问用户）")
+    create_parser.add_argument("--no-body", action="store_true", help="快讯报告，没有正文部分")
+    create_parser.add_argument("--appendix-scope", default=DEFAULT_APPENDIX_SCOPE, help="法律披露附录位置描述")
+    create_parser.add_argument("--no-appendix", action="store_true", help="没有法律披露附录")
+    create_parser.add_argument("--output-dir", default="templates", help="输出目录（默认: templates）")
+    create_parser.add_argument("--auto-confirm", "-y", action="store_true", help="跳过确认，直接创建")
+
+    # publish 子命令
+    publish_parser = subparsers.add_parser(
+        "publish", help="发布本地模板到 neolyst"
+    )
+    publish_parser.add_argument("--report-type", required=True, help="报告类型（如 company, macro）")
+    publish_parser.add_argument("--language", required=True, help="语言（如 en, zh）")
+    publish_parser.add_argument("--template", required=True, help="本地 template.docx 文件路径")
+    publish_parser.add_argument("--schema", default=None, help="本地 schema.yaml 文件路径（可选）")
+
+    # reuse 子命令
+    reuse_parser = subparsers.add_parser(
+        "reuse", help="让模板复用另一个报告类型的文件"
+    )
+    reuse_parser.add_argument("--report-type", required=True, help="目标报告类型")
+    reuse_parser.add_argument("--language", required=True, help="语言（如 en, zh）")
+    reuse_parser.add_argument("--same-as", required=True, help="源报告类型（模板已发布）")
 
     args = parser.parse_args()
 
-    # 处理 --no-body 和 --no-appendix 参数
-    body_scope = None if args.no_body else args.body_scope
-    appendix_scope = None if args.no_appendix else args.appendix_scope
+    if args.command == "create":
+        body_scope = None if args.no_body else args.body_scope
+        appendix_scope = None if args.no_appendix else args.appendix_scope
 
-    result = create_template(
-        name=args.name,
-        word_path=args.word,
-        elements_path=args.elements,
-        abstract_scope=args.abstract_scope,
-        body_scope=body_scope,
-        appendix_scope=appendix_scope,
-        output_dir=args.output_dir,
-        auto_confirm=args.auto_confirm
-    )
+        result = create_template(
+            name=args.name,
+            word_path=args.word,
+            elements_path=args.elements,
+            abstract_scope=args.abstract_scope,
+            body_scope=body_scope,
+            appendix_scope=appendix_scope,
+            output_dir=args.output_dir,
+            auto_confirm=args.auto_confirm
+        )
 
-    if result["success"]:
-        print(f"\n{result['message']}")
-        print("创建的文件:")
-        for f in result["files"]:
-            print(f"  - {f}")
+        if result["success"]:
+            print(f"\n{result['message']}")
+            print("创建的文件:")
+            for f in result["files"]:
+                print(f"  - {f}")
+            return 0
+        else:
+            print(f"\n{result['message']}", file=sys.stderr)
+            return 1
+
+    elif args.command == "publish":
+        publish_template(args.report_type, args.language, args.template, args.schema)
         return 0
+
+    elif args.command == "reuse":
+        reuse_template_cmd(args.report_type, args.language, args.same_as)
+        return 0
+
     else:
-        print(f"\n{result['message']}", file=sys.stderr)
+        parser.print_help()
         return 1
 
 
