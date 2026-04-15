@@ -22,9 +22,9 @@ begin
     end if;
 
     update public.report r
-       set r.status = 'published',
-           r.published_by = auth.uid(),
-           r.published_at = now()
+       set status = 'published',
+           published_by = auth.uid(),
+           published_at = now()
      where r.id = p_report_id;
 
     return query select p_report_id, 'published'::text;
@@ -60,8 +60,8 @@ begin
     end if;
 
     update public.report r
-       set r.status = 'rejected',
-           r.rejection_reason = p_rejection_reason
+       set status = 'rejected',
+           rejection_reason = p_rejection_reason
      where r.id = p_report_id;
 
     return query select p_report_id, 'rejected'::text;

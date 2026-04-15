@@ -4,6 +4,8 @@ test_save_report.py — save_report 集成测试。
 import uuid
 import pytest
 
+from .conftest import _base_report_payload
+
 
 class TestSaveReport:
     def test_returns_report_id_uuid(self, neolyst_client, test_analyst_email):
@@ -50,7 +52,8 @@ class TestSaveReport:
             neolyst_client.table("report").delete().eq("id", result["report_id"]).execute()
 
     def test_update_metadata_keeps_existing_paths(self, neolyst_client, test_analyst_email, tmp_path):
-        from skills.neolyst.scripts.report import save_report, upload_files
+        from skills.neolyst.scripts.report import save_report
+        from skills.neolyst.scripts import upload_files
 
         word = tmp_path / "report.docx"
         pdf = tmp_path / "report.pdf"
