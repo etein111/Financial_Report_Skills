@@ -44,8 +44,8 @@ def _generate_relative_chart(ticker: str, output_path: str, company_name: str = 
 
         # 尝试获取数据
         try:
-            stock_data = yf.download(ticker, start=start_date, end=end_date, proxy=CHART_PROXY or None, progress=False)
-            benchmark_data = yf.download("^HSI", start=start_date, end=end_date, proxy=CHART_PROXY or None, progress=False)
+            stock_data = yf.download(ticker, start=start_date, end=end_date, progress=False)
+            benchmark_data = yf.download("^HSI", start=start_date, end=end_date, progress=False)
         except Exception as e:
             print(f"  [yfinance] 下载数据失败: {e}")
             return False
@@ -55,8 +55,19 @@ def _generate_relative_chart(ticker: str, output_path: str, company_name: str = 
             return False
 
         # 计算相对收益
-        stock_return = (1 + stock_data['Adj Close'].pct_change()).cumprod() - 1
-        benchmark_return = (1 + benchmark_data['Adj Close'].pct_change()).cumprod() - 1
+        # yfinance 返回 MultiIndex 列名，如 ('Close', '3393.HK') 或单级列名 'Adj Close'
+        def get_close(df):
+            if 'Adj Close' in df.columns:
+                return df['Adj Close']
+            for col in df.columns:
+                if 'Close' in str(col):
+                    return df[col]
+            raise ValueError(f"No Close column found: {df.columns.tolist()}")
+        
+        stock_close = get_close(stock_data)
+        benchmark_close = get_close(benchmark_data)
+        stock_return = (1 + stock_close.pct_change()).cumprod() - 1
+        benchmark_return = (1 + benchmark_close.pct_change()).cumprod() - 1
         relative_return = (1 + stock_return) / (1 + benchmark_return) - 1
 
         # 绘图
