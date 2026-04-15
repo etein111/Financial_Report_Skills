@@ -6,7 +6,7 @@
 
 `report_maker` 保持现有草稿解析、字段确认、模板渲染和输出 Word/PDF 的主流程不变。生成阶段所需的 Neolyst 数据读取统一通过 `neolyst` 接口完成。
 
-模板的运行时来源不再是本地 `templates/` 目录，而是 `neolyst` 中保存的模板记录。机器处理并生成 Word/PDF 后，`report_maker` 调用 `save_draft_report` 将机器处理结果保存为第一个 draft 版本。人工确认前，Neolyst 中已经存在该 `report_id` 下可查看的 draft。
+模板的运行时来源不再是本地 `templates/` 目录，而是 `neolyst` 中保存的模板记录。机器处理并生成 Word/PDF 后，`report_maker` 调用 `save_report` 保存元数据，再通过 `upload_report_files` 上传文件，在 Neolyst 中生成第一个 draft 版本。人工确认前，Neolyst 中已经存在该 `report_id` 下可查看的 draft。
 
 本地 `templates/` 目录仍可保留为模板制作阶段的工作目录，用于编辑、验证和预览模板；但模板一旦发布，运行时事实来源统一以 `neolyst` 为准。
 
@@ -67,19 +67,20 @@
 
 模板解析规则如下：
 
-- `resolve_template` 以 `report_type + language` 解析目标模板，但最终应落到唯一的 `report_template.id = {report_type}_{language}` 记录；若数据库中出现重复组合，应直接报数据异常
+- `resolve_template` 以 `report_type + language` 解析目标模板，返回 `{“template_local_path”: “...”, “schema_local_path”: str | None}`
 - 若多个 `report_type` 共用同一模板资产，则这些 `report_type` 最终解析到同一组 `template_file_path` 与 `schema_file_path`
 - `resolve_template` 支持可选 `dest_dir` 参数，默认下载到当前工作目录下的 `templates/{report_type}/{language}/`
-- `report_maker` 不再维护额外的“报告类型 -> 模板类型”映射表
+- `report_maker` 不再维护额外的”报告类型 -> 模板类型”映射表
 
 ## 5. 提交前数据准备：字段来源与补齐规则
 
-本章只说明提交字段来源。默认不做人工确认，只有字段缺失、格式异常、或 `neolyst` / `validate_draft` 校验失败时再交互；`contact_person` 始终通过交互确认。
+本章只说明提交字段来源。默认不做人工确认，只有字段缺失、格式异常、或 `validate_report` 校验失败时再交互；`contact_person` 始终通过交互确认。
 
 `report_maker` 需要把机器处理结果映射成 `neolyst` draft 输入：
 
-- 保存 draft 的最小字段：`title`、`report_type`、`report_language`、`analysts`、`report_file`、`pdf_file`
-- 提交前补齐字段：`contact_person`、`investment_thesis`、`coverage_id`、`ticker`、`rating`、`target_price`、`region_code`、`sector_id`、`model_file`
+- 保存元数据的最小字段：`title`、`report_type`、`analysts`
+- 提交前必须补齐：`report_language`、`contact_person`、`investment_thesis`、`coverage_id`、`ticker`、`rating`、`target_price`、`region_code`、`sector_id`
+- 文件上传：`report_file`、`pdf_file` 通过 `upload_report_files` 上传；`model_file` 通过 `upload_model_file` 上传（公司类报告）
 
 ### 5.1 报告要素
 
@@ -113,13 +114,11 @@
 
 ## 6. 保存 draft：生成结果入库并在 neolyst 查看
 
-`report_maker` 不再等待所有字段完全正确后才把结果写入 Neolyst。机器处理结果通过 `save_draft_report` 直接保存为 draft，人工可以直接在 Neolyst 中查看该版本、核对内容，并决定是否继续提交。
+`report_maker` 不再等待所有字段完全正确后才把结果写入 Neolyst。保存分三步完成：
 
-文件字段映射如下：
-
-- draft 使用最终生成的 Word 文件路径作为 `report_file`
-- draft 使用最终生成的 PDF 文件路径作为 `pdf_file`
-- `model_file` 仅在公司类报告提交时提供
+1. `save_report` — 保存元数据，返回 `report_id`。文件字段（`report_file`、`pdf_file`、`model_file`）会被自动剥离，不影响 RPC 调用
+2. `upload_report_files` — 上传 Word + PDF 文件，回写路径。须在 `save_report` 之后调用，report 必须处于 draft 或 rejected 状态
+3. `upload_model_file` — 上传 Model 文件，回写路径（公司类报告）
 
 首次保存后，Neolyst 中已经存在该 `report_id` 下可查看的第一个 draft 版本。后续如需补字段、重新保存、重新校验或重新提交，都围绕同一个 `report_id` 进行。
 
@@ -127,8 +126,8 @@
 
 草稿保存后，不自动提交，用户可以上neolyst查看报告的生成情况。
 
-用户明确发出提交报告的指令后，首先要调用 neolyst skill 的 `validate_draft(report_id)` 执行提交前校验。只需要准备 `report_id`，实际校验版本由 `report.current_version_no` 决定。
-校验失败时，`validate_draft` 返回完整错误；根据错误提示，与用户交互，补字段、修正数据、重新提交检验。
+用户明确发出提交报告的指令后，首先要调用 neolyst skill 的 `validate_report(client, report_id)` 执行提交前校验。只需要准备 `report_id`，实际校验版本由 `report.current_version_no` 决定。
+校验失败时，`validate_report` 返回完整错误；根据错误提示，与用户交互，补字段、修正数据、重新提交检验。
 对于公司类报告，进入提交前还需要先能确定有效的 `coverage_id`；若 `coverage` 未命中或数据无效，要通过对话创建新的coverage。
 
-校验通过后调用 neolyst skill 的 `submit_report(report_id)` 将当前版本提交为 `submitted`。返回值中的 `version_no` 为实际提交版本。
+校验通过后调用 neolyst skill 的 `submit_report(client, report_id)` 将当前版本提交为 `submitted`。返回值中的 `status` 为 `"submitted"`。
