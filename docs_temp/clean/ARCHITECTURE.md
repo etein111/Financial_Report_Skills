@@ -5,7 +5,6 @@
 
 ## 1. 系统总览
 
-- Next.js 是唯一应用入口。
 ### neolyst-db(Superbase)
 
 - Supabase Auth 承担认证、数据访问与数据权限兜底。
