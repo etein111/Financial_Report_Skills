@@ -2,7 +2,7 @@
 
 ## 1. resolve_analyst_by_email
 
-按邮箱查询并返回标准化的 analyst 记录。
+按邮箱查询 analyst 记录（直接查表，非 RPC）。
 
 ```python
 from skills.neolyst.scripts import analyst
@@ -12,8 +12,64 @@ record = analyst.resolve_analyst_by_email(client, "alice@neolyst.com")
 # 找不到或已停用：抛出 ValueError（含具体原因）
 ```
 
-- 邮箱大小写不敏感，内部统一 lowercase
+- Python 侧做 `strip().lower()` 标准化
 - `is_active=False` 的分析师抛出 `ValueError: 分析师已停用：{email}`
+
+## 1a. search_analyst_by_name
+
+按姓名模糊查询活跃分析师，返回精简字段（直接查表）。
+
+```python
+from skills.neolyst.scripts import analyst
+
+results = analyst.search_analyst_by_name(client, "Alice")
+# 返回：[{"email": "alice@neolyst.com", "english_name": "Alice Chen", "chinese_name": "陈小明"}, ...]
+# 无匹配：返回 []
+```
+
+- 同时匹配 `english_name` 和 `chinese_name`（ilike 模糊匹配）
+- 只返回 `is_active=True` 的分析师
+- 返回字段：`email`、`english_name`、`chinese_name`
+- `name` 中的 `%` 和 `_` 在 Python 侧 escape，防止通配符注入
+- 受 `dict_select` RLS 约束，所有认证用户可调用
+
+## 1b. upsert_analyst
+
+以 email 为键创建或更新分析师记录（需 admin 角色）。
+
+```python
+from skills.neolyst.scripts import analyst
+
+record = analyst.upsert_analyst(
+    client,
+    email="alice@neolyst.com",
+    english_name="Alice Chen",
+    chinese_name="陈小明",
+    suffix="CFA",
+    sfc="S12345",
+    region_code="CN",
+)
+# 返回：dict，完整 analyst 记录（含 email, english_name, chinese_name, suffix, sfc, region_code, is_active, created_at, updated_at）
+```
+
+- email 自动做 `strip().lower()` 标准化
+- 已存在时更新，不存在时创建
+- 受 `dict_write` RLS 约束，仅 admin 角色可执行
+
+## 1c. set_analyst_active
+
+更新分析师的在职状态（需 admin 角色）。
+
+```python
+from skills.neolyst.scripts import analyst
+
+record = analyst.set_analyst_active(client, "alice@neolyst.com", is_active=False)
+# 返回：dict，更新后的完整 analyst 记录
+# 邮箱不存在：抛出 ValueError（"找不到分析师：{email}"）
+```
+
+- email 自动做 `strip().lower()` 标准化
+- 受 `dict_write` RLS 约束，仅 admin 角色可执行
 
 ## 2. resolve_template
 
@@ -113,9 +169,9 @@ coverage_id = coverage.create_coverage(
 保存或更新报告元数据。不操作文件、不生成版本号。
 
 ```python
-from skills.neolyst.scripts import save_report
+from skills.neolyst.scripts.report import save_report
 
-result = save_report.save_report(client, {
+result = save_report(client, {
     "report_id": None,          # 首次为 None；后续传已有 report_id
     "report_type": "company",
     "title": "Vertiv: AI demand drives earnings growth",
@@ -183,7 +239,7 @@ result = upload_files.upload_model_file(
 调用 DB 侧 `validate_report` RPC，校验报告是否满足提交条件。全量收集所有错误后一次性返回。
 
 ```python
-from skills.neolyst.scripts.validators import validate_report
+from skills.neolyst.scripts.report import validate_report
 
 result = validate_report(client, report_id="uuid")
 # 通过：返回 {"report_id": "uuid"}
@@ -206,9 +262,9 @@ result = validate_report(client, report_id="uuid")
 将 draft/rejected 报告提交为 `submitted`。
 
 ```python
-from skills.neolyst.scripts import submit_report
+from skills.neolyst.scripts.report import submit_report
 
-result = submit_report.submit_report(client, report_id="uuid")
+result = submit_report(client, report_id="uuid")
 # 返回：{"report_id": "uuid", "status": "submitted"}
 # RPC 内部调用 validate_report 做字段守门，字段不完整时抛出 ValueError
 # 如需提前获取全量错误展示，先显式调用 validate_report(client, report_id="uuid")
@@ -241,6 +297,52 @@ rows = coverage.list_coverage_history(
 # coverage 找不到：抛出 ValueError
 # coverage 找到但没有已发布历史：返回 []
 ```
+
+## 11. retract_report
+
+将 submitted/rejected 报告撤回为 draft。
+
+```python
+from skills.neolyst.scripts.report import retract_report
+
+result = retract_report(client, report_id="uuid")
+# 返回：{"report_id": str, "status": "draft"}
+# 报告不存在或非 submitted/rejected 状态：抛出 ValueError
+```
+
+- 撤回后报告回到 draft 状态，可重新编辑和提交
+- `report_status_log` 由数据库触发器自动记录
+
+## 12. publish_report
+
+将 submitted 报告发布为 published。
+
+```python
+from skills.neolyst.scripts.report import publish_report
+
+result = publish_report(client, report_id)
+# 返回：{"report_id": str, "status": "published"}
+# 报告不存在或非 submitted 状态：抛出 ValueError
+```
+
+- 自动记录 `published_by`（当前用户）和 `published_at`（当前时间）
+- 仅 SA 或 admin 角色可执行
+
+## 13. reject_report
+
+将 submitted 报告退回为 rejected。
+
+```python
+from skills.neolyst.scripts.report import reject_report
+
+result = reject_report(client, report_id, reason="数据不完整，请补充")
+# 返回：{"report_id": str, "status": "rejected"}
+# 退回原因为空：抛出 ValueError
+# 报告不存在或非 submitted 状态：抛出 ValueError
+```
+
+- `reason`：退回原因，必填
+- 仅 SA 或 admin 角色可执行
 
 ## 错误处理策略
 
@@ -281,3 +383,62 @@ rows = coverage.list_coverage_history(
 报错内容："No valid session and no credentials" 或 "Authentication failed"
 
 → 向用户索取邮箱和密码，调用 `get_client(email=..., password=...)` 重新认证。不要尝试从其他来源猜测凭据。
+
+## 字典表直接操作
+
+`region`、`sector`、`rating`、`report_type` 四张字典表直接用 `client.table()` 读写，不封装专用接口。
+
+| 表 | 主键 | 用途 |
+|---|------|------|
+| `region` | `code` (text) | 区域/市场（CN、HK、JP 等） |
+| `sector` | `id` (uuid) | 行业分类（二级树，level 1/2） |
+| `rating` | `code` (text) | 投资评级（OUTPERFORM、NEUTRAL 等） |
+| `report_type` | `report_type` (text) | 报告类型（company、macro 等） |
+
+权限：`dict_select`（所有认证用户可读），`dict_write`（仅 admin 可写）。
+
+**只有这 4 张表允许直接读写。** 其他表（`analyst`、`report`、`coverage`、`coverage_analyst`、`report_template` 等）走专用接口或 RPC。
+
+### 查询示例
+
+```python
+# 查全部活跃 region
+client.table("region").select("code,name_en,name_cn").eq("is_active", True).execute()
+
+# 按 code 查单个
+client.table("region").select("*").eq("code", "CN").execute()
+
+# 按名称模糊搜索 region
+client.table("region").select("code,name_en,name_cn").or_("name_en.ilike.%Hong%,name_cn.ilike.%香港%").execute()
+
+# 查 level 1 行业
+client.table("sector").select("id,name_en,name_cn").eq("level", 1).eq("is_active", True).execute()
+
+# 查某行业的 level 2 子行业
+client.table("sector").select("id,name_en,name_cn,wind_name").eq("parent_id", parent_uuid).eq("is_active", True).execute()
+
+# 查全部 rating（按 rank 排序）
+client.table("rating").select("code,name,rank").order("rank").execute()
+
+# 查活跃 report_type（按 sort 排序）
+client.table("report_type").select("report_type,name,sort").eq("is_active", True).order("sort").execute()
+```
+
+### 写入示例（需 admin 角色）
+
+```python
+# 新增/更新 region
+client.table("region").upsert(
+    {"code": "SG", "name_en": "Singapore", "name_cn": "新加坡", "is_active": True},
+    on_conflict="code",
+).execute()
+
+# 停用 region
+client.table("region").update({"is_active": False}).eq("code", "SG").execute()
+
+# 新增/更新 rating
+client.table("rating").upsert(
+    {"code": "OUTPERFORM", "name": "优于大市", "rank": 1},
+    on_conflict="code",
+).execute()
+```

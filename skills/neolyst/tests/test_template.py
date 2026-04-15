@@ -125,12 +125,12 @@ class TestResolveTemplate:
             "template_file_path": "",
         }).execute()
         try:
-            with pytest.raises(ValueError, match="not published"):
+            with pytest.raises(ValueError, match="未发布"):
                 template.resolve_template(neolyst_client, f"empty_{_SUFFIX}", "en")
         finally:
             neolyst_client.table("report_template").delete().eq("id", empty_id).execute()
 
     def test_resolve_nonexistent_raises(self, neolyst_client):
         from skills.neolyst.scripts import template
-        with pytest.raises(ValueError, match="not found"):
+        with pytest.raises(ValueError, match="模板不存在"):
             template.resolve_template(neolyst_client, f"ghost_{_SUFFIX}", "en")

@@ -1,6 +1,6 @@
 ---
 name: neolyst
-description: 当用户提到“neolyst"、"查询分析师"、"上传模板"、"发布模板"、"创建 coverage"、"查询 coverage"、"保存 draft"、"提交报告"、"校验报告"、"查询历史报告"，或任何需要读写 Neolyst 数据库的操作时，使用此 skill。
+description: 当用户提到”neolyst”、”查询分析师”、”上传模板”、”发布模板”、”创建 coverage”、”查询 coverage”、”保存 draft”、”提交报告”、”校验报告”、”查询历史报告”、”发布报告”、”退回报告”、”reject”，或任何需要读写 Neolyst 数据库的操作时，使用此 skill。
 ---
 
 # neolyst
@@ -12,7 +12,10 @@ Neolyst Supabase 数据访问层，实现位置：`skills/neolyst/scripts/`。�
 
 | # | 接口 | 模块 | 说明 |
 |---|------|------|------|
-| 1 | `resolve_analyst_by_email(client, email)` | `analyst` | 按邮箱查询标准化 analyst 记录 |
+| 1 | `resolve_analyst_by_email(client, email)` | `analyst` | 按邮箱精确查询 analyst 记录（直接查表） |
+| 1a | `search_analyst_by_name(client, name)` | `analyst` | 按姓名模糊查询活跃分析师，返回精简字段 |
+| 1b | `upsert_analyst(client, email, english_name, ...)` | `analyst` | 以 email 为键创建或更新分析师（需 admin） |
+| 1c | `set_analyst_active(client, email, is_active)` | `analyst` | 更新分析师在职状态（需 admin） |
 | 2 | `resolve_template(client, report_type, language, dest_dir=".")` | `template` | 下载模板 + schema 到本地路径 |
 | 3 | `upsert_template(client, report_type, language, template_local_path, schema_local_path=None)` | `template` | 上传模板文件并 upsert `report_template` 记录 |
 | 4 | `reuse_template(client, report_type, language, same_as_report_type)` | `template` | 静态复制另一个 report_type 的模板路径 |
@@ -22,10 +25,17 @@ Neolyst Supabase 数据访问层，实现位置：`skills/neolyst/scripts/`。�
 | 8 | `upload_report_files(client, report_id, report_file, pdf_file)` | `upload_files` | 上传 Word+PDF，回写路径 |
 | 9 | `upload_model_file(client, report_id, model_file)` | `upload_files` | 上传 Model，回写路径 |
 | 10 | `validate_report(client, report_id)` | `validators` | 调用 DB 侧 RPC 校验报告是否满足提交条件，全量收集错误 |
-| 11 | `submit_report(client, report_id)` | `submit_report` | 将 draft/rejected 报告提交为 submitted |
-| 12 | `list_coverage_history(client, ticker, first_analyst_email)` | `coverage` | 返回 coverage 下已发布的历史报告 |
+| 11 | `submit_report(client, report_id)` | `report` | 将 draft/rejected 报告提交为 submitted |
+| 12 | `retract_report(client, report_id)` | `report` | 将 submitted/rejected 报告撤回为 draft |
+| 13 | `list_coverage_history(client, ticker, first_analyst_email)` | `coverage` | 返回 coverage 下已发布的历史报告 |
+| 14 | `publish_report(client, report_id)` | `report` | 将 submitted 报告发布为 published |
+| 15 | `reject_report(client, report_id, reason)` | `report` | 将 submitted 报告退回为 rejected |
 
 完整签名、参数、返回值和代码示例见 `references/interfaces.md`。
+
+## 字典表
+
+`region`、`sector`、`rating`、`report_type` 直接用 `client.table()` 读写。其他表禁止直接写入，走专用接口或 RPC。详情和示例见 `references/interfaces.md`「字典表直接操作」。
 
 ## 认证
 
@@ -40,10 +50,11 @@ Neolyst Supabase 数据访问层，实现位置：`skills/neolyst/scripts/`。�
 - `create_coverage`：仅在 `resolve_coverage` 未命中且用户确认"Coverage 已完成审批"后调用
 - `submit_report`：RPC 内部已调用 `validate_report` 做字段守门；如需提前获取全量错误展示，先显式调用 `validate_report`
 - `reuse_template`：静态路径复制；主模板重新上传后需重新执行才能同步
+- `publish_report` / `reject_report`：SA 角色操作，报告必须处于 submitted 状态
 - `report_type` 取值和分析师列表约束见 README「业务常量」
 - 接口报错处理见 `references/interfaces.md`「错误处理策略」
 
 ## 参考文件
 
-- **`references/interfaces.md`** — 全部 12 个接口的完整签名、参数、返回值和代码示例
+- **`references/interfaces.md`** — 所有接口的完整签名、参数、返回值和代码示例
 - **`references/authentication.md`** — 认证流程、配置文件、凭据管理、首次使用、测试连接约束
