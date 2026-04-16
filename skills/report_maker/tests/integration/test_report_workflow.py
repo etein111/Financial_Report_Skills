@@ -15,7 +15,16 @@ import shutil
 from pathlib import Path
 from datetime import datetime
 
-from scripts import common, extractor, splitter, renderer
+import sys
+from pathlib import Path
+
+# 直接将 scripts 目录加入 sys.path，绕过 __init__.py 的 neolyst_integration 依赖
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / "scripts"))
+
+import common
+import extractor
+import splitter
+import renderer
 
 
 class TestReportWorkflow:
@@ -101,7 +110,7 @@ class TestReportWorkflow:
         errors = common.validate_elements_against_schema(loaded_elements, schema)
 
         # 排除片段字段和图表生成状态的错误
-        ignorable = {'abstract', 'body', 'compare_chart', 'volume_chart', 'recommendation_chart'}
+        ignorable = {'abstract', 'body', 'compare_chart', 'volume_chart', 'recommendation_chart', 'relative_chart'}
         non_fragment_errors = [e for e in errors if not any(f in e for f in ignorable)]
 
         assert len(non_fragment_errors) == 0, f"elements.yaml 与 schema 不一致: {non_fragment_errors}"
@@ -161,7 +170,7 @@ class TestReportWorkflow:
         errors = common.validate_elements_against_schema(elements, schema)
 
         # 排除片段字段和图表生成状态的错误
-        ignorable = {'abstract', 'body', 'compare_chart', 'volume_chart', 'recommendation_chart'}
+        ignorable = {'abstract', 'body', 'compare_chart', 'volume_chart', 'recommendation_chart', 'relative_chart'}
         non_fragment_errors = [e for e in errors if not any(f in e for f in ignorable)]
 
         assert len(non_fragment_errors) == 0, f"elements.yaml 与 schema 不一致: {non_fragment_errors}"

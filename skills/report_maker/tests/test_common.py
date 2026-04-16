@@ -36,7 +36,7 @@ rating: "OUTPERFORM"
 """
         with tempfile.TemporaryDirectory() as tmpdir:
             file_path = Path(tmpdir) / "test.yaml"
-            file_path.write_text(content)
+            file_path.write_text(content, encoding='utf-8')
 
             result = load_yaml(file_path)
 

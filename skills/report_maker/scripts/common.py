@@ -172,7 +172,7 @@ def load_yaml(path: Union[str, Path]) -> Dict[str, Any]:
     """
     path = Path(path)
     try:
-        return yaml.safe_load(path.read_text())
+        return yaml.safe_load(path.read_text(encoding='utf-8'))
     except FileNotFoundError:
         return {}
 
@@ -187,7 +187,7 @@ def save_yaml(path: Union[str, Path], data: Dict[str, Any], sort_keys: bool = Fa
     """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(yaml.dump(data, allow_unicode=True, sort_keys=sort_keys))
+    path.write_text(yaml.dump(data, allow_unicode=True, sort_keys=sort_keys), encoding='utf-8')
 
 
 # ==================== 路由工具函数 ====================
