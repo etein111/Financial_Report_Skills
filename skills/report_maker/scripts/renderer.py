@@ -239,46 +239,43 @@ def render_report(
                     break
             doc.save(output_path)
 
-        # 8. 处理 ENGLISH_SUMMARY_MARKER
+        # 8. 处理 ENGLISH_SUMMARY_MARKER + 图表插入（合并为单个 Document 会话）
+        es_margins = None
+        es_inserted = False
+        need_save = False
+
+        doc = Document(output_path)
+
         if english_summary_path and Path(english_summary_path).exists() and Path(english_summary_path).stat().st_size > 0:
-            doc = Document(output_path)
             english_summary_doc = Document(english_summary_path)
 
-            es_margins = _get_template_english_summary_margins(str(fixed_template_path))
+            es_margins = _get_template_english_summary_margins(template_path)
             if es_margins:
                 print(f"  模板 ENGLISH_SUMMARY 页边距: top={es_margins.get('top')}, bottom={es_margins.get('bottom')}, left={es_margins.get('left')}")
 
             es_inserted = insert_abstract_to_cell(doc, english_summary_doc, ENGLISH_SUMMARY_MARKER)
             if es_inserted:
                 print(f"  已在 ENGLISH_SUMMARY_MARKER 位置插入 english_summary")
+                need_save = True
             else:
                 es_inserted = _insert_abstract_at_paragraph(doc, english_summary_doc, ENGLISH_SUMMARY_MARKER)
                 if es_inserted:
                     print(f"  已在段落中插入 english_summary")
+                    need_save = True
                 else:
                     print(f"  ⚠️ 未找到 ENGLISH_SUMMARY_MARKER，english_summary 未插入")
-
-            doc.save(output_path)
-
-            if es_margins and es_inserted:
-                _apply_english_summary_margins(output_path, es_margins)
         else:
-            doc = Document(output_path)
             body_elem = doc.element.body
-            marker_removed = False
             for elem in list(body_elem):
                 text = common.get_element_text(elem)
                 if ENGLISH_SUMMARY_MARKER in text:
                     body_elem.remove(elem)
-                    marker_removed = True
+                    need_save = True
                     print(f"  已删除 ENGLISH_SUMMARY_MARKER（无 english_summary 文件）")
                     break
-            if marker_removed:
-                doc.save(output_path)
 
-        # 8.5 插入 relative_chart
+        # 8.5 插入 relative_chart（同一 Document 会话）
         if relative_chart_generated:
-            doc = Document(output_path)
             relative_chart_path = Path(output_path).parent / "relative_chart.png"
             if relative_chart_path.exists():
                 chart_inserted = _insert_image_to_placeholder(
@@ -286,13 +283,12 @@ def render_report(
                 )
                 if chart_inserted:
                     print(f"  ✅ relative_chart 已插入到文档")
+                    need_save = True
                 else:
                     print(f"  ⚠️ relative_chart 插入失败")
-                doc.save(output_path)
 
-        # 8.6 插入 recommendation_chart
+        # 8.6 插入 recommendation_chart（同一 Document 会话）
         if recommendation_chart_generated:
-            doc = Document(output_path)
             recommendation_chart_path = Path(output_path).parent / "recommendation_chart.png"
             if recommendation_chart_path.exists():
                 chart_inserted = _insert_image_to_placeholder(
@@ -300,9 +296,16 @@ def render_report(
                 )
                 if chart_inserted:
                     print(f"  ✅ recommendation_chart 已插入到文档")
+                    need_save = True
                 else:
                     print(f"  ⚠️ recommendation_chart 插入失败")
-                doc.save(output_path)
+
+        if need_save:
+            doc.save(output_path)
+
+        # 8.7 应用 english_summary 页边距（从磁盘读取，需先保存）
+        if es_margins and es_inserted:
+            _apply_english_summary_margins(output_path, es_margins)
 
         # 9. 恢复图表 XML 中被转义的 Jinja2 语法
         if escaped_chart_files:

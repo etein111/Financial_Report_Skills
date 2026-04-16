@@ -4,6 +4,7 @@
 """
 
 from typing import Dict, Any
+from lxml import etree
 
 try:
     from docx import Document
@@ -158,58 +159,50 @@ def _apply_english_summary_margins(
     if not margins:
         return False
 
-    import zipfile
-    from lxml import etree
-
     try:
-        files = common.read_docx_zip(docx_path)
+        result = [False]
 
-        if 'word/document.xml' not in files:
-            return False
+        def _apply_margins(tree):
+            body = tree.find(f'{W}body')
+            if body is None:
+                return
 
-        doc_tree = etree.fromstring(files['word/document.xml'])
-        body = doc_tree.find(f'{W}body')
-        if body is None:
-            return False
+            all_elements = list(body)
 
-        all_elements = list(body)
+            es_start_idx = None
+            for idx, elem in enumerate(all_elements):
+                if elem.tag == f'{W}p':
+                    text = common.get_element_text(elem).strip()
+                    if text == 'APPENDIX 1':
+                        es_start_idx = idx
+                        break
 
-        es_start_idx = None
-        for idx, elem in enumerate(all_elements):
-            if elem.tag == f'{W}p':
-                text = common.get_element_text(elem).strip()
-                if text == 'APPENDIX 1':
-                    es_start_idx = idx
-                    break
+            if es_start_idx is None or es_start_idx == 0:
+                return
 
-        if es_start_idx is None or es_start_idx == 0:
-            return False
+            # 在 es_start_idx 之前找最近的 sectPr
+            for i in range(es_start_idx - 1, -1, -1):
+                elem = all_elements[i]
+                if elem.tag == f'{W}p':
+                    pPr = elem.find(f'{W}pPr')
+                    if pPr is not None:
+                        sectPr = pPr.find(f'{W}sectPr')
+                        if sectPr is not None:
+                            pgMar = sectPr.find(f'{W}pgMar')
+                            if pgMar is None:
+                                pgMar = etree.SubElement(sectPr, f'{W}pgMar')
 
-        # 在 es_start_idx 之前找最近的 sectPr
-        for i in range(es_start_idx - 1, -1, -1):
-            elem = all_elements[i]
-            if elem.tag == f'{W}p':
-                pPr = elem.find(f'{W}pPr')
-                if pPr is not None:
-                    sectPr = pPr.find(f'{W}sectPr')
-                    if sectPr is not None:
-                        pgMar = sectPr.find(f'{W}pgMar')
-                        if pgMar is None:
-                            pgMar = etree.SubElement(sectPr, f'{W}pgMar')
+                            for attr, val in margins.items():
+                                pgMar.set(f'{W}{attr}', val)
 
-                        for attr, val in margins.items():
-                            pgMar.set(f'{W}{attr}', val)
+                            result[0] = True
+                            return
 
-                        files['word/document.xml'] = etree.tostring(
-                            doc_tree, xml_declaration=True, encoding='UTF-8', standalone=True
-                        )
+        common.modify_docx_xml(docx_path, _apply_margins)
 
-                        common.write_docx_zip(docx_path, files)
-
-                        print(f"  已应用 english_summary 页边距")
-                        return True
-
-        return False
+        if result[0]:
+            print(f"  已应用 english_summary 页边距")
+        return result[0]
 
     except Exception as e:
         print(f"  应用 english_summary 页边距失败: {e}")

@@ -101,94 +101,91 @@ def _restore_all_sectPrs(docx_path: str, template_sectPrs: Dict[str, Any]) -> bo
         是否成功
     """
     try:
-        files = common.read_docx_zip(docx_path)
+        result = [False]
 
-        if 'word/document.xml' not in files:
-            return False
+        def _restore(tree):
+            body = tree.find(f'{W}body')
+            if body is None:
+                return
 
-        doc_tree = etree.fromstring(files['word/document.xml'])
-        body = doc_tree.find(f'{W}body')
-        if body is None:
-            return False
+            all_elements = list(body)
 
-        all_elements = list(body)
+            para_sectPrs = []
+            for idx, elem in enumerate(all_elements):
+                if elem.tag == f'{W}p':
+                    pPr = elem.find(f'{W}pPr')
+                    if pPr is not None:
+                        sectPr = pPr.find(f'{W}sectPr')
+                        if sectPr is not None:
+                            para_sectPrs.append((idx, elem, sectPr))
 
-        para_sectPrs = []
-        for idx, elem in enumerate(all_elements):
-            if elem.tag == f'{W}p':
-                pPr = elem.find(f'{W}pPr')
-                if pPr is not None:
-                    sectPr = pPr.find(f'{W}sectPr')
-                    if sectPr is not None:
-                        para_sectPrs.append((idx, elem, sectPr))
+            cover_sectPr = template_sectPrs.get('cover')
+            body_sectPr = template_sectPrs.get('body')
+            es_sectPr = template_sectPrs.get('english_summary')
+            appendix_sectPr = template_sectPrs.get('appendix')
 
-        cover_sectPr = template_sectPrs.get('cover')
-        body_sectPr = template_sectPrs.get('body')
-        es_sectPr = template_sectPrs.get('english_summary')
-        appendix_sectPr = template_sectPrs.get('appendix')
+            appendix1_idx = None
+            for idx, elem in enumerate(all_elements):
+                if elem.tag == f'{W}p':
+                    text = common.get_element_text(elem).strip()
+                    if text == 'APPENDIX 1':
+                        appendix1_idx = idx
+                        break
 
-        appendix1_idx = None
-        for idx, elem in enumerate(all_elements):
-            if elem.tag == f'{W}p':
-                text = common.get_element_text(elem).strip()
-                if text == 'APPENDIX 1':
-                    appendix1_idx = idx
-                    break
+            disclaimer_idx = None
+            for idx, elem in enumerate(all_elements):
+                if elem.tag == f'{W}tbl':
+                    text = common.get_element_text(elem)
+                    if '附录APPENDIX' in text or 'Table_disclaimer' in text:
+                        disclaimer_idx = idx
+                        break
 
-        disclaimer_idx = None
-        for idx, elem in enumerate(all_elements):
-            if elem.tag == f'{W}tbl':
-                text = common.get_element_text(elem)
-                if '附录APPENDIX' in text or 'Table_disclaimer' in text:
-                    disclaimer_idx = idx
-                    break
+            print(f"  关键位置: APPENDIX 1={appendix1_idx}, 法律附录={disclaimer_idx}")
 
-        print(f"  关键位置: APPENDIX 1={appendix1_idx}, 法律附录={disclaimer_idx}")
+            for idx, para, old_sectPr in para_sectPrs:
+                pPr = para.find(f'{W}pPr')
+                sect_type = old_sectPr.find(f'{W}type')
+                type_val = sect_type.get(f'{W}val') if sect_type is not None else 'nextPage'
 
-        for idx, para, old_sectPr in para_sectPrs:
-            pPr = para.find(f'{W}pPr')
-            sect_type = old_sectPr.find(f'{W}type')
-            type_val = sect_type.get(f'{W}val') if sect_type is not None else 'nextPage'
+                pPr.remove(old_sectPr)
 
-            pPr.remove(old_sectPr)
+                replacement = None
+                if type_val == 'continuous':
+                    replacement = cover_sectPr
+                    label = 'cover'
+                elif appendix1_idx is not None and idx < appendix1_idx:
+                    replacement = body_sectPr
+                    label = 'body'
+                elif disclaimer_idx is not None and idx < disclaimer_idx:
+                    replacement = es_sectPr
+                    label = 'english_summary'
+                else:
+                    label = 'dropped'
 
-            replacement = None
-            if type_val == 'continuous':
-                replacement = cover_sectPr
-                label = 'cover'
-            elif appendix1_idx is not None and idx < appendix1_idx:
-                replacement = body_sectPr
-                label = 'body'
-            elif disclaimer_idx is not None and idx < disclaimer_idx:
-                replacement = es_sectPr
-                label = 'english_summary'
-            else:
-                label = 'dropped'
+                if replacement is not None:
+                    pPr.append(deepcopy(replacement))
 
-            if replacement is not None:
-                pPr.append(deepcopy(replacement))
+                if type_val == 'continuous' or replacement is not None:
+                    source_sectPr = replacement if replacement is not None else old_sectPr
+                    pgMar = source_sectPr.find(f'{W}pgMar')
+                    left = pgMar.get(f'{W}left') if pgMar is not None else '?'
+                    print(f"  [{idx}] type={type_val} → {label} (left={left})")
 
-            if type_val == 'continuous' or replacement is not None:
-                pgMar = (replacement or old_sectPr).find(f'{W}pgMar')
-                left = pgMar.get(f'{W}left') if pgMar is not None else '?'
-                print(f"  [{idx}] type={type_val} → {label} (left={left})")
+            # 替换 body-level sectPr (appendix)
+            if appendix_sectPr is not None:
+                for elem in list(body):
+                    if elem.tag == f'{W}sectPr':
+                        body.remove(elem)
+                        break
+                body.append(deepcopy(appendix_sectPr))
 
-        # 替换 body-level sectPr (appendix)
-        if appendix_sectPr is not None:
-            for elem in list(body):
-                if elem.tag == f'{W}sectPr':
-                    body.remove(elem)
-                    break
-            body.append(deepcopy(appendix_sectPr))
+            result[0] = True
 
-        files['word/document.xml'] = etree.tostring(
-            doc_tree, xml_declaration=True, encoding='UTF-8', standalone=True
-        )
+        common.modify_docx_xml(docx_path, _restore)
 
-        common.write_docx_zip(docx_path, files)
-
-        print(f"  已恢复所有 sectPrs（按位置语义分配）")
-        return True
+        if result[0]:
+            print(f"  已恢复所有 sectPrs（按位置语义分配）")
+        return result[0]
 
     except Exception as e:
         print(f"  恢复 sectPrs 失败: {e}")
@@ -208,31 +205,26 @@ def _restore_final_sectPr(docx_path: str, template_sectPr) -> bool:
         是否成功
     """
     try:
-        files = common.read_docx_zip(docx_path)
+        result = [False]
 
-        if 'word/document.xml' not in files:
-            return False
+        def _restore(tree):
+            body = tree.find(f'{W}body')
+            if body is None:
+                return
 
-        doc_tree = etree.fromstring(files['word/document.xml'])
-        body = doc_tree.find(f'{W}body')
-        if body is None:
-            return False
+            for elem in list(body):
+                if elem.tag == f'{W}sectPr':
+                    body.remove(elem)
+                    break
 
-        for elem in list(body):
-            if elem.tag == f'{W}sectPr':
-                body.remove(elem)
-                break
+            body.append(deepcopy(template_sectPr))
+            result[0] = True
 
-        body.append(deepcopy(template_sectPr))
+        common.modify_docx_xml(docx_path, _restore)
 
-        files['word/document.xml'] = etree.tostring(
-            doc_tree, xml_declaration=True, encoding='UTF-8', standalone=True
-        )
-
-        common.write_docx_zip(docx_path, files)
-
-        print(f"  已恢复文档末尾 sectPr（来自模板）")
-        return True
+        if result[0]:
+            print(f"  已恢复文档末尾 sectPr（来自模板）")
+        return result[0]
 
     except Exception as e:
         print(f"  恢复 final sectPr 失败: {e}")
