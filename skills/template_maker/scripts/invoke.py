@@ -26,8 +26,8 @@ from document import find_abstract_by_elements, find_body_range_by_sections, fin
 from router import load_router, update_mapping, save_router, get_all_router_mappings
 import yaml
 
-from neolyst.connection import get_client
-from neolyst.template import upsert_template, reuse_template
+from skills.neolyst.scripts.connection import get_client
+from skills.neolyst.scripts.template import upsert_template, reuse_template
 
 
 DEFAULT_APPENDIX_SCOPE = "正文之后，报告末尾"

@@ -15,12 +15,12 @@ from typing import Dict, Any, Optional, List
 from pathlib import Path
 from supabase import Client
 
-from neolyst.connection import get_client
-from neolyst.template import resolve_template
-from neolyst.report import save_report, validate_report, submit_report
-from neolyst.coverage import resolve_coverage
-from neolyst.analyst import resolve_analyst_by_email
-from neolyst.upload_files import upload_report_files, upload_model_file
+from skills.neolyst.scripts.connection import get_client
+from skills.neolyst.scripts.template import resolve_template
+from skills.neolyst.scripts.report import save_report, validate_report, submit_report
+from skills.neolyst.scripts.coverage import resolve_coverage
+from skills.neolyst.scripts.analyst import resolve_analyst_by_email
+from skills.neolyst.scripts.upload_files import upload_report_files, upload_model_file
 
 
 # ==================== 模板解析 ====================
