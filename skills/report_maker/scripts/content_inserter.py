@@ -4,6 +4,7 @@
 """
 
 from typing import Dict, Any
+from lxml import etree
 
 try:
     from docx import Document

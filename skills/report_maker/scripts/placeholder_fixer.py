@@ -5,9 +5,6 @@ Word 有时会将 {{ a1_email }} 这样的连续文本拆分成多个 run，
 导致 Jinja2 无法正确识别和替换占位符。
 """
 
-import zipfile
-from lxml import etree
-
 import common
 W = common.W_NS
 
@@ -107,28 +104,17 @@ def _fix_split_placeholders_in_docx(docx_path: str, output_path: str = None) -> 
         output_path = docx_path
 
     try:
-        files = common.read_docx_zip(docx_path)
+        def _fix_placeholders(tree):
+            body = tree.find(f'{W}body')
+            if body is None:
+                return
+            for para in body.findall(f'.//{W}p'):
+                current_placeholder = None
+                collected_runs = []
+                for child in para:
+                    current_placeholder = fix_element(child, current_placeholder, collected_runs)
 
-        if 'word/document.xml' not in files:
-            return output_path
-
-        doc_tree = etree.fromstring(files['word/document.xml'])
-        body = doc_tree.find(f'{W}body')
-        if body is None:
-            return output_path
-
-        for para in body.findall(f'.//{W}p'):
-            current_placeholder = None
-            collected_runs = []
-
-            for child in para:
-                current_placeholder = fix_element(child, current_placeholder, collected_runs)
-
-        files['word/document.xml'] = etree.tostring(
-            doc_tree, xml_declaration=True, encoding='UTF-8', standalone=True
-        )
-
-        common.write_docx_zip(output_path, files)
+        common.modify_docx_xml(docx_path, _fix_placeholders, output_path=output_path)
 
     except Exception as e:
         print(f"  修复拆分占位符时出错: {e}")

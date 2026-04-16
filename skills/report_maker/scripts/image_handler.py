@@ -114,16 +114,11 @@ def _replace_in_nested_tables(doc, elem, placeholder, image_path, width_cm=None)
                         processed_runs.add(id(run_obj._element))
                         
                         run_obj.text = run_obj.text.replace(placeholder, '')
-                        run_obj.add_picture(image_path)
                         if width_cm:
                             from docx.shared import Cm
-                            for shape in run_obj._element.iter(qn('wp:inline')):
-                                extent = shape.find(qn('wp:extent'))
-                                if extent is not None:
-                                    cx = int(width_cm * 914400)
-                                    cy = int(width_cm * 914400 * 0.75)
-                                    extent.set('cx', str(cx))
-                                    extent.set('cy', str(cy))
+                            run_obj.add_picture(image_path, width=Cm(width_cm))
+                        else:
+                            run_obj.add_picture(image_path)
                         replaced = True
                         break
     
@@ -160,14 +155,11 @@ def _insert_image_to_placeholder(
                 for run in para.runs:
                     if placeholder in run.text:
                         run.text = run.text.replace(placeholder, '')
-                        run.add_picture(image_path)
                         if width_cm:
-                            last_picture = run._element.getparent().findall('.//{http://schemas.openxmlformats.org/drawingml/2006/picture}pic')
-                            if last_picture:
-                                size = last_picture[-1].find('.//{http://schemas.openxmlformats.org/drawingml/2006/main}ext')
-                                if size is not None:
-                                    size.set('{http://schemas.openxmlformats.org/drawingml/2006/main}cx', str(int(width_cm * 914400)))
-                                    size.set('{http://schemas.openxmlformats.org/drawingml/2006/main}cy', str(int(width_cm * 914400 * 0.75)))
+                            from docx.shared import Cm
+                            run.add_picture(image_path, width=Cm(width_cm))
+                        else:
+                            run.add_picture(image_path)
                         return True
 
         # 2. 在文档 body 中递归搜索所有嵌套表格

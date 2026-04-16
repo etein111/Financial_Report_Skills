@@ -9,6 +9,7 @@ from . import schema
 from . import validate
 from . import document
 from . import template
+from .invoke import publish_template, reuse_template_cmd
 
 __all__ = [
     'common',    # 共享工具函数和常量
@@ -17,4 +18,6 @@ __all__ = [
     'validate',  # 验证函数模块
     'document',  # 文档分析函数模块
     'template',  # 模板操作函数模块
+    'publish_template',      # 发布模板到 neolyst
+    'reuse_template_cmd',    # 复用 neolyst 模板
 ]

@@ -67,15 +67,7 @@ def extract_elements(
         提取的字段字典
     """
     # 初始化结果
-    elements = {}
-    for field_name in schema.keys():
-        if field_name not in ['abstract', 'body']:
-            elements[field_name] = ""
-
-    if 'abstract' in schema:
-        elements['abstract'] = common.FILE_ABSTRACT
-    if 'body' in schema:
-        elements['body'] = common.FILE_BODY
+    elements = common.init_elements_from_schema(schema)
 
     # 第一步：自动化提取
     if use_auto_extraction:

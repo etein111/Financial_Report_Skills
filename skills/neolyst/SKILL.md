@@ -105,6 +105,43 @@ RLS 可见范围：admin 全部；SA 可见 submitted / published / rejected；a
 
 查询示例、report_status_log 审计日志查询、报告文件下载，以及字典表操作，统一见 `references/direct-queries.md`。
 
+## 模板发布（template_maker 集成）
+
+`template_maker` 通过以下接口发布模板到 neolyst：
+
+### `upsert_template` — 发布主模板
+
+上传 Word 模板和 schema.yaml 到 neolyst，建立 `report_type + language` 的模板记录：
+
+```python
+template.upsert_template(
+    client,
+    report_type="company",
+    language="zh",
+    template_local_path="templates/company/template.docx",
+    schema_local_path="templates/company/schema.yaml"
+)
+```
+
+### `reuse_template` — 建立模板共享关系
+
+声明当前 `report_type` 复用另一个已发布的模板（不重复上传文件）：
+
+```python
+template.reuse_template(
+    client,
+    report_type="quantitative",
+    language="zh",
+    same_as_report_type="macro"
+)
+```
+
+**约束**：
+- 源模板必须已发布
+- language 必须一致
+- report_type 不能复用自己
+- 共享关系为静态复制；主模板重新上传后需重新执行
+
 ## 字典表
 
 `region`、`sector`、`rating`、`report_type` 直接用 `client.table()` 读写。其他表禁止直接写入，走专用接口或 RPC。详情和示例见 `references/direct-queries.md`「字典表」。

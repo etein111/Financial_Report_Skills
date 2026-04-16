@@ -85,14 +85,7 @@ def _apply_font_constraints(docx_path: str, chinese_font: str = '楷体', latin_
     if not DOCX_AVAILABLE:
         return False
 
-    try:
-        files = common.read_docx_zip(docx_path)
-
-        if 'word/document.xml' not in files:
-            return False
-
-        doc_tree = etree.fromstring(files['word/document.xml'])
-
+    def _apply_fonts(doc_tree):
         def process_element(elem):
             if elem.tag == f'{W}r':
                 # Run 元素
@@ -138,14 +131,9 @@ def _apply_font_constraints(docx_path: str, chinese_font: str = '楷体', latin_
             for elem in body:
                 process_element(elem)
 
-        files['word/document.xml'] = etree.tostring(
-            doc_tree, xml_declaration=True, encoding='UTF-8', standalone=True
-        )
-
-        common.write_docx_zip(docx_path, files)
-
+    try:
+        common.modify_docx_xml(docx_path, _apply_fonts)
         return True
-
     except Exception as e:
         print(f"  应用字体约束失败: {e}")
         return False
@@ -169,13 +157,9 @@ def expand_analyst_certification(docx_path: str, elements: Dict[str, Any]) -> in
 
     certification_keywords = ['分析师', 'analyst', '认证', 'certification']
 
-    try:
-        files = common.read_docx_zip(docx_path)
+    result = [0]
 
-        if 'word/document.xml' not in files:
-            return 0
-
-        doc_tree = etree.fromstring(files['word/document.xml'])
+    def _expand_fn(doc_tree):
         body = doc_tree.find(f'{W}body')
 
         analyst_count = 0
@@ -184,7 +168,7 @@ def expand_analyst_certification(docx_path: str, elements: Dict[str, Any]) -> in
                 analyst_count += 1
 
         if analyst_count <= 1:
-            return 0  # 只有一个分析师，不需要扩展
+            return  # 只有一个分析师，不需要扩展
 
         certification_paras = []
         for p in body.findall(f'{W}p'):
@@ -194,25 +178,18 @@ def expand_analyst_certification(docx_path: str, elements: Dict[str, Any]) -> in
                 certification_paras.append(p)
 
         if not certification_paras:
-            return 0
+            return
 
         # 复制声明段落（除了第一个）
-        copied_count = 0
         for _ in range(analyst_count - 1):
             for para in certification_paras:
                 new_para = deepcopy(para)
                 body.append(new_para)
-                copied_count += 1
+                result[0] += 1
 
-        if copied_count > 0:
-            files['word/document.xml'] = etree.tostring(
-                doc_tree, xml_declaration=True, encoding='UTF-8', standalone=True
-            )
-
-            common.write_docx_zip(docx_path, files)
-
-        return copied_count
-
+    try:
+        common.modify_docx_xml(docx_path, _expand_fn)
+        return result[0]
     except Exception as e:
         print(f"  扩展分析师认证声明失败: {e}")
         return 0

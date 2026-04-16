@@ -87,6 +87,32 @@ def write_docx_zip(path: str, files: Dict[str, bytes]) -> None:
         raise
 
 
+def modify_docx_xml(path: str, modifier_fn, standalone=True, output_path: str = None) -> None:
+    """读取 docx 的 document.xml，执行修改函数，写回 docx。
+
+    将 read → parse → modify → serialize → write 模式封装为单次调用，
+    避免在 6+ 个模块中重复相同的样板代码。
+
+    Args:
+        path: docx 文件路径
+        modifier_fn: 接收 lxml etree.Element（document.xml 根节点）的回调函数
+        standalone: XML declaration 的 standalone 属性（默认 True）
+        output_path: 输出路径（默认覆盖原文件）
+    """
+    from lxml import etree
+
+    files = read_docx_zip(path)
+    if 'word/document.xml' not in files:
+        return
+
+    tree = etree.fromstring(files['word/document.xml'])
+    modifier_fn(tree)
+    files['word/document.xml'] = etree.tostring(
+        tree, xml_declaration=True, encoding='UTF-8', standalone=standalone
+    )
+    write_docx_zip(output_path or path, files)
+
+
 def get_element_text(elem) -> str:
     """提取 XML 元素中所有 w:t 子元素的文本内容。
 
@@ -152,6 +178,9 @@ def save_yaml(path: Union[str, Path], data: Dict[str, Any], sort_keys: bool = Fa
 
 def get_template_name(report_type: str, router_path: Union[str, Path] = None) -> Optional[str]:
     """根据报告类型获取模板名。
+
+    注意：此函数已被 neolyst_integration.resolve_template_for_report 替代，
+    保留仅为向后兼容。
 
     Args:
         report_type: 报告类型（如 "company", "sector"）
@@ -321,29 +350,25 @@ def get_report_output_path(
 
 # ==================== Schema 工具函数 ====================
 
-def get_all_field_names(schema: Dict[str, Any]) -> List[str]:
-    """从 schema 中获取所有字段名。
+
+def init_elements_from_schema(schema: Dict[str, Any]) -> Dict[str, Any]:
+    """从 schema 初始化 elements 字典，fragment 字段设为文件引用。
 
     Args:
         schema: schema.yaml 内容
 
     Returns:
-        字段名列表（按顺序）
+        初始化后的 elements 字典
     """
-    return list(schema.keys())
-
-
-def filter_fragment_fields(fields: List[str]) -> List[str]:
-    """过滤出非 fragment 类型的字段。
-
-    Args:
-        fields: 所有字段名列表
-
-    Returns:
-        非 fragment 类型的字段名列表
-    """
-    fragment_fields = {'abstract', 'body', 'appendix'}
-    return [f for f in fields if f not in fragment_fields]
+    elements = {}
+    for field_name in schema.keys():
+        if field_name not in ['abstract', 'body']:
+            elements[field_name] = ""
+    if 'abstract' in schema:
+        elements['abstract'] = FILE_ABSTRACT
+    if 'body' in schema:
+        elements['body'] = FILE_BODY
+    return elements
 
 
 def ensure_all_fields(elements: Dict[str, Any], schema: Dict[str, Any]) -> Dict[str, Any]:
