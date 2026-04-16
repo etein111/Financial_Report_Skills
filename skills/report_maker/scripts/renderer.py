@@ -90,8 +90,6 @@ def render_report(
     body_path: str,
     output_path: str,
     english_summary_path: str = None,
-    header_footer_mappings: Dict[str, Dict[str, str]] = None,
-    neolyst_client=None,
 ) -> bool:
     """渲染报告，正确处理分析师字段、abstract、body 和 english_summary。
 
@@ -107,8 +105,6 @@ def render_report(
         body_path: 正文文件路径
         output_path: 输出文件路径
         english_summary_path: 英文摘要文件路径（可选）
-        header_footer_mappings: 已废弃参数，保留兼容性
-        neolyst_client: 已废弃参数，保留兼容性
 
     Returns:
         是否成功
@@ -174,7 +170,6 @@ def render_report(
                 output_path=str(recommendation_chart_path),
                 company_name=elements.get('company_en') or elements.get('company_cn', ''),
                 elements=elements,
-                neolyst_client=neolyst_client,
             )
             if recommendation_chart_generated:
                 print(f"  ✅ recommendation_chart 已生成")
@@ -263,7 +258,7 @@ def render_report(
             doc.save(output_path)
 
             if es_margins and es_inserted:
-                _apply_english_summary_margins(output_path, es_margins, header_footer_mappings)
+                _apply_english_summary_margins(output_path, es_margins)
         else:
             doc = Document(output_path)
             body_elem = doc.element.body

@@ -105,7 +105,6 @@ def _generate_recommendation_chart(
     output_path: str,
     company_name: str = None,
     elements: Dict[str, Any] = None,
-    neolyst_client=None
 ) -> bool:
     """生成评级推荐图表。
 
@@ -116,7 +115,6 @@ def _generate_recommendation_chart(
         output_path: 输出图片路径
         company_name: 公司名称
         elements: 要素字典（包含 rating, target_price, current_price 等）
-        neolyst_client: neolyst 客户端（用于获取数据）
 
     Returns:
         是否成功生成

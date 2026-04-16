@@ -37,7 +37,6 @@ def insert_body_at_marker_compose(
     marker: str,
     output_path: str,
     template_path: str = None,
-    header_footer_mappings: Dict[str, Dict[str, str]] = None,
 ) -> bool:
     """使用 docxcompose 三段式合并：在 marker 位置插入 body。
 
@@ -52,7 +51,6 @@ def insert_body_at_marker_compose(
         marker: 占位符标记
         output_path: 输出路径
         template_path: 原始模板路径（用于恢复文档末尾 sectPr）
-        header_footer_mappings: 已废弃参数，保留兼容性
 
     Returns:
         是否成功插入

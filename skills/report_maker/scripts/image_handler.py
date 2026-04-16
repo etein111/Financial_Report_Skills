@@ -80,57 +80,6 @@ def _restore_jinja_in_charts(docx_path: str, escaped_files: Dict[str, str]) -> N
         print(f"  恢复图表 Jinja2 语法时出错: {e}")
 
 
-def _replace_placeholder_in_element(doc, elem, placeholder, image_path, width_cm=None):
-    """搜索并替换元素中的占位符为图片。"""
-    from docx.oxml.ns import qn
-    
-    replaced = False
-    
-    # 只处理直接子元素，不递归处理嵌套表格
-    # 处理 run
-    for r_elem in elem.iter(qn('w:r')):
-        # 获取这个 run 的完整文本内容
-        texts = [t.text for t in r_elem.iter(qn('w:t')) if t.text]
-        combined = ''.join(texts)
-        
-        if placeholder in combined:
-            # 找到包含占位符的 run
-            # 通过 parent 找到 paragraph
-            p_elem = r_elem.getparent()
-            while p_elem is not None and p_elem.tag != qn('w:p'):
-                p_elem = p_elem.getparent()
-            
-            if p_elem is not None:
-                # 找到 paragraph，创建 Run 对象
-                from docx.text.paragraph import Paragraph
-                para_obj = Paragraph(p_elem, doc)
-                
-                # 找到对应的 Run 对象
-                for run_obj in para_obj.runs:
-                    run_texts = [t.text for t in run_obj._element.iter(qn('w:t')) if t.text]
-                    run_combined = ''.join(run_texts)
-                    if placeholder in run_combined:
-                        # 清除文本中的占位符
-                        run_obj.text = run_obj.text.replace(placeholder, '')
-                        # 添加图片
-                        run_obj.add_picture(image_path)
-                        if width_cm:
-                            from docx.shared import Cm
-                            # 设置图片宽度
-                            for shape in run_obj._element.iter(qn('wp:inline')):
-                                extent = shape.find(qn('wp:extent'))
-                                if extent is not None:
-                                    cx = int(width_cm * 914400)
-                                    cy = int(width_cm * 914400 * 0.75)
-                                    extent.set('cx', str(cx))
-                                    extent.set('cy', str(cy))
-                        replaced = True
-                        break
-            break
-    
-    return replaced
-
-
 def _replace_in_nested_tables(doc, elem, placeholder, image_path, width_cm=None):
     """处理嵌套表格中的占位符，直接遍历不递归。"""
     from docx.oxml.ns import qn

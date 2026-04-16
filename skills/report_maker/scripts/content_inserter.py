@@ -143,7 +143,6 @@ def _insert_abstract_at_paragraph(doc: Document, abstract_doc: Document, marker:
 def _apply_english_summary_margins(
     docx_path: str,
     margins: Dict[str, str],
-    header_footer_mappings: Dict[str, Dict[str, str]] = None
 ) -> bool:
     """应用英文摘要部分的页边距。
 
@@ -152,7 +151,6 @@ def _apply_english_summary_margins(
     Args:
         docx_path: 文档路径
         margins: 页边距字典
-        header_footer_mappings: 页眉页脚映射配置
 
     Returns:
         是否成功
