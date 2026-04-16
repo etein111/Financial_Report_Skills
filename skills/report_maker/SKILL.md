@@ -464,6 +464,7 @@ def render_report(
     body_path: str,               # 正文文件路径
     output_path: str,             # 输出文件路径
     english_summary_path: str = None,  # 英文摘要路径（可选）
+    neolyst_client=None,           # 已认证的 Supabase client（可选，用于获取历史推荐）
 ) -> bool:
 ```
 
