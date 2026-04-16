@@ -12,16 +12,98 @@
 - 依赖包: `supabase` Python SDK
 - Supabase 项目（参见 `01-supabase-data-requirements.md` 准备数据）
 
-### 2. 设置环境变量
+### 2. 本地 Supabase 数据库连接信息
 
-```bash
-export SUPABASE_URL=https://your-project.supabase.co
-export SUPABASE_ANON_KEY=your-anon-key
-# 或使用 service role key（测试环境）
-export SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+**本地 Supabase 已部署在 `D:\Program\supabase`**
+
+#### 数据库连接信息
+
+| 配置项 | 值 |
+|--------|-----|
+| **Host** | localhost |
+| **Port** | 5432 |
+| **Database** | _supabase |
+| **Username** | supabase_admin |
+| **Password** | `OzIvixnAYAXbcyoDakQS4C8gU8N6TRwu` |
+
+#### 连接字符串（pg）
+
+```
+postgresql://supabase_admin:OzIvixnAYAXbcyoDakQS4C8gU8N6TRwu@localhost:5432/_supabase
 ```
 
-### 3. 验证连接
+#### Python 连接示例
+
+```python
+from supabase import create_client, Client
+
+url = "http://localhost:8000"  # 本地 API Gateway
+key = "***REMOVED-JWT***"  # anon key
+
+# 使用 REST API 连接
+client: Client = create_client(url, key)
+```
+
+#### 直接连接 PostgreSQL（使用 psql）
+
+```bash
+# 通过 Docker 容器连接
+docker exec -it supabase-db psql -U supabase_admin -d _supabase
+
+# 或本地 psql 连接
+psql "postgresql://supabase_admin:OzIvixnAYAXbcyoDakQS4C8gU8N6TRwu@localhost:5432/_supabase"
+```
+
+#### 已创建的表
+
+| 表名 | 说明 |
+|------|------|
+| `analyst` | 分析师信息 |
+| `report_template` | 报告模板 |
+| `sector` | 行业 |
+| `region` | 区域 |
+| `coverage` | 覆盖范围（股票） |
+| `coverage_analyst` | 覆盖范围-分析师关联 |
+
+#### 当前测试数据
+
+**analyst 表：**
+| email | english_name | chinese_name | is_active |
+|-------|--------------|--------------|-----------|
+| harryyang@hfisec.com.hk | Bin Yang | 杨斌 | true |
+| dengyida@hfisec.com.hk | Yida Deng | 邓轶达 | true |
+
+**report_template 表：**
+| id | report_type | language | is_published |
+|----|-------------|----------|--------------|
+| company_zh | company | zh | true |
+
+**coverage 表：**
+| ticker | english_name | chinese_name | country_of_domicile |
+|--------|--------------|--------------|-------------------|
+| 3393.HK | Wasion Holdings | 威胜控股 | HK |
+
+**coverage_analyst 表：**
+| coverage_id | analyst_email | author_order | is_primary |
+|-------------|---------------|--------------|------------|
+| c3333333... | harryyang@hfisec.com.hk | 1 | true |
+| c3333333... | dengyida@hfisec.com.hk | 2 | false |
+
+### 3. 设置环境变量
+
+```bash
+# 本地 Supabase（使用本地部署的实例）
+export SUPABASE_URL=http://localhost:8000
+export SUPABASE_ANON_KEY=***REMOVED-JWT***
+# 或使用 service role key（测试环境）
+export SUPABASE_SERVICE_ROLE_KEY=***REMOVED-JWT***
+
+# neolyst 认证（用于调用 neolyst API）
+export NEOLYST_EMAIL=yechuan958@gmail.com
+export NEOLYST_PASSWORD=yc123456
+```
+
+### 4. 验证连接
 
 ```python
 from neolyst.connection import get_client
