@@ -35,7 +35,6 @@ Neolyst 数据库的唯一访问入口，用户和其他 skill 共用。实现�
 - draft 驱动：机器结果先存 draft，不要求满足提交条件；人工确认后再提交
 - 提交失败后沿用原 report_id 重新 save_report + upload_report_files，重新走 validate → submit
 - 撤回（retract）：submitted 或 rejected 的报告可撤回为 draft 重新编辑；rejected 不能直接重提，必须先撤回 draft 再提交
-- 整体行为对齐 Neolyst Web 的 Analyst Submit
 
 ## 内部架构
 

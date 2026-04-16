@@ -445,13 +445,6 @@ output_path = common.get_report_output_path(report_dir, elements)
 template_name = "company"
 template_path = f'templates/{template_name}/template.docx'
 
-# 获取 Neolyst client（用于 recommendation chart 从 Neolyst 获取历史推荐数据）
-try:
-    neolyst_client = connection.get_client()
-except Exception:
-    neolyst_client = None
-    print("  ⚠️ Neolyst 认证失败，recommendation chart 将使用默认数据")
-
 renderer.render_report(
     template_path=template_path,
     elements=elements,
@@ -459,7 +452,6 @@ renderer.render_report(
     body_path=str(body_path),
     output_path=str(output_path),
     english_summary_path=str(report_dir / 'english_summary.docx') if (report_dir / 'english_summary.docx').exists() else None,
-    neolyst_client=neolyst_client,
 )
 ```
 
@@ -472,10 +464,6 @@ def render_report(
     body_path: str,               # 正文文件路径
     output_path: str,             # 输出文件路径
     english_summary_path: str = None,  # 英文摘要路径（可选）
-    optimize_pagination_enabled: bool = True,
-    pagination_min_lines: int = 3,
-    header_footer_mappings: Dict[str, Dict[str, str]] = None,
-    neolyst_client=None,          # Neolyst Supabase client（用于 recommendation chart 获取历史推荐）
 ) -> bool:
 ```
 

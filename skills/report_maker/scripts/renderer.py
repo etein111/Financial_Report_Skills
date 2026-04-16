@@ -33,21 +33,12 @@ except ImportError as e:
 
 import common
 
-# 尝试导入分页优化模块
-try:
-    from pagination import optimize_pagination, optimize_pagination_xml
-    PAGINATION_AVAILABLE = True
-except ImportError:
-    PAGINATION_AVAILABLE = False
-    optimize_pagination = None
-    optimize_pagination_xml = None
-
 # 占位符标记（用于避免 docxtpl 破坏文档结构）
-ABSTRACT_MARKER = '###ABSTRACT_MARKER###'
-BODY_MARKER = '###BODY_MARKER###'
-ENGLISH_SUMMARY_MARKER = '###ENGLISH_SUMMARY_MARKER###'
-RELATIVE_CHART_MARKER = '###RELATIVE_CHART_MARKER###'
-RECOMMENDATION_CHART_MARKER = '###RECOMMENDATION_CHART_MARKER###'
+ABSTRACT_MARKER = common.ABSTRACT_MARKER
+BODY_MARKER = common.BODY_MARKER
+ENGLISH_SUMMARY_MARKER = common.ENGLISH_SUMMARY_MARKER
+RELATIVE_CHART_MARKER = common.RELATIVE_CHART_MARKER
+RECOMMENDATION_CHART_MARKER = common.RECOMMENDATION_CHART_MARKER
 
 # 从各模块导入函数
 from context import (
@@ -65,7 +56,6 @@ from image_handler import (
     _restore_jinja_in_charts,
     _insert_image_to_placeholder,
     _copy_media_between_docx,
-    _fix_docxcompose_image_rels,
 )
 
 from placeholder_fixer import _fix_split_placeholders_in_docx
@@ -100,10 +90,6 @@ def render_report(
     body_path: str,
     output_path: str,
     english_summary_path: str = None,
-    optimize_pagination_enabled: bool = True,
-    pagination_min_lines: int = 3,
-    header_footer_mappings: Dict[str, Dict[str, str]] = None,
-    neolyst_client=None,
 ) -> bool:
     """渲染报告，正确处理分析师字段、abstract、body 和 english_summary。
 
@@ -119,10 +105,6 @@ def render_report(
         body_path: 正文文件路径
         output_path: 输出文件路径
         english_summary_path: 英文摘要文件路径（可选）
-        optimize_pagination_enabled: 是否启用分页优化（默认 True）
-        pagination_min_lines: 段落分页的最小行数阈值（默认 3）
-        header_footer_mappings: 已废弃参数，保留兼容性
-        neolyst_client: 已废弃参数，保留兼容性
 
     Returns:
         是否成功
@@ -169,7 +151,7 @@ def render_report(
             relative_chart_generated = _generate_relative_chart(
                 ticker=ticker,
                 output_path=str(relative_chart_path),
-                company_name=elements.get('company_cn') or elements.get('company_en', '')
+                company_name=elements.get('company_en')
             )
             if relative_chart_generated:
                 print(f"  ✅ relative_chart 已生成")
@@ -188,7 +170,6 @@ def render_report(
                 output_path=str(recommendation_chart_path),
                 company_name=elements.get('company_en') or elements.get('company_cn', ''),
                 elements=elements,
-                neolyst_client=neolyst_client,
             )
             if recommendation_chart_generated:
                 print(f"  ✅ recommendation_chart 已生成")
@@ -219,35 +200,6 @@ def render_report(
 
         doc.save(str(temp_path))
 
-        # 6. 分页优化（仅针对 body.docx）
-        body_pagination_done = False
-        if optimize_pagination_enabled and PAGINATION_AVAILABLE and Path(body_path).exists():
-            print("\n正在优化 body.docx 分页...")
-            pagination_result = optimize_pagination(
-                input_path=body_path,
-                output_path=body_path,
-                optimize_paragraphs=True,
-                optimize_headings=True,
-                optimize_figures=True,
-                min_lines=pagination_min_lines
-            )
-            if pagination_result["success"]:
-                body_pagination_done = True
-                total_modified = (
-                    pagination_result["paragraphs_modified"] +
-                    pagination_result["headings_modified"] +
-                    pagination_result["figures_modified"]
-                )
-                print(f"  ✅ body.docx 分页优化完成: 修改 {total_modified} 处")
-            else:
-                print(f"  LibreOffice 方案失败，使用 XML 备用方案...")
-                xml_result = optimize_pagination_xml(body_path, body_path)
-                if xml_result["success"]:
-                    body_pagination_done = True
-                    print(f"  ✅ body.docx XML 分页优化完成")
-                else:
-                    print(f"  ⚠️ body.docx 分页优化失败")
-
         # 7. 处理 BODY_MARKER - 使用 docxcompose 三段式合并
         if Path(body_path).exists() and Path(body_path).stat().st_size > 0:
             body_inserted = insert_body_at_marker_compose(
@@ -272,15 +224,12 @@ def render_report(
                 copied_count = _copy_media_between_docx(body_path, output_path)
                 if copied_count > 0:
                     print(f"  已补充复制 {copied_count} 张图片")
-                fixed_rid_count = _fix_docxcompose_image_rels(body_path, output_path)
-                if fixed_rid_count > 0:
-                    print(f"  已修复 {fixed_rid_count} 处图片 rId 映射错误")
 
         else:
             doc = Document(str(temp_path))
             body_elem = doc.element.body
             for elem in list(body_elem):
-                text = ''.join(t.text or '' for t in elem.iter() if t.text)
+                text = common.get_element_text(elem)
                 if BODY_MARKER in text:
                     body_elem.remove(elem)
                     print(f"  已删除 BODY_MARKER（无 body 文件）")
@@ -309,13 +258,13 @@ def render_report(
             doc.save(output_path)
 
             if es_margins and es_inserted:
-                _apply_english_summary_margins(output_path, es_margins, header_footer_mappings)
+                _apply_english_summary_margins(output_path, es_margins)
         else:
             doc = Document(output_path)
             body_elem = doc.element.body
             marker_removed = False
             for elem in list(body_elem):
-                text = ''.join(t.text or '' for t in elem.iter() if t.text)
+                text = common.get_element_text(elem)
                 if ENGLISH_SUMMARY_MARKER in text:
                     body_elem.remove(elem)
                     marker_removed = True
@@ -364,38 +313,6 @@ def render_report(
         # 10. 清理临时文件
         temp_path.unlink(missing_ok=True)
         fixed_template_path.unlink(missing_ok=True)
-
-        # 10.5 分页优化（仅在未对 body 预优化时执行）
-        if optimize_pagination_enabled and not body_pagination_done:
-            print("\n正在优化最终输出分页...")
-            if PAGINATION_AVAILABLE:
-                pagination_result = optimize_pagination(
-                    input_path=output_path,
-                    output_path=output_path,
-                    optimize_paragraphs=True,
-                    optimize_headings=True,
-                    optimize_figures=True,
-                    min_lines=pagination_min_lines
-                )
-
-                if pagination_result["success"]:
-                    total_modified = (
-                        pagination_result["paragraphs_modified"] +
-                        pagination_result["headings_modified"] +
-                        pagination_result["figures_modified"]
-                    )
-                    print(f"  ✅ 分页优化完成: 修改 {total_modified} 处")
-                else:
-                    print(f"  UNO 方案失败，使用 XML 备用方案...")
-                    xml_result = optimize_pagination_xml(output_path, output_path)
-                    if xml_result["success"]:
-                        print(f"  ✅ XML 分页优化完成")
-                    else:
-                        print(f"  ⚠️ 分页优化失败")
-            else:
-                print("  ⚠️ 分页优化模块不可用，跳过")
-        elif body_pagination_done:
-            print("\n跳过最终输出分页优化（body.docx 已预优化）")
 
         # 11. 验证输出
         final_doc = Document(output_path)

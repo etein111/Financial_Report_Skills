@@ -93,3 +93,25 @@ def reject_report(client: Client, report_id: str, reason: str) -> dict:
         "report_id": str(row["report_id"]),
         "status": row["status"],
     }
+
+
+def deactivate_report(client: Client, report_id: str) -> dict:
+    """废弃报告，设 is_active=False。返回 {"report_id": str, "is_active": False}。"""
+    resp = (
+        client.table("report")
+        .update({"is_active": False})
+        .eq("id", report_id)
+        .eq("is_active", True)
+        .execute()
+    )
+    if not resp.data:
+        exists = (
+            client.table("report")
+            .select("id,is_active")
+            .eq("id", report_id)
+            .execute()
+        )
+        if not exists.data:
+            raise ValueError(f"报告不存在：{report_id}")
+        raise ValueError(f"报告已废弃：{report_id}")
+    return {"report_id": report_id, "is_active": False}

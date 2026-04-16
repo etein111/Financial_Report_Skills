@@ -3,14 +3,13 @@
 提供图表插入、Jinja2 转义、图片复制等功能。
 """
 
-import zipfile
 import hashlib
-import re
 from typing import Dict, Any
 from pathlib import Path
 from lxml import etree
 
-W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
+import common
+W = common.W_NS
 
 # 尝试导入 docx
 try:
@@ -38,18 +37,18 @@ def _escape_jinja_in_charts(docx_path: str) -> Dict[str, str]:
     escaped_files = {}
 
     try:
-        with zipfile.ZipFile(docx_path, 'r') as z:
-            chart_files = [name for name in z.namelist() if name.startswith('word/charts/') and name.endswith('.xml')]
+        files = common.read_docx_zip(docx_path)
+        chart_files = [name for name in files if name.startswith('word/charts/') and name.endswith('.xml')]
 
-            for chart_file in chart_files:
-                content = z.read(chart_file).decode('utf-8')
-                # 转义 {{ 和 }} 为临时标记
-                escaped = content.replace('{{', '__JINJA_LBRACE__').replace('}}', '__JINJA_RBRACE__')
-                if escaped != content:
-                    escaped_files[chart_file] = content
-                    # 写入转义后的内容
-                    with zipfile.ZipFile(docx_path, 'a') as z_out:
-                        z_out.writestr(chart_file, escaped.encode('utf-8'))
+        for chart_file in chart_files:
+            content = files[chart_file].decode('utf-8')
+            escaped = content.replace('{{', '__JINJA_LBRACE__').replace('}}', '__JINJA_RBRACE__')
+            if escaped != content:
+                escaped_files[chart_file] = content
+                files[chart_file] = escaped.encode('utf-8')
+
+        if escaped_files:
+            common.write_docx_zip(docx_path, files)
 
     except Exception as e:
         print(f"  转义图表 Jinja2 语法时出错: {e}")
@@ -68,26 +67,67 @@ def _restore_jinja_in_charts(docx_path: str, escaped_files: Dict[str, str]) -> N
         return
 
     try:
-        # 重新读取，打包所有文件
-        with zipfile.ZipFile(docx_path, 'r') as z:
-            files = {name: z.read(name) for name in z.namelist()}
+        files = common.read_docx_zip(docx_path)
 
-        # 恢复被转义的文件
         for chart_file, original_content in escaped_files.items():
             if chart_file in files:
-                # 恢复 {{ 和 }}
                 restored = original_content.replace('__JINJA_LBRACE__', '{{').replace('__JINJA_RBRACE__', '}}')
                 files[chart_file] = restored.encode('utf-8')
 
-        # 写回
-        import os
-        os.remove(docx_path)
-        with zipfile.ZipFile(docx_path, 'w', zipfile.ZIP_DEFLATED) as z:
-            for name, content in files.items():
-                z.writestr(name, content)
+        common.write_docx_zip(docx_path, files)
 
     except Exception as e:
         print(f"  恢复图表 Jinja2 语法时出错: {e}")
+
+
+def _replace_in_nested_tables(doc, elem, placeholder, image_path, width_cm=None):
+    """处理嵌套表格中的占位符，直接遍历不递归。"""
+    from docx.oxml.ns import qn
+    
+    replaced = False
+    processed_runs = set()  # 避免重复处理同一个 run
+    
+    # 直接遍历 body 中所有的 w:r 元素
+    for r_elem in elem.iter(qn('w:r')):
+        # 跳过已处理的
+        if id(r_elem) in processed_runs:
+            continue
+        
+        texts = [t.text for t in r_elem.iter(qn('w:t')) if t.text]
+        combined = ''.join(texts)
+        
+        if placeholder in combined:
+            # 找到包含占位符的 run
+            p_elem = r_elem.getparent()
+            while p_elem is not None and p_elem.tag != qn('w:p'):
+                p_elem = p_elem.getparent()
+            
+            if p_elem is not None:
+                from docx.text.paragraph import Paragraph
+                para_obj = Paragraph(p_elem, doc)
+                
+                for run_obj in para_obj.runs:
+                    run_texts = [t.text for t in run_obj._element.iter(qn('w:t')) if t.text]
+                    run_combined = ''.join(run_texts)
+                    if placeholder in run_combined:
+                        # 标记为已处理
+                        processed_runs.add(id(run_obj._element))
+                        
+                        run_obj.text = run_obj.text.replace(placeholder, '')
+                        run_obj.add_picture(image_path)
+                        if width_cm:
+                            from docx.shared import Cm
+                            for shape in run_obj._element.iter(qn('wp:inline')):
+                                extent = shape.find(qn('wp:extent'))
+                                if extent is not None:
+                                    cx = int(width_cm * 914400)
+                                    cy = int(width_cm * 914400 * 0.75)
+                                    extent.set('cx', str(cx))
+                                    extent.set('cy', str(cy))
+                        replaced = True
+                        break
+    
+    return replaced
 
 
 def _insert_image_to_placeholder(
@@ -114,34 +154,26 @@ def _insert_image_to_placeholder(
         from docx.oxml import OxmlElement
         from docx.oxml.ns import qn
 
+        # 1. 先在段落中查找
         for para in doc.paragraphs:
             if placeholder in para.text:
-                # 找到包含占位符的 run
                 for run in para.runs:
                     if placeholder in run.text:
                         run.text = run.text.replace(placeholder, '')
-
-                        # 添加图片
                         run.add_picture(image_path)
                         if width_cm:
-                            # 设置图片宽度
                             last_picture = run._element.getparent().findall('.//{http://schemas.openxmlformats.org/drawingml/2006/picture}pic')
                             if last_picture:
                                 size = last_picture[-1].find('.//{http://schemas.openxmlformats.org/drawingml/2006/main}ext')
                                 if size is not None:
                                     size.set('{http://schemas.openxmlformats.org/drawingml/2006/main}cx', str(int(width_cm * 914400)))
                                     size.set('{http://schemas.openxmlformats.org/drawingml/2006/main}cy', str(int(width_cm * 914400 * 0.75)))
-
                         return True
 
-        # 尝试在表格中查找
-        for table in doc.tables:
-            for row in table.rows:
-                for cell in row.cells:
-                    if placeholder in cell.text:
-                        # 简化处理：清除占位符文本
-                        cell.text = cell.text.replace(placeholder, '')
-                        return True
+        # 2. 在文档 body 中递归搜索所有嵌套表格
+        body = doc.element.body
+        if _replace_in_nested_tables(doc, body, placeholder, image_path, width_cm):
+            return True
 
         return False
 
@@ -208,8 +240,7 @@ def _copy_media_between_docx(source_path: str, target_path: str) -> int:
                 missing_media.append((media_name, media_bytes))
 
         if missing_media:
-            with zipfile.ZipFile(target_path, 'r') as z:
-                files = {name: z.read(name) for name in z.namelist()}
+            files = common.read_docx_zip(target_path)
 
             for media_name, media_bytes in missing_media:
                 target_media_name = f'word/media/{Path(media_name).name}'
@@ -217,68 +248,9 @@ def _copy_media_between_docx(source_path: str, target_path: str) -> int:
                     files[target_media_name] = media_bytes
                     copied_count += 1
 
-            import os
-            os.remove(target_path)
-            with zipfile.ZipFile(target_path, 'w', zipfile.ZIP_DEFLATED) as z:
-                for name, content in files.items():
-                    z.writestr(name, content)
+            common.write_docx_zip(target_path, files)
 
     except Exception as e:
         print(f"  复制媒体文件时出错: {e}")
 
     return copied_count
-
-
-def _fix_docxcompose_image_rels(body_path: str, output_path: str) -> int:
-    """修复 docxcompose 合并后图片 rId 映射错误。
-
-    docxcompose 合并时可能会改变图片的 rId，导致图片显示错误。
-    本函数检查并修复这些 rId 映射问题。
-
-    Args:
-        body_path: body 文档路径
-        output_path: 输出文档路径
-
-    Returns:
-        修复的 rId 数量
-    """
-    fixed_count = 0
-
-    try:
-        with zipfile.ZipFile(body_path, 'r') as z:
-            body_rels = {}
-            if 'word/_rels/document.xml.rels' in z.namelist():
-                rels_xml = z.read('word/_rels/document.xml.rels')
-                rels_tree = etree.fromstring(rels_xml)
-                ns = {'r': 'http://schemas.openxmlformats.org/package/2006/relationships'}
-                for rel in rels_tree.findall('r:Relationship', ns):
-                    rid = rel.get('Id')
-                    target = rel.get('Target', '')
-                    rel_type = rel.get('Type')
-                    if 'image' in rel_type:
-                        body_rels[rid] = target
-
-        with zipfile.ZipFile(output_path, 'r') as z:
-            output_rels = {}
-            output_files = {name: z.read(name) for name in z.namelist()}
-            if 'word/_rels/document.xml.rels' in output_files:
-                rels_xml = output_files['word/_rels/document.xml.rels']
-                rels_tree = etree.fromstring(rels_xml)
-                ns = {'r': 'http://schemas.openxmlformats.org/package/2006/relationships'}
-                for rel in rels_tree.findall('r:Relationship', ns):
-                    rid = rel.get('Id')
-                    output_rels[rid] = rel.get('Target', '')
-
-        # 检查图片引用
-        for rid, target in output_rels.items():
-            if target and 'media/' in target:
-                # 检查图片是否存在
-                media_name = f'word/{target}'
-                if media_name not in output_files:
-                    # 尝试找到正确的图片
-                    pass
-
-    except Exception as e:
-        print(f"  修复图片 rId 映射时出错: {e}")
-
-    return fixed_count

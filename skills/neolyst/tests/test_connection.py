@@ -67,5 +67,5 @@ def test_get_client_no_file_no_credentials_raises():
     """没有 user.json/session.json 且未传 credentials 时应抛出错误。"""
     from skills.neolyst.scripts import connection
 
-    with pytest.raises(Exception, match="credentials"):
+    with pytest.raises(ValueError, match="凭据"):
         connection.get_client(neolyst_dir=str(NEOLYST_DIR))

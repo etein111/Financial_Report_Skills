@@ -4,8 +4,8 @@
 """
 
 import shutil
+import zipfile
 from pathlib import Path
-from copy import deepcopy
 from typing import Dict, Any, Optional
 
 try:
@@ -21,16 +21,14 @@ import sys
 SCRIPTS_DIR = Path(__file__).parent
 sys.path.insert(0, str(SCRIPTS_DIR))
 
+import common
 from sectpr_manager import (
     _save_all_template_sectPrs,
     _restore_all_sectPrs,
     _restore_final_sectPr,
     _save_template_final_sectPr,
 )
-from image_handler import _copy_media_between_docx, _fix_docxcompose_image_rels
-
-# 占位符标记
-BODY_MARKER = '###BODY_MARKER###'
+from image_handler import _copy_media_between_docx
 
 
 def insert_body_at_marker_compose(
@@ -39,7 +37,6 @@ def insert_body_at_marker_compose(
     marker: str,
     output_path: str,
     template_path: str = None,
-    header_footer_mappings: Dict[str, Dict[str, str]] = None,
 ) -> bool:
     """使用 docxcompose 三段式合并：在 marker 位置插入 body。
 
@@ -54,7 +51,6 @@ def insert_body_at_marker_compose(
         marker: 占位符标记
         output_path: 输出路径
         template_path: 原始模板路径（用于恢复文档末尾 sectPr）
-        header_footer_mappings: 已废弃参数，保留兼容性
 
     Returns:
         是否成功插入
@@ -76,7 +72,7 @@ def insert_body_at_marker_compose(
 
         marker_idx = None
         for i, elem in enumerate(all_elements):
-            text = ''.join(t.text or '' for t in elem.iter() if t.text)
+            text = common.get_element_text(elem)
             if marker in text:
                 marker_idx = i
                 break
@@ -116,7 +112,7 @@ def insert_body_at_marker_compose(
         for elem in part3_body:
             tag = elem.tag.split('}')[-1]
             if tag in ['p', 'tbl', 'sdt']:
-                text = ''.join(t.text or '' for t in elem.iter() if t.text)
+                text = common.get_element_text(elem)
                 if text.strip():
                     has_part3_content = True
                     break
@@ -146,10 +142,6 @@ def insert_body_at_marker_compose(
         if copied_count > 0:
             print(f"  已补充复制 {copied_count} 张图片（修复 docxcompose 图片丢失）")
 
-        fixed_rid_count = _fix_docxcompose_image_rels(body_path, output_path)
-        if fixed_rid_count > 0:
-            print(f"  已修复 {fixed_rid_count} 处图片 rId 映射错误")
-
         # 7. 清理临时文件
         part1_path.unlink(missing_ok=True)
         if has_part3_content:
@@ -162,44 +154,3 @@ def insert_body_at_marker_compose(
         import traceback
         traceback.print_exc()
         return False
-
-
-def _copy_headers_footers_between_docs(body_path: str, output_path: str) -> Dict[str, str]:
-    """从 body 文档复制 header/footer 文件到输出文档。
-
-    Args:
-        body_path: body 文档路径
-        output_path: 输出文档路径
-
-    Returns:
-        rId 映射字典
-    """
-    mapping = {}
-
-    try:
-        with zipfile.ZipFile(body_path, 'r') as z:
-            body_files = {name: z.read(name) for name in z.namelist() if 'header' in name.lower() or 'footer' in name.lower()}
-
-        with zipfile.ZipFile(output_path, 'r') as z:
-            output_files = {name: z.read(name) for name in z.namelist()}
-
-        # 复制 header/footer 文件
-        for name, content in body_files.items():
-            target_name = name
-            if target_name not in output_files:
-                output_files[target_name] = content
-
-        import os
-        os.remove(output_path)
-        with zipfile.ZipFile(output_path, 'w', zipfile.ZIP_DEFLATED) as z:
-            for name, content in output_files.items():
-                z.writestr(name, content)
-
-    except Exception as e:
-        print(f"  复制 headers/footers 时出错: {e}")
-
-    return mapping
-
-
-# 需要导入 zipfile
-import zipfile

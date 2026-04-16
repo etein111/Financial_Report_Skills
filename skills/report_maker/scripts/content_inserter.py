@@ -4,7 +4,6 @@
 """
 
 from typing import Dict, Any
-from pathlib import Path
 
 try:
     from docx import Document
@@ -13,11 +12,8 @@ except ImportError:
     DOCX_AVAILABLE = False
     Document = None
 
-W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
-
-# 占位符标记
-ABSTRACT_MARKER = '###ABSTRACT_MARKER###'
-ENGLISH_SUMMARY_MARKER = '###ENGLISH_SUMMARY_MARKER###'
+import common
+W = common.W_NS
 
 
 def _find_marker_in_cells(table, marker: str):
@@ -103,13 +99,12 @@ def _insert_abstract_at_paragraph(doc: Document, abstract_doc: Document, marker:
         return False
 
     try:
-        # 找到包含 marker 的段落
         target_para = None
         target_idx = None
 
         all_paras = list(doc.element.body.iter(f'{W}p'))
         for idx, para in enumerate(all_paras):
-            text = ''.join(t.text or '' for t in para.iter(f'{W}t'))
+            text = common.get_element_text(para)
             if marker in text:
                 target_para = para
                 target_idx = idx
@@ -148,7 +143,6 @@ def _insert_abstract_at_paragraph(doc: Document, abstract_doc: Document, marker:
 def _apply_english_summary_margins(
     docx_path: str,
     margins: Dict[str, str],
-    header_footer_mappings: Dict[str, Dict[str, str]] = None
 ) -> bool:
     """应用英文摘要部分的页边距。
 
@@ -157,7 +151,6 @@ def _apply_english_summary_margins(
     Args:
         docx_path: 文档路径
         margins: 页边距字典
-        header_footer_mappings: 页眉页脚映射配置
 
     Returns:
         是否成功
@@ -169,8 +162,7 @@ def _apply_english_summary_margins(
     from lxml import etree
 
     try:
-        with zipfile.ZipFile(docx_path, 'r') as z:
-            files = {name: z.read(name) for name in z.namelist()}
+        files = common.read_docx_zip(docx_path)
 
         if 'word/document.xml' not in files:
             return False
@@ -182,11 +174,10 @@ def _apply_english_summary_margins(
 
         all_elements = list(body)
 
-        # 找到英文摘要开始位置
         es_start_idx = None
         for idx, elem in enumerate(all_elements):
             if elem.tag == f'{W}p':
-                text = ''.join(t.text or '' for t in elem.iter(f'{W}t')).strip()
+                text = common.get_element_text(elem).strip()
                 if text == 'APPENDIX 1':
                     es_start_idx = idx
                     break
@@ -213,11 +204,7 @@ def _apply_english_summary_margins(
                             doc_tree, xml_declaration=True, encoding='UTF-8', standalone=True
                         )
 
-                        import os
-                        os.remove(docx_path)
-                        with zipfile.ZipFile(docx_path, 'w', zipfile.ZIP_DEFLATED) as z:
-                            for name, content in files.items():
-                                z.writestr(name, content)
+                        common.write_docx_zip(docx_path, files)
 
                         print(f"  已应用 english_summary 页边距")
                         return True

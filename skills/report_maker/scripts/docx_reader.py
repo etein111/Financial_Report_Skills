@@ -6,13 +6,12 @@
 遵循函数式编程原则：纯函数、无副作用、I/O 分离。
 """
 
-import zipfile
 from typing import List, Dict, Any, Optional
 from pathlib import Path
 from lxml import etree
 
-
-W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
+import common
+W = common.W_NS
 
 
 def read_docx_tables(docx_path: str) -> List[Dict[str, Any]]:
@@ -35,9 +34,8 @@ def read_docx_tables(docx_path: str) -> List[Dict[str, Any]]:
         raise FileNotFoundError(f"文件不存在: {docx_path}")
 
     # 使用 lxml 直接解析 document.xml
-    with zipfile.ZipFile(docx_path, 'r') as z:
-        with z.open('word/document.xml') as f:
-            tree = etree.parse(f).getroot()
+    files = common.read_docx_zip(docx_path)
+    tree = etree.fromstring(files['word/document.xml'])
 
     # 提取所有表格（包括嵌套表格）
     all_tables = list(tree.iter(f'{W}tbl'))

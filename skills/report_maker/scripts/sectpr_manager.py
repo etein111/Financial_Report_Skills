@@ -4,13 +4,13 @@
 docxcompose 在合并文档时会破坏 sectPr，本模块用于修复这些问题。
 """
 
-import zipfile
 from lxml import etree
 from copy import deepcopy
 from typing import Dict, Any, Optional
 
-W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
-R = '{http://schemas.openxmlformats.org/officeDocument/2006/relationships}'
+import common
+W = common.W_NS
+R = common.R_NS
 
 
 def _save_template_final_sectPr(template_path: str) -> Optional[Any]:
@@ -46,8 +46,8 @@ def _save_all_template_sectPrs(template_path: str) -> Optional[Dict[str, Any]]:
         或 None
     """
     try:
-        with zipfile.ZipFile(template_path, 'r') as z:
-            doc_xml = z.read('word/document.xml')
+        files = common.read_docx_zip(template_path)
+        doc_xml = files['word/document.xml']
 
         doc_tree = etree.fromstring(doc_xml)
         body = doc_tree.find(f'{W}body')
@@ -101,8 +101,7 @@ def _restore_all_sectPrs(docx_path: str, template_sectPrs: Dict[str, Any]) -> bo
         是否成功
     """
     try:
-        with zipfile.ZipFile(docx_path, 'r') as z:
-            files = {name: z.read(name) for name in z.namelist()}
+        files = common.read_docx_zip(docx_path)
 
         if 'word/document.xml' not in files:
             return False
@@ -114,7 +113,6 @@ def _restore_all_sectPrs(docx_path: str, template_sectPrs: Dict[str, Any]) -> bo
 
         all_elements = list(body)
 
-        # 收集所有段落级 sectPr 及其索引
         para_sectPrs = []
         for idx, elem in enumerate(all_elements):
             if elem.tag == f'{W}p':
@@ -129,20 +127,18 @@ def _restore_all_sectPrs(docx_path: str, template_sectPrs: Dict[str, Any]) -> bo
         es_sectPr = template_sectPrs.get('english_summary')
         appendix_sectPr = template_sectPrs.get('appendix')
 
-        # 找到关键内容位置
         appendix1_idx = None
         for idx, elem in enumerate(all_elements):
             if elem.tag == f'{W}p':
-                text = ''.join(t.text or '' for t in elem.iter(f'{W}t')).strip()
+                text = common.get_element_text(elem).strip()
                 if text == 'APPENDIX 1':
                     appendix1_idx = idx
                     break
 
-        # 找到法律附录表格位置
         disclaimer_idx = None
         for idx, elem in enumerate(all_elements):
             if elem.tag == f'{W}tbl':
-                text = ''.join(t.text or '' for t in elem.iter(f'{W}t'))
+                text = common.get_element_text(elem)
                 if '附录APPENDIX' in text or 'Table_disclaimer' in text:
                     disclaimer_idx = idx
                     break
@@ -189,11 +185,7 @@ def _restore_all_sectPrs(docx_path: str, template_sectPrs: Dict[str, Any]) -> bo
             doc_tree, xml_declaration=True, encoding='UTF-8', standalone=True
         )
 
-        import os
-        os.remove(docx_path)
-        with zipfile.ZipFile(docx_path, 'w', zipfile.ZIP_DEFLATED) as z:
-            for name, content in files.items():
-                z.writestr(name, content)
+        common.write_docx_zip(docx_path, files)
 
         print(f"  已恢复所有 sectPrs（按位置语义分配）")
         return True
@@ -216,8 +208,7 @@ def _restore_final_sectPr(docx_path: str, template_sectPr) -> bool:
         是否成功
     """
     try:
-        with zipfile.ZipFile(docx_path, 'r') as z:
-            files = {name: z.read(name) for name in z.namelist()}
+        files = common.read_docx_zip(docx_path)
 
         if 'word/document.xml' not in files:
             return False
@@ -238,11 +229,7 @@ def _restore_final_sectPr(docx_path: str, template_sectPr) -> bool:
             doc_tree, xml_declaration=True, encoding='UTF-8', standalone=True
         )
 
-        import os
-        os.remove(docx_path)
-        with zipfile.ZipFile(docx_path, 'w', zipfile.ZIP_DEFLATED) as z:
-            for name, content in files.items():
-                z.writestr(name, content)
+        common.write_docx_zip(docx_path, files)
 
         print(f"  已恢复文档末尾 sectPr（来自模板）")
         return True
@@ -268,11 +255,10 @@ def _get_template_english_summary_margins(template_path: str) -> Dict[str, str]:
     margins = {}
 
     try:
-        with zipfile.ZipFile(template_path, 'r') as z:
-            with z.open('word/document.xml') as f:
-                tree = etree.parse(f)
+        files = common.read_docx_zip(template_path)
+        tree = etree.fromstring(files['word/document.xml'])
 
-        body = tree.getroot().find(f'.//{W}body')
+        body = tree.find(f'{W}body')
         if body is None:
             return margins
 
@@ -280,7 +266,7 @@ def _get_template_english_summary_margins(template_path: str) -> Dict[str, str]:
         all_elements = list(body)
         marker_idx = None
         for idx, elem in enumerate(all_elements):
-            text = ''.join(t.text or '' for t in elem.iter(f'{W}t'))
+            text = common.get_element_text(elem)
             if ENGLISH_SUMMARY_MARKER in text:
                 marker_idx = idx
                 print(f"  找到 ENGLISH_SUMMARY_MARKER 在元素 {idx}")
@@ -304,10 +290,7 @@ def _get_template_english_summary_margins(template_path: str) -> Dict[str, str]:
                         if sectPr is not None:
                             pgMar = sectPr.find(f'{W}pgMar')
                             if pgMar is not None:
-                                for attr in ['top', 'bottom', 'left', 'right', 'header', 'footer', 'gutter']:
-                                    val = pgMar.get(f'{W}{attr}')
-                                    if val:
-                                        margins[attr] = val
+                                margins = common.extract_margins_from_pgMar(pgMar)
                                 if margins:
                                     print(f"  从模板 ENGLISH_SUMMARY_MARKER 位置获取页边距: {margins}")
                                 return margins
@@ -324,10 +307,7 @@ def _get_template_english_summary_margins(template_path: str) -> Dict[str, str]:
                     if sectPr is not None:
                         pgMar = sectPr.find(f'{W}pgMar')
                         if pgMar is not None:
-                            for attr in ['top', 'bottom', 'left', 'right', 'header', 'footer', 'gutter']:
-                                val = pgMar.get(f'{W}{attr}')
-                                if val:
-                                    margins[attr] = val
+                            margins = common.extract_margins_from_pgMar(pgMar)
                             if margins:
                                 print(f"  从模板 marker 之前获取页边距: {margins}")
                             return margins

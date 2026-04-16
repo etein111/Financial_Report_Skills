@@ -6,7 +6,9 @@
 """
 
 import re
-from typing import Dict, Any, List, Optional, Tuple
+import json
+from typing import Dict, Any, List, Optional
+import common
 import docx_reader
 
 
@@ -87,9 +89,9 @@ def extract_fields_from_docx(
 
     # 设置 fragment 字段
     if 'abstract' in schema:
-        elements['abstract'] = 'abstract.docx'
+        elements['abstract'] = common.FILE_ABSTRACT
     if 'body' in schema:
-        elements['body'] = 'body.docx'
+        elements['body'] = common.FILE_BODY
 
     # 从主表格中提取基本信息（首页表格）
     basic_fields = _extract_basic_fields_from_main_tables(tables, schema)
@@ -100,51 +102,9 @@ def extract_fields_from_docx(
     elements.update(financial_fields)
 
     # 特殊处理需要拆分的字段
-    _handle_split_fields(elements)
+    elements = _handle_split_fields(elements)
 
     return elements
-
-
-def _extract_from_tables(
-    tables: List[Dict[str, Any]],
-    schema: Dict[str, Any]
-) -> Dict[str, Any]:
-    """从表格中提取字段（已弃用，保留向后兼容）。
-
-    Args:
-        tables: 表格数据列表
-        schema: schema.yaml 内容
-
-    Returns:
-        提取的字段字典
-    """
-    extracted = {}
-
-    # 优先从嵌套表格中提取（首页财务数据通常在嵌套表格中）
-    nested_tables = docx_reader.extract_nested_tables_only(tables)
-    for field_name, field_def in schema.items():
-        if field_name in ['abstract', 'body']:
-            continue
-
-        # 尝试从嵌套表格提取
-        value = _extract_field_from_nested_tables(
-            nested_tables,
-            field_name,
-            field_def
-        )
-
-        # 如果嵌套表格没找到，尝试从所有表格提取
-        if not value:
-            value = _extract_field_from_all_tables(
-                tables,
-                field_name,
-                field_def
-            )
-
-        if value:
-            extracted[field_name] = value
-
-    return extracted
 
 
 def _extract_basic_fields_from_main_tables(
@@ -232,7 +192,7 @@ def _extract_financial_fields_from_nested_tables(
         if field_name in SKIP_FIELDS:
             continue
 
-        value = _extract_field_from_nested_tables(
+        value = _extract_field_from_tables(
             nested_tables,
             field_name,
             field_def
@@ -244,7 +204,7 @@ def _extract_financial_fields_from_nested_tables(
     return extracted
 
 
-def _handle_split_fields(elements: Dict[str, Any]) -> None:
+def _handle_split_fields(elements: Dict[str, Any]) -> Dict[str, Any]:
     """处理需要拆分的字段。
 
     例如：
@@ -252,13 +212,16 @@ def _handle_split_fields(elements: Dict[str, Any]) -> None:
     - 需要拆分为 one_year_high="73.40", one_year_low="20.50"
 
     Args:
-        elements: 元素字典（会直接修改）
-    """
-    # 处理 one_year_high 和 one_year_low 组合字段
-    high_value = elements.get('one_year_high', '')
-    low_value = elements.get('one_year_low', '')
+        elements: 元素字典（不会被修改）
 
-    # 统一处理逻辑：找到包含 "-" 的值并拆分
+    Returns:
+        处理后的新 elements 字典
+    """
+    result = elements.copy()
+
+    high_value = result.get('one_year_high', '')
+    low_value = result.get('one_year_low', '')
+
     source_value = None
     if '-' in high_value and not low_value:
         source_value = high_value
@@ -268,8 +231,10 @@ def _handle_split_fields(elements: Dict[str, Any]) -> None:
     if source_value:
         parts = source_value.split('-')
         if len(parts) == 2:
-            elements['one_year_high'] = parts[0].strip()
-            elements['one_year_low'] = parts[1].strip()
+            result['one_year_high'] = parts[0].strip()
+            result['one_year_low'] = parts[1].strip()
+
+    return result
 
 
 def _find_date_in_text(text: str) -> Optional[str]:
@@ -330,40 +295,15 @@ def _find_title_in_lines(lines: List[str]) -> Optional[str]:
     return None
 
 
-def _extract_field_from_nested_tables(
-    nested_tables: List[Dict[str, Any]],
-    field_name: str,
-    field_def: Dict[str, Any]
-) -> Optional[str]:
-    """从嵌套表格中提取字段。
-
-    Args:
-        nested_tables: 嵌套表格列表
-        field_name: 字段名
-        field_def: 字段定义
-
-    Returns:
-        提取值，未找到返回 None
-    """
-    aliases = FIELD_ALIASES.get(field_name, [field_name])
-
-    for table in nested_tables:
-        value = _search_field_in_table(table, aliases, field_def)
-        if value:
-            return value
-
-    return None
-
-
-def _extract_field_from_all_tables(
+def _extract_field_from_tables(
     tables: List[Dict[str, Any]],
     field_name: str,
     field_def: Dict[str, Any]
 ) -> Optional[str]:
-    """从所有表格中提取字段。
+    """从表格列表中提取字段。
 
     Args:
-        tables: 表格列表
+        tables: 表格列表（嵌套表格或全部表格均可）
         field_name: 字段名
         field_def: 字段定义
 
@@ -479,36 +419,8 @@ def _clean_field_value(value: str, field_def: Dict[str, Any]) -> str:
     # 注意：不再移除单位后缀（bn, mn 等），因为它们是值的一部分
     # 例如：22.11bn, 365.99mn
 
-    # 特殊处理：analysts 字段
-    if field_def.get('description') == 'analysts':
-        value = _format_analysts_value(value)
-
     return value
 
-
-def _format_analysts_value(value: str) -> str:
-    """格式化 analysts 字段值。
-
-    将各种格式的分析师信息转换为标准格式。
-
-    Args:
-        value: 原始值
-
-    Returns:
-        格式化后的值
-    """
-    # 简单的格式化，可以根据实际情况扩展
-    # 例如：从 "杨斌 Bin Yang, SFC:BSQ313" 提取结构化数据
-    value = value.strip()
-
-    # 如果包含逗号分隔的信息，尝试解析
-    if ',' in value:
-        parts = [p.strip() for p in value.split(',')]
-        # 这里可以添加更复杂的解析逻辑
-        # 暂时返回原始值
-        return value
-
-    return value
 
 
 # ==================== 辅助函数 ====================
@@ -567,9 +479,8 @@ def _extract_analysts_from_tables(
 
             for line in lines:
                 # 提取中文姓名
-                if PATTERN_CHINESE_NAME.search(line):
-                    chinese_match = PATTERN_CHINESE_NAME.search(line)
-                    if chinese_match:
+                chinese_match = PATTERN_CHINESE_NAME.search(line)
+                if chinese_match:
                         chinese_name = chinese_match.group(1)
 
                 # 提取英文姓名
@@ -589,11 +500,12 @@ def _extract_analysts_from_tables(
 
             # 如果找到了至少一个字段，返回格式化结果
             if chinese_name or english_name:
-                chinese_name = chinese_name or ''
-                english_name = english_name or ''
-                sfc_code = sfc_code or ''
-                email = email or ''
-
-                return f"[{{'chinese_name': '{chinese_name}', 'english_name': '{english_name}', 'sfc_code': '{sfc_code}', 'email': '{email}'}}]"
+                analyst_data = {
+                    'chinese_name': chinese_name or '',
+                    'english_name': english_name or '',
+                    'sfc_code': sfc_code or '',
+                    'email': email or '',
+                }
+                return json.dumps([analyst_data], ensure_ascii=False)
 
     return None

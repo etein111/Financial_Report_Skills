@@ -11,14 +11,12 @@ from pathlib import Path
 from copy import deepcopy
 import shutil
 import sys
-import zipfile
 
 SCRIPTS_DIR = Path(__file__).parent
 sys.path.insert(0, str(SCRIPTS_DIR))
 
 try:
     from docx import Document
-    from docx.shared import Inches, Pt
     from docx.oxml import OxmlElement
     from docx.oxml.ns import qn
 except ImportError:
@@ -33,19 +31,8 @@ from lxml import etree
 import common
 
 
-W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
+W = common.W_NS
 
-
-def _get_para_text(para_elem) -> str:
-    """获取段落的所有文本。
-
-    Args:
-        para_elem: 段落元素
-
-    Returns:
-        段落文本
-    """
-    return ''.join(t.text or '' for t in para_elem.iter(f'{W}t'))
 
 
 def _get_all_tables_lxml(doc_path: str) -> List[etree._Element]:
@@ -59,26 +46,10 @@ def _get_all_tables_lxml(doc_path: str) -> List[etree._Element]:
     Returns:
         表格元素列表
     """
-    with zipfile.ZipFile(doc_path, 'r') as z:
-        with z.open('word/document.xml') as f:
-            tree = etree.parse(f).getroot()
+    files = common.read_docx_zip(doc_path)
+    tree = etree.fromstring(files['word/document.xml'])
     return list(tree.iter(f'{W}tbl'))
 
-
-def _get_cell_text_lxml(tc_elem) -> str:
-    """获取单元格的文本（包括嵌套内容）。
-
-    Args:
-        tc_elem: 单元格元素
-
-    Returns:
-        单元格文本
-    """
-    texts = []
-    for t in tc_elem.iter(f'{W}t'):
-        if t.text:
-            texts.append(t.text)
-    return ''.join(texts)
 
 
 def extract_fragment_by_markers(
@@ -124,7 +95,7 @@ def extract_fragment_by_markers(
         end_idx = None
 
         for i, elem in enumerate(elements):
-            text = ''.join(elem.itertext()).strip()
+            text = common.get_element_text(elem).strip()
             text_upper = text.upper()
 
             # 找开始位置（不区分大小写）
@@ -278,7 +249,7 @@ def extract_abstract(draft_path: str, scope: str, output_path: Optional[str] = N
             candidate_cells = []
             for row_idx, row in enumerate(first_table.findall(f'{W}tr')):
                 for col_idx, tc in enumerate(row.findall(f'{W}tc')):
-                    cell_text = _get_cell_text_lxml(tc).strip()
+                    cell_text = common.get_element_text(tc).strip()
 
                     # 跳过模板占位符单元格
                     if '[Table_' in cell_text:
@@ -304,7 +275,7 @@ def extract_abstract(draft_path: str, scope: str, output_path: Optional[str] = N
 
                 # 复制单元格内容
                 for para_elem in best_tc.findall(f'{W}p'):
-                    if _get_para_text(para_elem).strip():
+                    if common.get_element_text(para_elem).strip():
                         new_para = deepcopy(para_elem)
                         abstract_doc.element.body.append(new_para)
                 abstract_found = True
@@ -314,7 +285,7 @@ def extract_abstract(draft_path: str, scope: str, output_path: Optional[str] = N
             in_abstract = False
             body = doc.element.body
             for para in body.iter(f'{W}p'):
-                text = _get_para_text(para).strip()
+                text = common.get_element_text(para).strip()
 
                 if any(marker in text for marker in ['摘要', '投资亮点', '核心观点']):
                     in_abstract = True
@@ -358,15 +329,9 @@ def _find_sectpr_margins_for_range(elements: list, start_idx: int, end_idx: int,
     def _extract_margins(sectPr):
         """从 sectPr 提取页边距"""
         pgMar = sectPr.find(f'{W}pgMar')
-        if pgMar is not None:
-            margins = {}
-            for attr in ['top', 'bottom', 'left', 'right', 'header', 'footer', 'gutter']:
-                val = pgMar.get(f'{W}{attr}')
-                if val is not None:
-                    margins[attr] = val
-            if margins:
-                return margins
-        return None
+        if pgMar is None:
+            return None
+        return common.extract_margins_from_pgMar(pgMar) or None
 
     # 1. 首先在范围内查找 sectPr（从后往前找）
     for i in range(min(end_idx, len(elements)) - 1, start_idx - 1, -1):
@@ -511,19 +476,10 @@ def _clear_paragraph_indents(docx_path: str) -> bool:
         是否成功
     """
     try:
-        import zipfile
-        import tempfile
-        import os
-
-        # 读取文档
-        with zipfile.ZipFile(docx_path, 'r') as z:
-            xml_content = z.read('word/document.xml')
-
-        # 解析 XML
-        tree = etree.fromstring(xml_content)
+        files = common.read_docx_zip(docx_path)
+        tree = etree.fromstring(files['word/document.xml'])
         cleared_count = 0
 
-        # 查找并删除所有 w:ind 元素
         for ind in tree.findall(f'.//{W}ind'):
             parent = ind.getparent()
             if parent is not None:
@@ -532,23 +488,10 @@ def _clear_paragraph_indents(docx_path: str) -> bool:
 
         if cleared_count > 0:
             print(f"  已清除 {cleared_count} 个段落缩进设置")
-
-            # 保存修改后的 XML
-            new_xml = etree.tostring(tree, xml_declaration=True, encoding='UTF-8', standalone='yes')
-
-            # 创建临时文件来保存修改后的 docx
-            temp_path = docx_path + '.tmp'
-
-            with zipfile.ZipFile(docx_path, 'r') as z_in:
-                with zipfile.ZipFile(temp_path, 'w', zipfile.ZIP_DEFLATED) as z_out:
-                    for item in z_in.namelist():
-                        if item == 'word/document.xml':
-                            z_out.writestr(item, new_xml)
-                        else:
-                            z_out.writestr(item, z_in.read(item))
-
-            # 替换原文件
-            os.replace(temp_path, docx_path)
+            files['word/document.xml'] = etree.tostring(
+                tree, xml_declaration=True, encoding='UTF-8', standalone='yes'
+            )
+            common.write_docx_zip(docx_path, files)
 
         return True
 
@@ -624,7 +567,7 @@ def extract_body(draft_path: str, scope: str, output_path: Optional[str] = None,
 
         # 找目录位置和正文结束位置
         for i, elem in enumerate(elements):
-            text = ''.join(elem.itertext()).strip()
+            text = common.get_element_text(elem).strip()
             text_upper = text.upper()
             tag = elem.tag.split('}')[-1]
 
@@ -659,7 +602,7 @@ def extract_body(draft_path: str, scope: str, output_path: Optional[str] = None,
                                 print(f"找到正文结束前的分页符: 元素 {j}")
                                 break
                             # 如果段落有文本就停止查找
-                            prev_text = ''.join(prev_elem.itertext()).strip()
+                            prev_text = common.get_element_text(prev_elem).strip()
                             if prev_text:
                                 break
 
@@ -675,7 +618,7 @@ def extract_body(draft_path: str, scope: str, output_path: Optional[str] = None,
         if start_marker:
             # 使用 LLM 提供的开始标记
             for i, elem in enumerate(elements):
-                text = ''.join(elem.itertext()).strip()
+                text = common.get_element_text(elem).strip()
                 if start_marker.upper() in text.upper():
                     start_idx = i
                     print(f"找到正文开始标记: 元素 {i}, 文本: {text[:50]}...")
@@ -685,7 +628,7 @@ def extract_body(draft_path: str, scope: str, output_path: Optional[str] = None,
         else:
             # 找正文第一章
             for i, elem in enumerate(elements):
-                text = ''.join(elem.itertext()).strip()
+                text = common.get_element_text(elem).strip()
                 if text.startswith('1 ') or text.startswith('1.'):
                     if '\t' not in text and text and not text[-1].isdigit():
                         start_idx = i
@@ -1290,7 +1233,7 @@ def extract_appendix(draft_path: str, scope: str, output_path: Optional[str] = N
         # 查找附录起始位置
         start_idx = None
         for i, elem in enumerate(elements):
-            text = ''.join(elem.itertext()).strip()
+            text = common.get_element_text(elem).strip()
 
             for marker in appendix_markers:
                 if marker in text:
@@ -1398,7 +1341,7 @@ def validate_appendix(draft_path: str, schema: Dict[str, Any]) -> Dict[str, Any]
         important_found = []
 
         for i, elem in enumerate(elements):
-            text = ''.join(elem.itertext()).strip()
+            text = common.get_element_text(elem).strip()
 
             for kw in appendix_keywords:
                 if kw in text and kw not in found_keywords:
@@ -1499,7 +1442,7 @@ def extract_english_summary(draft_path: str, scope: str, output_path: Optional[s
 
         # 找起始位置
         for i, elem in enumerate(elements):
-            text = ''.join(elem.itertext()).strip()
+            text = common.get_element_text(elem).strip()
 
             for kw in summary_keywords:
                 if kw.upper() in text.upper():
@@ -1519,7 +1462,7 @@ def extract_english_summary(draft_path: str, scope: str, output_path: Optional[s
         if end_marker:
             # 使用 LLM 提供的结束标记
             for i in range(start_idx + 1, len(elements)):
-                text = ''.join(elements[i].itertext()).strip()
+                text = common.get_element_text(elements[i]).strip()
                 if end_marker.upper() in text.upper():
                     end_idx = i
                     print(f"找到英文摘要结束标记: 元素 {i}")
@@ -1530,7 +1473,7 @@ def extract_english_summary(draft_path: str, scope: str, output_path: Optional[s
             for i in range(start_idx + 1, len(elements)):
                 elem = elements[i]
                 tag = elem.tag.split('}')[-1]
-                text = ''.join(elem.itertext()).strip()
+                text = common.get_element_text(elem).strip()
 
                 # 先检查结束标记
                 for marker in end_markers_fallback:

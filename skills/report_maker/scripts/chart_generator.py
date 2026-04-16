@@ -5,7 +5,6 @@
 
 import os
 from typing import Dict, Any, Optional
-from pathlib import Path
 
 # 尝试导入图表依赖
 try:
@@ -17,11 +16,6 @@ try:
     CHARTS_AVAILABLE = True
 except ImportError as e:
     CHARTS_AVAILABLE = False
-    yf = None
-    plt = None
-    mdates = None
-    np = None
-    datetime = None
 
 # 图表代理设置
 CHART_PROXY = os.environ.get("HTTP_PROXY") or os.environ.get("HTTPS_PROXY") or ""
@@ -50,8 +44,8 @@ def _generate_relative_chart(ticker: str, output_path: str, company_name: str = 
 
         # 尝试获取数据
         try:
-            stock_data = yf.download(ticker, start=start_date, end=end_date, proxy=CHART_PROXY or None, progress=False)
-            benchmark_data = yf.download("^HSI", start=start_date, end=end_date, proxy=CHART_PROXY or None, progress=False)
+            stock_data = yf.download(ticker, start=start_date, end=end_date, progress=False)
+            benchmark_data = yf.download("^HSI", start=start_date, end=end_date, progress=False)
         except Exception as e:
             print(f"  [yfinance] 下载数据失败: {e}")
             return False
@@ -61,8 +55,19 @@ def _generate_relative_chart(ticker: str, output_path: str, company_name: str = 
             return False
 
         # 计算相对收益
-        stock_return = (1 + stock_data['Adj Close'].pct_change()).cumprod() - 1
-        benchmark_return = (1 + benchmark_data['Adj Close'].pct_change()).cumprod() - 1
+        # yfinance 返回 MultiIndex 列名，如 ('Close', '3393.HK') 或单级列名 'Adj Close'
+        def get_close(df):
+            if 'Adj Close' in df.columns:
+                return df['Adj Close']
+            for col in df.columns:
+                if 'Close' in str(col):
+                    return df[col]
+            raise ValueError(f"No Close column found: {df.columns.tolist()}")
+        
+        stock_close = get_close(stock_data)
+        benchmark_close = get_close(benchmark_data)
+        stock_return = (1 + stock_close.pct_change()).cumprod() - 1
+        benchmark_return = (1 + benchmark_close.pct_change()).cumprod() - 1
         relative_return = (1 + stock_return) / (1 + benchmark_return) - 1
 
         # 绘图
@@ -100,7 +105,6 @@ def _generate_recommendation_chart(
     output_path: str,
     company_name: str = None,
     elements: Dict[str, Any] = None,
-    neolyst_client=None
 ) -> bool:
     """生成评级推荐图表。
 
@@ -111,7 +115,6 @@ def _generate_recommendation_chart(
         output_path: 输出图片路径
         company_name: 公司名称
         elements: 要素字典（包含 rating, target_price, current_price 等）
-        neolyst_client: neolyst 客户端（用于获取数据）
 
     Returns:
         是否成功生成
@@ -134,7 +137,7 @@ def _generate_recommendation_chart(
                 stock = yf.Ticker(ticker)
                 info = stock.info
                 current_price = info.get('currentPrice') or info.get('previousClose')
-            except:
+            except Exception:
                 pass
 
         # 如果有当前价格和目标价格，计算潜在涨幅
@@ -142,7 +145,7 @@ def _generate_recommendation_chart(
         if current_price and target_price:
             try:
                 potential_upside = (float(target_price) - float(current_price)) / float(current_price) * 100
-            except:
+            except Exception:
                 pass
 
         # 绘图
@@ -174,7 +177,7 @@ def _generate_recommendation_chart(
 
                     # 绘制目标价格标记
                     ax.axvline(x=100, color='#2ecc71', linewidth=2, linestyle='--', label=f'Target: {tp:.2f}')
-            except:
+            except Exception:
                 pass
 
         # 设置图表样式
