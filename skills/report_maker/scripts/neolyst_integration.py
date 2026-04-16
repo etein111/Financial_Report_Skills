@@ -23,6 +23,12 @@ from skills.neolyst.scripts.analyst import resolve_analyst_by_email
 from skills.neolyst.scripts.upload_files import upload_report_files, upload_model_file
 
 
+# ==================== 报告类型常量 ====================
+
+COMPANY_REPORT_TYPES = ("company", "company_flash")
+SECTOR_REPORT_TYPES = ("sector", "macro", "strategy", "quantitative", "bond")
+
+
 # ==================== 模板解析 ====================
 
 def resolve_template_for_report(
@@ -227,7 +233,7 @@ def map_elements_to_draft(
         draft["investment_thesis"] = investment_thesis
 
     # 公司类报告字段
-    if report_type in ("company", "company_flash"):
+    if report_type in COMPANY_REPORT_TYPES:
         if coverage_id:
             draft["coverage_id"] = coverage_id
         ticker = elements.get("ticker")
@@ -243,7 +249,7 @@ def map_elements_to_draft(
             draft["model_file"] = model_file
 
     # 行业类报告字段
-    elif report_type in ("sector", "macro", "strategy", "quantitative", "bond"):
+    elif report_type in SECTOR_REPORT_TYPES:
         region_code = elements.get("region_code")
         if region_code:
             draft["region_code"] = region_code

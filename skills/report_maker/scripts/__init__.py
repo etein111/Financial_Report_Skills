@@ -18,8 +18,6 @@ from .neolyst_integration import (
 from .workflow import (
     prepare_and_save_draft,
     submit_report_workflow,
-    is_company_report,
-    is_sector_report,
     classify_report_type,
     COMPANY_REPORT_TYPES,
     SECTOR_REPORT_TYPES,

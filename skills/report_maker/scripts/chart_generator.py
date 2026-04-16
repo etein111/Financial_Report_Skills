@@ -8,6 +8,8 @@ import sys
 from typing import Dict, Any, Optional
 from pathlib import Path
 
+import common
+
 # 尝试导入图表依赖
 try:
     import yfinance as yf
@@ -21,6 +23,27 @@ except ImportError as e:
 
 # 图表代理设置
 CHART_PROXY = os.environ.get("HTTP_PROXY") or os.environ.get("HTTPS_PROXY") or ""
+
+# Neolyst 模块缓存（避免每次调用都重新导入）
+_OPENCODE_ROOT = str(Path(__file__).resolve().parents[3])
+_NEOLYST_MODULES_CACHE = None
+
+
+def _ensure_neolyst_modules():
+    """确保 Neolyst 相关模块已导入并返回缓存的模块字典。"""
+    global _NEOLYST_MODULES_CACHE
+    if _NEOLYST_MODULES_CACHE is not None:
+        return _NEOLYST_MODULES_CACHE
+
+    if _OPENCODE_ROOT not in sys.path:
+        sys.path.insert(0, _OPENCODE_ROOT)
+
+    import importlib
+    _cov_mod = importlib.import_module("skills.neolyst.scripts.coverage")
+    import market_data as _md
+
+    _NEOLYST_MODULES_CACHE = {"coverage": _cov_mod, "market_data": _md}
+    return _NEOLYST_MODULES_CACHE
 
 
 def _generate_relative_chart(ticker: str, output_path: str, company_name: str = None) -> bool:
@@ -50,9 +73,7 @@ def _generate_relative_chart(ticker: str, output_path: str, company_name: str = 
         start_date = datetime(end_date.year - 1, end_date.month, end_date.day)
 
         # 处理 ticker 格式
-        if not ('.' in ticker or '^' in ticker):
-            if ticker.isdigit() and len(ticker) == 4:
-                ticker = f"{ticker}.HK"
+        ticker = common.normalize_yf_ticker(ticker)
 
         # 获取股票数据
         stock = yf.Ticker(ticker)
@@ -197,9 +218,7 @@ def _generate_recommendation_chart(ticker: str, output_path: str, company_name: 
         start_date = datetime(end_date.year - 5, end_date.month, end_date.day)
 
         # 处理 ticker 格式
-        if not ('.' in ticker or '^' in ticker):
-            if ticker.isdigit() and len(ticker) == 4:
-                ticker = f"{ticker}.HK"
+        ticker = common.normalize_yf_ticker(ticker)
 
         # 获取股票数据
         stock = yf.Ticker(ticker)
@@ -223,14 +242,9 @@ def _generate_recommendation_chart(ticker: str, output_path: str, company_name: 
             first_analyst_email = elements.get('a1_email', '')
             if first_analyst_email:
                 try:
-                    import importlib
-                    _opencode_root = str(Path(__file__).resolve().parents[3])
-                    if _opencode_root not in sys.path:
-                        sys.path.insert(0, _opencode_root)
-                    _cov_mod = importlib.import_module("skills.neolyst.scripts.coverage")
-                    import market_data as _md
-                    neolyst_recs = _md.fetch_recommendation_history(
-                        lambda t, e: _cov_mod.list_coverage_history(neolyst_client, t, e),
+                    mods = _ensure_neolyst_modules()
+                    neolyst_recs = mods["market_data"].fetch_recommendation_history(
+                        lambda t, e: mods["coverage"].list_coverage_history(neolyst_client, t, e),
                         ticker, first_analyst_email)
                     if neolyst_recs:
                         recommendations = neolyst_recs

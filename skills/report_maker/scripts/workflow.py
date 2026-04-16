@@ -23,17 +23,10 @@ from .neolyst_integration import (
     upload_draft_files,
     upload_model,
     get_contact_person_options,
+    COMPANY_REPORT_TYPES,
+    SECTOR_REPORT_TYPES,
 )
 from .common import load_yaml
-
-
-# ==================== 常量定义 ====================
-
-# 公司类报告类型
-COMPANY_REPORT_TYPES = ("company", "company_flash")
-
-# 行业类报告类型
-SECTOR_REPORT_TYPES = ("sector", "macro", "strategy", "quantitative", "bond")
 
 
 # ==================== 核心工作流函数 ====================
@@ -202,16 +195,6 @@ def submit_report_workflow(
 
 # ==================== 辅助函数 ====================
 
-def is_company_report(report_type: str) -> bool:
-    """判断是否为公司类报告。"""
-    return report_type in COMPANY_REPORT_TYPES
-
-
-def is_sector_report(report_type: str) -> bool:
-    """判断是否为行业类报告。"""
-    return report_type in SECTOR_REPORT_TYPES
-
-
 def classify_report_type(report_type: str) -> str:
     """分类报告类型。
 
@@ -224,9 +207,9 @@ def classify_report_type(report_type: str) -> str:
     Raises:
         ValueError: 未知报告类型
     """
-    if is_company_report(report_type):
+    if report_type in COMPANY_REPORT_TYPES:
         return "company"
-    elif is_sector_report(report_type):
+    elif report_type in SECTOR_REPORT_TYPES:
         return "sector"
     else:
         raise ValueError(

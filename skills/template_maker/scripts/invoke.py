@@ -32,6 +32,10 @@ from skills.neolyst.scripts.template import upsert_template, reuse_template
 
 DEFAULT_APPENDIX_SCOPE = "正文之后，报告末尾"
 
+# 分析师字段名集合（用于跳过占位符验证和替换）
+ANALYST_FIELDS = {f'a{i}_{f}' for i in range(1, 9) for f in ['cn', 'en', 'sfc', 'email']}
+SKIP_FIELDS = {'sections', 'analysts'}
+
 
 def validate_template_placeholders(doc, elements: dict, abstract_scope: str, body_scope: str) -> dict:
     """验证模板中的占位符是否完整提取。
@@ -76,11 +80,8 @@ def validate_template_placeholders(doc, elements: dict, abstract_scope: str, bod
     expected_placeholders = []
 
     # 1. 添加 elements.yaml 中的所有字段（除分析师和结构化字段外）
-    analyst_fields = {f'a{i}_{f}' for i in range(1, 9) for f in ['cn', 'en', 'sfc', 'email']}
-    skip_fields = {'sections', 'analysts'}
-
     for field_name, field_value in elements.items():
-        if not field_value or field_name in analyst_fields or field_name in skip_fields:
+        if not field_value or field_name in ANALYST_FIELDS or field_name in SKIP_FIELDS:
             continue
         if isinstance(field_value, dict) or isinstance(field_value, list):
             continue
@@ -581,13 +582,10 @@ def create_template(
     print("分析师字段: 已处理")
 
     # 替换普通字段值为占位符（跳过分析师字段和结构化字段）
-    analyst_fields = {f'a{i}_{f}' for i in range(1, 9) for f in ['cn', 'en', 'sfc', 'email']}
-    # 只跳过结构化字段（字典类型），保留普通文本字段
-    skip_fields = {'sections', 'analysts'}
     replaced_fields = []
 
     for field_name, field_value in elements.items():
-        if not field_value or field_name in analyst_fields or field_name in skip_fields:
+        if not field_value or field_name in ANALYST_FIELDS or field_name in SKIP_FIELDS:
             continue
 
         # 如果是字典类型（如 sections），跳过
@@ -710,7 +708,6 @@ def create_template(
         "validation": validation,
         "files": [
             str(schema_path),
-            str(meta_path),
             str(template_docx_path),
             str(router_path)
         ]

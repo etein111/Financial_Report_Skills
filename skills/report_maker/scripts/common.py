@@ -251,6 +251,21 @@ def normalize_report_name(filename: str) -> str:
     return name
 
 
+def normalize_yf_ticker(ticker: str) -> str:
+    """将 4 位数字 ticker 转换为 Yahoo Finance 格式。
+
+    Args:
+        ticker: 原始 ticker（如 "3393"、已格式化的 "3393.HK" 或 "VRT"）
+
+    Returns:
+        Yahoo Finance 格式的 ticker（如 "3393.HK"、"VRT"）
+    """
+    if not ('.' in ticker or '^' in ticker):
+        if ticker.isdigit() and len(ticker) == 4:
+            return f"{ticker}.HK"
+    return ticker
+
+
 def generate_report_filename(elements: Dict[str, Any], extension: str = ".docx") -> str:
     """根据 elements 生成报告文件名。
 
