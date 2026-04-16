@@ -14,7 +14,7 @@
 
 from typing import Dict, Any
 from pathlib import Path
-import os
+from concurrent.futures import ThreadPoolExecutor
 import sys
 
 SCRIPTS_DIR = Path(__file__).parent
@@ -62,8 +62,6 @@ from placeholder_fixer import _fix_split_placeholders_in_docx
 
 from sectpr_manager import (
     _save_template_final_sectPr,
-    _save_all_template_sectPrs,
-    _restore_all_sectPrs,
     _restore_final_sectPr,
     _get_template_english_summary_margins,
 )
@@ -74,6 +72,7 @@ from content_inserter import (
     insert_abstract_to_cell,
     _insert_abstract_at_paragraph,
     _apply_english_summary_margins,
+    _apply_english_summary_margins_doc,
 )
 
 from post_processor import (
@@ -142,41 +141,39 @@ def render_report(
         if expanded_analysts > 0:
             print(f"  已扩展分析师认证声明（新增 {expanded_analysts} 个分析师）")
 
-        # 3.6 生成 relative_chart
+        # 3.6+3.7 并行生成两个图表
         ticker = elements.get('ticker', '')
         relative_chart_generated = False
+        recommendation_chart_generated = False
+
         if ticker:
             report_dir = Path(output_path).parent
             relative_chart_path = report_dir / "relative_chart.png"
-            relative_chart_generated = _generate_relative_chart(
-                ticker=ticker,
-                output_path=str(relative_chart_path),
-                company_name=elements.get('company_en')
-            )
+            recommendation_chart_path = report_dir / "recommendation_chart.png"
+
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                rel_future = executor.submit(
+                    _generate_relative_chart,
+                    ticker, str(relative_chart_path), elements.get('company_en')
+                )
+                rec_future = executor.submit(
+                    _generate_recommendation_chart,
+                    ticker, str(recommendation_chart_path),
+                    elements.get('company_en') or elements.get('company_cn', ''), elements
+                )
+                relative_chart_generated = rel_future.result()
+                recommendation_chart_generated = rec_future.result()
+
             if relative_chart_generated:
                 print(f"  ✅ relative_chart 已生成")
             else:
                 print(f"  ⚠️ relative_chart 生成失败")
-        else:
-            print(f"  ⚠️ 无 ticker，跳过 relative_chart 生成")
-
-        # 3.7 生成 recommendation_chart
-        recommendation_chart_generated = False
-        if ticker:
-            report_dir = Path(output_path).parent
-            recommendation_chart_path = report_dir / "recommendation_chart.png"
-            recommendation_chart_generated = _generate_recommendation_chart(
-                ticker=ticker,
-                output_path=str(recommendation_chart_path),
-                company_name=elements.get('company_en') or elements.get('company_cn', ''),
-                elements=elements,
-            )
             if recommendation_chart_generated:
                 print(f"  ✅ recommendation_chart 已生成")
             else:
                 print(f"  ⚠️ recommendation_chart 生成失败")
         else:
-            print(f"  ⚠️ 无 ticker，跳过 recommendation_chart 生成")
+            print(f"  ⚠️ 无 ticker，跳过图表生成")
 
         # 4. 使用 docxtpl 渲染修复后的模板
         template = DocxTemplate(str(fixed_template_path))
@@ -209,6 +206,8 @@ def render_report(
 
             if body_inserted:
                 print(f"  已使用 docxcompose 三段式合并插入 body")
+                # 步骤 5: 加载 Document，后续所有操作复用此对象
+                doc = Document(output_path)
             else:
                 print(f"  ⚠️ 未找到 BODY_MARKER，使用 docxcompose 追加 body")
                 from docxcompose.composer import Composer
@@ -238,7 +237,6 @@ def render_report(
 
         # 8. 处理 ENGLISH_SUMMARY_MARKER
         if english_summary_path and Path(english_summary_path).exists() and Path(english_summary_path).stat().st_size > 0:
-            doc = Document(output_path)
             english_summary_doc = Document(english_summary_path)
 
             es_margins = _get_template_english_summary_margins(str(fixed_template_path))
@@ -258,9 +256,8 @@ def render_report(
             doc.save(output_path)
 
             if es_margins and es_inserted:
-                _apply_english_summary_margins(output_path, es_margins)
+                _apply_english_summary_margins_doc(doc, es_margins)
         else:
-            doc = Document(output_path)
             body_elem = doc.element.body
             marker_removed = False
             for elem in list(body_elem):
@@ -275,7 +272,6 @@ def render_report(
 
         # 8.5 插入 relative_chart
         if relative_chart_generated:
-            doc = Document(output_path)
             relative_chart_path = Path(output_path).parent / "relative_chart.png"
             if relative_chart_path.exists():
                 chart_inserted = _insert_image_to_placeholder(
@@ -285,11 +281,9 @@ def render_report(
                     print(f"  ✅ relative_chart 已插入到文档")
                 else:
                     print(f"  ⚠️ relative_chart 插入失败")
-                doc.save(output_path)
 
         # 8.6 插入 recommendation_chart
         if recommendation_chart_generated:
-            doc = Document(output_path)
             recommendation_chart_path = Path(output_path).parent / "recommendation_chart.png"
             if recommendation_chart_path.exists():
                 chart_inserted = _insert_image_to_placeholder(
@@ -299,7 +293,10 @@ def render_report(
                     print(f"  ✅ recommendation_chart 已插入到文档")
                 else:
                     print(f"  ⚠️ recommendation_chart 插入失败")
-                doc.save(output_path)
+
+        # 统一保存文档（含 english_summary 和 charts）
+        if relative_chart_generated or recommendation_chart_generated:
+            doc.save(output_path)
 
         # 9. 恢复图表 XML 中被转义的 Jinja2 语法
         if escaped_chart_files:
