@@ -37,7 +37,6 @@ AI Native(todo)
 
 ## AI自主学习（todo）
 
-
 # Plan
 
 ## Roadmap
@@ -46,7 +45,7 @@ AI Native(todo)
 
 * 目标
   替换现有xn系统，先解决编辑排版工作量最大的问题。
-* 做法
+* 范围
   开发neolyst-db，neolyst-web和几个skill：neolyst,report_maker, template_maker,compliance。
   用opencode充当临时工作台，挂载skills。
   Editor与AI工作台对话对话调用report_maker skill完成要素提取，用模板自动生成报告，自动提交报告。
@@ -57,7 +56,7 @@ AI Native(todo)
 
 * 目标
   分析师通过微信把报告发给工作台，AI直接与分析师对话半自助处理报告，编辑补位，逐步完善自动化。
-* 做法
+* 范围
   自研AI工作台neospace，分析师接入微信，微信机器人Agent转发工作session给AI工作台。
   AI工作台AI自动处理为主，人工补位为辅。
   报告处理以markdown格式为中心，标准化报告生产，降低报告排版的难度。
@@ -67,7 +66,7 @@ AI Native(todo)
 
 * 目标
   分析师提观点，AI助理自动生成报告。
-* 做法
+* 范围
   建立分析师AI记忆系统，沉淀分析师的经验与思考体系。
   建立金融数据库和知识库。
   AI基于这些基础设施，从分析师观点出发自动产生报告。
