@@ -286,7 +286,7 @@ SET default_table_access_method = "heap";
 CREATE TABLE IF NOT EXISTS "public"."analyst" (
     "english_name" "text" NOT NULL,
     "chinese_name" "text",
-    "email" "text" NOT NULL,
+    "email" "text" NOT NULL PRIMARY KEY,
     "suffix" "text",
     "sfc" "text",
     "region_code" "text",
@@ -869,7 +869,7 @@ COMMENT ON FUNCTION "public"."validate_sector_hierarchy"() IS '行业分类层�
 
 
 CREATE TABLE IF NOT EXISTS "public"."coverage" (
-    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL PRIMARY KEY,
     "ticker" "text" NOT NULL,
     "english_name" "text" NOT NULL,
     "chinese_name" "text",
@@ -940,7 +940,7 @@ COMMENT ON COLUMN "public"."coverage"."updated_at" IS '记录最后更新时间�
 
 
 CREATE TABLE IF NOT EXISTS "public"."coverage_analyst" (
-    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL PRIMARY KEY,
     "coverage_id" "uuid" NOT NULL,
     "analyst_email" "text" NOT NULL,
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
@@ -983,7 +983,7 @@ COMMENT ON COLUMN "public"."coverage_analyst"."author_order" IS '署名排序号
 CREATE TABLE IF NOT EXISTS "public"."rating" (
     "name" "text" NOT NULL,
     "code" "text" NOT NULL,
-    "rank" integer DEFAULT 1 NOT NULL
+    "rank" integer DEFAULT 1 NOT NULL PRIMARY KEY
 );
 
 
@@ -1009,7 +1009,7 @@ COMMENT ON COLUMN "public"."rating"."rank" IS '排序权重，值越小排名越
 CREATE TABLE IF NOT EXISTS "public"."region" (
     "name_en" "text" NOT NULL,
     "name_cn" "text" NOT NULL,
-    "code" "text" NOT NULL,
+    "code" "text" NOT NULL PRIMARY KEY,
     "is_active" boolean DEFAULT true NOT NULL,
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL
@@ -1048,7 +1048,7 @@ COMMENT ON COLUMN "public"."region"."updated_at" IS '记录最后更新时间（
 
 
 CREATE TABLE IF NOT EXISTS "public"."report" (
-    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL PRIMARY KEY,
     "title" "text" NOT NULL,
     "report_type" "text" NOT NULL,
     "report_language" "text",
@@ -1182,7 +1182,7 @@ COMMENT ON COLUMN "public"."report"."model_path" IS '当前 Model 文件在 Stor
 
 
 CREATE TABLE IF NOT EXISTS "public"."report_status_log" (
-    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL PRIMARY KEY,
     "report_id" "uuid" NOT NULL,
     "from_status" "text" NOT NULL,
     "to_status" "text" NOT NULL,
@@ -1239,7 +1239,7 @@ COMMENT ON COLUMN "public"."report_status_log"."metadata" IS '状态变更时的
 
 
 CREATE TABLE IF NOT EXISTS "public"."report_template" (
-    "id" "text" NOT NULL,
+    "id" "text" NOT NULL PRIMARY KEY,
     "report_type" "text" NOT NULL,
     "language" "text" DEFAULT 'en'::"text" NOT NULL,
     "template_file_path" "text" NOT NULL,
@@ -1287,7 +1287,7 @@ COMMENT ON COLUMN "public"."report_template"."updated_at" IS '记录最后更新
 
 CREATE TABLE IF NOT EXISTS "public"."report_type" (
     "name" "text" NOT NULL,
-    "report_type" "text" NOT NULL,
+    "report_type" "text" NOT NULL PRIMARY KEY,
     "sort" integer DEFAULT 1 NOT NULL,
     "is_active" boolean DEFAULT true NOT NULL,
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
@@ -1327,7 +1327,7 @@ COMMENT ON COLUMN "public"."report_type"."updated_at" IS '记录最后更新时�
 
 
 CREATE TABLE IF NOT EXISTS "public"."sector" (
-    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL PRIMARY KEY,
     "level" smallint NOT NULL,
     "parent_id" "uuid",
     "name_en" "text" NOT NULL,
@@ -1384,13 +1384,7 @@ COMMENT ON COLUMN "public"."sector"."updated_at" IS '记录最后更新时间（
 
 
 
-ALTER TABLE ONLY "public"."analyst"
-    ADD CONSTRAINT "analyst_pkey" PRIMARY KEY ("email");
 
-
-
-ALTER TABLE ONLY "public"."coverage_analyst"
-    ADD CONSTRAINT "coverage_analyst_pkey" PRIMARY KEY ("id");
 
 
 
@@ -1399,18 +1393,12 @@ ALTER TABLE ONLY "public"."coverage_analyst"
 
 
 
-ALTER TABLE ONLY "public"."coverage"
-    ADD CONSTRAINT "coverage_pkey" PRIMARY KEY ("id");
-
 
 
 ALTER TABLE ONLY "public"."rating"
     ADD CONSTRAINT "rating_code_key" UNIQUE ("code");
 
 
-
-ALTER TABLE ONLY "public"."rating"
-    ADD CONSTRAINT "rating_pkey" PRIMARY KEY ("rank");
 
 
 
@@ -1424,33 +1412,15 @@ ALTER TABLE ONLY "public"."region"
 
 
 
-ALTER TABLE ONLY "public"."region"
-    ADD CONSTRAINT "region_pkey" PRIMARY KEY ("code");
 
 
 
-ALTER TABLE ONLY "public"."report"
-    ADD CONSTRAINT "report_pkey" PRIMARY KEY ("id");
 
 
 
-ALTER TABLE ONLY "public"."report_status_log"
-    ADD CONSTRAINT "report_status_log_pkey" PRIMARY KEY ("id");
 
 
 
-ALTER TABLE ONLY "public"."report_template"
-    ADD CONSTRAINT "report_template_pkey" PRIMARY KEY ("id");
-
-
-
-ALTER TABLE ONLY "public"."report_type"
-    ADD CONSTRAINT "report_type_pkey" PRIMARY KEY ("report_type");
-
-
-
-ALTER TABLE ONLY "public"."sector"
-    ADD CONSTRAINT "sector_pkey" PRIMARY KEY ("id");
 
 
 
