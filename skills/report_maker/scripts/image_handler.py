@@ -4,7 +4,6 @@
 """
 
 import hashlib
-import zipfile
 from typing import Dict, Any
 from pathlib import Path
 from lxml import etree
@@ -46,28 +45,19 @@ def _escape_jinja_in_charts(docx_path: str) -> Dict[str, str]:
     escaped_files = {}
 
     try:
-        with zipfile.ZipFile(docx_path, 'r') as z:
-            chart_files = [name for name in z.namelist()
-                          if name.startswith('word/charts/') and name.endswith('.xml')]
+        files = common.read_docx_zip(docx_path)
 
-            for chart_file in chart_files:
-                content = z.read(chart_file).decode('utf-8')
-                escaped = content.replace('{{', _JINJA_LBRACE_ESC).replace('}}', _JINJA_RBRACE_ESC)
-                if escaped != content:
-                    escaped_files[chart_file] = content
+        for name, content in files.items():
+            if not (name.startswith('word/charts/') and name.endswith('.xml')):
+                continue
+            text = content.decode('utf-8')
+            escaped = text.replace('{{', _JINJA_LBRACE_ESC).replace('}}', _JINJA_RBRACE_ESC)
+            if escaped != text:
+                escaped_files[name] = text
+                files[name] = escaped.encode('utf-8')
 
-        # 只写入有变化的图表文件
         if escaped_files:
-            # 复制原 zip，只替换变化的图表文件
-            tmp_path = docx_path + '.tmp'
-            with zipfile.ZipFile(docx_path, 'r') as zin, \
-                 zipfile.ZipFile(tmp_path, 'w', compression=zipfile.ZIP_DEFLATED) as zout:
-                for item in zin.infolist():
-                    if item.filename in escaped_files:
-                        zout.writestr(item, escaped_files[item.filename].encode('utf-8'))
-                    else:
-                        zout.writestr(item, zin.read(item.filename))
-            Path(tmp_path).replace(docx_path)
+            common.write_docx_zip(docx_path, files)
 
     except Exception as e:
         print(f"  转义图表 Jinja2 语法时出错: {e}")
@@ -86,17 +76,14 @@ def _restore_jinja_in_charts(docx_path: str, escaped_files: Dict[str, str]) -> N
         return
 
     try:
-        tmp_path = docx_path + '.tmp'
-        with zipfile.ZipFile(docx_path, 'r') as zin, \
-             zipfile.ZipFile(tmp_path, 'w', compression=zipfile.ZIP_DEFLATED) as zout:
-            for item in zin.infolist():
-                if item.filename in escaped_files:
-                    restored = escaped_files[item.filename].replace(
-                        _JINJA_LBRACE_ESC, '{{').replace(_JINJA_RBRACE_ESC, '}}')
-                    zout.writestr(item, restored.encode('utf-8'))
-                else:
-                    zout.writestr(item, zin.read(item.filename))
-        Path(tmp_path).replace(docx_path)
+        files = common.read_docx_zip(docx_path)
+
+        for name, original in escaped_files.items():
+            restored = original.replace(
+                _JINJA_LBRACE_ESC, '{{').replace(_JINJA_RBRACE_ESC, '}}')
+            files[name] = restored.encode('utf-8')
+
+        common.write_docx_zip(docx_path, files)
 
     except Exception as e:
         print(f"  恢复图表 Jinja2 语法时出错: {e}")
@@ -197,7 +184,7 @@ def _insert_image_to_placeholder(
 def _copy_media_between_docx(source_path: str, target_path: str) -> int:
     """从源 docx 复制所有媒体资源到目标 docx。
 
-    使用 zipfile 直接操作，确保图片文件被正确复制。
+    使用 common.read_docx_zip / write_docx_zip 操作，确保图片文件被正确复制。
     当 body_doc 的 XML 被 deepcopy 到 master_doc 后，图片引用（rId）会被保留，
     但目标文档的 rels 文件中没有对应的关系。本函数补充这些缺失的关系。
 
@@ -212,39 +199,37 @@ def _copy_media_between_docx(source_path: str, target_path: str) -> int:
 
     try:
         source_rid_to_media = {}  # {rId: (media_name, media_bytes, media_hash)}
+        source_files = common.read_docx_zip(source_path)
 
-        with zipfile.ZipFile(source_path, 'r') as z:
-            for name in z.namelist():
-                if name.startswith('word/media/'):
-                    media_bytes = z.read(name)
-                    media_hash = hashlib.md5(media_bytes).hexdigest()
-                    source_rid_to_media[f'_h_{media_hash}'] = (name[5:], media_bytes, media_hash)
+        for name, media_bytes in source_files.items():
+            if name.startswith('word/media/'):
+                media_hash = hashlib.md5(media_bytes).hexdigest()
+                source_rid_to_media[f'_h_{media_hash}'] = (name[5:], media_bytes, media_hash)
 
-            if 'word/_rels/document.xml.rels' in z.namelist():
-                rels_xml = z.read('word/_rels/document.xml.rels')
-                rels_tree = etree.fromstring(rels_xml)
-                ns = {'r': 'http://schemas.openxmlformats.org/package/2006/relationships'}
-                for rel in rels_tree.findall('r:Relationship', ns):
-                    rel_id = rel.get('Id')
-                    target = rel.get('Target')
-                    rel_type = rel.get('Type')
-                    if target and target.startswith('media/') and 'image' in rel_type:
-                        media_name = target
-                        if f'word/{media_name}' in z.namelist():
-                            media_bytes = z.read(f'word/{media_name}')
-                            media_hash = hashlib.md5(media_bytes).hexdigest()
-                            source_rid_to_media[rel_id] = (media_name, media_bytes, media_hash)
+        rels_xml = source_files.get('word/_rels/document.xml.rels')
+        if rels_xml:
+            rels_tree = etree.fromstring(rels_xml)
+            ns = {'r': 'http://schemas.openxmlformats.org/package/2006/relationships'}
+            for rel in rels_tree.findall('r:Relationship', ns):
+                rel_id = rel.get('Id')
+                target = rel.get('Target')
+                rel_type = rel.get('Type')
+                if target and target.startswith('media/') and 'image' in rel_type:
+                    media_name = target
+                    media_bytes = source_files.get(f'word/{media_name}')
+                    if media_bytes:
+                        media_hash = hashlib.md5(media_bytes).hexdigest()
+                        source_rid_to_media[rel_id] = (media_name, media_bytes, media_hash)
 
-        with zipfile.ZipFile(target_path, 'r') as z:
-            target_media = {name for name in z.namelist() if name.startswith('word/media/')}
-            target_rels = {}
-            if 'word/_rels/document.xml.rels' in z.namelist():
-                rels_xml = z.read('word/_rels/document.xml.rels')
-                rels_tree = etree.fromstring(rels_xml)
-                ns = {'r': 'http://schemas.openxmlformats.org/package/2006/relationships'}
-                for rel in rels_tree.findall('r:Relationship', ns):
-                    rid = rel.get('Id')
-                    target_rels[rid] = rel.get('Target', '')
+        target_files = common.read_docx_zip(target_path)
+        target_rels = {}
+        target_rels_xml = target_files.get('word/_rels/document.xml.rels')
+        if target_rels_xml:
+            rels_tree = etree.fromstring(target_rels_xml)
+            ns = {'r': 'http://schemas.openxmlformats.org/package/2006/relationships'}
+            for rel in rels_tree.findall('r:Relationship', ns):
+                rid = rel.get('Id')
+                target_rels[rid] = rel.get('Target', '')
 
         missing_media = []
         for rid, (media_name, media_bytes, media_hash) in source_rid_to_media.items():
@@ -252,15 +237,13 @@ def _copy_media_between_docx(source_path: str, target_path: str) -> int:
                 missing_media.append((media_name, media_bytes))
 
         if missing_media:
-            files = common.read_docx_zip(target_path)
-
             for media_name, media_bytes in missing_media:
                 target_media_name = f'word/media/{Path(media_name).name}'
-                if target_media_name not in files:
-                    files[target_media_name] = media_bytes
+                if target_media_name not in target_files:
+                    target_files[target_media_name] = media_bytes
                     copied_count += 1
 
-            common.write_docx_zip(target_path, files)
+            common.write_docx_zip(target_path, target_files)
 
     except Exception as e:
         print(f"  复制媒体文件时出错: {e}")

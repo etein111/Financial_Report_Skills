@@ -3,7 +3,6 @@
 提供使用 docxcompose 进行文档合并的功能。
 """
 
-import shutil
 from pathlib import Path
 from typing import Dict, Any, Optional
 
@@ -63,13 +62,13 @@ def insert_body_at_marker_compose(
         if template_path:
             template_sectPrs = _save_all_template_sectPrs(template_path)
 
-        # 1. 找到 marker 位置
-        doc = Document(doc_path)
-        body_elem = doc.element.body
-        all_elements = list(body_elem)
+        # 1. 找到 marker 位置（同时复用此 Document 作为 part1 来源）
+        part1_doc = Document(doc_path)
+        part1_body = part1_doc.element.body
+        part1_elements = list(part1_body)
 
         marker_idx = None
-        for i, elem in enumerate(all_elements):
+        for i, elem in enumerate(part1_elements):
             text = common.get_element_text(elem)
             if marker in text:
                 marker_idx = i
@@ -78,26 +77,16 @@ def insert_body_at_marker_compose(
         if marker_idx is None:
             return False
 
-        # 2. 创建 part1（marker 之前的内容 = 封面 section）
+        # 2. 修改 part1，保留 marker 之前的内容（封面 section）
         part1_path = Path(output_path).parent / "temp_part1.docx"
-        shutil.copy(doc_path, str(part1_path))
-
-        part1_doc = Document(str(part1_path))
-        part1_body = part1_doc.element.body
-        part1_elements = list(part1_body)
-
         for elem in part1_elements[marker_idx:]:
-            tag = common.local_tag(elem)
-            if tag != 'sectPr':
+            if common.local_tag(elem) != 'sectPr':
                 part1_body.remove(elem)
-
         part1_doc.save(str(part1_path))
 
         # 3. 创建 part3（marker 之后的内容 = 英文摘要 + 法律披露 sections）
         part3_path = Path(output_path).parent / "temp_part3.docx"
-        shutil.copy(doc_path, str(part3_path))
-
-        part3_doc = Document(str(part3_path))
+        part3_doc = Document(doc_path)
         part3_body = part3_doc.element.body
         part3_elements = list(part3_body)
 
