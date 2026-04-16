@@ -4,12 +4,21 @@
 """
 
 import hashlib
+import zipfile
 from typing import Dict, Any
 from pathlib import Path
 from lxml import etree
 
 import common
 W = common.W_NS
+
+# 图片宽高比（4:3）
+_ASPECT_RATIO = 0.75
+# EMU (English Metric Units) per centimeter (1 cm = 914400 EMU)
+EMU_PER_CM = 914400
+# Jinja2 escape tokens for chart XML
+_JINJA_LBRACE_ESC = '__JINJA_LBRACE__'
+_JINJA_RBRACE_ESC = '__JINJA_RBRACE__'
 
 # 尝试导入 docx
 try:
@@ -37,18 +46,28 @@ def _escape_jinja_in_charts(docx_path: str) -> Dict[str, str]:
     escaped_files = {}
 
     try:
-        files = common.read_docx_zip(docx_path)
-        chart_files = [name for name in files if name.startswith('word/charts/') and name.endswith('.xml')]
+        with zipfile.ZipFile(docx_path, 'r') as z:
+            chart_files = [name for name in z.namelist()
+                          if name.startswith('word/charts/') and name.endswith('.xml')]
 
-        for chart_file in chart_files:
-            content = files[chart_file].decode('utf-8')
-            escaped = content.replace('{{', '__JINJA_LBRACE__').replace('}}', '__JINJA_RBRACE__')
-            if escaped != content:
-                escaped_files[chart_file] = content
-                files[chart_file] = escaped.encode('utf-8')
+            for chart_file in chart_files:
+                content = z.read(chart_file).decode('utf-8')
+                escaped = content.replace('{{', _JINJA_LBRACE_ESC).replace('}}', _JINJA_RBRACE_ESC)
+                if escaped != content:
+                    escaped_files[chart_file] = content
 
+        # 只写入有变化的图表文件
         if escaped_files:
-            common.write_docx_zip(docx_path, files)
+            # 复制原 zip，只替换变化的图表文件
+            tmp_path = docx_path + '.tmp'
+            with zipfile.ZipFile(docx_path, 'r') as zin, \
+                 zipfile.ZipFile(tmp_path, 'w', compression=zipfile.ZIP_DEFLATED) as zout:
+                for item in zin.infolist():
+                    if item.filename in escaped_files:
+                        zout.writestr(item, escaped_files[item.filename].encode('utf-8'))
+                    else:
+                        zout.writestr(item, zin.read(item.filename))
+            Path(tmp_path).replace(docx_path)
 
     except Exception as e:
         print(f"  转义图表 Jinja2 语法时出错: {e}")
@@ -67,14 +86,17 @@ def _restore_jinja_in_charts(docx_path: str, escaped_files: Dict[str, str]) -> N
         return
 
     try:
-        files = common.read_docx_zip(docx_path)
-
-        for chart_file, original_content in escaped_files.items():
-            if chart_file in files:
-                restored = original_content.replace('__JINJA_LBRACE__', '{{').replace('__JINJA_RBRACE__', '}}')
-                files[chart_file] = restored.encode('utf-8')
-
-        common.write_docx_zip(docx_path, files)
+        tmp_path = docx_path + '.tmp'
+        with zipfile.ZipFile(docx_path, 'r') as zin, \
+             zipfile.ZipFile(tmp_path, 'w', compression=zipfile.ZIP_DEFLATED) as zout:
+            for item in zin.infolist():
+                if item.filename in escaped_files:
+                    restored = escaped_files[item.filename].replace(
+                        _JINJA_LBRACE_ESC, '{{').replace(_JINJA_RBRACE_ESC, '}}')
+                    zout.writestr(item, restored.encode('utf-8'))
+                else:
+                    zout.writestr(item, zin.read(item.filename))
+        Path(tmp_path).replace(docx_path)
 
     except Exception as e:
         print(f"  恢复图表 Jinja2 语法时出错: {e}")
