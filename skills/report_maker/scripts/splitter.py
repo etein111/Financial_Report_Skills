@@ -476,22 +476,19 @@ def _clear_paragraph_indents(docx_path: str) -> bool:
         是否成功
     """
     try:
-        files = common.read_docx_zip(docx_path)
-        tree = etree.fromstring(files['word/document.xml'])
-        cleared_count = 0
+        cleared_count = [0]
 
-        for ind in tree.findall(f'.//{W}ind'):
-            parent = ind.getparent()
-            if parent is not None:
-                parent.remove(ind)
-                cleared_count += 1
+        def _clear_inds(tree):
+            for ind in tree.findall(f'.//{W}ind'):
+                parent = ind.getparent()
+                if parent is not None:
+                    parent.remove(ind)
+                    cleared_count[0] += 1
 
-        if cleared_count > 0:
-            print(f"  已清除 {cleared_count} 个段落缩进设置")
-            files['word/document.xml'] = etree.tostring(
-                tree, xml_declaration=True, encoding='UTF-8', standalone='yes'
-            )
-            common.write_docx_zip(docx_path, files)
+        common.modify_docx_xml(docx_path, _clear_inds)
+
+        if cleared_count[0] > 0:
+            print(f"  已清除 {cleared_count[0]} 个段落缩进设置")
 
         return True
 

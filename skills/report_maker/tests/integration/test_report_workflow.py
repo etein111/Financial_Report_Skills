@@ -81,8 +81,8 @@ class TestReportWorkflow:
             extracted_elements = extractor.extract_elements(str(target_draft), schema)
 
         # 验证：关键非片段字段存在（样例数据可能使用旧格式，不逐一断言）
-        field_names = common.get_all_field_names(schema)
-        non_fragment = common.filter_fragment_fields(field_names)
+        field_names = list(schema.keys())
+        non_fragment = [f for f in field_names if f not in {'abstract', 'body', 'appendix'}]
         # 核心字段必须存在
         assert "ticker" in extracted_elements, "字段 ticker 未提取"
         assert "rating" in extracted_elements, "字段 rating 未提取"
@@ -206,13 +206,13 @@ class TestReportWorkflow:
         schema = common.load_yaml(schema_path)
 
         # 获取所有字段
-        all_fields = common.get_all_field_names(schema)
+        all_fields = list(schema.keys())
         assert "abstract" in all_fields
         assert "body" in all_fields
         assert "ticker" in all_fields
 
         # 过滤出非片段字段
-        non_fragment_fields = common.filter_fragment_fields(all_fields)
+        non_fragment_fields = [f for f in all_fields if f not in {'abstract', 'body', 'appendix'}]
         assert "abstract" not in non_fragment_fields
         assert "body" not in non_fragment_fields
         assert "ticker" in non_fragment_fields
@@ -229,7 +229,7 @@ class TestReportWorkflow:
         completed = common.ensure_all_fields(partial_elements, schema)
 
         # 验证所有字段都存在（但缺失的会是空字符串）
-        all_fields = common.get_all_field_names(schema)
+        all_fields = list(schema.keys())
         for field in all_fields:
             assert field in completed, f"字段 {field} 未补全"
 

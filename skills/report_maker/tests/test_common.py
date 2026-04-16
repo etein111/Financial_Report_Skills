@@ -11,8 +11,6 @@ from common import (
     list_report_types,
     create_report_dir,
     normalize_report_name,
-    get_all_field_names,
-    filter_fragment_fields,
     ensure_all_fields,
     validate_elements_against_schema,
     DIR_REPORTS,
@@ -185,42 +183,6 @@ class TestNormalizeReportName:
     def test_keep_clean_name(self):
         """测试：保留干净的名称。"""
         assert normalize_report_name("西锐飞机首次覆盖报告.docx") == "西锐飞机首次覆盖报告"
-
-
-class TestGetAllFieldNames:
-    """测试 get_all_field_names 函数。"""
-
-    def test_get_all_field_names(self):
-        """测试：获取所有字段名。"""
-        schema = {
-            "ticker": {"description": "股票代码"},
-            "company": {"description": "公司名"},
-            "rating": {"description": "评级"}
-        }
-
-        result = get_all_field_names(schema)
-
-        assert result == ["ticker", "company", "rating"]
-
-
-class TestFilterFragmentFields:
-    """测试 filter_fragment_fields 函数。"""
-
-    def test_filter_abstract_and_body(self):
-        """测试：过滤 abstract 和 body 字段。"""
-        fields = ["ticker", "company", "abstract", "rating", "body"]
-
-        result = filter_fragment_fields(fields)
-
-        assert result == ["ticker", "company", "rating"]
-
-    def test_no_fragment_fields(self):
-        """测试：没有 fragment 字段时返回全部。"""
-        fields = ["ticker", "company", "rating"]
-
-        result = filter_fragment_fields(fields)
-
-        assert result == ["ticker", "company", "rating"]
 
 
 class TestEnsureAllFields:

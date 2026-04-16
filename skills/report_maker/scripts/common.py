@@ -87,6 +87,32 @@ def write_docx_zip(path: str, files: Dict[str, bytes]) -> None:
         raise
 
 
+def modify_docx_xml(path: str, modifier_fn, standalone=True, output_path: str = None) -> None:
+    """读取 docx 的 document.xml，执行修改函数，写回 docx。
+
+    将 read → parse → modify → serialize → write 模式封装为单次调用，
+    避免在 6+ 个模块中重复相同的样板代码。
+
+    Args:
+        path: docx 文件路径
+        modifier_fn: 接收 lxml etree.Element（document.xml 根节点）的回调函数
+        standalone: XML declaration 的 standalone 属性（默认 True）
+        output_path: 输出路径（默认覆盖原文件）
+    """
+    from lxml import etree
+
+    files = read_docx_zip(path)
+    if 'word/document.xml' not in files:
+        return
+
+    tree = etree.fromstring(files['word/document.xml'])
+    modifier_fn(tree)
+    files['word/document.xml'] = etree.tostring(
+        tree, xml_declaration=True, encoding='UTF-8', standalone=standalone
+    )
+    write_docx_zip(output_path or path, files)
+
+
 def get_element_text(elem) -> str:
     """提取 XML 元素中所有 w:t 子元素的文本内容。
 
@@ -320,30 +346,6 @@ def get_report_output_path(
 
 
 # ==================== Schema 工具函数 ====================
-
-def get_all_field_names(schema: Dict[str, Any]) -> List[str]:
-    """从 schema 中获取所有字段名。
-
-    Args:
-        schema: schema.yaml 内容
-
-    Returns:
-        字段名列表（按顺序）
-    """
-    return list(schema.keys())
-
-
-def filter_fragment_fields(fields: List[str]) -> List[str]:
-    """过滤出非 fragment 类型的字段。
-
-    Args:
-        fields: 所有字段名列表
-
-    Returns:
-        非 fragment 类型的字段名列表
-    """
-    fragment_fields = {'abstract', 'body', 'appendix'}
-    return [f for f in fields if f not in fragment_fields]
 
 
 def ensure_all_fields(elements: Dict[str, Any], schema: Dict[str, Any]) -> Dict[str, Any]:
