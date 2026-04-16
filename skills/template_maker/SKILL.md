@@ -30,10 +30,11 @@ description: "当用户说「制作模板」、「创建模板」、「分析模
 | `bond`          | 债券报告（使用 common 模板） |
 
 **注意**：
-- 报告类型通过 `router.yaml` 映射到模板名
-- 多个报告类型可以共用一个模板
-- `macro`、`strategy`、`quantitative`、`bond` 共用 `common` 模板
+- 模板发布后，运行时通过 neolyst 的 `resolve_template(report_type, language)` 获取
+- 多个报告类型可以共用一个模板（通过 `reuse` 命令建立共享关系）
+- `macro`、`strategy`、`quantitative`、`bond` 可共用同一模板
 - 报告类型可以扩展
+- **router.yaml 不再参与运行时模板选择**，仅服务于模板制作阶段的人类维护体验
 
 ## 使用流程
 
@@ -175,7 +176,97 @@ description: "当用户说「制作模板」、「创建模板」、「分析模
 - **模板创建**：生成带 Jinja2 占位符的 Word 模板
 - **字段管理**：添加、删除、修改字段
 - **模板验证**：检查模板结构和占位符
-- **路由维护**：更新 router.yaml 映射
+- **发布模板**：`publish` 命令将模板发布到 neolyst
+- **复用模板**：`reuse` 命令声明复用已发布的模板
+
+---
+
+## 发布模板到 neolyst
+
+制作完成并验证通过后，可使用以下命令发布模板：
+
+### `publish` 命令
+
+将本地模板发布到 neolyst：
+
+```
+【发布模板】
+请选择要发布的模板：
+  1. company - 公司覆盖报告
+  2. sector - 行业研究报告
+  ...
+
+您的选择: company
+
+请选择语言：
+  1. zh - 中文
+  2. en - 英文
+
+您的选择: zh
+
+正在上传模板到 neolyst...
+✓ 已上传 template.docx
+✓ 已上传 schema.yaml
+✓ 已发布 company_zh 模板
+```
+
+**参数**：
+- `report_type`：模板对应的报告类型
+- `language`：语言版本（zh/en）
+- `template_local_path`：本地 Word 模板文件路径
+- `schema_local_path`：本地 schema.yaml 路径（可选）
+
+**调用接口**：
+```python
+from skills.neolyst.scripts import template
+
+client = connection.get_client()
+template.upsert_template(
+    client,
+    report_type="company",
+    language="zh",
+    template_local_path="templates/company/template.docx",
+    schema_local_path="templates/company/schema.yaml"
+)
+```
+
+### `reuse` 命令
+
+声明当前 report_type 复用另一个已发布模板（不重复上传文件）：
+
+```
+【复用模板】
+当前 report_type: quantitative
+目标复用: macro（已有 macro_zh 模板）
+
+请确认复用关系？(y/n)
+✓ 已建立 quantitative_zh → macro_zh 共享关系
+```
+
+**参数**：
+- `report_type`：当前要设置的 report_type
+- `language`：语言版本
+- `same_as_report_type`：被复用的源 report_type
+
+**调用接口**：
+```python
+from skills.neolyst.scripts import template
+
+client = connection.get_client()
+template.reuse_template(
+    client,
+    report_type="quantitative",
+    language="zh",
+    same_as_report_type="macro"
+)
+```
+
+**错误处理**：
+- 源模板未发布时报错
+- language 不一致时报错
+- report_type 复用自己时报错
+
+**注意**：共享关系为静态复制。若主模板后续重新上传，需重新执行 `reuse_template` 同步。
 
 ## 写权限边界
 

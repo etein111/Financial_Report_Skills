@@ -24,6 +24,15 @@ from supabase import create_client, Client
 
 logger = logging.getLogger(__name__)
 
+
+class NeedsLoginError(Exception):
+    """需要用户登录才能继续操作。
+
+    AI 捕获此异常后应主动询问用户邮箱和密码，
+    然后调用 get_client(email=..., password=...) 继续。
+    """
+    pass
+
 # skill 根目录（skills/neolyst/），neolyst.yaml 和 user.json 默认存放于此
 SKILL_ROOT = Path(__file__).parent.parent
 USER_FILE = "user.json"
@@ -165,9 +174,10 @@ def get_client(
     _email = email or (user_data.get("email") if user_data else None)
     _password = password or (user_data.get("password") if user_data else None)
     if not _email or not _password:
-        raise ValueError(
-            "无可用 session 且未提供凭据。请传入 email+password，"
-            "或确保 user.json 包含有效凭据。"
+        raise NeedsLoginError(
+            "需要登录 Supabase 才能继续操作。请提供："
+            "邮箱: <你的 Supabase 登录邮箱>"
+            "密码: <你的 Supabase 密码>"
         )
 
     try:

@@ -179,6 +179,9 @@ def save_yaml(path: Union[str, Path], data: Dict[str, Any], sort_keys: bool = Fa
 def get_template_name(report_type: str, router_path: Union[str, Path] = None) -> Optional[str]:
     """根据报告类型获取模板名。
 
+    注意：此函数已被 neolyst_integration.resolve_template_for_report 替代，
+    保留仅为向后兼容。
+
     Args:
         report_type: 报告类型（如 "company", "sector"）
         router_path: router.yaml 文件路径，默认为 templates/router.yaml

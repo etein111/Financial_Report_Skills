@@ -145,19 +145,32 @@ uv pip install "docxtpl>=0.20.0" docxcompose
 
 ### 1.4 加载模板
 
+**运行时模板来源：neolyst（不再从本地 templates/ 目录读取）**
+
 根据报告类型自动加载：
 
 ```
 【加载模板】
 报告类型: company
-使用模板: templates/company/
-✓ 已加载 schema.yaml（25 个字段）
-✓ 已加载 template.docx
+语言: zh
+使用模板: neolyst (resolve_template)
+✓ 已下载 schema.yaml（25 个字段）→ templates/company/zh/
+✓ 已下载 template.docx
 ```
+
+**模板解析规则**：
+- 调用 `resolve_template(report_type, language, dest_dir)` 从 neolyst 获取模板
+- `language` 来自当前报告的 `report_language`
+- 模板下载到 `templates/{report_type}/{language}/` 目录
+- 不再维护额外的"报告类型 -> 模板类型"映射表
 
 每个模板目录必须包含：
 - `schema.yaml` - **定义要提取哪些字段**
 - `template.docx` - **Word 模板文件**
+
+**本地 templates/ 目录**：
+- 仅用于模板制作阶段的工作目录
+- 运行时模板来源统一以 neolyst 保存的模板记录为准
 
 ### 1.5 预处理文档
 
@@ -319,6 +332,63 @@ if llm_result.get('has_english_summary'):
 ```
 
 **⚠️ 第一阶段完成后必须暂停，展示摘要，等待用户确认后再进入第二阶段**
+
+### 1.10 保存草稿到 neolyst
+
+第一阶段确认后，调用 `save_draft_report` 将机器处理结果保存为 draft：
+
+```python
+from skills.neolyst.scripts import save_report
+
+draft_input = {
+    "title": elements["title"],
+    "report_type": report_type,
+    "report_language": report_language,  # 从 title 自动判断
+    "analysts": analysts,  # 从 elements.yaml 中 a1~a8 槽位提取并标准化
+    "report_file": output_docx_path,  # 最终生成的 Word 文件
+    "pdf_file": output_pdf_path,       # 最终生成的 PDF 文件
+    # 以下字段可选，提交前补齐
+    # "investment_thesis": "...",  # LLM 压缩摘要为 150 字
+    # "ticker": "2507.HK",
+    # "rating": "OUTPERFORM",
+    # "target_price": "86.72",
+}
+
+report_id = save_report(client, draft_input)
+print(f"已保存 draft，report_id: {report_id}")
+```
+
+**保存后**：
+- Neolyst 中已存在该 `report_id` 下可查看的第一个 draft 版本
+- 用户可以上 Neolyst 查看报告生成情况，人工确认后再继续提交
+- 后续补字段、重新保存、重新校验都围绕同一个 `report_id` 进行
+
+---
+
+## 4b. 草稿确认与提交工作流（neolyst 集成）
+
+`report_maker` 提供两个 workflow 函数，支持草稿保存后的完整提交流程：
+
+### `prepare_and_save_draft(report_dir, report_type)`
+
+准备并保存草稿到 neolyst：
+- 加载 `report_dir/elements.yaml`
+- 加载 `report_dir/draft.docx`（原始草稿）
+- 合成最终 Word 和 PDF
+- 调用 `save_report` 保存 draft
+- 返回 `report_id`
+
+### `submit_report_workflow(report_id)`
+
+提交报告前的校验与提交：
+1. 调用 `validate_report(report_id)` 做提交前校验
+2. 校验失败时返回完整错误，与用户交互补字段
+3. 校验通过后调用 `submit_report(report_id)` 提交为 `submitted`
+4. 返回提交版本号
+
+**提交前需确保**：
+- 公司类报告需有有效的 `coverage_id`（通过 `resolve_coverage(ticker, first_analyst_email)` 获取）
+- `contact_person` 必须属于 `analysts` 列表中的分析师
 
 ---
 
