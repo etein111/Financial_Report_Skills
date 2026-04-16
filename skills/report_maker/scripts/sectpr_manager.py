@@ -101,9 +101,10 @@ def _restore_all_sectPrs(docx_path: str, template_sectPrs: Dict[str, Any]) -> bo
         是否成功
     """
     try:
-        result = [False]
+        result = False
 
         def _restore(tree):
+            nonlocal result
             body = tree.find(f'{W}body')
             if body is None:
                 return
@@ -128,7 +129,7 @@ def _restore_all_sectPrs(docx_path: str, template_sectPrs: Dict[str, Any]) -> bo
             for idx, elem in enumerate(all_elements):
                 if elem.tag == f'{W}p':
                     text = common.get_element_text(elem).strip()
-                    if text == 'APPENDIX 1':
+                    if text == common.APPENDIX_1_MARKER:
                         appendix1_idx = idx
                         break
 
@@ -179,13 +180,13 @@ def _restore_all_sectPrs(docx_path: str, template_sectPrs: Dict[str, Any]) -> bo
                         break
                 body.append(deepcopy(appendix_sectPr))
 
-            result[0] = True
+            result = True
 
         common.modify_docx_xml(docx_path, _restore)
 
-        if result[0]:
+        if result:
             print(f"  已恢复所有 sectPrs（按位置语义分配）")
-        return result[0]
+        return result
 
     except Exception as e:
         print(f"  恢复 sectPrs 失败: {e}")
@@ -205,9 +206,10 @@ def _restore_final_sectPr(docx_path: str, template_sectPr) -> bool:
         是否成功
     """
     try:
-        result = [False]
+        result = False
 
         def _restore(tree):
+            nonlocal result
             body = tree.find(f'{W}body')
             if body is None:
                 return
@@ -218,13 +220,13 @@ def _restore_final_sectPr(docx_path: str, template_sectPr) -> bool:
                     break
 
             body.append(deepcopy(template_sectPr))
-            result[0] = True
+            result = True
 
         common.modify_docx_xml(docx_path, _restore)
 
-        if result[0]:
+        if result:
             print(f"  已恢复文档末尾 sectPr（来自模板）")
-        return result[0]
+        return result
 
     except Exception as e:
         print(f"  恢复 final sectPr 失败: {e}")
@@ -243,7 +245,7 @@ def _get_template_english_summary_margins(template_path: str) -> Dict[str, str]:
     Returns:
         页边距字典 {'top': '...', 'bottom': '...', 'left': '...', 'right': '...', ...}
     """
-    ENGLISH_SUMMARY_MARKER = 'APPENDIX 1'
+    ENGLISH_SUMMARY_MARKER = common.APPENDIX_1_MARKER
     margins = {}
 
     try:

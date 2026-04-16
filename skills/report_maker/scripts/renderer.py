@@ -274,33 +274,24 @@ def render_report(
             if marker_removed:
                 doc.save(output_path)
 
-        # 8.5 插入 relative_chart
-        if relative_chart_generated:
-            relative_chart_path = Path(output_path).parent / "relative_chart.png"
-            if relative_chart_path.exists():
-                chart_inserted = _insert_image_to_placeholder(
-                    doc, RELATIVE_CHART_MARKER, str(relative_chart_path), width_cm=6.35
-                )
-                if chart_inserted:
-                    print(f"  ✅ relative_chart 已插入到文档")
-                else:
-                    print(f"  ⚠️ relative_chart 插入失败")
+        # 8.5/8.6 插入图表
+        for chart_generated, chart_name, chart_marker, chart_width in [
+            (relative_chart_generated, "relative_chart", RELATIVE_CHART_MARKER, 6.35),
+            (recommendation_chart_generated, "recommendation_chart", RECOMMENDATION_CHART_MARKER, 18),
+        ]:
+            if chart_generated:
+                chart_path = Path(output_path).parent / f"{chart_name}.png"
+                if chart_path.exists():
+                    chart_inserted = _insert_image_to_placeholder(
+                        doc, chart_marker, str(chart_path), width_cm=chart_width
+                    )
+                    if chart_inserted:
+                        print(f"  ✅ {chart_name} 已插入到文档")
+                    else:
+                        print(f"  ⚠️ {chart_name} 插入失败")
 
-        # 8.6 插入 recommendation_chart
-        if recommendation_chart_generated:
-            recommendation_chart_path = Path(output_path).parent / "recommendation_chart.png"
-            if recommendation_chart_path.exists():
-                chart_inserted = _insert_image_to_placeholder(
-                    doc, RECOMMENDATION_CHART_MARKER, str(recommendation_chart_path), width_cm=18
-                )
-                if chart_inserted:
-                    print(f"  ✅ recommendation_chart 已插入到文档")
-                else:
-                    print(f"  ⚠️ recommendation_chart 插入失败")
-
-        # 统一保存文档（含 english_summary 和 charts）
-        if relative_chart_generated or recommendation_chart_generated:
-            doc.save(output_path)
+        # 统一保存文档（含 english_summary 页边距和图表）
+        doc.save(output_path)
 
         # 9. 恢复图表 XML 中被转义的 Jinja2 语法
         if escaped_chart_files:

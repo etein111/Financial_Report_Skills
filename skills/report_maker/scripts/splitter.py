@@ -11,6 +11,8 @@ from pathlib import Path
 from copy import deepcopy
 import shutil
 import sys
+import tempfile
+import uuid
 
 SCRIPTS_DIR = Path(__file__).parent
 sys.path.insert(0, str(SCRIPTS_DIR))
@@ -125,8 +127,6 @@ def extract_fragment_by_markers(
 
     try:
         # 复制到临时文件（避免 Windows 文件锁定问题）
-        import tempfile
-        import uuid
         temp_dir = Path(tempfile.gettempdir())
         temp_path = temp_dir / f"fragment_temp_{uuid.uuid4().hex[:8]}.docx"
         shutil.copy(draft_path, str(temp_path))
@@ -186,6 +186,8 @@ def extract_fragment_by_markers(
         # 保存到输出路径
         doc.save(str(out_path))
 
+        print(f"Fragment 提取完成: {len(doc.paragraphs)} 段落, {len(doc.tables)} 表格")
+
         # 释放文档对象，避免文件锁定
         del doc
 
@@ -194,8 +196,6 @@ def extract_fragment_by_markers(
             temp_path.unlink()
         except (PermissionError, OSError):
             pass  # Windows 上可能仍被锁定，忽略错误
-
-        print(f"Fragment 提取完成: {len(doc.paragraphs)} 段落, {len(doc.tables)} 表格")
 
         return out_path
 
@@ -561,8 +561,6 @@ def extract_body(draft_path: str, scope: str, output_path: Optional[str] = None,
 
     try:
         # 复制整个文档到临时文件（保留所有资源引用）
-        import tempfile
-        import uuid
         temp_dir = Path(tempfile.gettempdir())
         temp_path = temp_dir / f"body_temp_{uuid.uuid4().hex[:8]}.docx"
         shutil.copy(draft_path, str(temp_path))
@@ -582,14 +580,8 @@ def extract_body(draft_path: str, scope: str, output_path: Optional[str] = None,
             end_markers = [end_marker]
             print(f"使用 LLM 提供的结束标记: '{end_marker}'")
         else:
-            end_markers = [
-                'Summary',  # 英文摘要标题（优先检查，避免 body 包含英文摘要）
-                '重要信息披露',
-                '[Table_disclaimer]',
-                '免责声明',
-                'APPENDIX',
-                '附录',
-            ]
+            # 'Summary' 优先检查，避免 body 包含英文摘要；其余复用 _APPENDIX_MARKERS
+            end_markers = ['Summary'] + _APPENDIX_MARKERS
             print("使用默认结束标记列表")
 
         # 找目录位置和正文结束位置
@@ -1036,41 +1028,14 @@ def _copy_paragraph(target_doc: Document, source_para) -> None:
 
 
 def _copy_table(target_doc: Document, source_table) -> None:
-    """完整复制表格到目标文档。
+    """完整复制表格到目标文档，保留所有 XML 格式。
 
     Args:
         target_doc: 目标文档
         source_table: 源表格
     """
-    # 创建新表格
-    table = target_doc.add_table(rows=len(source_table.rows), cols=len(source_table.columns))
-
-    # 复制表格内容
-    for i, row in enumerate(source_table.rows):
-        for j, cell in enumerate(row.cells):
-            target_cell = table.rows[i].cells[j]
-
-            # 复制单元格文本
-            if cell.text:
-                target_cell.text = cell.text
-
-            # 尝试复制单元格格式
-            try:
-                # 复制段落
-                for para_idx, para in enumerate(cell.paragraphs):
-                    if para_idx == 0:
-                        target_cell.text = para.text
-                    elif para.text:
-                        target_cell.add_paragraph(para.text)
-            except Exception:
-                pass
-
-    # 复制表格样式（如果可用）
-    try:
-        if source_table.style:
-            table.style = source_table.style
-    except Exception:
-        pass
+    new_table_element = deepcopy(source_table._element)
+    target_doc.element.body.append(new_table_element)
 
 
 def read_document_structure(doc_path: str) -> Dict[str, Any]:
@@ -1405,8 +1370,6 @@ def extract_english_summary(draft_path: str, scope: str, output_path: Optional[s
 
     try:
         # 复制到临时文件以避免文件锁定问题
-        import tempfile
-        import uuid
         temp_dir = Path(tempfile.gettempdir())
         temp_path = temp_dir / f"english_summary_temp_{uuid.uuid4().hex[:8]}.docx"
         shutil.copy(draft_path, str(temp_path))
@@ -1460,8 +1423,8 @@ def extract_english_summary(draft_path: str, scope: str, output_path: Optional[s
                     print(f"找到英文摘要结束标记: 元素 {i}")
                     break
         else:
-            # 备用：查找分页符或结束标记
-            end_markers_fallback = ['APPENDIX', '附录', '重要信息披露', '[Table_disclaimer]']
+            # 备用：查找分页符或结束标记（复用 _APPENDIX_MARKERS）
+            end_markers_fallback = _APPENDIX_MARKERS
             for i in range(start_idx + 1, len(elements)):
                 elem = elements[i]
                 tag = common.local_tag(elem)

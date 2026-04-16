@@ -86,22 +86,20 @@ def _apply_font_constraints(docx_path: str, chinese_font: str = '楷体', latin_
         return False
 
     def _apply_fonts(doc_tree):
-        def process_element(elem):
+        body = doc_tree.find(f'{W}body')
+        if body is None:
+            return
+        for elem in body.iter():
             if elem.tag == f'{W}r':
-                # Run 元素
                 rFonts = elem.find(f'{W}rFonts')
                 if rFonts is None:
                     rFonts = etree.SubElement(elem, f'{W}rFonts')
-                    # 插入到最前面
                     elem.insert(0, rFonts)
-
                 rFonts.set(f'{W}ascii', latin_font)
                 rFonts.set(f'{W}hAnsi', latin_font)
                 rFonts.set(f'{W}eastAsia', chinese_font)
                 rFonts.set(f'{W}cs', chinese_font)
-
             elif elem.tag == f'{W}p':
-                # 段落属性
                 pPr = elem.find(f'{W}pPr')
                 if pPr is not None:
                     rPr = pPr.find(f'{W}rPr')
@@ -109,27 +107,10 @@ def _apply_font_constraints(docx_path: str, chinese_font: str = '楷体', latin_
                         rFonts = rPr.find(f'{W}rFonts')
                         if rFonts is None:
                             rFonts = etree.SubElement(rPr, f'{W}rFonts')
-
-                        # 只设置 latin 和 eastAsia，保留其他设置
                         for attr in ['ascii', 'hAnsi']:
                             rFonts.set(f'{W}{attr}', latin_font)
                         for attr in ['eastAsia', 'cs']:
                             rFonts.set(f'{W}{attr}', chinese_font)
-
-                # 处理段落内的 runs
-                for child in elem:
-                    process_element(child)
-
-            elif elem.tag in [f'{W}tbl', f'{W}tr', f'{W}tc']:
-                # 表格元素，递归处理
-                for child in elem:
-                    process_element(child)
-
-        # 处理文档主体
-        body = doc_tree.find(f'{W}body')
-        if body is not None:
-            for elem in body:
-                process_element(elem)
 
     try:
         common.modify_docx_xml(docx_path, _apply_fonts)
@@ -157,9 +138,10 @@ def expand_analyst_certification(docx_path: str, elements: Dict[str, Any]) -> in
 
     certification_keywords = ['分析师', 'analyst', '认证', 'certification']
 
-    result = [0]
+    result = 0
 
     def _expand_fn(doc_tree):
+        nonlocal result
         body = doc_tree.find(f'{W}body')
 
         analyst_count = 0
@@ -185,11 +167,11 @@ def expand_analyst_certification(docx_path: str, elements: Dict[str, Any]) -> in
             for para in certification_paras:
                 new_para = deepcopy(para)
                 body.append(new_para)
-                result[0] += 1
+                result += 1
 
     try:
         common.modify_docx_xml(docx_path, _expand_fn)
-        return result[0]
+        return result
     except Exception as e:
         print(f"  扩展分析师认证声明失败: {e}")
         return 0

@@ -16,8 +16,7 @@ except ImportError:
 import common
 W = common.W_NS
 
-# 英文摘要 section 起始标记（模板中固定的字符串）
-_ENGLISH_SUMMARY_START_MARKER = 'APPENDIX 1'
+_ENGLISH_SUMMARY_START_MARKER = common.APPENDIX_1_MARKER
 
 
 def _find_marker_in_cells(table, marker: str):

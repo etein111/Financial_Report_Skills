@@ -39,6 +39,9 @@ FILE_OUTPUT_PDF = "output.pdf"
 W_NS = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
 R_NS = '{http://schemas.openxmlformats.org/officeDocument/2006/relationships}'
 
+# 英文摘要 section 起始标记（模板中固定的段落文本）
+APPENDIX_1_MARKER = 'APPENDIX 1'
+
 # 占位符标记（docxtpl 渲染时替换为特殊文本，后续步骤插入实际内容）
 ABSTRACT_MARKER = '###ABSTRACT_MARKER###'
 BODY_MARKER = '###BODY_MARKER###'

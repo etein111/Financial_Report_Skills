@@ -8,6 +8,9 @@ Word 有时会将 {{ a1_email }} 这样的连续文本拆分成多个 run，
 import common
 W = common.W_NS
 
+PLACEHOLDER_START = '{{'
+PLACEHOLDER_END = '}}'
+
 
 def fix_runs_in_parent(parent, collected_runs):
     """在父元素中合并收集的 runs。
@@ -83,11 +86,6 @@ def fix_element(elem, current_placeholder, collected_runs):
             current_placeholder = fix_element(child, current_placeholder, collected_runs)
 
     return current_placeholder
-
-
-# 全局占位符标记
-PLACEHOLDER_START = '{{'
-PLACEHOLDER_END = '}}'
 
 
 def _fix_split_placeholders_in_docx(docx_path: str, output_path: str = None) -> str:
