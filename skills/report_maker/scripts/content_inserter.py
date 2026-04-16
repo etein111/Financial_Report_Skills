@@ -15,6 +15,9 @@ except ImportError:
 import common
 W = common.W_NS
 
+# 英文摘要 section 起始标记（模板中固定的字符串）
+_ENGLISH_SUMMARY_START_MARKER = 'APPENDIX 1'
+
 
 def _find_marker_in_cells(table, marker: str):
     """在表格单元格中查找 marker。
@@ -140,11 +143,60 @@ def _insert_abstract_at_paragraph(doc: Document, abstract_doc: Document, marker:
         return False
 
 
+def _apply_english_summary_margins_doc(doc: Document, margins: Dict[str, str]) -> bool:
+    """应用英文摘要部分的页边距（直接操作 Document 对象）。
+
+    找到英文摘要内容之前最近的分节符，应用指定的页边距。
+
+    Args:
+        doc: Document 对象
+        margins: 页边距字典
+
+    Returns:
+        是否成功
+    """
+    if not margins:
+        return False
+
+    from lxml import etree
+
+    W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
+    body = doc.element.body
+    all_elements = list(body)
+
+    es_start_idx = None
+    for idx, elem in enumerate(all_elements):
+        if elem.tag == f'{{{W_NS}}}p':
+            text = common.get_element_text(elem).strip()
+            if text == _ENGLISH_SUMMARY_START_MARKER:
+                es_start_idx = idx
+                break
+
+    if es_start_idx is None or es_start_idx == 0:
+        return False
+
+    for i in range(es_start_idx - 1, -1, -1):
+        elem = all_elements[i]
+        if elem.tag == f'{{{W_NS}}}p':
+            pPr = elem.find(f'{{{W_NS}}}pPr')
+            if pPr is not None:
+                sectPr = pPr.find(f'{{{W_NS}}}sectPr')
+                if sectPr is not None:
+                    pgMar = sectPr.find(f'{{{W_NS}}}pgMar')
+                    if pgMar is None:
+                        pgMar = etree.SubElement(sectPr, f'{{{W_NS}}}pgMar')
+                    for attr, val in margins.items():
+                        pgMar.set(f'{{{W_NS}}}{attr}', val)
+                    print(f"  已应用 english_summary 页边距")
+                    return True
+    return False
+
+
 def _apply_english_summary_margins(
     docx_path: str,
     margins: Dict[str, str],
 ) -> bool:
-    """应用英文摘要部分的页边距。
+    """应用英文摘要部分的页边距（文件路径版本，兼容旧调用方）。
 
     找到英文摘要内容之前最近的分节符，应用指定的页边距。
 
@@ -155,62 +207,13 @@ def _apply_english_summary_margins(
     Returns:
         是否成功
     """
+    if not DOCX_AVAILABLE:
+        return False
     if not margins:
         return False
-
-    import zipfile
-    from lxml import etree
-
     try:
-        files = common.read_docx_zip(docx_path)
-
-        if 'word/document.xml' not in files:
-            return False
-
-        doc_tree = etree.fromstring(files['word/document.xml'])
-        body = doc_tree.find(f'{W}body')
-        if body is None:
-            return False
-
-        all_elements = list(body)
-
-        es_start_idx = None
-        for idx, elem in enumerate(all_elements):
-            if elem.tag == f'{W}p':
-                text = common.get_element_text(elem).strip()
-                if text == 'APPENDIX 1':
-                    es_start_idx = idx
-                    break
-
-        if es_start_idx is None or es_start_idx == 0:
-            return False
-
-        # 在 es_start_idx 之前找最近的 sectPr
-        for i in range(es_start_idx - 1, -1, -1):
-            elem = all_elements[i]
-            if elem.tag == f'{W}p':
-                pPr = elem.find(f'{W}pPr')
-                if pPr is not None:
-                    sectPr = pPr.find(f'{W}sectPr')
-                    if sectPr is not None:
-                        pgMar = sectPr.find(f'{W}pgMar')
-                        if pgMar is None:
-                            pgMar = etree.SubElement(sectPr, f'{W}pgMar')
-
-                        for attr, val in margins.items():
-                            pgMar.set(f'{W}{attr}', val)
-
-                        files['word/document.xml'] = etree.tostring(
-                            doc_tree, xml_declaration=True, encoding='UTF-8', standalone=True
-                        )
-
-                        common.write_docx_zip(docx_path, files)
-
-                        print(f"  已应用 english_summary 页边距")
-                        return True
-
-        return False
-
+        doc = Document(docx_path)
+        return _apply_english_summary_margins_doc(doc, margins)
     except Exception as e:
         print(f"  应用 english_summary 页边距失败: {e}")
         return False
