@@ -166,7 +166,8 @@ def _restore_all_sectPrs(docx_path: str, template_sectPrs: Dict[str, Any]) -> bo
                     pPr.append(deepcopy(replacement))
 
                 if type_val == 'continuous' or replacement is not None:
-                    pgMar = (replacement or old_sectPr).find(f'{W}pgMar')
+                    source_sectPr = replacement if replacement is not None else old_sectPr
+                    pgMar = source_sectPr.find(f'{W}pgMar')
                     left = pgMar.get(f'{W}left') if pgMar is not None else '?'
                     print(f"  [{idx}] type={type_val} → {label} (left={left})")
 

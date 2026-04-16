@@ -246,7 +246,7 @@ def render_report(
         if english_summary_path and Path(english_summary_path).exists() and Path(english_summary_path).stat().st_size > 0:
             english_summary_doc = Document(english_summary_path)
 
-            es_margins = _get_template_english_summary_margins(str(fixed_template_path))
+            es_margins = _get_template_english_summary_margins(template_path)
             if es_margins:
                 print(f"  模板 ENGLISH_SUMMARY 页边距: top={es_margins.get('top')}, bottom={es_margins.get('bottom')}, left={es_margins.get('left')}")
 

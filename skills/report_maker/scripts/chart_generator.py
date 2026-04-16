@@ -75,7 +75,8 @@ def _generate_relative_chart(ticker: str, output_path: str, company_name: str = 
         fig, ax = plt.subplots(figsize=(10, 5.5), dpi=100)
 
         dates = mdates.date2num(relative_return.index.to_pydatetime())
-        ax.plot_date(dates, relative_return.values * 100, '-', linewidth=2, color='#1f77b4')
+        ax.plot(dates, relative_return.values * 100, '-', linewidth=2, color='#1f77b4')
+        ax.xaxis_date()
 
         ax.axhline(y=0, color='black', linestyle='-', linewidth=0.5)
         ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f'{x:.0f}%'))
