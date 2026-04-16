@@ -5,6 +5,7 @@
 
 from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, Any
+import os
 
 # 图表常量
 DEFAULT_CHART_DPI = 100
@@ -22,6 +23,8 @@ DEFAULT_RATING_COLOR = '#3498db'
 # 尝试导入图表依赖
 try:
     import yfinance as yf
+    import matplotlib
+    matplotlib.use('Agg')  # 避免 tkinter 问题
     import matplotlib.pyplot as plt
     import matplotlib.dates as mdates
     import numpy as np

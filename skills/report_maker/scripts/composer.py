@@ -4,7 +4,6 @@
 """
 
 import shutil
-import zipfile
 from pathlib import Path
 from typing import Dict, Any, Optional
 
@@ -29,6 +28,11 @@ from sectpr_manager import (
     _save_template_final_sectPr,
 )
 from image_handler import _copy_media_between_docx
+
+
+def _local_tag(elem) -> str:
+    """从带命名空间的 XML tag 中提取本地名称。"""
+    return elem.tag.split('}')[-1]
 
 
 def insert_body_at_marker_compose(
@@ -89,7 +93,7 @@ def insert_body_at_marker_compose(
         part1_elements = list(part1_body)
 
         for elem in part1_elements[marker_idx:]:
-            tag = elem.tag.split('}')[-1]
+            tag = _local_tag(elem)
             if tag != 'sectPr':
                 part1_body.remove(elem)
 
@@ -105,12 +109,12 @@ def insert_body_at_marker_compose(
 
         has_part3_content = False
         for elem in part3_elements[:marker_idx + 1]:
-            tag = elem.tag.split('}')[-1]
+            tag = _local_tag(elem)
             if tag != 'sectPr':
                 part3_body.remove(elem)
 
         for elem in part3_body:
-            tag = elem.tag.split('}')[-1]
+            tag = _local_tag(elem)
             if tag in ['p', 'tbl', 'sdt']:
                 text = common.get_element_text(elem)
                 if text.strip():

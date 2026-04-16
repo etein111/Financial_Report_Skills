@@ -156,9 +156,10 @@ def load_yaml(path: Union[str, Path]) -> Dict[str, Any]:
         解析后的字典，文件不存在时返回空字典
     """
     path = Path(path)
-    if not path.exists():
+    try:
+        return yaml.safe_load(path.read_text())
+    except FileNotFoundError:
         return {}
-    return yaml.safe_load(path.read_text())
 
 
 def save_yaml(path: Union[str, Path], data: Dict[str, Any], sort_keys: bool = False) -> None:
