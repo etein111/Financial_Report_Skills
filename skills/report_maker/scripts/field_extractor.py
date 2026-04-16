@@ -53,14 +53,6 @@ FIELD_ALIASES = {
     'source': ['资料来源', '来源', 'Source', 'Data Source'],
 }
 
-# 数值字段的清理规则
-NUMBER_CLEAN_PATTERNS = [
-    (r'[^\d.]', ''),  # 移除非数字字符（保留小数点）
-    (r'^HK\D*', ''),  # 移除 HK 前缀
-    (r'\s*', ''),  # 移除空格
-]
-
-
 # ==================== 主要提取函数 ====================
 
 def extract_fields_from_docx(
@@ -82,16 +74,7 @@ def extract_fields_from_docx(
     tables = docx_reader.read_docx_tables(docx_path)
 
     # 初始化结果
-    elements = {}
-    for field_name in schema.keys():
-        if field_name not in ['abstract', 'body']:
-            elements[field_name] = ""
-
-    # 设置 fragment 字段
-    if 'abstract' in schema:
-        elements['abstract'] = common.FILE_ABSTRACT
-    if 'body' in schema:
-        elements['body'] = common.FILE_BODY
+    elements = common.init_elements_from_schema(schema)
 
     # 从主表格中提取基本信息（首页表格）
     basic_fields = _extract_basic_fields_from_main_tables(tables, schema)
@@ -481,7 +464,7 @@ def _extract_analysts_from_tables(
                 # 提取中文姓名
                 chinese_match = PATTERN_CHINESE_NAME.search(line)
                 if chinese_match:
-                        chinese_name = chinese_match.group(1)
+                    chinese_name = chinese_match.group(1)
 
                 # 提取英文姓名
                 english_match = PATTERN_ENGLISH_NAME.search(line)

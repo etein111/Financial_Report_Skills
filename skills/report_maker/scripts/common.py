@@ -348,6 +348,26 @@ def get_report_output_path(
 # ==================== Schema 工具函数 ====================
 
 
+def init_elements_from_schema(schema: Dict[str, Any]) -> Dict[str, Any]:
+    """从 schema 初始化 elements 字典，fragment 字段设为文件引用。
+
+    Args:
+        schema: schema.yaml 内容
+
+    Returns:
+        初始化后的 elements 字典
+    """
+    elements = {}
+    for field_name in schema.keys():
+        if field_name not in ['abstract', 'body']:
+            elements[field_name] = ""
+    if 'abstract' in schema:
+        elements['abstract'] = FILE_ABSTRACT
+    if 'body' in schema:
+        elements['body'] = FILE_BODY
+    return elements
+
+
 def ensure_all_fields(elements: Dict[str, Any], schema: Dict[str, Any]) -> Dict[str, Any]:
     """确保 elements 包含 schema 中的所有字段。
 

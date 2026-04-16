@@ -33,6 +33,52 @@ import common
 
 W = common.W_NS
 
+# 法律披露附录的识别标记（extract_appendix 和 validate_appendix 共用）
+_APPENDIX_MARKERS = [
+    'APPENDIX',
+    '附录',
+    '重要信息披露',
+    'IMPORTANT DISCLOSURES',
+    'Disclaimer',
+    '免责声明',
+    '[Table_disclaimer]',
+]
+
+
+def _remove_elements_outside_range(body, elements: list, start_idx: int, end_idx: int) -> None:
+    """移除 [start_idx, end_idx) 范围外的元素，保留 sectPr 元素。
+
+    按倒序收集待删除元素，避免索引偏移。被 extract_fragment_by_markers、
+    extract_body、extract_english_summary 三个函数共用。
+
+    Args:
+        body: document.xml 的 body 元素
+        elements: body 的直接子元素列表
+        start_idx: 保留范围起始索引（包含）
+        end_idx: 保留范围结束索引（不包含）
+    """
+    elements_to_remove = []
+
+    # 倒序删除 end_idx 之后的元素
+    for i in range(len(elements) - 1, end_idx - 1, -1):
+        elem = elements[i]
+        tag = elem.tag.split('}')[-1]
+        if tag != 'sectPr':
+            elements_to_remove.append(elem)
+
+    # 倒序删除 start_idx 之前的元素
+    for i in range(start_idx - 1, -1, -1):
+        elem = elements[i]
+        tag = elem.tag.split('}')[-1]
+        if tag != 'sectPr':
+            elements_to_remove.append(elem)
+
+    for elem in elements_to_remove:
+        try:
+            body.remove(elem)
+        except ValueError:
+            pass
+
 
 
 def _get_all_tables_lxml(doc_path: str) -> List[etree._Element]:
@@ -131,28 +177,7 @@ def extract_fragment_by_markers(
         margins_to_preserve = _find_sectpr_margins_for_range(elements, start_idx, end_idx, W)
 
         # 删除范围外的元素
-        elements_to_remove = []
-
-        # 删除结束位置之后的元素（倒序）
-        for i in range(len(elements) - 1, end_idx - 1, -1):
-            elem = elements[i]
-            tag = elem.tag.split('}')[-1]
-            if tag not in ['sectPr']:
-                elements_to_remove.append(elem)
-
-        # 删除起始位置之前的元素（倒序）
-        for i in range(start_idx - 1, -1, -1):
-            elem = elements[i]
-            tag = elem.tag.split('}')[-1]
-            if tag not in ['sectPr']:
-                elements_to_remove.append(elem)
-
-        # 执行删除
-        for elem in elements_to_remove:
-            try:
-                body.remove(elem)
-            except ValueError:
-                pass
+        _remove_elements_outside_range(body, elements, start_idx, end_idx)
 
         # 🔑 关键：将保存的页边距应用到最终的 sectPr
         if margins_to_preserve:
@@ -446,8 +471,8 @@ def _prepend_abstract_notice(docx_path: str, notice_text: str) -> bool:
         r.append(t)
 
         # 在 body 第一个段落之前插入提示段落
-        first_child = list(body)[0] if len(list(body)) > 0 else None
-        if first_child is not None:
+        children = list(body)
+        if children:
             body.insert(0, notice_para)
         else:
             body.append(notice_para)
@@ -649,25 +674,7 @@ def extract_body(draft_path: str, scope: str, output_path: Optional[str] = None,
         margins_to_preserve = _find_sectpr_margins_for_range(elements, start_idx, end_idx, W)
 
         # 删除范围外的元素
-        elements_to_remove = []
-
-        for i in range(len(elements) - 1, end_idx - 1, -1):
-            elem = elements[i]
-            tag = elem.tag.split('}')[-1]
-            if tag not in ['sectPr']:
-                elements_to_remove.append(elem)
-
-        for i in range(start_idx - 1, -1, -1):
-            elem = elements[i]
-            tag = elem.tag.split('}')[-1]
-            if tag not in ['sectPr']:
-                elements_to_remove.append(elem)
-
-        for elem in elements_to_remove:
-            try:
-                body.remove(elem)
-            except ValueError:
-                pass
+        _remove_elements_outside_range(body, elements, start_idx, end_idx)
 
         # 🔑 关键：将保存的页边距应用到最终的 sectPr
         if margins_to_preserve:
@@ -1217,15 +1224,7 @@ def extract_appendix(draft_path: str, scope: str, output_path: Optional[str] = N
         elements = list(body)
 
         # 法律披露附录的起始标记
-        appendix_markers = [
-            'APPENDIX',
-            '附录',
-            '重要信息披露',
-            'IMPORTANT DISCLOSURES',
-            'Disclaimer',
-            '免责声明',
-            '[Table_disclaimer]'
-        ]
+        appendix_markers = _APPENDIX_MARKERS
 
         # 查找附录起始位置
         start_idx = None
@@ -1314,15 +1313,7 @@ def validate_appendix(draft_path: str, schema: Dict[str, Any]) -> Dict[str, Any]
         elements = list(body)
 
         # 法律披露附录的关键词
-        appendix_keywords = [
-            'APPENDIX',
-            '附录',
-            '重要信息披露',
-            'IMPORTANT DISCLOSURES',
-            'Disclaimer',
-            '免责声明',
-            '[Table_disclaimer]'
-        ]
+        appendix_keywords = _APPENDIX_MARKERS
 
         # 重要信息披露的关键词（必须包含）
         important_keywords = [
@@ -1514,25 +1505,7 @@ def extract_english_summary(draft_path: str, scope: str, output_path: Optional[s
         margins_to_preserve = _find_sectpr_margins_for_range(elements, start_idx, end_idx, W)
 
         # 删除范围外的元素
-        elements_to_remove = []
-
-        for i in range(len(elements) - 1, end_idx - 1, -1):
-            elem = elements[i]
-            tag = elem.tag.split('}')[-1]
-            if tag not in ['sectPr']:
-                elements_to_remove.append(elem)
-
-        for i in range(start_idx - 1, -1, -1):
-            elem = elements[i]
-            tag = elem.tag.split('}')[-1]
-            if tag not in ['sectPr']:
-                elements_to_remove.append(elem)
-
-        for elem in elements_to_remove:
-            try:
-                body.remove(elem)
-            except ValueError:
-                pass
+        _remove_elements_outside_range(body, elements, start_idx, end_idx)
 
         # 🔑 清除段落的缩进设置，让 english_summary 对齐 template 的格式
         # draft 中的 english_summary 可能有错误的缩进（如负缩进），
