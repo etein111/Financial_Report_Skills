@@ -62,14 +62,14 @@ def _remove_elements_outside_range(body, elements: list, start_idx: int, end_idx
     # 倒序删除 end_idx 之后的元素
     for i in range(len(elements) - 1, end_idx - 1, -1):
         elem = elements[i]
-        tag = elem.tag.split('}')[-1]
+        tag = common.local_tag(elem)
         if tag != 'sectPr':
             elements_to_remove.append(elem)
 
     # 倒序删除 start_idx 之前的元素
     for i in range(start_idx - 1, -1, -1):
         elem = elements[i]
-        tag = elem.tag.split('}')[-1]
+        tag = common.local_tag(elem)
         if tag != 'sectPr':
             elements_to_remove.append(elem)
 
@@ -195,9 +195,7 @@ def extract_fragment_by_markers(
         except (PermissionError, OSError):
             pass  # Windows 上可能仍被锁定，忽略错误
 
-        # 验证结果
-        final_doc = Document(str(out_path))
-        print(f"Fragment 提取完成: {len(final_doc.paragraphs)} 段落, {len(final_doc.tables)} 表格")
+        print(f"Fragment 提取完成: {len(doc.paragraphs)} 段落, {len(doc.tables)} 表格")
 
         return out_path
 
@@ -361,7 +359,7 @@ def _find_sectpr_margins_for_range(elements: list, start_idx: int, end_idx: int,
     # 1. 首先在范围内查找 sectPr（从后往前找）
     for i in range(min(end_idx, len(elements)) - 1, start_idx - 1, -1):
         elem = elements[i]
-        tag = elem.tag.split('}')[-1]
+        tag = common.local_tag(elem)
 
         if tag == 'p':
             pPr = elem.find(f'{W}pPr')
@@ -376,7 +374,7 @@ def _find_sectpr_margins_for_range(elements: list, start_idx: int, end_idx: int,
     # 2. 范围内没有 sectPr，查找范围后最近的 sectPr（不包括文档末尾的直接 sectPr）
     for i in range(end_idx, len(elements)):
         elem = elements[i]
-        tag = elem.tag.split('}')[-1]
+        tag = common.local_tag(elem)
 
         # 跳过文档末尾的直接 sectPr
         if tag == 'sectPr':
@@ -415,7 +413,7 @@ def _apply_margins_to_final_sectpr(body, margins: Dict[str, str], W: str) -> boo
     # 找到末尾的 sectPr
     elements = list(body)
     for elem in reversed(elements):
-        tag = elem.tag.split('}')[-1]
+        tag = common.local_tag(elem)
         if tag == 'sectPr':
             # 清除所有 headerReference 和 footerReference
             # 因为 body.docx 的 sectPr 可能包含封面 section 的 header 引用
@@ -488,6 +486,17 @@ def _prepend_abstract_notice(docx_path: str, notice_text: str) -> bool:
         return False
 
 
+def _clear_indents_in_tree(tree) -> int:
+    """从 lxml 树中移除所有 w:ind 元素，返回清除数量。"""
+    count = 0
+    for ind in tree.findall(f'.//{W}ind'):
+        parent = ind.getparent()
+        if parent is not None:
+            parent.remove(ind)
+            count += 1
+    return count
+
+
 def _clear_paragraph_indents(docx_path: str) -> bool:
     """清除 Word 文档中所有段落的缩进设置。
 
@@ -504,11 +513,7 @@ def _clear_paragraph_indents(docx_path: str) -> bool:
         cleared_count = [0]
 
         def _clear_inds(tree):
-            for ind in tree.findall(f'.//{W}ind'):
-                parent = ind.getparent()
-                if parent is not None:
-                    parent.remove(ind)
-                    cleared_count[0] += 1
+            cleared_count[0] = _clear_indents_in_tree(tree)
 
         common.modify_docx_xml(docx_path, _clear_inds)
 
@@ -591,7 +596,7 @@ def extract_body(draft_path: str, scope: str, output_path: Optional[str] = None,
         for i, elem in enumerate(elements):
             text = common.get_element_text(elem).strip()
             text_upper = text.upper()
-            tag = elem.tag.split('}')[-1]
+            tag = common.local_tag(elem)
 
             # 找目录位置
             if toc_idx is None:
@@ -610,7 +615,7 @@ def extract_body(draft_path: str, scope: str, output_path: Optional[str] = None,
                     page_break_idx = None
                     for j in range(i - 1, max(0, i - 5), -1):
                         prev_elem = elements[j]
-                        prev_tag = prev_elem.tag.split('}')[-1]
+                        prev_tag = common.local_tag(prev_elem)
                         if prev_tag == 'p':
                             # 检查是否包含分页符
                             has_page_break = False
@@ -655,7 +660,7 @@ def extract_body(draft_path: str, scope: str, output_path: Optional[str] = None,
                     if '\t' not in text and text and not text[-1].isdigit():
                         start_idx = i
                         break
-                    if elem.tag.endswith('}p'):
+                    if common.local_tag(elem) == 'p':
                         pPr = elem.find('.//{http://schemas.openxmlformats.org/wordprocessingml/2006/main}pStyle')
                         if pPr is not None:
                             style_val = pPr.get('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}val', '')
@@ -688,10 +693,9 @@ def extract_body(draft_path: str, scope: str, output_path: Optional[str] = None,
         except Exception:
             pass
 
-        final_doc = Document(str(out_path))
-        print(f"正文提取完成: {len(final_doc.paragraphs)} 段落, "
-              f"{len(final_doc.tables)} 表格, "
-              f"{len(final_doc.inline_shapes)} 图片")
+        print(f"正文提取完成: {len(doc.paragraphs)} 段落, "
+              f"{len(doc.tables)} 表格, "
+              f"{len(doc.inline_shapes)} 图片")
 
         return out_path
 
@@ -1006,7 +1010,7 @@ def _find_table_paragraph_position(doc: Document, table_index: int) -> int:
                 # 找到表格，返回之前的段落数
                 return para_count
             # 检查是否是段落元素
-            if child.tag.endswith('}p'):
+            if common.local_tag(child) == 'p':
                 para_count += 1
 
     except Exception:
@@ -1258,7 +1262,7 @@ def extract_appendix(draft_path: str, scope: str, output_path: Optional[str] = N
         # 复制附录内容
         for i in range(start_idx, len(elements)):
             elem = elements[i]
-            tag = elem.tag.split('}')[-1]
+            tag = common.local_tag(elem)
 
             if tag == 'p':
                 # 复制段落
@@ -1460,7 +1464,7 @@ def extract_english_summary(draft_path: str, scope: str, output_path: Optional[s
             end_markers_fallback = ['APPENDIX', '附录', '重要信息披露', '[Table_disclaimer]']
             for i in range(start_idx + 1, len(elements)):
                 elem = elements[i]
-                tag = elem.tag.split('}')[-1]
+                tag = common.local_tag(elem)
                 text = common.get_element_text(elem).strip()
 
                 # 先检查结束标记
@@ -1510,13 +1514,9 @@ def extract_english_summary(draft_path: str, scope: str, output_path: Optional[s
         # 🔑 清除段落的缩进设置，让 english_summary 对齐 template 的格式
         # draft 中的 english_summary 可能有错误的缩进（如负缩进），
         # 清除后让内容继承 template 的 "APPENDIX 1 Summary" 格式
-        for p in body.findall(f'.//{W}p'):
-            pPr = p.find(f'{W}pPr')
-            if pPr is not None:
-                ind = pPr.find(f'{W}ind')
-                if ind is not None:
-                    pPr.remove(ind)
-                    print(f"  已清除段落缩进")
+        cleared = _clear_indents_in_tree(body)
+        if cleared > 0:
+            print(f"  已清除 {cleared} 个段落缩进")
 
         # 🔑 关键：将保存的页边距应用到最终的 sectPr
         if margins_to_preserve:
@@ -1530,9 +1530,8 @@ def extract_english_summary(draft_path: str, scope: str, output_path: Optional[s
         except Exception:
             pass
 
-        final_doc = Document(str(out_path))
-        print(f"英文摘要提取完成: {len(final_doc.paragraphs)} 段落, "
-              f"{len(final_doc.tables)} 表格")
+        print(f"英文摘要提取完成: {len(doc.paragraphs)} 段落, "
+              f"{len(doc.tables)} 表格")
 
         return out_path
 

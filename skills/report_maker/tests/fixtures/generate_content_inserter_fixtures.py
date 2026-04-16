@@ -4,7 +4,7 @@
 用于测试 content_inserter.py 中的：
 - insert_abstract_to_cell: 在表格单元格中插入内容
 - _insert_abstract_at_paragraph: 在段落中插入内容
-- _apply_english_summary_margins: 应用页边距
+- _apply_english_summary_margins_doc: 应用页边距
 
 生成的文档结构：
 - doc_with_abstract_marker.docx: 包含 {{ABSTRACT}} 标记的文档

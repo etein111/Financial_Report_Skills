@@ -273,7 +273,7 @@ def _get_template_english_summary_margins(template_path: str) -> Dict[str, str]:
             check_idx = marker_idx + offset
             if 0 <= check_idx < len(all_elements):
                 elem = all_elements[check_idx]
-                tag = elem.tag.split('}')[-1]
+                tag = common.local_tag(elem)
 
                 if tag == 'p':
                     pPr = elem.find(f'{W}pPr')
@@ -290,7 +290,7 @@ def _get_template_english_summary_margins(template_path: str) -> Dict[str, str]:
         # 如果在附近没找到，查找 marker 之前的最后一个 sectPr
         for i in range(marker_idx - 1, -1, -1):
             elem = all_elements[i]
-            tag = elem.tag.split('}')[-1]
+            tag = common.local_tag(elem)
 
             if tag == 'p':
                 pPr = elem.find(f'{W}pPr')

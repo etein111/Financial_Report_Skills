@@ -115,9 +115,8 @@ def _replace_in_nested_tables(doc, elem, placeholder, image_path, width_cm=None)
         if id(r_elem) in processed_runs:
             continue
         
-        texts = [t.text for t in r_elem.iter(qn('w:t')) if t.text]
-        combined = ''.join(texts)
-        
+        combined = common.get_element_text(r_elem)
+
         if placeholder in combined:
             # 找到包含占位符的 run
             p_elem = r_elem.getparent()
@@ -129,8 +128,7 @@ def _replace_in_nested_tables(doc, elem, placeholder, image_path, width_cm=None)
                 para_obj = Paragraph(p_elem, doc)
                 
                 for run_obj in para_obj.runs:
-                    run_texts = [t.text for t in run_obj._element.iter(qn('w:t')) if t.text]
-                    run_combined = ''.join(run_texts)
+                    run_combined = common.get_element_text(run_obj._element)
                     if placeholder in run_combined:
                         # 标记为已处理
                         processed_runs.add(id(run_obj._element))

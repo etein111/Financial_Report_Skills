@@ -159,15 +159,12 @@ def _apply_english_summary_margins_doc(doc: Document, margins: Dict[str, str]) -
     if not margins:
         return False
 
-    from lxml import etree
-
-    W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
     body = doc.element.body
     all_elements = list(body)
 
     es_start_idx = None
     for idx, elem in enumerate(all_elements):
-        if elem.tag == f'{{{W_NS}}}p':
+        if elem.tag == f'{W}p':
             text = common.get_element_text(elem).strip()
             if text == _ENGLISH_SUMMARY_START_MARKER:
                 es_start_idx = idx
@@ -178,43 +175,18 @@ def _apply_english_summary_margins_doc(doc: Document, margins: Dict[str, str]) -
 
     for i in range(es_start_idx - 1, -1, -1):
         elem = all_elements[i]
-        if elem.tag == f'{{{W_NS}}}p':
-            pPr = elem.find(f'{{{W_NS}}}pPr')
+        if elem.tag == f'{W}p':
+            pPr = elem.find(f'{W}pPr')
             if pPr is not None:
-                sectPr = pPr.find(f'{{{W_NS}}}sectPr')
+                sectPr = pPr.find(f'{W}sectPr')
                 if sectPr is not None:
-                    pgMar = sectPr.find(f'{{{W_NS}}}pgMar')
+                    pgMar = sectPr.find(f'{W}pgMar')
                     if pgMar is None:
-                        pgMar = etree.SubElement(sectPr, f'{{{W_NS}}}pgMar')
+                        pgMar = etree.SubElement(sectPr, f'{W}pgMar')
                     for attr, val in margins.items():
-                        pgMar.set(f'{{{W_NS}}}{attr}', val)
+                        pgMar.set(f'{W}{attr}', val)
                     print(f"  已应用 english_summary 页边距")
                     return True
     return False
 
 
-def _apply_english_summary_margins(
-    docx_path: str,
-    margins: Dict[str, str],
-) -> bool:
-    """应用英文摘要部分的页边距（文件路径版本，兼容旧调用方）。
-
-    找到英文摘要内容之前最近的分节符，应用指定的页边距。
-
-    Args:
-        docx_path: 文档路径
-        margins: 页边距字典
-
-    Returns:
-        是否成功
-    """
-    if not DOCX_AVAILABLE:
-        return False
-    if not margins:
-        return False
-    try:
-        doc = Document(docx_path)
-        return _apply_english_summary_margins_doc(doc, margins)
-    except Exception as e:
-        print(f"  应用 english_summary 页边距失败: {e}")
-        return False

@@ -125,6 +125,18 @@ def get_element_text(elem) -> str:
     return ''.join(t.text or '' for t in elem.iter(f'{W_NS}t'))
 
 
+def local_tag(elem) -> str:
+    """从带命名空间的 XML tag 中提取本地名称。
+
+    Args:
+        elem: lxml 元素
+
+    Returns:
+        去除命名空间后的标签名（如 'p'、'tbl'、'sectPr'）
+    """
+    return elem.tag.rsplit('}', 1)[-1]
+
+
 def extract_margins_from_pgMar(pgMar_elem) -> Dict[str, str]:
     """从 w:pgMar 元素提取页边距属性。
 

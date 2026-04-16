@@ -71,7 +71,6 @@ from composer import insert_body_at_marker_compose
 from content_inserter import (
     insert_abstract_to_cell,
     _insert_abstract_at_paragraph,
-    _apply_english_summary_margins,
     _apply_english_summary_margins_doc,
 )
 
@@ -316,14 +315,14 @@ def render_report(
         temp_path.unlink(missing_ok=True)
         fixed_template_path.unlink(missing_ok=True)
 
-        # 11. 验证输出
-        final_doc = Document(output_path)
-        image_count = sum(1 for rel in final_doc.part.rels.values() if 'image' in rel.reltype)
+        # 11. 验证输出（_restore_jinja_in_charts 与 _apply_font_constraints 只改 XML 属性，
+        # 不影响段落/表格/图片数量，沿用内存中的 doc 即可，避免再次解析整份 docx）
+        image_count = sum(1 for rel in doc.part.rels.values() if 'image' in rel.reltype)
 
         appendix_result = _verify_appendix_with_lxml(output_path)
         appendix_found = appendix_result.get('found', False)
 
-        print(f"  输出: 段落={len(final_doc.paragraphs)}, 表格={len(final_doc.tables)}, 图片={image_count}")
+        print(f"  输出: 段落={len(doc.paragraphs)}, 表格={len(doc.tables)}, 图片={image_count}")
         if appendix_found:
             print(f"  ✅ 法律附录已完整保留 ({appendix_result.get('location', '')})")
         else:

@@ -214,21 +214,6 @@ def merge_llm_results(
     return result
 
 
-def validate_elements(elements: Dict[str, Any], schema: Dict[str, Any]) -> Dict[str, Any]:
-    """验证并补全 elements。
-
-    确保所有字段都存在，空字段使用空字符串。
-
-    Args:
-        elements: elements 字典
-        schema: schema.yaml 内容
-
-    Returns:
-        验证后的 elements 字典
-    """
-    return common.ensure_all_fields(elements, schema)
-
-
 def format_elements_for_confirmation(elements: Dict[str, Any]) -> str:
     """格式化 elements 用于用户确认。
 
