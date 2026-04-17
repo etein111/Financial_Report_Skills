@@ -28,44 +28,6 @@ from sectpr_manager import (
 from image_handler import _copy_media_between_docx
 
 
-def _remove_body_sectPrs(doc: Document) -> None:
-    """移除文档 body 中的所有 sectPr。
-
-    body.docx 中的分节符会影响页眉页脚的继承，
-    因此在合并到模板之前需要移除。
-
-    sectPr 可能在两种位置：
-    1. 段落内的 pPr > sectPr
-    2. body 的直接子元素（body-level sectPr）
-
-    Args:
-        doc: python-docx Document 对象
-    """
-    W = common.W_NS
-    body = doc.element.body
-
-    removed_count = 0
-
-    # 1. 移除段落内的 sectPr
-    for elem in list(body):
-        if elem.tag == f'{W}p':
-            pPr = elem.find(f'{W}pPr')
-            if pPr is not None:
-                sectPr = pPr.find(f'{W}sectPr')
-                if sectPr is not None:
-                    pPr.remove(sectPr)
-                    removed_count += 1
-
-    # 2. 移除 body-level sectPr
-    for elem in list(body):
-        if elem.tag == f'{W}sectPr':
-            body.remove(elem)
-            removed_count += 1
-
-    if removed_count > 0:
-        print(f"  已移除 body.docx 中的 {removed_count} 个分节符")
-
-
 def insert_body_at_marker_compose(
     doc_path: str,
     body_path: str,
@@ -148,7 +110,6 @@ def insert_body_at_marker_compose(
         composer = Composer(master)
 
         body_doc = Document(body_path)
-        _remove_body_sectPrs(body_doc)
         composer.append(body_doc, remove_property_fields=False)
 
         if has_part3_content:
