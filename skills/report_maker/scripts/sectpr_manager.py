@@ -13,14 +13,13 @@ W = common.W_NS
 R = common.R_NS
 
 
-def _make_linked_sectPr(old_sectPr: Any, template_sectPr: Any) -> Any:
+def _make_linked_sectPr(old_sectPr: Any) -> Any:
     """创建"同前节"的 sectPr（无 headerReference/footerReference）。
 
     用于正文内部的分节符，使其继承前一个 section 的页眉页脚。
 
     Args:
         old_sectPr: 原始 sectPr（从中复制 page margins 和 type）
-        template_sectPr: 模板的 body sectPr（备用）
 
     Returns:
         新创建的 sectPr，不含 headerReference/footerReference
@@ -173,6 +172,8 @@ def _restore_all_sectPrs(docx_path: str, template_sectPrs: Dict[str, Any]) -> bo
 
             print(f"  关键位置: APPENDIX 1={appendix1_idx}, 法律附录={disclaimer_idx}, 正文边界={body_boundary}")
 
+            first_body_sectPr_done = False  # 正文第一个 sectPr 已处理标志
+
             for idx, para, old_sectPr in para_sectPrs:
                 pPr = para.find(f'{W}pPr')
                 sect_type = old_sectPr.find(f'{W}type')
@@ -185,9 +186,15 @@ def _restore_all_sectPrs(docx_path: str, template_sectPrs: Dict[str, Any]) -> bo
                     replacement = cover_sectPr
                     label = 'cover'
                 elif body_boundary is not None and idx < body_boundary:
-                    # 正文内部的分节符：使用"同前节"的 sectPr（无 headerReference/footerReference）
-                    replacement = _make_linked_sectPr(old_sectPr, body_sectPr)
-                    label = 'body (linked)'
+                    # 正文第一个 sectPr：用模板的 body sectPr（带 header/footer）
+                    # 正文内部的分节符：用"同前节"（无 headerReference/footerReference）
+                    if not first_body_sectPr_done:
+                        replacement = body_sectPr
+                        label = 'body'
+                        first_body_sectPr_done = True
+                    else:
+                        replacement = _make_linked_sectPr(old_sectPr)
+                        label = 'body (linked)'
                 elif disclaimer_idx is not None and idx < disclaimer_idx:
                     # 只有当有 APPENDIX 1 时才到这里（english_summary）
                     replacement = es_sectPr
