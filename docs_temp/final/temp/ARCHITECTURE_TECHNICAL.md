@@ -1,46 +1,5 @@
 
 
-## 4. Agent Skills 能力详解
-
-### 4.1 Skills 分类
-
-**数据维护**：Analyst Manager — 从 Excel 提取分析师信息，与 Neolyst 比对，确认差异后自动更新
-
-**报告检查**：
-
-| Skill | 功能 |
-|-------|------|
-| Report Field Checker | 按报告类型验证必填字段完整性 |
-| File Completeness Checker | 验证 Word、Model 等文件齐全 |
-| File Similarity Checker | 莱文斯坦距离比对文件名，相似度 < 60% 警告 |
-| SFC Signature Validator | 从 SFC 官网查询牌照信息，自动填充 |
-
-**审批流程**：
-
-| Skill | 功能 |
-|-------|------|
-| Coverage Approval | 检查 Coverage 存在性，处理首次覆盖审批 |
-| Chief Approval | 处理首席审批 |
-| RQC Approval | 判断 RQC 触发（首次覆盖/评级调整/TP 变动 ≥ 30%） |
-
-**内容生成**：
-
-| Skill | 功能 |
-|-------|------|
-| Report Title Generator | 按规则自动生成标准标题 |
-| Report Extractor | 从 Word 提取摘要和正文 |
-| Stock Chart Generator | 从市场数据生成股价走势图和 Volume 柱状图 |
-| Report Generator | 填充模板生成完整报告 |
-
-**发布流程**：
-
-| Skill | 功能 |
-|-------|------|
-| Report Submission | 提交前检查（RQC/Coverage/字段），通过后更新状态 |
-| Translation | 报告翻译 |
-| Auto Auditor | AI 自动审核合规性 |
-| Publish Handler | Word → PDF，发送通知邮件，同步 Wind |
-
 ### 4.2 报告标题生成规则
 
 | 场景 | 格式 |
@@ -128,8 +87,6 @@ neoskills/
 报告文件命名：
 - 中文：`公司全称 日期.docx`
 - 英文：`Ticker 日期.docx`
-- 自动刷新 PDF：`原名_AutoRefresh.pdf`
-- 参数提取：`原名_params.json`
 
 ## 9. 关键技术实现
 
@@ -176,12 +133,3 @@ LibreOffice 静默转 PDF → PyMuPDF 解析坐标 → 高清截图裁剪 → �
 - 首次覆盖
 - 评级变动
 - 目标价变动 ≥ 30%
-
-### 10.3 数据库规范
-
-- 主键：uuid
-- 时间：timestamptz，字段名 created_at / updated_at
-- 外键：显式声明 ON DELETE
-- 唯一性：约束或唯一索引
-- 审计：append-only 日志表
-- 删除：优先逻辑删除或状态驱动
