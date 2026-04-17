@@ -3,16 +3,16 @@
 提供相对收益图表和推荐图表的生成功能。
 """
 
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Dict, Any
 import os
 import sys
 
 # 图表常量
-DEFAULT_CHART_DPI = 100
-CHART_LOOKBACK_DAYS = 365
-BENCHMARK_TICKER = "^HSI"
+DEFAULT_CHART_DPI = 150
+
+# 图表代理设置（默认从环境变量读取，如未设置则不使用代理）
+CHART_PROXY = os.environ.get("HTTP_PROXY") or os.environ.get("HTTPS_PROXY") or ""
 
 # 评级颜色映射
 RATING_COLORS = {
@@ -52,57 +52,124 @@ def _generate_relative_chart(ticker: str, output_path: str, company_name: str = 
         return False
 
     try:
+        # 仅在配置了代理时设置
+        if CHART_PROXY:
+            os.environ["HTTP_PROXY"] = CHART_PROXY
+            os.environ["HTTPS_PROXY"] = CHART_PROXY
+
         # 计算日期范围（最近1年）
         end_date = datetime.now()
-        start_date = end_date - timedelta(days=CHART_LOOKBACK_DAYS)
+        start_date = datetime(end_date.year - 1, end_date.month, end_date.day)
 
-        # 并行下载股票和基准数据
-        with ThreadPoolExecutor(max_workers=2) as executor:
-            stock_future = executor.submit(yf.download, ticker, start_date, end_date, progress=False)
-            benchmark_future = executor.submit(yf.download, BENCHMARK_TICKER, start_date, end_date, progress=False)
-            stock_data = stock_future.result()
-            benchmark_data = benchmark_future.result()
+        # 处理 ticker 格式
+        if not ('.' in ticker or '^' in ticker):
+            if ticker.isdigit() and len(ticker) == 4:
+                ticker = f"{ticker}.HK"
 
-        if stock_data.empty or benchmark_data.empty:
-            print(f"  ⚠️ 数据为空，跳过 relative_chart")
+        # 获取股票数据
+        stock = yf.Ticker(ticker)
+        hist = stock.history(start=start_date, end=end_date)
+
+        if hist.empty:
+            print(f"  ⚠️ 无法获取 {ticker} 的历史数据，跳过 relative_chart")
             return False
 
-        # 提取收盘价
-        def get_close(df):
-            if 'Adj Close' in df.columns:
-                return df['Adj Close']
-            for col in df.columns:
-                if 'Close' in str(col):
-                    return df[col]
-            raise ValueError(f"No Close column found: {df.columns.tolist()}")
+        stock_dates = hist.index
+        stock_prices = hist['Close'].values
+        volumes = hist['Volume'].values if 'Volume' in hist.columns else None
 
-        stock_close = get_close(stock_data)
-        benchmark_close = get_close(benchmark_data)
-        stock_return = (1 + stock_close.pct_change()).cumprod() - 1
-        benchmark_return = (1 + benchmark_close.pct_change()).cumprod() - 1
-        relative_return = (1 + stock_return) / (1 + benchmark_return) - 1
+        # 获取MSCI China数据
+        mchi = yf.Ticker("MCHI")
+        mchi_hist = mchi.history(start=start_date, end=end_date)
 
-        # 绘图
-        plt.style.use('seaborn-v0_8-whitegrid')
-        fig, ax = plt.subplots(figsize=(10, 5.5), dpi=DEFAULT_CHART_DPI)
+        if mchi_hist.empty:
+            # 尝试备用
+            mchi = yf.Ticker("2800.HK")
+            mchi_hist = mchi.history(start=start_date, end=end_date)
 
-        dates = mdates.date2num(relative_return.index.to_pydatetime())
-        ax.plot_date(dates, relative_return.values * 100, '-', linewidth=2, color='#1f77b4')
+        if mchi_hist.empty:
+            print(f"  ⚠️ 无法获取MSCI China数据，跳过 relative_chart")
+            return False
 
-        ax.axhline(y=0, color='black', linestyle='-', linewidth=0.5)
-        ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f'{x:.0f}%'))
+        index_dates = mchi_hist.index
+        index_prices = mchi_hist['Close'].values
 
-        title = f'{company_name or ticker} Relative Return vs HSI (1Y)'
-        ax.set_title(title, fontsize=14, fontweight='bold')
-        ax.set_ylabel('Relative Return (%)', fontsize=11)
-        ax.set_xlabel('')
-        ax.yaxis.grid(True, linestyle='--', alpha=0.7)
-        ax.xaxis.grid(True, linestyle='--', alpha=0.7)
+        # 归一化到100
+        stock_normalized = (stock_prices / stock_prices[0]) * 100
+        index_normalized = np.interp(
+            mdates.date2num(stock_dates),
+            mdates.date2num(index_dates),
+            (index_prices / index_prices[0]) * 100
+        )
+
+        # 确保输出目录存在
+        os.makedirs(os.path.dirname(output_path) if os.path.dirname(output_path) else "reports", exist_ok=True)
+
+        # 绘制图表（与 relative_chart.py 保持一致的风格）
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8), dpi=100,
+                                        gridspec_kw={'height_ratios': [3, 1]},
+                                        sharex=True)
+
+        fig.patch.set_facecolor('white')
+        ax1.set_facecolor('#fafafa')
+        ax2.set_facecolor('#fafafa')
+
+        # 上方面板：相对收益对比
+        ax1.plot(stock_dates, stock_normalized, color='#23558C', linewidth=2, label='Price Return')
+        ax1.plot(stock_dates, index_normalized, color='#808080', linewidth=2, label='MSCI China')
+
+        # Y轴设置
+        data_min = min(min(stock_normalized), min(index_normalized))
+        data_max = max(max(stock_normalized), max(index_normalized))
+        y_margin = (data_max - data_min) * 0.1
+        y_min = max(0, data_min - y_margin)
+        y_max = data_max + y_margin
+        ax1.set_ylim(y_min, y_max)
+
+        y_range = y_max - y_min
+        if y_range <= 20:
+            y_step = 5
+        elif y_range <= 50:
+            y_step = 10
+        elif y_range <= 100:
+            y_step = 20
+        else:
+            y_step = 50
+
+        y_ticks = []
+        current = int(y_min // y_step) * y_step
+        while current <= y_max:
+            if current >= y_min:
+                y_ticks.append(current)
+            current += y_step
+        ax1.set_yticks(y_ticks)
+
+        ax1.yaxis.grid(True, linestyle='--', alpha=0.6, color='lightgray')
+        ax1.set_axisbelow(True)
+        ax1.spines['top'].set_visible(False)
+        ax1.spines['right'].set_visible(False)
+        ax1.legend(loc='upper center', bbox_to_anchor=(0.5, 1.02), ncol=2, fontsize=10, framealpha=0.9)
+
+        # 下方面板：成交量
+        bar_colors = ['#23558C' if i == len(volumes) - 1 else '#B8D4E8' for i in range(len(volumes))]
+        ax2.bar(stock_dates, volumes, width=0.8, color=bar_colors, align='center')
+        ax2.set_ylim(0, max(volumes) * 1.2)
+        ax2.yaxis.grid(True, linestyle='--', alpha=0.6, color='lightgray')
+        ax2.set_axisbelow(True)
+        ax2.spines['top'].set_visible(False)
+        ax2.spines['right'].set_visible(False)
+        ax2.set_ylabel('Volume', fontsize=11)
+        ax2.set_yticklabels([])
+
+        ax2.xaxis.set_major_formatter(mdates.DateFormatter('%b-%y'))
+        ax2.xaxis.set_major_locator(mdates.MonthLocator(interval=1))
+        ax2.set_xlim(stock_dates[0], stock_dates[-1])
 
         plt.tight_layout()
-        plt.savefig(output_path, dpi=DEFAULT_CHART_DPI, bbox_inches='tight', facecolor='white')
+        plt.savefig(output_path, dpi=150, bbox_inches='tight', facecolor='white')
         plt.close()
 
+        print(f"  ✅ relative_chart 已生成: {output_path}")
         return True
 
     except Exception as e:
@@ -131,6 +198,11 @@ def _generate_recommendation_chart(ticker: str, output_path: str, company_name: 
         import matplotlib.pyplot as plt
         import matplotlib.dates as mdates
         import matplotlib.font_manager as fm
+
+        # 仅在配置了代理时设置
+        if CHART_PROXY:
+            os.environ["HTTP_PROXY"] = CHART_PROXY
+            os.environ["HTTPS_PROXY"] = CHART_PROXY
 
         # 计算日期范围（最近5年）
         end_date = datetime.now()
