@@ -388,6 +388,8 @@ def _generate_recommendation_chart(ticker: str, output_path: str, company_name: 
         print(f"  ✅ recommendation_chart 已生成: {output_path}")
         return True
 
+    except NeedsLoginError:
+        raise  # 让 NeedsLoginError 继续传播，触发 AI 主动询问用户
     except Exception as e:
         print(f"  ⚠️ 生成 recommendation_chart 时出错: {e}")
         return False

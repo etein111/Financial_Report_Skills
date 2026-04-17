@@ -46,6 +46,13 @@ from chart_generator import (
     _generate_recommendation_chart,
 )
 
+# Neolyst 登录异常
+try:
+    from skills.neolyst.scripts.connection import NeedsLoginError
+except ImportError:
+    class NeedsLoginError(Exception):
+        pass
+
 from image_handler import (
     _escape_jinja_in_charts,
     _restore_jinja_in_charts,
@@ -155,9 +162,9 @@ def render_report(
                 relative_chart_generated = rel_future.result()
                 try:
                     recommendation_chart_generated = rec_future.result()
+                except NeedsLoginError:
+                    raise  # 继续传播，让 AI 主动询问用户
                 except Exception as e:
-                    if 'NeedsLoginError' in type(e).__name__ or 'NeedsLoginError' in str(e):
-                        raise  # 继续传播，让 AI 主动询问用户
                     recommendation_chart_generated = False
 
             if relative_chart_generated:
@@ -312,6 +319,8 @@ def render_report(
 
         return True
 
+    except NeedsLoginError:
+        raise
     except Exception as e:
         print(f"渲染失败: {e}")
         import traceback
