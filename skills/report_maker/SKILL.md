@@ -176,9 +176,10 @@ uv pip install "docxtpl>=0.20.0" docxcompose
 ```
 
 **模板解析规则**：
-- 调用 `resolve_template(report_type, language, dest_dir)` 从 neolyst 获取模板
+- 调用 `resolve_template_for_report(report_type, language)` 从 neolyst 获取模板
 - `language` 来自当前报告的 `report_language`
-- 模板下载到 `templates/{report_type}/{language}/` 目录
+- 模板下载到 `{dest_dir}/templates/{report_type}/{language}/` 目录
+- `dest_dir` 默认为项目根目录，**不要传入已包含 `templates/` 的路径**，否则会嵌套
 - 不再维护额外的"报告类型 -> 模板类型"映射表
 
 每个模板目录必须包含：
