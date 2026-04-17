@@ -38,4 +38,4 @@
 ### 数据库工程
 
 - Neolyst-DB 的唯一事实源是 `supabase/migrations/`。
-- 迁移、测试、环境部署等工程规范统一遵循 [SUPABASE.md](../../principles/SUPABASE.md)。
+- 迁移、测试、环境部署等工程规范统一遵循 [SUPABASE.md](../principles/SUPABASE.md)。
