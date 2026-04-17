@@ -229,36 +229,46 @@ def _generate_recommendation_chart(ticker: str, output_path: str, company_name: 
         if elements:
             recommendations = elements.get('recommendations', [])
 
-        # 优先从 Neolyst 获取历史推荐数据
+        # 从 Neolyst 获取历史推荐数据
         neolyst_fetched = False
-        if neolyst_client and elements:
-            first_analyst_email = elements.get('a1_email', '')
-            if first_analyst_email:
-                try:
-                    import importlib
-                    _opencode_root = str(Path(__file__).resolve().parents[3])
-                    if _opencode_root not in sys.path:
-                        sys.path.insert(0, _opencode_root)
-                    _cov_mod = importlib.import_module("skills.neolyst.scripts.coverage")
-                    import market_data as _md
-                    neolyst_recs = _md.fetch_recommendation_history(
-                        lambda t, e: _cov_mod.list_coverage_history(neolyst_client, t, e),
-                        ticker, first_analyst_email)
-                    if neolyst_recs:
-                        recommendations = neolyst_recs
-                        neolyst_fetched = True
-                        print(f"  ✅ 从 Neolyst 获取到 {len(recommendations)} 条历史推荐")
-                    else:
-                        # Neolyst 有 coverage 但没有历史推荐数据，这是有效情况，不报错
-                        print(f"  ⚠️ Neolyst 中该股票没有历史推荐数据")
-                except Exception as e:
-                    print(f"  ⚠️ 从 Neolyst 获取推荐历史失败: {e}")
-                    # 如果传入了 neolyst_client 但获取失败，必须报错，不使用默认数据
-                    print(f"  ❌ recommendation_chart 生成失败：无法从 Neolyst 获取数据")
-                    return False
-        elif not recommendations:
-            # 没有传入 neolyst_client，且 elements 中也没有 recommendations，才使用默认值（仅价格线）
-            print(f"  ⚠️ 未传入 neolyst_client 且 elements 中无 recommendations，将生成仅含价格线的图表")
+        first_analyst_email = elements.get('a1_email', '') if elements else ''
+
+        # 如果没传入 neolyst_client，但有 analyst_email，自己获取 client
+        if not neolyst_client and first_analyst_email:
+            try:
+                _opencode_root = str(Path(__file__).resolve().parents[3])
+                if _opencode_root not in sys.path:
+                    sys.path.insert(0, _opencode_root)
+                from skills.neolyst.scripts.connection import get_client as _get_client
+                neolyst_client = _get_client()
+            except Exception as e:
+                print(f"  ⚠️ 无法获取 neolyst client: {e}")
+
+        if neolyst_client and first_analyst_email:
+            try:
+                import importlib
+                _opencode_root = str(Path(__file__).resolve().parents[3])
+                if _opencode_root not in sys.path:
+                    sys.path.insert(0, _opencode_root)
+                _cov_mod = importlib.import_module("skills.neolyst.scripts.coverage")
+                import market_data as _md
+                neolyst_recs = _md.fetch_recommendation_history(
+                    lambda t, e: _cov_mod.list_coverage_history(neolyst_client, t, e),
+                    ticker, first_analyst_email)
+                if neolyst_recs:
+                    recommendations = neolyst_recs
+                    neolyst_fetched = True
+                    print(f"  ✅ 从 Neolyst 获取到 {len(recommendations)} 条历史推荐")
+                else:
+                    # Neolyst 有 coverage 但没有历史推荐数据，这是有效情况，不报错
+                    print(f"  ⚠️ Neolyst 中该股票没有历史推荐数据")
+            except Exception as e:
+                print(f"  ⚠️ 从 Neolyst 获取推荐历史失败: {e}")
+                # 获取失败时，不报错，尝试用 elements 中的数据或生成默认图表
+
+        if not neolyst_fetched and not recommendations:
+            # 也没有传入 neolyst_client，且 elements 中也没有 recommendations，才使用默认值（仅价格线）
+            print(f"  ⚠️ 未获取到历史推荐数据，将生成仅含价格线的图表")
 
         # 如果没有 recommendations，生成仅含价格线的图表（不显示推荐点）
         if not recommendations:
