@@ -46,7 +46,7 @@ supabase migration new add_user_table
 # 生成: supabase/migrations/20260413140000_add_user_table.sql
 ```
 
-迁移文件规则（详见 [principles/ARCHITECTURE.md](../principles/ARCHITECTURE.md)）：
+迁移文件规则（详见 [ARCHITECTURE.md](../docs/principles/ARCHITECTURE.md)）：
 
 - 只追加，不修改已提交的迁移文件
 - `create or replace` 覆盖函数时以数据库当前版本为准，不从旧迁移复制文本

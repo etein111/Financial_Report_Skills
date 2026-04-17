@@ -41,7 +41,7 @@
 - 函数自身的行为、约束、边界——"做什么、怎么做、有什么限制"
 - 只对阅读/修改/调用该函数的人有意义
 - 代码变了这段话也要变
-- 依据：`principles/DOCSTR.md`
+- 依据：`docs/principles/DOCSTR.md`
 
 **放 README（子系统级、跨模块）：**
 
@@ -49,7 +49,7 @@
 - 脱离目录地图就不容易快速看懂的内容
 - 单个函数重写后仍然成立
 - 如：模块依赖方向、环境配置、开发测试方法
-- 依据：`principles/DOCUMENT_README.md`
+- 依据：`docs/principles/DOCUMENT_README.md`
 
 **放全局文档（跨 skill、面向未来的设计约束）：**
 
