@@ -11,9 +11,15 @@ neolyst_integration.py — report_maker 对 neolyst 的统一接口封装。
 7. 文件上传：upload_report_files / upload_model_file
 """
 
-from typing import Dict, Any, Optional, List
+import sys
 from pathlib import Path
+from typing import Dict, Any, Optional, List
 from supabase import Client
+
+# 将项目根目录（neoskills）加入 sys.path，以便能导入 skills.neolyst 等模块
+_NEOSKILLS_ROOT = str(Path(__file__).resolve().parents[3])
+if _NEOSKILLS_ROOT not in sys.path:
+    sys.path.insert(0, _NEOSKILLS_ROOT)
 
 from skills.neolyst.scripts.connection import get_client
 from skills.neolyst.scripts.template import resolve_template
