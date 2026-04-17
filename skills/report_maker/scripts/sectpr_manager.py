@@ -173,6 +173,7 @@ def _restore_all_sectPrs(docx_path: str, template_sectPrs: Dict[str, Any]) -> bo
             print(f"  关键位置: APPENDIX 1={appendix1_idx}, 法律附录={disclaimer_idx}, 正文边界={body_boundary}")
 
             first_body_sectPr_done = False  # 正文第一个 sectPr 已处理标志
+            body_boundary_inserted = False  # body_boundary 位置是否已插入 sectPr
 
             for idx, para, old_sectPr in para_sectPrs:
                 pPr = para.find(f'{W}pPr')
@@ -210,6 +211,28 @@ def _restore_all_sectPrs(docx_path: str, template_sectPrs: Dict[str, Any]) -> bo
                     pgMar = source_sectPr.find(f'{W}pgMar')
                     left = pgMar.get(f'{W}left') if pgMar is not None else '?'
                     print(f"  [{idx}] type={type_val} → {label} (left={left})")
+
+            # 如果正文区域没有任何 sectPr（body 内容被替换为分页符后无 sectPr），
+            # 在 body_boundary 位置前插入 body sectPr
+            if not first_body_sectPr_done and body_boundary is not None and body_sectPr is not None:
+                # 找到 body_boundary 位置的元素
+                all_elements = list(body)
+                insert_idx = None
+                for i, elem in enumerate(all_elements):
+                    if i >= body_boundary:
+                        insert_idx = i
+                        break
+
+                if insert_idx is not None:
+                    # 创建一个带 sectPr 的段落
+                    from lxml import etree
+                    p = etree.Element(f'{W}p')
+                    pPr = etree.SubElement(p, f'{W}pPr')
+                    new_sectPr = deepcopy(body_sectPr)
+                    pPr.append(new_sectPr)
+                    body.insert(insert_idx, p)
+                    body_boundary_inserted = True
+                    print(f"  [插入] 在 body_boundary({body_boundary}) 前插入 body sectPr")
 
             # 替换 body-level sectPr (appendix)
             if appendix_sectPr is not None:
