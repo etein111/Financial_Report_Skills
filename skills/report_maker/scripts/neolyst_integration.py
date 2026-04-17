@@ -35,7 +35,7 @@ from .common import COMPANY_REPORT_TYPES, SECTOR_REPORT_TYPES
 def resolve_template_for_report(
     report_type: str,
     report_language: str,
-    dest_dir: str = ".",
+    dest_dir: str = None,
     client: Client = None,
 ) -> Dict[str, str]:
     """
@@ -44,7 +44,7 @@ def resolve_template_for_report(
     Args:
         report_type: 报告类型（如 "company", "macro"）
         report_language: 报告语言（如 "en", "zh"）
-        dest_dir: 下载根目录，默认 "."，文件落在 {dest_dir}/templates/{report_type}/{report_language}/
+        dest_dir: 下载根目录，默认项目根目录，文件落在 {dest_dir}/templates/{report_type}/{report_language}/
         client: Supabase client，默认从环境变量创建
 
     Returns:
@@ -53,6 +53,8 @@ def resolve_template_for_report(
     Raises:
         ValueError: 模板不存在或未发布
     """
+    if dest_dir is None:
+        dest_dir = _NEOSKILLS_ROOT
     if client is None:
         client = get_client()
     return resolve_template(client, report_type, report_language, dest_dir)
