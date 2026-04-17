@@ -153,7 +153,12 @@ def render_report(
                     neolyst_client
                 )
                 relative_chart_generated = rel_future.result()
-                recommendation_chart_generated = rec_future.result()
+                try:
+                    recommendation_chart_generated = rec_future.result()
+                except Exception as e:
+                    if 'NeedsLoginError' in type(e).__name__ or 'NeedsLoginError' in str(e):
+                        raise  # 继续传播，让 AI 主动询问用户
+                    recommendation_chart_generated = False
 
             if relative_chart_generated:
                 print(f"  ✅ relative_chart 已生成")

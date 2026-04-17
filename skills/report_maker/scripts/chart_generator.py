@@ -243,8 +243,10 @@ def _generate_recommendation_chart(ticker: str, output_path: str, company_name: 
                 _opencode_root = str(Path(__file__).resolve().parents[3])
                 if _opencode_root not in sys.path:
                     sys.path.insert(0, _opencode_root)
-                from skills.neolyst.scripts.connection import get_client as _get_client
+                from skills.neolyst.scripts.connection import get_client as _get_client, NeedsLoginError
                 neolyst_client = _get_client()
+            except NeedsLoginError:
+                raise  # 让 NeedsLoginError 继续传播，触发 AI 主动询问用户
             except Exception as e:
                 print(f"  ⚠️ 无法获取 neolyst client: {e}")
 
@@ -266,6 +268,8 @@ def _generate_recommendation_chart(ticker: str, output_path: str, company_name: 
                 else:
                     # Neolyst 有 coverage 但没有历史推荐数据，这是有效情况，不报错
                     print(f"  ⚠️ Neolyst 中该股票没有历史推荐数据")
+            except NeedsLoginError:
+                raise  # 让 NeedsLoginError 继续传播
             except Exception as e:
                 print(f"  ⚠️ 从 Neolyst 获取推荐历史失败: {e}")
                 # 获取失败时，不报错，尝试用 elements 中的数据或生成默认图表
