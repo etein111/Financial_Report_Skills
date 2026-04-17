@@ -1,6 +1,6 @@
-# insights/
+# notes/
 
-从实践中积累的洞察和经验。定期审阅，成熟后提炼进 `docs/principles/`。
+从实践中积累的经验和操作指南。定期审阅，成熟后提炼进 `docs/principles/`。
 
 ## 约定
 
@@ -15,8 +15,8 @@
 1. 回顾当前 session 完成的工作
 2. 提炼其中可复用的通用原则（不是记录做了什么，而是归纳下次怎么做得更好）
 3. 按关注点拆分，每个文件一个主题
-4. 写入 `docs/insights/` 目录，格式参考 `doc-organization.md`
+4. 写入 `docs/notes/` 目录，格式参考 `doc-organization.md`
 
 **不写什么**：具体操作步骤、临时状态、一次性决策。
 
-**与 `docs/principles/` 的关系**：`docs/insights/` 是草稿区，定期审阅后成熟的规则提炼进 `docs/principles/`，对应的 insight 文件删除。
+**与 `docs/principles/` 的关系**：`docs/notes/` 是草稿区，定期审阅后成熟的规则提炼进 `docs/principles/`，对应的 note 文件删除。
