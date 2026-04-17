@@ -1,206 +1,133 @@
-"""composer.py - 文档合并模块
+"""context.py - 上下文准备模块
 
-提供使用 docxcompose 进行文档合并的功能。
+提供 render_report 所需的上下文准备函数：
+- enrich_company_names_with_yfinance: 使用 yfinance 补全公司名称
+- prepare_context_with_analysts: 准备渲染上下文（分析师字段等）
 """
 
-from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 
+# 尝试导入 yfinance
 try:
-    from docx import Document
-    from docxcompose.composer import Composer
-    DOCXCOMPOSE_AVAILABLE = True
-except ImportError:
-    DOCXCOMPOSE_AVAILABLE = False
-    Document = None
-    Composer = None
-
-import sys
-SCRIPTS_DIR = Path(__file__).parent
-sys.path.insert(0, str(SCRIPTS_DIR))
-
-import common
-from sectpr_manager import (
-    _save_all_template_sectPrs,
-    _restore_all_sectPrs,
-    _restore_final_sectPr,
-)
-from image_handler import _copy_media_between_docx
+    import yfinance as yf
+    CHARTS_AVAILABLE = True
+except ImportError as e:
+    print(f"Warning: yfinance not available: {e}")
+    CHARTS_AVAILABLE = False
+    yf = None
 
 
-def _replace_body_sectPr_with_page_break(doc: Document) -> None:
-    """将 body 中的所有 sectPr 替换为分页符。
+def enrich_company_names_with_yfinance(elements: Dict[str, Any]) -> Dict[str, Any]:
+    """使用 yfinance 补全公司中英文名称。
 
-    分节符会影响页眉页脚的继承，因此替换为分页符。
-    分页符是一个包含 <w:br w:type="page"/> 的段落。
-
-    sectPr 可能在两种位置：
-    1. 段落内的 pPr > sectPr
-    2. body 的直接子元素（body-level sectPr）
+    逻辑：
+    - 如果 company_en 已存在且不为空，跳过
+    - 如果 company_en 不存在或为空，但 ticker 存在，用 yfinance 查询补充
+    - 如果 company_cn 已存在且不为空，跳过
+    - 如果 company_cn 不存在或为空，但 ticker 存在，尝试用 yfinance 查询补充
 
     Args:
-        doc: python-docx Document 对象
-    """
-    W = common.W_NS
-    body = doc.element.body
-
-    # 创建分页符 XML
-    page_break_p = W  # noqa
-
-    def _make_page_break_para():
-        """创建一个包含分页符的段落"""
-        from lxml import etree
-        # <w:p>
-        p = etree.Element(f'{W}p')
-        # <w:r>
-        r = etree.SubElement(p, f'{W}r')
-        # <w:br w:type="page"/>
-        br = etree.SubElement(r, f'{W}br')
-        br.set(f'{W}type', 'page')
-        return p
-
-    sectPrs_to_remove = []
-    insert_positions = []  # (position, sectPr_element)
-
-    # 收集所有 sectPr 及其位置
-    elements = list(body)
-    for i, elem in enumerate(elements):
-        if elem.tag == f'{W}p':
-            pPr = elem.find(f'{W}pPr')
-            if pPr is not None:
-                sectPr = pPr.find(f'{W}sectPr')
-                if sectPr is not None:
-                    sectPrs_to_remove.append((i, elem, pPr, sectPr))
-        elif elem.tag == f'{W}sectPr':
-            sectPrs_to_remove.append((i, elem, None, elem))
-
-    # 反向遍历（从后往前）处理，避免索引变化问题
-    for item in reversed(sectPrs_to_remove):
-        idx, elem, pPr, sectPr = item
-
-        # 在 sectPr 之前插入分页符
-        page_break_para = _make_page_break_para()
-        body.insert(idx, page_break_para)
-
-        # 删除 sectPr
-        if pPr is not None:
-            pPr.remove(sectPr)
-        else:
-            body.remove(elem)
-
-    if sectPrs_to_remove:
-        print(f"  已将 body 中的 {len(sectPrs_to_remove)} 个分节符替换为分页符")
-
-
-def insert_body_at_marker_compose(
-    doc_path: str,
-    body_path: str,
-    marker: str,
-    output_path: str,
-    template_path: str = None,
-) -> bool:
-    """使用 docxcompose 三段式合并：在 marker 位置插入 body。
-
-    模板已分为 4 个 section（封面/body/英文摘要/法律披露），
-    每个 section 自带 sectPr（含 header/footer 引用）。
-    body 内容插入 body section 后自动继承该 section 的 header/footer，
-    无需额外处理页眉页脚。
-
-    Args:
-        doc_path: 渲染后的模板路径
-        body_path: body 文档路径
-        marker: 占位符标记
-        output_path: 输出路径
-        template_path: 原始模板路径（用于恢复文档末尾 sectPr）
+        elements: 原始要素字典
 
     Returns:
-        是否成功插入
+        补全后的要素字典
     """
-    if not DOCXCOMPOSE_AVAILABLE:
-        print("  ⚠️ docxcompose 不可用，无法使用三段式合并")
-        return False
+    elements = elements.copy()
 
-    try:
-        # docxcompose 会损坏 sectPrs，需要预先保存
-        template_sectPrs = None
-        if template_path:
-            template_sectPrs = _save_all_template_sectPrs(template_path)
+    ticker = elements.get('ticker', '').strip() if elements.get('ticker') else ''
 
-        part1_doc = Document(doc_path)
-        part1_body = part1_doc.element.body
-        part1_elements = list(part1_body)
+    if not ticker:
+        return elements
 
-        marker_idx = None
-        for i, elem in enumerate(part1_elements):
-            text = common.get_element_text(elem)
-            if marker in text:
-                marker_idx = i
-                break
+    # 如果 company_en 或 company_cn 为空，尝试用 yfinance 补全
+    if not elements.get('company_en') or not elements.get('company_cn'):
+        try:
+            stock = yf.Ticker(ticker)
+            info = stock.info
 
-        if marker_idx is None:
-            return False
+            if not elements.get('company_en'):
+                company_en = info.get('longName') or info.get('shortName', '')
+                if company_en:
+                    elements['company_en'] = company_en
+                    print(f"  [yfinance] 补全 company_en: {company_en}")
 
-        part1_path = Path(output_path).parent / "temp_part1.docx"
-        for elem in part1_elements[marker_idx:]:
-            if common.local_tag(elem) != 'sectPr':
-                part1_body.remove(elem)
-        part1_doc.save(str(part1_path))
+            if not elements.get('company_cn'):
+                company_cn = info.get('longName') or info.get('shortName', '')
+                if company_cn:
+                    elements['company_cn'] = company_cn
+                    print(f"  [yfinance] 补全 company_cn: {company_cn}")
+        except Exception as e:
+            print(f"  [yfinance] 查询公司名称失败: {e}")
 
-        # 创建 part3（marker 之后的内容 = 英文摘要 + 法律披露 sections）
-        part3_path = Path(output_path).parent / "temp_part3.docx"
-        part3_doc = Document(doc_path)
-        part3_body = part3_doc.element.body
-        part3_elements = list(part3_body)
+    return elements
 
-        has_part3_content = False
-        for elem in part3_elements[:marker_idx + 1]:
-            tag = common.local_tag(elem)
-            if tag != 'sectPr':
-                part3_body.remove(elem)
 
-        for elem in part3_body:
-            tag = common.local_tag(elem)
-            if tag in ['p', 'tbl', 'sdt']:
-                text = common.get_element_text(elem)
-                if text.strip():
-                    has_part3_content = True
-                    break
+def clean_value(value: Any) -> str:
+    """清理字段值为字符串，处理 None 和列表。
 
-        if has_part3_content:
-            part3_doc.save(str(part3_path))
+    Args:
+        value: 原始值
 
-        # 合并：part1(封面) + body + part3(英文摘要+法律披露)
-        master = Document(str(part1_path))
-        composer = Composer(master)
+    Returns:
+        清理后的字符串，空返回空字符串
+    """
+    if value is None:
+        return ''
+    if isinstance(value, list):
+        return ', '.join(str(v) for v in value)
+    return str(value)
 
-        body_doc = Document(body_path)
-        _replace_body_sectPr_with_page_break(body_doc)
-        composer.append(body_doc, remove_property_fields=False)
 
-        if has_part3_content:
-            part3_for_merge = Document(str(part3_path))
-            composer.append(part3_for_merge, remove_property_fields=False)
+def prepare_context_with_analysts(elements: Dict[str, Any]) -> Dict[str, Any]:
+    """准备渲染上下文，将 a1~a8 字段展开为独立变量。
 
-        composer.save(output_path)
+    将 elements 中的 a1_email、a1_name 等字段展开为独立的上下文变量，
+    方便模板中直接引用 {{ a1_email }}、{{ a2_name }} 等。
 
-        # 恢复所有 sectPrs（docxcompose 会损坏 header/footer rId 引用）
-        if template_sectPrs is not None:
-            _restore_all_sectPrs(output_path, template_sectPrs)
+    同时处理 rating、target_price 等字段的格式化。
 
-        # 复制 body 中的图片资源（修复 docxcompose 图片丢失）
-        copied_count = _copy_media_between_docx(body_path, output_path)
-        if copied_count > 0:
-            print(f"  已补充复制 {copied_count} 张图片（修复 docxcompose 图片丢失）")
+    Args:
+        elements: 要素字典
 
-        # 清理临时文件
-        part1_path.unlink(missing_ok=True)
-        if has_part3_content:
-            part3_path.unlink(missing_ok=True)
+    Returns:
+        渲染上下文字典
+    """
+    context = {}
 
-        return True
+    # 复制所有字段（包括 aN_* 字段）
+    for key, value in elements.items():
+        context[key] = value
 
-    except Exception as e:
-        print(f"  docxcompose 三段式合并失败: {e}")
-        import traceback
-        traceback.print_exc()
-        return False
+    # 展开 a1~a8 字段
+    for i in range(1, 9):
+        prefix = f'a{i}'
+        for suffix in ['_name', '_email', '_certification']:
+            key = f'{prefix}{suffix}'
+            if key in elements:
+                context[key] = elements[key]
+            # rating 字段（如果有）
+        rating_key = f'a{i}_rating'
+        if rating_key in elements:
+            context[rating_key] = elements[rating_key]
+
+    # 格式化 rating 和 target_price
+    if 'rating' in context:
+        context['rating'] = clean_value(context['rating'])
+    if 'target_price' in context:
+        tp = context['target_price']
+        if tp:
+            try:
+                context['target_price'] = float(tp)
+            except (ValueError, TypeError):
+                pass
+
+    # 处理 analyst_abbr 字段（用于显示）
+    if 'analysts' in elements:
+        analysts = elements['analysts']
+        if isinstance(analysts, list) and analysts:
+            context['analyst_display'] = ' / '.join(
+                a.get('name', '') for a in analysts if a.get('name')
+            )
+        context['analysts'] = analysts
+
+    return context
