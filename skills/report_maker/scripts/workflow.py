@@ -10,10 +10,16 @@ workflow.py — report_maker 完整报告提交流程。
 - 行业类报告：("sector", "macro", "strategy", "quantitative", "bond") - 不需要 coverage_id
 """
 
-from typing import Dict, Any, Optional, List, Tuple
+import sys
 from pathlib import Path
+from typing import Dict, Any, Optional, List, Tuple
 
-from .neolyst_integration import (
+# 将项目根目录（neoskills）加入 sys.path
+_NEOSKILLS_ROOT = str(Path(__file__).resolve().parents[2])
+if _NEOSKILLS_ROOT not in sys.path:
+    sys.path.insert(0, _NEOSKILLS_ROOT)
+
+from skills.report_maker.scripts.neolyst_integration import (
     resolve_analysts_from_elements,
     resolve_coverage_for_report,
     map_elements_to_draft,
@@ -24,7 +30,7 @@ from .neolyst_integration import (
     upload_model,
     get_contact_person_options,
 )
-from .common import load_yaml, COMPANY_REPORT_TYPES, SECTOR_REPORT_TYPES
+from skills.report_maker.scripts.common import load_yaml, COMPANY_REPORT_TYPES, SECTOR_REPORT_TYPES
 
 
 # ==================== 核心工作流函数 ====================

@@ -27,7 +27,7 @@ from skills.neolyst.scripts.report import save_report, validate_report, submit_r
 from skills.neolyst.scripts.coverage import resolve_coverage
 from skills.neolyst.scripts.analyst import resolve_analyst_by_email
 from skills.neolyst.scripts.upload_files import upload_report_files, upload_model_file
-from .common import COMPANY_REPORT_TYPES, SECTOR_REPORT_TYPES
+from skills.report_maker.scripts.common import COMPANY_REPORT_TYPES, SECTOR_REPORT_TYPES
 
 
 # ==================== 模板解析 ====================
