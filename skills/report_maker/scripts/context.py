@@ -94,10 +94,9 @@ def prepare_context_with_analysts(elements: Dict[str, Any]) -> Dict[str, Any]:
     """
     context = {}
 
-    # 复制所有非 aN_* 的字段
+    # 复制所有字段（包括 aN_* 字段）
     for key, value in elements.items():
-        if not key.startswith('a') or not key[1:].split('_')[0].isdigit():
-            context[key] = value
+        context[key] = value
 
     # 展开 a1~a8 字段
     for i in range(1, 9):
