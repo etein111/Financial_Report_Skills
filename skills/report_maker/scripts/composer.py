@@ -28,6 +28,70 @@ from sectpr_manager import (
 from image_handler import _copy_media_between_docx
 
 
+def _replace_body_sectPr_with_page_break(doc: Document) -> None:
+    """将 body 中的所有 sectPr 替换为分页符。
+
+    分节符会影响页眉页脚的继承，因此替换为分页符。
+    分页符是一个包含 <w:br w:type="page"/> 的段落。
+
+    sectPr 可能在两种位置：
+    1. 段落内的 pPr > sectPr
+    2. body 的直接子元素（body-level sectPr）
+
+    Args:
+        doc: python-docx Document 对象
+    """
+    W = common.W_NS
+    body = doc.element.body
+
+    # 创建分页符 XML
+    page_break_p = W  # noqa
+
+    def _make_page_break_para():
+        """创建一个包含分页符的段落"""
+        from lxml import etree
+        # <w:p>
+        p = etree.Element(f'{W}p')
+        # <w:r>
+        r = etree.SubElement(p, f'{W}r')
+        # <w:br w:type="page"/>
+        br = etree.SubElement(r, f'{W}br')
+        br.set(f'{W}type', 'page')
+        return p
+
+    sectPrs_to_remove = []
+    insert_positions = []  # (position, sectPr_element)
+
+    # 收集所有 sectPr 及其位置
+    elements = list(body)
+    for i, elem in enumerate(elements):
+        if elem.tag == f'{W}p':
+            pPr = elem.find(f'{W}pPr')
+            if pPr is not None:
+                sectPr = pPr.find(f'{W}sectPr')
+                if sectPr is not None:
+                    sectPrs_to_remove.append((i, elem, pPr, sectPr))
+        elif elem.tag == f'{W}sectPr':
+            sectPrs_to_remove.append((i, elem, None, elem))
+
+    # 反向遍历（从后往前）处理，避免索引变化问题
+    for item in reversed(sectPrs_to_remove):
+        idx, elem, pPr, sectPr = item
+
+        # 在 sectPr 之前插入分页符
+        page_break_para = _make_page_break_para()
+        body.insert(idx, page_break_para)
+
+        # 删除 sectPr
+        if pPr is not None:
+            pPr.remove(sectPr)
+        else:
+            body.remove(elem)
+
+    if sectPrs_to_remove:
+        print(f"  已将 body 中的 {len(sectPrs_to_remove)} 个分节符替换为分页符")
+
+
 def insert_body_at_marker_compose(
     doc_path: str,
     body_path: str,
@@ -110,6 +174,7 @@ def insert_body_at_marker_compose(
         composer = Composer(master)
 
         body_doc = Document(body_path)
+        _replace_body_sectPr_with_page_break(body_doc)
         composer.append(body_doc, remove_property_fields=False)
 
         if has_part3_content:
