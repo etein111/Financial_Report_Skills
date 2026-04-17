@@ -100,15 +100,9 @@ uv pip install "docxtpl>=0.20.0" docxcompose
 【选择草稿文件】
 在 inbox/samples/company/ 目录下找到以下草稿：
 
-  1.  EN-Vistra Corp20260104.docx
-  2.  0402威胜控股（3393.HK）首次覆盖.docx
-  3.  测试-威胜控股（3393.HK）首次覆盖.docx
-  4.  0402威胜控股（3393.HK）首次覆盖.docx
-  5.  2025年西锐飞机年报点评.docx
-  6.  draft3.docx
-  7.  draft2.docx
-  8.  draft.docx
-  9.  西锐飞机首次覆盖报告（中文）提交版.docx
+  1.  某公司研究报告.docx
+  2.  某行业深度报告.docx
+  ...
 
 请选择要使用的草稿文件（输入编号）：
 ```
