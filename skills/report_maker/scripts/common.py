@@ -12,8 +12,6 @@ from lxml import etree
 import yaml
 
 
-# ==================== 常量定义 ====================
-
 # 目录常量
 DIR_REPORTS = "reports"
 DIR_TEMPLATES = "templates"
@@ -52,8 +50,21 @@ RECOMMENDATION_CHART_MARKER = '###RECOMMENDATION_CHART_MARKER###'
 # Windows 文件名禁止字符
 INVALID_FILENAME_CHARS = r'\/:*?"<>|'
 
+# 报告类型分类
+COMPANY_REPORT_TYPES = ("company", "company_flash")
+SECTOR_REPORT_TYPES = ("sector", "macro", "strategy", "quantitative", "bond")
 
-# ==================== Docx Zip 工具函数 ====================
+# 法律披露附录的识别标记
+APPENDIX_MARKERS = (
+    'APPENDIX',
+    '附录',
+    '重要信息披露',
+    'IMPORTANT DISCLOSURES',
+    'Disclaimer',
+    '免责声明',
+    '[Table_disclaimer]',
+)
+
 
 def read_docx_zip(path: str) -> Dict[str, bytes]:
     """读取 docx (zip) 文件中的所有条目。
@@ -102,8 +113,6 @@ def modify_docx_xml(path: str, modifier_fn, standalone=True, output_path: str = 
         standalone: XML declaration 的 standalone 属性（默认 True）
         output_path: 输出路径（默认覆盖原文件）
     """
-    from lxml import etree
-
     files = read_docx_zip(path)
     if 'word/document.xml' not in files:
         return
@@ -159,8 +168,6 @@ def extract_margins_from_pgMar(pgMar_elem) -> Dict[str, str]:
     return margins
 
 
-# ==================== YAML 工具函数 ====================
-
 def load_yaml(path: Union[str, Path]) -> Dict[str, Any]:
     """加载 YAML 文件。
 
@@ -189,8 +196,6 @@ def save_yaml(path: Union[str, Path], data: Dict[str, Any], sort_keys: bool = Fa
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(yaml.dump(data, allow_unicode=True, sort_keys=sort_keys), encoding='utf-8')
 
-
-# ==================== 路由工具函数 ====================
 
 def get_template_name(report_type: str, router_path: Union[str, Path] = None) -> Optional[str]:
     """根据报告类型获取模板名。
@@ -233,8 +238,6 @@ def list_report_types(router_path: Union[str, Path] = None) -> List[str]:
     mappings = router_data.get('mappings', {})
     return list(mappings.keys())
 
-
-# ==================== 报告目录工具函数 ====================
 
 def create_report_dir(report_name: str, reports_dir: Union[str, Path] = None) -> Path:
     """创建报告目录。
@@ -364,8 +367,6 @@ def get_report_output_path(
     return Path(report_dir) / filename
 
 
-# ==================== Schema 工具函数 ====================
-
 
 def init_elements_from_schema(schema: Dict[str, Any]) -> Dict[str, Any]:
     """从 schema 初始化 elements 字典，fragment 字段设为文件引用。
@@ -405,8 +406,6 @@ def ensure_all_fields(elements: Dict[str, Any], schema: Dict[str, Any]) -> Dict[
             result[field_name] = ""
     return result
 
-
-# ==================== Elements 验证工具函数 ====================
 
 def validate_elements_against_schema(
     elements: Dict[str, Any],

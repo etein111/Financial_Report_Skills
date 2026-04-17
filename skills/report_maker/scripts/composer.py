@@ -57,12 +57,11 @@ def insert_body_at_marker_compose(
         return False
 
     try:
-        # 0. 保存模板的所有 sectPrs（docxcompose 会损坏它们）
+        # docxcompose 会损坏 sectPrs，需要预先保存
         template_sectPrs = None
         if template_path:
             template_sectPrs = _save_all_template_sectPrs(template_path)
 
-        # 1. 找到 marker 位置（同时复用此 Document 作为 part1 来源）
         part1_doc = Document(doc_path)
         part1_body = part1_doc.element.body
         part1_elements = list(part1_body)
@@ -77,14 +76,13 @@ def insert_body_at_marker_compose(
         if marker_idx is None:
             return False
 
-        # 2. 修改 part1，保留 marker 之前的内容（封面 section）
         part1_path = Path(output_path).parent / "temp_part1.docx"
         for elem in part1_elements[marker_idx:]:
             if common.local_tag(elem) != 'sectPr':
                 part1_body.remove(elem)
         part1_doc.save(str(part1_path))
 
-        # 3. 创建 part3（marker 之后的内容 = 英文摘要 + 法律披露 sections）
+        # 创建 part3（marker 之后的内容 = 英文摘要 + 法律披露 sections）
         part3_path = Path(output_path).parent / "temp_part3.docx"
         part3_doc = Document(doc_path)
         part3_body = part3_doc.element.body
@@ -107,7 +105,7 @@ def insert_body_at_marker_compose(
         if has_part3_content:
             part3_doc.save(str(part3_path))
 
-        # 4. 合并：part1(封面) + body + part3(英文摘要+法律披露)
+        # 合并：part1(封面) + body + part3(英文摘要+法律披露)
         master = Document(str(part1_path))
         composer = Composer(master)
 
@@ -120,16 +118,16 @@ def insert_body_at_marker_compose(
 
         composer.save(output_path)
 
-        # 5. 恢复所有 sectPrs（docxcompose 会损坏 header/footer rId 引用）
+        # 恢复所有 sectPrs（docxcompose 会损坏 header/footer rId 引用）
         if template_sectPrs is not None:
             _restore_all_sectPrs(output_path, template_sectPrs)
 
-        # 6. 补救：复制 body 中的图片资源
+        # 复制 body 中的图片资源（修复 docxcompose 图片丢失）
         copied_count = _copy_media_between_docx(body_path, output_path)
         if copied_count > 0:
             print(f"  已补充复制 {copied_count} 张图片（修复 docxcompose 图片丢失）")
 
-        # 7. 清理临时文件
+        # 清理临时文件
         part1_path.unlink(missing_ok=True)
         if has_part3_content:
             part3_path.unlink(missing_ok=True)

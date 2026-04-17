@@ -30,6 +30,7 @@ def _verify_appendix_with_lxml(doc_path: str) -> Dict[str, Any]:
     Returns:
         {"found": bool, "location": str, "text": str}
     """
+    # 使用单数形式以同时匹配 "IMPORTANT DISCLOSURE" 和 "IMPORTANT DISCLOSURES"
     appendix_keywords = ['附录APPENDIX', 'IMPORTANT DISCLOSURE']
 
     try:

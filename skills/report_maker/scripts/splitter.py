@@ -23,8 +23,6 @@ try:
     from docx.oxml.ns import qn
 except ImportError:
     Document = None
-    Inches = None
-    Pt = None
     OxmlElement = None
     qn = None
 
@@ -35,16 +33,8 @@ import common
 
 W = common.W_NS
 
-# 法律披露附录的识别标记（extract_appendix 和 validate_appendix 共用）
-_APPENDIX_MARKERS = [
-    'APPENDIX',
-    '附录',
-    '重要信息披露',
-    'IMPORTANT DISCLOSURES',
-    'Disclaimer',
-    '免责声明',
-    '[Table_disclaimer]',
-]
+# 法律披露附录的识别标记（从 common 导入，保留本地引用以兼容旧代码）
+_APPENDIX_MARKERS = list(common.APPENDIX_MARKERS)
 
 
 def _remove_elements_outside_range(body, elements: list, start_idx: int, end_idx: int) -> None:
@@ -172,14 +162,14 @@ def extract_fragment_by_markers(
 
         print(f"提取范围: 元素 {start_idx} - {end_idx}")
 
-        # 🔑 关键：在删除元素前，找到范围内的 sectPr 页边距
+        # 在删除元素前，找到范围内的 sectPr 页边距
         # 因为这些 sectPr 定义了内容应该使用的页边距
         margins_to_preserve = _find_sectpr_margins_for_range(elements, start_idx, end_idx, W)
 
         # 删除范围外的元素
         _remove_elements_outside_range(body, elements, start_idx, end_idx)
 
-        # 🔑 关键：将保存的页边距应用到最终的 sectPr
+        # 将保存的页边距应用到最终的 sectPr
         if margins_to_preserve:
             _apply_margins_to_final_sectpr(body, margins_to_preserve, W)
 
@@ -666,14 +656,14 @@ def extract_body(draft_path: str, scope: str, output_path: Optional[str] = None,
 
         print(f"正文范围: 元素 {start_idx} - {end_idx}")
 
-        # 🔑 关键：在删除元素前，找到范围内的 sectPr 页边距
+        # 在删除元素前，找到范围内的 sectPr 页边距
         # 因为这些 sectPr 定义了正文内容应该使用的页边距
         margins_to_preserve = _find_sectpr_margins_for_range(elements, start_idx, end_idx, W)
 
         # 删除范围外的元素
         _remove_elements_outside_range(body, elements, start_idx, end_idx)
 
-        # 🔑 关键：将保存的页边距应用到最终的 sectPr
+        # 将保存的页边距应用到最终的 sectPr
         if margins_to_preserve:
             _apply_margins_to_final_sectpr(body, margins_to_preserve, W)
 
@@ -1193,14 +1183,12 @@ def extract_appendix(draft_path: str, scope: str, output_path: Optional[str] = N
         elements = list(body)
 
         # 法律披露附录的起始标记
-        appendix_markers = _APPENDIX_MARKERS
-
         # 查找附录起始位置
         start_idx = None
         for i, elem in enumerate(elements):
             text = common.get_element_text(elem).strip()
 
-            for marker in appendix_markers:
+            for marker in _APPENDIX_MARKERS:
                 if marker in text:
                     start_idx = i
                     print(f"找到法律披露附录起始位置: 元素 {i} - '{text[:50]}'")
@@ -1282,8 +1270,6 @@ def validate_appendix(draft_path: str, schema: Dict[str, Any]) -> Dict[str, Any]
         elements = list(body)
 
         # 法律披露附录的关键词
-        appendix_keywords = _APPENDIX_MARKERS
-
         # 重要信息披露的关键词（必须包含）
         important_keywords = [
             'DISCLOSURES',
@@ -1300,7 +1286,7 @@ def validate_appendix(draft_path: str, schema: Dict[str, Any]) -> Dict[str, Any]
         for i, elem in enumerate(elements):
             text = common.get_element_text(elem).strip()
 
-            for kw in appendix_keywords:
+            for kw in _APPENDIX_MARKERS:
                 if kw in text and kw not in found_keywords:
                     found_keywords.append(kw)
                     result["has_appendix"] = True
@@ -1355,7 +1341,7 @@ def extract_english_summary(draft_path: str, scope: str, output_path: Optional[s
         print(f"使用 LLM 提供的标记提取英文摘要: '{start_marker}' -> '{end_marker}'")
         result_path = extract_fragment_by_markers(draft_path, start_marker, end_marker, str(out_path))
 
-        # 🔑 关键：清除提取后文档中的段落缩进
+        # 清除提取后文档中的段落缩进
         # draft 中的 english_summary 可能有错误的缩进（如负缩进），
         # 清除后让内容继承 template 的 "APPENDIX 1 Summary" 格式
         _clear_paragraph_indents(str(result_path))
@@ -1423,15 +1409,14 @@ def extract_english_summary(draft_path: str, scope: str, output_path: Optional[s
                     print(f"找到英文摘要结束标记: 元素 {i}")
                     break
         else:
-            # 备用：查找分页符或结束标记（复用 _APPENDIX_MARKERS）
-            end_markers_fallback = _APPENDIX_MARKERS
+            # 备用：查找分页符或结束标记
             for i in range(start_idx + 1, len(elements)):
                 elem = elements[i]
                 tag = common.local_tag(elem)
                 text = common.get_element_text(elem).strip()
 
                 # 先检查结束标记
-                for marker in end_markers_fallback:
+                for marker in _APPENDIX_MARKERS:
                     if marker.upper() in text.upper():
                         end_idx = i
                         print(f"找到英文摘要结束标记: 元素 {i}, 匹配 '{marker}'")
@@ -1467,21 +1452,21 @@ def extract_english_summary(draft_path: str, scope: str, output_path: Optional[s
 
         print(f"英文摘要范围: 元素 {start_idx} - {end_idx}")
 
-        # 🔑 关键：在删除元素前，找到范围内的 sectPr 页边距
+        # 在删除元素前，找到范围内的 sectPr 页边距
         # 因为这些 sectPr 定义了英文摘要内容应该使用的页边距
         margins_to_preserve = _find_sectpr_margins_for_range(elements, start_idx, end_idx, W)
 
         # 删除范围外的元素
         _remove_elements_outside_range(body, elements, start_idx, end_idx)
 
-        # 🔑 清除段落的缩进设置，让 english_summary 对齐 template 的格式
+        # 清除段落的缩进设置，让 english_summary 对齐 template 的格式
         # draft 中的 english_summary 可能有错误的缩进（如负缩进），
         # 清除后让内容继承 template 的 "APPENDIX 1 Summary" 格式
         cleared = _clear_indents_in_tree(body)
         if cleared > 0:
             print(f"  已清除 {cleared} 个段落缩进")
 
-        # 🔑 关键：将保存的页边距应用到最终的 sectPr
+        # 将保存的页边距应用到最终的 sectPr
         if margins_to_preserve:
             _apply_margins_to_final_sectpr(body, margins_to_preserve, W)
 
