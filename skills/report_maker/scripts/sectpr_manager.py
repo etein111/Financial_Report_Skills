@@ -141,7 +141,10 @@ def _restore_all_sectPrs(docx_path: str, template_sectPrs: Dict[str, Any]) -> bo
                         disclaimer_idx = idx
                         break
 
-            print(f"  关键位置: APPENDIX 1={appendix1_idx}, 法律附录={disclaimer_idx}")
+            # 计算正文边界：APPENDIX 1 存在时用它，不存在时用 disclaimer
+            body_boundary = appendix1_idx if appendix1_idx is not None else disclaimer_idx
+
+            print(f"  关键位置: APPENDIX 1={appendix1_idx}, 法律附录={disclaimer_idx}, 正文边界={body_boundary}")
 
             for idx, para, old_sectPr in para_sectPrs:
                 pPr = para.find(f'{W}pPr')
@@ -154,10 +157,13 @@ def _restore_all_sectPrs(docx_path: str, template_sectPrs: Dict[str, Any]) -> bo
                 if type_val == 'continuous':
                     replacement = cover_sectPr
                     label = 'cover'
-                elif appendix1_idx is not None and idx < appendix1_idx:
+                elif body_boundary is not None and idx < body_boundary:
+                    # 有 APPENDIX 1 时：body_boundary=appendix1_idx，正文之前是 body
+                    # 没有 APPENDIX 1 时：body_boundary=disclaimer_idx，正文之前也是 body
                     replacement = body_sectPr
                     label = 'body'
                 elif disclaimer_idx is not None and idx < disclaimer_idx:
+                    # 只有当有 APPENDIX 1 时才到这里（english_summary）
                     replacement = es_sectPr
                     label = 'english_summary'
                 else:
