@@ -75,15 +75,17 @@ uv pip install "docxtpl>=0.20.0" docxcompose
 ```
 【选择报告类型】
 请选择要制作的研报类型：
-  1️⃣ company       - 公司覆盖报告
-  2️⃣ sector        - 行业研究报告
-  3️⃣ flash         - 快讯
-  4️⃣ company_flash - 公司快讯
-  5️⃣ sector_flash  - 行业快讯
-  6️⃣ macro         - 宏观报告
-  7️⃣ strategy      - 策略报告
-  8️⃣ quantitative  - 量化报告
-  9️⃣ bond          - 债券报告
+  1.  company        - 公司覆盖报告
+  2.  sector         - 行业研究报告
+  3.  flash          - 快讯
+  4.  company_flash  - 公司快讯
+  5.  sector_flash   - 行业快讯
+  6.  macro          - 宏观报告
+  7.  strategy       - 策略报告
+  8.  quantitative   - 量化报告
+  9.  bond           - 债券报告
+
+请选择报告类型（输入编号）：
 ```
 
 **⚠️ 禁止行为**：不要列出数字选项让用户输入，直接展示选项让用户选择。
@@ -97,11 +99,18 @@ uv pip install "docxtpl>=0.20.0" docxcompose
 ```
 【选择草稿文件】
 在 inbox/samples/company/ 目录下找到以下草稿：
-  1️⃣ 西锐飞机首次覆盖报告（中文）提交版.docx
-  2️⃣ 某公司研究报告.docx
-  3️⃣ ...
 
-请选择要使用的草稿文件：
+  1.  EN-Vistra Corp20260104.docx
+  2.  0402威胜控股（3393.HK）首次覆盖.docx
+  3.  测试-威胜控股（3393.HK）首次覆盖.docx
+  4.  0402威胜控股（3393.HK）首次覆盖.docx
+  5.  2025年西锐飞机年报点评.docx
+  6.  draft3.docx
+  7.  draft2.docx
+  8.  draft.docx
+  9.  西锐飞机首次覆盖报告（中文）提交版.docx
+
+请选择要使用的草稿文件（输入编号）：
 ```
 
 **扫描目录规则**：
