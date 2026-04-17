@@ -282,7 +282,28 @@ english_summary_content_start: "Initial Coverage on Wasion Holdings"
 
 ### 1.7 确认摘要和正文（has_abstract / has_body）
 
-⚠️ **has_abstract 和 has_body 必须分开确认，用户输入 y/n**
+### 1.7 展示提取结果并确认
+
+⚠️ **不要问用户"是否有摘要/正文"——已经提取到文件了，直接展示结果让用户确认内容是否正确**
+
+根据 LLM 提取的 `has_abstract`/`has_body` 直接调用 splitter 提取，提取完成后展示结果：
+
+```
+【确认摘要和正文】
+
+已提取以下内容：
+
+  内容      文件                  状态
+  摘要      abstract.docx (832字符)  ✅
+  正文      body.docx (271段落)     ✅
+  英文摘要  english_summary.docx (19段落) ✅
+
+确认继续？(y/n)
+```
+
+**如果用户回答 n**：
+- 询问具体哪个内容有问题
+- 必要时重新调用 LLM 提取范围，或让用户手动指定范围
 
 ### 1.8 提取摘要和正文
 

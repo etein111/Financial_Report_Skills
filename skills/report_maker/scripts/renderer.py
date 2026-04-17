@@ -46,6 +46,8 @@ from context import (
     prepare_context_with_analysts,
 )
 
+from neolyst_integration import detect_language_from_title
+
 from chart_generator import (
     _generate_relative_chart,
     _generate_recommendation_chart,
@@ -240,6 +242,11 @@ def render_report(
             doc.save(output_path)
 
         # 8. 处理 ENGLISH_SUMMARY_MARKER
+        # 英文研报无需 english_summary section
+        title = elements.get('title', '') if elements else ''
+        if detect_language_from_title(title) == 'en':
+            english_summary_path = None
+
         if english_summary_path and Path(english_summary_path).exists() and Path(english_summary_path).stat().st_size > 0:
             english_summary_doc = Document(english_summary_path)
 

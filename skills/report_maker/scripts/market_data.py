@@ -51,10 +51,12 @@ def fetch_recommendation_history(
         logger.warning("fetch_recommendation_history: yfinance 不可用")
         return []
 
-    yf_ticker = ticker
-    if not ('.' in ticker or '^' in ticker):
-        if ticker.isdigit() and len(ticker) == 4:
-            yf_ticker = f"{ticker}.HK"
+    yf_ticker = ticker.replace(" ", "")
+    if not ('.' in yf_ticker or '^' in yf_ticker):
+        if yf_ticker.isdigit() and len(yf_ticker) == 4:
+            yf_ticker = f"{yf_ticker}.HK"
+        elif yf_ticker.endswith("US"):
+            yf_ticker = yf_ticker[:-2]  # 去掉 US 后缀，yfinance 识别美股
 
     # 解析所有发布日期，确定最早日期
     parsed_rows = []
