@@ -40,6 +40,7 @@ def insert_abstract_to_cell(doc: Document, abstract_doc: Document, marker: str) 
     """在文档的表格单元格中插入 abstract 内容。
 
     查找包含 marker 的表格单元格，将 abstract_doc 的内容插入其中。
+    使用 deepcopy 保留原始段落的完整格式（加粗、颜色等）。
 
     Args:
         doc: 目标 Document 对象
@@ -53,28 +54,35 @@ def insert_abstract_to_cell(doc: Document, abstract_doc: Document, marker: str) 
         return False
 
     try:
+        from copy import deepcopy
+
         # 在表格中查找 marker
         for table in doc.tables:
             cell = _find_marker_in_cells(table, marker)
             if cell:
-                # 获取 abstract 内容
-                abstract_content = []
-                for para in abstract_doc.paragraphs:
-                    if para.text.strip():
-                        abstract_content.append(para.text)
+                # 获取 abstract 段落 XML 元素（保留完整 XML）
+                abstract_para_elems = [p._element for p in abstract_doc.paragraphs if p.text.strip()]
 
-                # 插入到单元格
-                if abstract_content:
-                    # 清除原有内容
-                    for para in cell.paragraphs:
-                        for run in para.runs:
-                            run.text = ''
+                if abstract_para_elems:
+                    # 获取单元格内所有段落元素
+                    cell_para_elems = [p._element for p in cell.paragraphs]
 
-                    # 设置新内容
-                    if cell.paragraphs:
-                        cell.paragraphs[0].text = abstract_content[0]
-                        for text in abstract_content[1:]:
-                            cell.add_paragraph(text)
+                    if cell_para_elems:
+                        # 在第一个单元格段落之前插入 abstract 段落
+                        first_cell_para = cell_para_elems[0]
+                        parent = first_cell_para.getparent()
+
+                        if parent is not None:
+                            insert_idx = list(parent).index(first_cell_para)
+                            for i, abstract_para_elem in enumerate(abstract_para_elems):
+                                parent.insert(insert_idx + i, deepcopy(abstract_para_elem))
+
+                            # 删除原始段落
+                            for para_elem in cell_para_elems:
+                                try:
+                                    parent.remove(para_elem)
+                                except ValueError:
+                                    pass
 
                 return True
 
@@ -82,6 +90,8 @@ def insert_abstract_to_cell(doc: Document, abstract_doc: Document, marker: str) 
 
     except Exception as e:
         print(f"  插入 abstract 到表格单元格失败: {e}")
+        import traceback
+        traceback.print_exc()
         return False
 
 
