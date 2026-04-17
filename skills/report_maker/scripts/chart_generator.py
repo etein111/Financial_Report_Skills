@@ -65,6 +65,8 @@ def _generate_relative_chart(ticker: str, output_path: str, company_name: str = 
         if not ('.' in ticker or '^' in ticker):
             if ticker.isdigit() and len(ticker) == 4:
                 ticker = f"{ticker}.HK"
+            elif ticker.endswith("US"):
+                ticker = ticker[:-2].strip()  # 去掉 US 后缀，yfinance 识别美股
 
         # 获取股票数据
         stock = yf.Ticker(ticker)
@@ -212,9 +214,11 @@ def _generate_recommendation_chart(ticker: str, output_path: str, company_name: 
         if not ('.' in ticker or '^' in ticker):
             if ticker.isdigit() and len(ticker) == 4:
                 ticker = f"{ticker}.HK"
+            elif ticker.endswith("US"):
+                ticker = ticker[:-2].strip()  # 去掉 US 后缀，yfinance 识别美股
 
         # 获取股票数据
-        stock = yf.Ticker(ticker)
+        stock = yf.Ticker(ticker.strip())
         hist = stock.history(start=start_date, end=end_date)
 
         if hist.empty:
