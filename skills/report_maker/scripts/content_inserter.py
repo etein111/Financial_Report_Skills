@@ -16,8 +16,6 @@ except ImportError:
 import common
 W = common.W_NS
 
-_ENGLISH_SUMMARY_START_MARKER = common.APPENDIX_1_MARKER
-
 
 def _find_marker_in_cells(table, marker: str):
     """在表格单元格中查找 marker。
@@ -175,7 +173,7 @@ def _apply_english_summary_margins_doc(doc: Document, margins: Dict[str, str]) -
     for idx, elem in enumerate(all_elements):
         if elem.tag == f'{W}p':
             text = common.get_element_text(elem).strip()
-            if text == _ENGLISH_SUMMARY_START_MARKER:
+            if text == common.APPENDIX_1_MARKER:
                 es_start_idx = idx
                 break
 

@@ -32,6 +32,12 @@ PATTERN_SFC_CODE = re.compile(r'[SFC:]*([A-Z]{4}\d{3})', re.IGNORECASE)
 KEYWORDS_PRICE_NOTE = ('注', '现价', '收盘价')
 KEYWORDS_ANALYST = ('yang', '杨斌', 'analyst')
 
+# 字段值中需要移除的常见前缀
+PREFIXES_TO_REMOVE = (
+    '资料来源：', '来源：', 'Source:',
+    '注：', 'Note:', '说明：',
+)
+
 
 # ==================== 字段提取规则 ====================
 
@@ -389,13 +395,7 @@ def _clean_field_value(value: str, field_def: Dict[str, Any]) -> str:
     """
     value = value.strip()
 
-    # 移除常见的无用前缀
-    prefixes_to_remove = [
-        '资料来源：', '来源：', 'Source:',
-        '注：', 'Note:', '说明：',
-    ]
-
-    for prefix in prefixes_to_remove:
+    for prefix in PREFIXES_TO_REMOVE:
         if value.startswith(prefix):
             value = value[len(prefix):].strip()
 

@@ -133,6 +133,32 @@ def _extract_cell_data(cell_elem, cell_idx: int) -> Dict[str, Any]:
     }
 
 
+def _walk_tables(tables: List[Dict[str, Any]], on_cell):
+    """通用表格遍历，对每个 cell 节点调用 on_cell(cell_node)。
+
+    递归遍历 table → row → cell 结构，遇到 cell 时执行回调，
+    并自动递归进入 cell 内的嵌套表格。
+    """
+    def _walk(node):
+        node_type = node.get('type', '')
+
+        if node_type == 'cell':
+            on_cell(node)
+            for nested_table in node.get('nested_tables', []):
+                _walk(nested_table)
+
+        elif node_type == 'row':
+            for cell in node.get('cells', []):
+                _walk(cell)
+
+        elif node_type == 'table':
+            for row in node.get('rows', []):
+                _walk(row)
+
+    for table in tables:
+        _walk(table)
+
+
 def flatten_table_text(tables: List[Dict[str, Any]], paragraphs: List[str] = None) -> List[str]:
     """扁平化表格数据为文本列表。
 
@@ -147,33 +173,13 @@ def flatten_table_text(tables: List[Dict[str, Any]], paragraphs: List[str] = Non
     """
     lines = []
 
-    def _flatten_node(node: Dict[str, Any], prefix: str = "") -> None:
-        """递归扁平化节点。"""
-        node_type = node.get('type', '')
+    def _collect_text(cell):
+        text = cell.get('text', '').strip()
+        if text:
+            lines.append(text)
 
-        if node_type == 'cell':
-            # 添加单元格文本
-            text = node.get('text', '').strip()
-            if text:
-                lines.append(text)
+    _walk_tables(tables, _collect_text)
 
-            # 递归处理嵌套表格
-            for nested_table in node.get('nested_tables', []):
-                _flatten_node(nested_table, f"{prefix}  ")
-
-        elif node_type == 'row':
-            for cell in node.get('cells', []):
-                _flatten_node(cell, prefix)
-
-        elif node_type == 'table':
-            for row in node.get('rows', []):
-                _flatten_node(row, prefix)
-
-    # 处理所有表格
-    for table in tables:
-        _flatten_node(table)
-
-    # 添加段落文本（如果有）
     if paragraphs:
         lines.extend(paragraphs)
 
@@ -193,30 +199,12 @@ def search_in_tables(tables: List[Dict[str, Any]], keyword: str) -> List[Dict[st
     matches = []
     keyword_lower = keyword.lower()
 
-    def _search_node(node: Dict[str, Any]) -> None:
-        """递归搜索节点。"""
-        node_type = node.get('type', '')
+    def _match_cell(cell):
+        text = cell.get('text', '').strip()
+        if keyword_lower in text.lower():
+            matches.append(cell)
 
-        if node_type == 'cell':
-            text = node.get('text', '').strip()
-            if keyword_lower in text.lower():
-                matches.append(node)
-
-            # 递归搜索嵌套表格
-            for nested_table in node.get('nested_tables', []):
-                _search_node(nested_table)
-
-        elif node_type == 'row':
-            for cell in node.get('cells', []):
-                _search_node(cell)
-
-        elif node_type == 'table':
-            for row in node.get('rows', []):
-                _search_node(row)
-
-    # 搜索所有表格
-    for table in tables:
-        _search_node(table)
+    _walk_tables(tables, _match_cell)
 
     return matches
 
@@ -232,28 +220,12 @@ def extract_nested_tables_only(tables: List[Dict[str, Any]]) -> List[Dict[str, A
     Returns:
         嵌套表格列表
     """
-    nested_tables = []
+    nested = []
 
-    def _collect_nested(node: Dict[str, Any]) -> None:
-        """递归收集嵌套表格。"""
-        node_type = node.get('type', '')
+    def _collect_nested(cell):
+        for tbl in cell.get('nested_tables', []):
+            nested.append(tbl)
 
-        if node_type == 'cell':
-            for nested_table in node.get('nested_tables', []):
-                nested_tables.append(nested_table)
-                # 递归处理更深层的嵌套
-                _collect_nested(nested_table)
+    _walk_tables(tables, _collect_nested)
 
-        elif node_type == 'row':
-            for cell in node.get('cells', []):
-                _collect_nested(cell)
-
-        elif node_type == 'table':
-            for row in node.get('rows', []):
-                _collect_nested(row)
-
-    # 收集所有嵌套表格
-    for table in tables:
-        _collect_nested(table)
-
-    return nested_tables
+    return nested

@@ -92,34 +92,30 @@ def _restore_jinja_in_charts(docx_path: str, escaped_files: Dict[str, str]) -> N
 def _replace_in_nested_tables(doc, elem, placeholder, image_path, width_cm=None):
     """处理嵌套表格中的占位符，直接遍历不递归。"""
     from docx.oxml.ns import qn
-    
+    from docx.text.paragraph import Paragraph
+
     replaced = False
-    processed_runs = set()  # 避免重复处理同一个 run
-    
-    # 直接遍历 body 中所有的 w:r 元素
+    processed_runs = set()
+
     for r_elem in elem.iter(qn('w:r')):
-        # 跳过已处理的
         if id(r_elem) in processed_runs:
             continue
-        
+
         combined = common.get_element_text(r_elem)
 
         if placeholder in combined:
-            # 找到包含占位符的 run
             p_elem = r_elem.getparent()
             while p_elem is not None and p_elem.tag != qn('w:p'):
                 p_elem = p_elem.getparent()
-            
+
             if p_elem is not None:
-                from docx.text.paragraph import Paragraph
                 para_obj = Paragraph(p_elem, doc)
-                
+
                 for run_obj in para_obj.runs:
                     run_combined = common.get_element_text(run_obj._element)
                     if placeholder in run_combined:
-                        # 标记为已处理
                         processed_runs.add(id(run_obj._element))
-                        
+
                         run_obj.text = run_obj.text.replace(placeholder, '')
                         if width_cm:
                             from docx.shared import Cm
@@ -128,7 +124,7 @@ def _replace_in_nested_tables(doc, elem, placeholder, image_path, width_cm=None)
                             run_obj.add_picture(image_path)
                         replaced = True
                         break
-    
+
     return replaced
 
 
@@ -153,9 +149,6 @@ def _insert_image_to_placeholder(
         return False
 
     try:
-        from docx.oxml import OxmlElement
-        from docx.oxml.ns import qn
-
         # 1. 先在段落中查找
         for para in doc.paragraphs:
             if placeholder in para.text:

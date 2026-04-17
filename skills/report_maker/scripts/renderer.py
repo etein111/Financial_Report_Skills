@@ -33,20 +33,11 @@ except ImportError as e:
 
 import common
 
-# 占位符标记（用于避免 docxtpl 破坏文档结构）
-ABSTRACT_MARKER = common.ABSTRACT_MARKER
-BODY_MARKER = common.BODY_MARKER
-ENGLISH_SUMMARY_MARKER = common.ENGLISH_SUMMARY_MARKER
-RELATIVE_CHART_MARKER = common.RELATIVE_CHART_MARKER
-RECOMMENDATION_CHART_MARKER = common.RECOMMENDATION_CHART_MARKER
-
 # 从各模块导入函数
 from context import (
     enrich_company_names_with_yfinance,
     prepare_context_with_analysts,
 )
-
-from neolyst_integration import detect_language_from_title
 
 from chart_generator import (
     _generate_relative_chart,
@@ -116,35 +107,29 @@ def render_report(
         return False
 
     try:
-        # 0.1 补全公司中英文名称（如有需要）
         elements = enrich_company_names_with_yfinance(elements)
 
-        # 1. 准备渲染上下文
         context = prepare_context_with_analysts(elements)
 
-        # 2. 添加 abstract、body 和 english_summary 的 MARKER 到上下文
-        context['abstract'] = ABSTRACT_MARKER
-        context['body'] = BODY_MARKER
-        context['english_summary'] = ENGLISH_SUMMARY_MARKER
-        context['relative_chart'] = RELATIVE_CHART_MARKER
-        context['recommendation_chart'] = RECOMMENDATION_CHART_MARKER
 
-        # 3. 修复模板中被拆分的占位符
+        context['abstract'] = common.ABSTRACT_MARKER
+        context['body'] = common.BODY_MARKER
+        context['english_summary'] = common.ENGLISH_SUMMARY_MARKER
+        context['relative_chart'] = common.RELATIVE_CHART_MARKER
+        context['recommendation_chart'] = common.RECOMMENDATION_CHART_MARKER
+
         temp_path = Path(output_path).parent / "temp_rendered.docx"
         fixed_template_path = Path(output_path).parent / "temp_fixed_template.docx"
         _fix_split_placeholders_in_docx(template_path, str(fixed_template_path))
 
-        # 3.1 转义图表 XML 中的 Jinja2 语法
         escaped_chart_files = _escape_jinja_in_charts(str(fixed_template_path))
         if escaped_chart_files:
             print(f"  已转义 {len(escaped_chart_files)} 个图表文件中的 Jinja2 语法")
 
-        # 3.5 扩展分析师认证声明
         expanded_analysts = expand_analyst_certification(str(fixed_template_path), elements)
         if expanded_analysts > 0:
             print(f"  已扩展分析师认证声明（新增 {expanded_analysts} 个分析师）")
 
-        # 3.6+3.7 并行生成两个图表
         ticker = elements.get('ticker', '')
         relative_chart_generated = False
         recommendation_chart_generated = False
@@ -179,21 +164,19 @@ def render_report(
         else:
             print(f"  ⚠️ 无 ticker，跳过图表生成")
 
-        # 4. 使用 docxtpl 渲染修复后的模板
         template = DocxTemplate(str(fixed_template_path))
         template.render(context)
         template.save(str(temp_path))
 
-        # 5. 处理 ABSTRACT_MARKER
         doc = Document(str(temp_path))
 
         if Path(abstract_path).exists() and Path(abstract_path).stat().st_size > 0:
             abstract_doc = Document(abstract_path)
-            abstract_inserted = insert_abstract_to_cell(doc, abstract_doc, ABSTRACT_MARKER)
+            abstract_inserted = insert_abstract_to_cell(doc, abstract_doc, common.ABSTRACT_MARKER)
             if abstract_inserted:
                 print(f"  已在 ABSTRACT_MARKER 位置插入 abstract")
             else:
-                abstract_inserted = _insert_abstract_at_paragraph(doc, abstract_doc, ABSTRACT_MARKER)
+                abstract_inserted = _insert_abstract_at_paragraph(doc, abstract_doc, common.ABSTRACT_MARKER)
                 if abstract_inserted:
                     print(f"  已在段落中插入 abstract")
                 else:
@@ -201,16 +184,14 @@ def render_report(
 
         doc.save(str(temp_path))
 
-        # 7. 处理 BODY_MARKER - 使用 docxcompose 三段式合并
         if Path(body_path).exists() and Path(body_path).stat().st_size > 0:
             body_inserted = insert_body_at_marker_compose(
-                str(temp_path), body_path, BODY_MARKER, output_path,
+                str(temp_path), body_path, common.BODY_MARKER, output_path,
                 template_path=template_path
             )
 
             if body_inserted:
                 print(f"  已使用 docxcompose 三段式合并插入 body")
-                # 步骤 5: 加载 Document，后续所有操作复用此对象
                 doc = Document(output_path)
             else:
                 print(f"  ⚠️ 未找到 BODY_MARKER，使用 docxcompose 追加 body")
@@ -235,17 +216,11 @@ def render_report(
             body_elem = doc.element.body
             for elem in list(body_elem):
                 text = common.get_element_text(elem)
-                if BODY_MARKER in text:
+                if common.BODY_MARKER in text:
                     body_elem.remove(elem)
                     print(f"  已删除 BODY_MARKER（无 body 文件）")
                     break
             doc.save(output_path)
-
-        # 8. 处理 ENGLISH_SUMMARY_MARKER
-        # 英文研报无需 english_summary section
-        title = elements.get('title', '') if elements else ''
-        if detect_language_from_title(title) == 'en':
-            english_summary_path = None
 
         if english_summary_path and Path(english_summary_path).exists() and Path(english_summary_path).stat().st_size > 0:
             english_summary_doc = Document(english_summary_path)
@@ -254,11 +229,11 @@ def render_report(
             if es_margins:
                 print(f"  模板 ENGLISH_SUMMARY 页边距: top={es_margins.get('top')}, bottom={es_margins.get('bottom')}, left={es_margins.get('left')}")
 
-            es_inserted = insert_abstract_to_cell(doc, english_summary_doc, ENGLISH_SUMMARY_MARKER)
+            es_inserted = insert_abstract_to_cell(doc, english_summary_doc, common.ENGLISH_SUMMARY_MARKER)
             if es_inserted:
                 print(f"  已在 ENGLISH_SUMMARY_MARKER 位置插入 english_summary")
             else:
-                es_inserted = _insert_abstract_at_paragraph(doc, english_summary_doc, ENGLISH_SUMMARY_MARKER)
+                es_inserted = _insert_abstract_at_paragraph(doc, english_summary_doc, common.ENGLISH_SUMMARY_MARKER)
                 if es_inserted:
                     print(f"  已在段落中插入 english_summary")
                 else:
@@ -273,7 +248,7 @@ def render_report(
             marker_removed = False
             for elem in list(body_elem):
                 text = common.get_element_text(elem)
-                if ENGLISH_SUMMARY_MARKER in text:
+                if common.ENGLISH_SUMMARY_MARKER in text:
                     body_elem.remove(elem)
                     marker_removed = True
                     print(f"  已删除 ENGLISH_SUMMARY_MARKER（无 english_summary 文件）")
@@ -281,10 +256,9 @@ def render_report(
             if marker_removed:
                 doc.save(output_path)
 
-        # 8.5/8.6 插入图表
         for chart_generated, chart_name, chart_marker, chart_width in [
-            (relative_chart_generated, "relative_chart", RELATIVE_CHART_MARKER, 6.35),
-            (recommendation_chart_generated, "recommendation_chart", RECOMMENDATION_CHART_MARKER, 18),
+            (relative_chart_generated, "relative_chart", common.RELATIVE_CHART_MARKER, 6.35),
+            (recommendation_chart_generated, "recommendation_chart", common.RECOMMENDATION_CHART_MARKER, 18),
         ]:
             if chart_generated:
                 chart_path = Path(output_path).parent / f"{chart_name}.png"
@@ -300,21 +274,19 @@ def render_report(
         # 统一保存文档（含 english_summary 页边距和图表）
         doc.save(output_path)
 
-        # 9. 恢复图表 XML 中被转义的 Jinja2 语法
         if escaped_chart_files:
             _restore_jinja_in_charts(output_path, escaped_chart_files)
             print(f"  已恢复 {len(escaped_chart_files)} 个图表文件的原始内容")
 
-        # 9.5 字体约束
         _apply_font_constraints(output_path, chinese_font='楷体')
         print(f"  已应用字体约束：中文=楷体, 英文=Calibri")
 
-        # 10. 清理临时文件
+
         temp_path.unlink(missing_ok=True)
         fixed_template_path.unlink(missing_ok=True)
 
-        # 11. 验证输出（_restore_jinja_in_charts 与 _apply_font_constraints 只改 XML 属性，
-        # 不影响段落/表格/图片数量，沿用内存中的 doc 即可，避免再次解析整份 docx）
+        # _restore_jinja_in_charts 与 _apply_font_constraints 只改 XML 属性，
+        # 不影响段落/表格/图片数量，沿用内存中的 doc 即可，避免再次解析整份 docx
         image_count = sum(1 for rel in doc.part.rels.values() if 'image' in rel.reltype)
 
         appendix_result = _verify_appendix_with_lxml(output_path)

@@ -1,3 +1,4 @@
+# Neolyst-DB 规范
 
 ## 数据库规范
 
@@ -10,7 +11,7 @@
 - 日志表必须 append-only（例如报告状态历史）。
 - 优先逻辑删除（is_active）或状态驱动，避免引用失效或外键问题。
 
-### 规范
+### 授权规范
 
 - RLS 是最终授权裁判。
 - 角色判断统一来源于 JWT 角色字段。
@@ -20,18 +21,21 @@
 ### 存储架构规范
 
 - 模板文件与报告文件统一使用 Supabase Storage。
-- 文件范文权限由rls控制。
+- 存储文件访问权限由 RLS 控制。
 
-### 迁移与演进原则(todo)
+#### 模板文件
 
-- 所有 Schema/RLS 变更必须走 `supabase/migrations/*.sql`。
-- 字典表等初始化数据在`supabase/seed.sql`
-- 测试数据由test测试脚本创建。位置在
+- 路径由 RPC 统一生成，客户端禁止硬编码。
+- 多个 `report_type` 可复用同一路径，共用模板资产。
+- 当前路径格式：`templates/{report_type}/{language}/template.docx` 和 `schema.yaml`。
 
-## neolyst-db
+#### 报告文件
 
-### 存储路径规则(todo)
+- 上传路径由服务端 RPC 生成，客户端禁止硬编码。
+- 仅 `draft` / `rejected` 状态的报告允许生成上传路径。
+- 当前路径格式：`reports/{report_id}/{category}/{timestamp}/`（`category` 为 `report` 或 `model`）。
 
-### 数据库模型
+### 数据库工程
 
-* 以neoskills/supabase/migrations/ 为准
+- Neolyst-DB 的唯一事实源是 `supabase/migrations/`。
+- 迁移、测试、环境部署等工程规范统一遵循 [SUPABASE.md](../../principles/SUPABASE.md)。

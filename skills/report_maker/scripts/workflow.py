@@ -24,16 +24,7 @@ from .neolyst_integration import (
     upload_model,
     get_contact_person_options,
 )
-from .common import load_yaml
-
-
-# ==================== 常量定义 ====================
-
-# 公司类报告类型
-COMPANY_REPORT_TYPES = ("company", "company_flash")
-
-# 行业类报告类型
-SECTOR_REPORT_TYPES = ("sector", "macro", "strategy", "quantitative", "bond")
+from .common import load_yaml, COMPANY_REPORT_TYPES, SECTOR_REPORT_TYPES
 
 
 # ==================== 核心工作流函数 ====================
