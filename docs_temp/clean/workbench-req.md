@@ -39,7 +39,6 @@
 | Analysts | 分析师名字、邮箱（多个都提取） |
 | Contact Person | 工作台输入或 neolyst 选择 |
 | Investment thesis | 报告首页表格第9行2列，可能跨页需人工干预 |
-| Certificate | 工作台确认 |
 
 ### 检查文件齐全性
 

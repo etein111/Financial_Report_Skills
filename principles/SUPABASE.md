@@ -11,6 +11,7 @@
 - `config.toml` — 本地服务配置
 - `seed.sql` — 种子数据（db reset 时自动加载）
 - `migrations/` — Schema 迁移文件
+- `tests/` — 测试数据
 
 ## 环境
 
@@ -24,7 +25,13 @@
 - 迁移文件必须用 `supabase migration new <name>` 创建，不手动拼时间戳。
 - 迁移文件只追加，不修改；已提交的迁移文件不可编辑，所有变更通过新建迁移文件实现。
 - `create or replace` 覆盖函数时以数据库当前版本为准，不从旧迁移复制文本。
-- 远端环境只通过 migration 同步，不直接在 Dashboard 改 schema。
+
+## 跨环境部署
+
+- 每个环境对应独立的 Supabase 项目。
+- 迁移通过 git 分支流转：develop → staging，main → production。
+- 远端禁止通过 Dashboard 直接修改 schema。
+- 紧急 hotfix 使用 `db push` 后必须补齐迁移文件。
 
 ## 参考文档
 
