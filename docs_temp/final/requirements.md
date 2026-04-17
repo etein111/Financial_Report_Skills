@@ -100,18 +100,27 @@
 - 状态历史服务于审计报告流程。
 - 状态流转必须记录状态日志，并记录动作对应版本号。
 
-## RLS 矩阵(todo)
+## 角色权限
 
-| 表 | Admin | SA | Analyst |
-|----|-------|----|---------|
-| region / analyst / sector | R/W | R | R |
-| coverage | R/W | R | R + INSERT |
-| coverage_analyst | R/W | R | R + INSERT |
-| template | R/W | R | R |
-| report | 全量 R/W（无 DELETE） | R（submitted/published/rejected） | R/W（仅 owner，draft/submitted） |
-| report_version | R + INSERT | R（submitted/published/rejected） | R + INSERT（仅 owner） |
-| report_analyst | 全量 R/W | R（submitted/published/rejected） | R/W（仅 owner） |
-| report_status_log | R + INSERT | R + INSERT（审批与退回） | R + INSERT（仅 owner submit） |
+### 管理员（Admin）
+
+- 管理基础数据（区域、分析师、行业）
+- 管理 Coverage
+- 管理模板及模板文件
+- 操作所有报告，不可删除
+
+### 合规人员（SA）
+
+- 查看基础数据、Coverage、模板
+- 查看已提交、已发布、已退回的报告及文件
+- 审批和退回报告
+
+### 分析师（Analyst）
+
+- 查看基础数据、Coverage、模板
+- 新增 Coverage
+- 创建、编辑、提交自己的报告
+- 操作自己的报告文件
 
 ## Domain Model(todo)
 

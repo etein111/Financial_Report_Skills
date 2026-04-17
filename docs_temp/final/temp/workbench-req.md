@@ -19,6 +19,13 @@
 | `quantitative` | 量化报告 | common |
 | `bond` | 债券报告 | common |
 
+## 报告创建流程
+
+```
+上传文件 → 字段检查 → 文件检查 → 相似度检查 → SFC 检查
+→ Coverage 检查 → 标题生成 → 提交报告 → RQC/首席审批 → 发布
+```
+
 ## Capabilities
 
 ### 检查报告基本信息

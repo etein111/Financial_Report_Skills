@@ -6,7 +6,7 @@
 |------|------|----------|
 | **overview.md** | 项目全景 | 目标与价值、设计原则、Features、Roadmap |
 | **architecture.md** | 平台架构 | 子系统职责与关系、命名规则、架构原则 |
-| **business.md** | 业务规则 | 报告字段矩阵、提交规则、Certificate、状态机、版本、RLS 矩阵、领域模型 |
+| **requirements.md** | 业务规则 | 报告字段矩阵、提交规则、Certificate、状态机、版本、RLS 矩阵、领域模型 |
 | **neolyst_db.md** | Neolyst-DB 规范 | 表/授权/命名/存储的业务规则，数据库工程引用 |
 | **neolyst_web.md** | Neolyst-Web 规范 | 业务需求、技术栈、分层架构、认证授权 |
 | **neoskills.md** | Neoskills 规范 | Skills 架构、skill 编排规则、skill 与子系统的关系 |
