@@ -1,33 +1,7 @@
-# 文档整理进度
-
-## 已完成
-
-- [x] overview.md
-- [x] architecture.md
-- [x] requirements.md
-- [x] neolyst_db.md
-- [x] neolyst_web.md
-- [x] README.md（含整理准则）
-
-## 待清理
-
-- [ ] ARCHITECTURE_TECHNICAL.md
-- [x] REQUIREMENTS.md
-- [ ] skills-report.md
-- [ ] workbench-req.md
 
 ## 待定内容
 
 暂存无法确定归属的内容，后续逐步消化。
-
-### 技术栈总览
-
-* 数据与权限
-  Supabase (PostgreSQL + RLS 安全策略 + Storage)。
-* web前端框架
-  Next.js (App Router)。
-* Skills
-  Python (核心文档处理、数据解析、图表生成)。
 
 ### Agent Skills 能力详解
 
