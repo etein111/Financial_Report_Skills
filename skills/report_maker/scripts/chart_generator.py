@@ -69,7 +69,7 @@ def _generate_relative_chart(ticker: str, output_path: str, company_name: str = 
                 ticker = ticker[:-2].strip()  # 去掉 US 后缀，yfinance 识别美股
 
         # 获取股票数据
-        stock = yf.Ticker(ticker)
+        stock = yf.Ticker(ticker.strip())
         hist = stock.history(start=start_date, end=end_date)
 
         if hist.empty:
