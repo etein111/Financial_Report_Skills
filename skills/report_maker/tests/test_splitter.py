@@ -8,7 +8,7 @@ from splitter import (
     extract_abstract, extract_body, get_split_instructions,
     locate_fragment_by_content, extract_fragment_by_table_range,
     extract_fragment_by_paragraph_range, extract_fragment_by_keywords,
-    read_document_structure
+    read_document_structure, _extract_fragment_by_range_finder
 )
 
 
@@ -30,6 +30,48 @@ class TestExtractBody:
         result = extract_body("draft.docx", "首页之后")
 
         assert result == Path("body.docx")
+
+
+class TestExtractFragmentByRangeFinder:
+    """测试通用启发式提取 helper。"""
+
+    @pytest.fixture
+    def sample_doc(self, tmp_path):
+        """创建用于范围提取的示例文档。"""
+        try:
+            from docx import Document
+
+            doc = Document()
+            doc.add_paragraph("封面")
+            doc.add_paragraph("目标段落 1")
+            doc.add_paragraph("目标段落 2")
+            doc.add_paragraph("附录")
+
+            doc_path = tmp_path / "sample.docx"
+            doc.save(str(doc_path))
+            return str(doc_path)
+        except ImportError:
+            pytest.skip("python-docx not installed")
+
+    def test_extracts_range_from_callback(self, sample_doc, tmp_path):
+        """测试：按回调返回的范围提取内容。"""
+        output_path = tmp_path / "output.docx"
+
+        def locate_range(_elements):
+            return 1, 3
+
+        result = _extract_fragment_by_range_finder(
+            sample_doc,
+            str(output_path),
+            "test_extract",
+            locate_range,
+        )
+
+        from docx import Document
+
+        assert result == output_path
+        paragraphs = [p.text for p in Document(str(output_path)).paragraphs if p.text.strip()]
+        assert paragraphs == ["目标段落 1", "目标段落 2"]
 
 
 class TestGetSplitInstructions:

@@ -229,3 +229,44 @@ def extract_nested_tables_only(tables: List[Dict[str, Any]]) -> List[Dict[str, A
     _walk_tables(tables, _collect_nested)
 
     return nested
+
+
+def preprocess_for_extraction(docx_path: str) -> None:
+    """预处理文档，输出表格和段落内容供 LLM 提取。
+
+    按三段格式打印到 stdout：
+    1. 表格内容（扁平化文本）
+    2. 全部非空段落（带索引，格式 [P{idx}/{total}]）
+    3. 最后 50 个段落（重点搜索英文摘要）
+
+    Args:
+        docx_path: Word 文档路径
+    """
+    from docx import Document as _Document
+
+    tables = read_docx_tables(docx_path)
+    flat = flatten_table_text(tables)
+
+    doc = _Document(docx_path)
+    paragraphs = [
+        (i, p.text.strip())
+        for i, p in enumerate(doc.paragraphs)
+        if p.text.strip()
+    ]
+    total = len(paragraphs)
+
+    # 1. 表格内容
+    print("=== 表格内容 ===")
+    for line in flat:
+        print(line)
+
+    # 2. 全部段落（带索引）
+    print("\n=== 段落内容（带索引）===")
+    for idx, text in paragraphs:
+        print(f"[P{idx}/{total}] {text}")
+
+    # 3. 最后 50 个段落
+    print("\n=== 最后 50 个段落（重点搜索 Summary）===")
+    last_50 = paragraphs[-50:] if len(paragraphs) > 50 else paragraphs
+    for idx, text in last_50:
+        print(f"[P{idx}] {text}")

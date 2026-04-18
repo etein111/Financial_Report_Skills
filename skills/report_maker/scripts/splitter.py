@@ -6,7 +6,7 @@
 注意：python-docx 的 doc.tables 会漏读嵌套表格，因此使用 lxml 直接解析。
 """
 
-from typing import Dict, Any, List, Tuple, Optional
+from typing import Dict, Any, List, Tuple, Optional, Callable
 from pathlib import Path
 from copy import deepcopy
 import shutil
@@ -87,6 +87,68 @@ def _get_all_tables_lxml(doc_path: str) -> List[etree._Element]:
     files = common.read_docx_zip(doc_path)
     tree = etree.fromstring(files['word/document.xml'])
     return list(tree.iter(f'{W}tbl'))
+
+
+def _extract_fragment_by_range_finder(
+    draft_path: str,
+    output_path: str,
+    temp_prefix: str,
+    locate_range: Callable[[list], Optional[Tuple[int, int]]],
+    clear_indents: bool = False,
+) -> Path:
+    """按范围定位回调提取 fragment。"""
+    out_path = Path(output_path)
+
+    if Document is None:
+        return out_path
+
+    temp_path = None
+
+    try:
+        temp_dir = Path(tempfile.gettempdir())
+        temp_path = temp_dir / f"{temp_prefix}_{uuid.uuid4().hex[:8]}.docx"
+        shutil.copy(draft_path, str(temp_path))
+
+        doc = Document(str(temp_path))
+        body = doc.element.body
+        elements = list(body)
+
+        result = locate_range(elements)
+        if result is None:
+            print("警告：未找到提取范围，返回空文档")
+            empty_doc = Document()
+            empty_doc.save(str(out_path))
+            return out_path
+
+        start_idx, end_idx = result
+        print(f"提取范围: 元素 {start_idx} - {end_idx}")
+
+        margins_to_preserve = _find_sectpr_margins_for_range(elements, start_idx, end_idx, W)
+        _remove_elements_outside_range(body, elements, start_idx, end_idx)
+
+        if clear_indents:
+            cleared = _clear_indents_in_tree(body)
+            if cleared > 0:
+                print(f"  已清除 {cleared} 个段落缩进")
+
+        if margins_to_preserve:
+            _apply_margins_to_final_sectpr(body, margins_to_preserve, W)
+
+        doc.save(str(out_path))
+        return out_path
+
+    except Exception as e:
+        print(f"提取 fragment 失败: {e}")
+        import traceback
+        traceback.print_exc()
+        return out_path
+
+    finally:
+        if temp_path is not None:
+            try:
+                temp_path.unlink()
+            except (PermissionError, OSError):
+                pass
 
 
 
@@ -519,6 +581,175 @@ def _clear_paragraph_indents(docx_path: str) -> bool:
         return False
 
 
+def _find_body_range(
+    elements: list,
+    start_marker: Optional[str],
+    end_marker: Optional[str],
+) -> Tuple[int, int]:
+    """定位正文的启发式提取范围。"""
+    start_idx = None
+    end_idx = len(elements)
+    toc_idx = None
+
+    if end_marker:
+        end_markers = [end_marker]
+        print(f"使用 LLM 提供的结束标记: '{end_marker}'")
+    else:
+        end_markers = ['Summary'] + _APPENDIX_MARKERS
+        print("使用默认结束标记列表")
+
+    for i, elem in enumerate(elements):
+        text = common.get_element_text(elem).strip()
+        text_upper = text.upper()
+        tag = common.local_tag(elem)
+
+        if toc_idx is None:
+            if text == '目录':
+                toc_idx = i
+                print(f"找到目录位置: 元素 {i}")
+            elif tag == 'sdt' and '目录' in text:
+                toc_idx = i
+                print(f"找到目录控件: 元素 {i}")
+
+        for marker in end_markers:
+            if marker.upper() in text_upper:
+                page_break_idx = None
+                for j in range(i - 1, max(0, i - 5), -1):
+                    prev_elem = elements[j]
+                    prev_tag = common.local_tag(prev_elem)
+                    if prev_tag != 'p':
+                        continue
+
+                    has_page_break = any(
+                        br.get(f'{W}type', '') == 'page'
+                        for br in prev_elem.iter(f'{W}br')
+                    )
+                    if has_page_break:
+                        page_break_idx = j
+                        print(f"找到正文结束前的分页符: 元素 {j}")
+                        break
+
+                    prev_text = common.get_element_text(prev_elem).strip()
+                    if prev_text:
+                        break
+
+                end_idx = page_break_idx if page_break_idx is not None else i
+                print(f"找到正文结束标记: 元素 {i}, 匹配 '{marker}', 文本: {text[:50]}...")
+                if page_break_idx is not None:
+                    print(f"  正文范围扩展到分页符: 元素 {page_break_idx}")
+                break
+        if end_idx < len(elements):
+            break
+
+    if start_marker:
+        for i, elem in enumerate(elements):
+            text = common.get_element_text(elem).strip()
+            if start_marker.upper() in text.upper():
+                start_idx = i
+                print(f"找到正文开始标记: 元素 {i}, 文本: {text[:50]}...")
+                break
+    elif toc_idx is not None:
+        start_idx = toc_idx
+    else:
+        for i, elem in enumerate(elements):
+            text = common.get_element_text(elem).strip()
+            if text.startswith('1 ') or text.startswith('1.'):
+                if '\t' not in text and text and not text[-1].isdigit():
+                    start_idx = i
+                    break
+                if common.local_tag(elem) == 'p':
+                    pPr = elem.find('.//{http://schemas.openxmlformats.org/wordprocessingml/2006/main}pStyle')
+                    if pPr is not None:
+                        style_val = pPr.get('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}val', '')
+                        if 'Heading' in style_val or '标题' in style_val:
+                            start_idx = i
+                            break
+
+    if start_idx is None:
+        print("警告：未找到正文起始位置，使用默认值")
+        start_idx = 10
+
+    return start_idx, end_idx
+
+
+def _find_english_summary_range(
+    elements: list,
+    start_marker: Optional[str],
+    end_marker: Optional[str],
+) -> Optional[Tuple[int, int]]:
+    """定位英文摘要的启发式提取范围。"""
+    if start_marker:
+        summary_keywords = [start_marker]
+    else:
+        summary_keywords = [
+            'Summary',
+            'APPENDIX 1 SUMMARY',
+            'APPENDIX 1 Summary',
+            'Appendix 1 Summary',
+            'EXECUTIVE SUMMARY',
+            'Executive Summary',
+        ]
+
+    start_idx = None
+    end_idx = len(elements)
+
+    for i, elem in enumerate(elements):
+        text = common.get_element_text(elem).strip()
+        for kw in summary_keywords:
+            if kw.upper() in text.upper():
+                start_idx = i
+                print(f"找到英文摘要起始位置: 元素 {i}")
+                break
+        if start_idx is not None:
+            break
+
+    if start_idx is None:
+        print("警告：未找到英文摘要起始标记")
+        return None
+
+    if end_marker:
+        for i in range(start_idx + 1, len(elements)):
+            text = common.get_element_text(elements[i]).strip()
+            if end_marker.upper() in text.upper():
+                end_idx = i
+                print(f"找到英文摘要结束标记: 元素 {i}")
+                break
+        return start_idx, end_idx
+
+    for i in range(start_idx + 1, len(elements)):
+        elem = elements[i]
+        tag = common.local_tag(elem)
+        text = common.get_element_text(elem).strip()
+
+        for marker in _APPENDIX_MARKERS:
+            if marker.upper() in text.upper():
+                end_idx = i
+                print(f"找到英文摘要结束标记: 元素 {i}, 匹配 '{marker}'")
+                return start_idx, end_idx
+
+        has_page_break = False
+
+        if tag == 'p':
+            has_page_break = any(
+                br.get(f'{W}type', '') == 'page'
+                for br in elem.iter(f'{W}br')
+            )
+            if not has_page_break:
+                has_page_break = any(True for _ in elem.iter(f'{W}lastRenderedPageBreak'))
+
+            if not has_page_break:
+                pPr = elem.find(f'{W}pPr')
+                if pPr is not None and pPr.find(f'{W}sectPr') is not None:
+                    has_page_break = True
+
+        if has_page_break:
+            end_idx = i
+            print(f"找到英文摘要结束位置（分页符）: 元素 {i}")
+            break
+
+    return start_idx, end_idx
+
+
 def extract_body(draft_path: str, scope: str, output_path: Optional[str] = None,
                  start_marker: Optional[str] = None, end_marker: Optional[str] = None) -> Path:
     """提取正文片段，保留完整格式、表格和图片。
@@ -550,136 +781,17 @@ def extract_body(draft_path: str, scope: str, output_path: Optional[str] = None,
         return out_path
 
     try:
-        # 复制整个文档到临时文件（保留所有资源引用）
-        temp_dir = Path(tempfile.gettempdir())
-        temp_path = temp_dir / f"body_temp_{uuid.uuid4().hex[:8]}.docx"
-        shutil.copy(draft_path, str(temp_path))
-
-        # 打开临时文件进行编辑
-        doc = Document(str(temp_path))
-        body = doc.element.body
-        elements = list(body)
-
-        # 找到正文的起始和结束位置
-        start_idx = None
-        end_idx = len(elements)
-        toc_idx = None
-
-        # 结束标记：优先使用 LLM 提供的 end_marker
-        if end_marker:
-            end_markers = [end_marker]
-            print(f"使用 LLM 提供的结束标记: '{end_marker}'")
-        else:
-            # 'Summary' 优先检查，避免 body 包含英文摘要；其余复用 _APPENDIX_MARKERS
-            end_markers = ['Summary'] + _APPENDIX_MARKERS
-            print("使用默认结束标记列表")
-
-        # 找目录位置和正文结束位置
-        for i, elem in enumerate(elements):
-            text = common.get_element_text(elem).strip()
-            text_upper = text.upper()
-            tag = common.local_tag(elem)
-
-            # 找目录位置
-            if toc_idx is None:
-                if text == '目录':
-                    toc_idx = i
-                    print(f"找到目录位置: 元素 {i}")
-                elif tag == 'sdt' and '目录' in text:
-                    toc_idx = i
-                    print(f"找到目录控件: 元素 {i}")
-
-            # 找结束位置
-            for marker in end_markers:
-                if marker.upper() in text_upper:
-                    # 找到结束标记后，检查结束标记之前是否有分页符段落
-                    # 如果有，应该把分页符也包含在 body 中（确保正文结束后换页）
-                    page_break_idx = None
-                    for j in range(i - 1, max(0, i - 5), -1):
-                        prev_elem = elements[j]
-                        prev_tag = common.local_tag(prev_elem)
-                        if prev_tag == 'p':
-                            # 检查是否包含分页符
-                            has_page_break = False
-                            for br in prev_elem.iter(f'{W}br'):
-                                br_type = br.get(f'{W}type', '')
-                                if br_type == 'page':
-                                    has_page_break = True
-                                    break
-                            if has_page_break:
-                                page_break_idx = j
-                                print(f"找到正文结束前的分页符: 元素 {j}")
-                                break
-                            # 如果段落有文本就停止查找
-                            prev_text = common.get_element_text(prev_elem).strip()
-                            if prev_text:
-                                break
-
-                    end_idx = page_break_idx if page_break_idx is not None else i
-                    print(f"找到正文结束标记: 元素 {i}, 匹配 '{marker}', 文本: {text[:50]}...")
-                    if page_break_idx is not None:
-                        print(f"  正文范围扩展到分页符: 元素 {page_break_idx}")
-                    break
-            if end_idx < len(elements):
-                break
-
-        # 确定起始位置
-        if start_marker:
-            # 使用 LLM 提供的开始标记
-            for i, elem in enumerate(elements):
-                text = common.get_element_text(elem).strip()
-                if start_marker.upper() in text.upper():
-                    start_idx = i
-                    print(f"找到正文开始标记: 元素 {i}, 文本: {text[:50]}...")
-                    break
-        elif toc_idx is not None:
-            start_idx = toc_idx
-        else:
-            # 找正文第一章
-            for i, elem in enumerate(elements):
-                text = common.get_element_text(elem).strip()
-                if text.startswith('1 ') or text.startswith('1.'):
-                    if '\t' not in text and text and not text[-1].isdigit():
-                        start_idx = i
-                        break
-                    if common.local_tag(elem) == 'p':
-                        pPr = elem.find('.//{http://schemas.openxmlformats.org/wordprocessingml/2006/main}pStyle')
-                        if pPr is not None:
-                            style_val = pPr.get('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}val', '')
-                            if 'Heading' in style_val or '标题' in style_val:
-                                start_idx = i
-                                break
-
-        if start_idx is None:
-            print("警告：未找到正文起始位置，使用默认值")
-            start_idx = 10
-
-        print(f"正文范围: 元素 {start_idx} - {end_idx}")
-
-        # 在删除元素前，找到范围内的 sectPr 页边距
-        # 因为这些 sectPr 定义了正文内容应该使用的页边距
-        margins_to_preserve = _find_sectpr_margins_for_range(elements, start_idx, end_idx, W)
-
-        # 删除范围外的元素
-        _remove_elements_outside_range(body, elements, start_idx, end_idx)
-
-        # 将保存的页边距应用到最终的 sectPr
-        if margins_to_preserve:
-            _apply_margins_to_final_sectpr(body, margins_to_preserve, W)
-
-        doc.save(str(out_path))
-
-        # 清理临时文件
-        try:
-            temp_path.unlink()
-        except Exception:
-            pass
-
-        print(f"正文提取完成: {len(doc.paragraphs)} 段落, "
-              f"{len(doc.tables)} 表格, "
-              f"{len(doc.inline_shapes)} 图片")
-
-        return out_path
+        result = _extract_fragment_by_range_finder(
+            draft_path,
+            str(out_path),
+            "body_temp",
+            lambda elements: _find_body_range(elements, start_marker, end_marker),
+        )
+        extracted_doc = Document(str(result))
+        print(f"正文提取完成: {len(extracted_doc.paragraphs)} 段落, "
+              f"{len(extracted_doc.tables)} 表格, "
+              f"{len(extracted_doc.inline_shapes)} 图片")
+        return result
 
     except Exception as e:
         print(f"提取正文失败: {e}")
@@ -1355,133 +1467,17 @@ def extract_english_summary(draft_path: str, scope: str, output_path: Optional[s
         return out_path
 
     try:
-        # 复制到临时文件以避免文件锁定问题
-        temp_dir = Path(tempfile.gettempdir())
-        temp_path = temp_dir / f"english_summary_temp_{uuid.uuid4().hex[:8]}.docx"
-        shutil.copy(draft_path, str(temp_path))
-
-        doc = Document(str(temp_path))
-        body = doc.element.body
-        elements = list(body)
-
-        # 英文摘要的起始标记
-        if start_marker:
-            summary_keywords = [start_marker]
-        else:
-            summary_keywords = [
-                'Summary',  # 简单的 Summary 标题
-                'APPENDIX 1 SUMMARY',
-                'APPENDIX 1 Summary',
-                'Appendix 1 Summary',
-                'EXECUTIVE SUMMARY',
-                'Executive Summary',
-            ]
-
-        # 找到英文摘要的起始和结束位置
-        start_idx = None
-        end_idx = len(elements)
-
-        # 找起始位置
-        for i, elem in enumerate(elements):
-            text = common.get_element_text(elem).strip()
-
-            for kw in summary_keywords:
-                if kw.upper() in text.upper():
-                    start_idx = i
-                    print(f"找到英文摘要起始位置: 元素 {i}")
-                    break
-            if start_idx is not None:
-                break
-
-        if start_idx is None:
-            print("警告：未找到英文摘要起始标记")
-            empty_doc = Document()
-            empty_doc.save(str(out_path))
-            return out_path
-
-        # 找结束位置
-        if end_marker:
-            # 使用 LLM 提供的结束标记
-            for i in range(start_idx + 1, len(elements)):
-                text = common.get_element_text(elements[i]).strip()
-                if end_marker.upper() in text.upper():
-                    end_idx = i
-                    print(f"找到英文摘要结束标记: 元素 {i}")
-                    break
-        else:
-            # 备用：查找分页符或结束标记
-            for i in range(start_idx + 1, len(elements)):
-                elem = elements[i]
-                tag = common.local_tag(elem)
-                text = common.get_element_text(elem).strip()
-
-                # 先检查结束标记
-                for marker in _APPENDIX_MARKERS:
-                    if marker.upper() in text.upper():
-                        end_idx = i
-                        print(f"找到英文摘要结束标记: 元素 {i}, 匹配 '{marker}'")
-                        break
-                if end_idx < len(elements):
-                    break
-
-                # 再检查分页符
-                has_page_break = False
-
-                if tag == 'p':
-                    for br in elem.iter(f'{W}br'):
-                        br_type = br.get(f'{W}type', '')
-                        if br_type == 'page':
-                            has_page_break = True
-                            break
-                    if not has_page_break:
-                        for _ in elem.iter(f'{W}lastRenderedPageBreak'):
-                            has_page_break = True
-                            break
-
-                if tag == 'p' and not has_page_break:
-                    pPr = elem.find(f'{W}pPr')
-                    if pPr is not None:
-                        sectPr = pPr.find(f'{W}sectPr')
-                        if sectPr is not None:
-                            has_page_break = True
-
-                if has_page_break:
-                    end_idx = i
-                    print(f"找到英文摘要结束位置（分页符）: 元素 {i}")
-                    break
-
-        print(f"英文摘要范围: 元素 {start_idx} - {end_idx}")
-
-        # 在删除元素前，找到范围内的 sectPr 页边距
-        # 因为这些 sectPr 定义了英文摘要内容应该使用的页边距
-        margins_to_preserve = _find_sectpr_margins_for_range(elements, start_idx, end_idx, W)
-
-        # 删除范围外的元素
-        _remove_elements_outside_range(body, elements, start_idx, end_idx)
-
-        # 清除段落的缩进设置，让 english_summary 对齐 template 的格式
-        # draft 中的 english_summary 可能有错误的缩进（如负缩进），
-        # 清除后让内容继承 template 的 "APPENDIX 1 Summary" 格式
-        cleared = _clear_indents_in_tree(body)
-        if cleared > 0:
-            print(f"  已清除 {cleared} 个段落缩进")
-
-        # 将保存的页边距应用到最终的 sectPr
-        if margins_to_preserve:
-            _apply_margins_to_final_sectpr(body, margins_to_preserve, W)
-
-        doc.save(str(out_path))
-
-        # 清理临时文件
-        try:
-            temp_path.unlink()
-        except Exception:
-            pass
-
-        print(f"英文摘要提取完成: {len(doc.paragraphs)} 段落, "
-              f"{len(doc.tables)} 表格")
-
-        return out_path
+        result = _extract_fragment_by_range_finder(
+            draft_path,
+            str(out_path),
+            "english_summary_temp",
+            lambda elements: _find_english_summary_range(elements, start_marker, end_marker),
+            clear_indents=True,
+        )
+        extracted_doc = Document(str(result))
+        print(f"英文摘要提取完成: {len(extracted_doc.paragraphs)} 段落, "
+              f"{len(extracted_doc.tables)} 表格")
+        return result
 
     except Exception as e:
         print(f"提取英文摘要失败: {e}")
