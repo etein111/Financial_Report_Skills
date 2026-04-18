@@ -60,10 +60,18 @@ def _replace_body_sectPr_with_page_break(doc: Document) -> None:
         return p
 
     sectPrs_to_remove = []
-    insert_positions = []  # (position, sectPr_element)
 
-    # 收集所有 sectPr 及其位置
+    # 先收集所有 body-level sectPr 的位置
     elements = list(body)
+    body_level_sectPrs = []
+    for i, elem in enumerate(elements):
+        if elem.tag == f'{W}sectPr':
+            body_level_sectPrs.append((i, elem))
+
+    # 最后一个 body-level sectPr 需要保留
+    last_body_level_idx = body_level_sectPrs[-1][0] if body_level_sectPrs else None
+
+    # 收集所有需要替换的 sectPr（跳过最后一个 body-level sectPr）
     for i, elem in enumerate(elements):
         if elem.tag == f'{W}p':
             pPr = elem.find(f'{W}pPr')
@@ -72,7 +80,9 @@ def _replace_body_sectPr_with_page_break(doc: Document) -> None:
                 if sectPr is not None:
                     sectPrs_to_remove.append((i, elem, pPr, sectPr))
         elif elem.tag == f'{W}sectPr':
-            sectPrs_to_remove.append((i, elem, None, elem))
+            # 跳过最后一个 body-level sectPr
+            if i != last_body_level_idx:
+                sectPrs_to_remove.append((i, elem, None, elem))
 
     # 反向遍历（从后往前）处理，避免索引变化问题
     for item in reversed(sectPrs_to_remove):
