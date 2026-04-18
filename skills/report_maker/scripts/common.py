@@ -407,6 +407,30 @@ def ensure_all_fields(elements: Dict[str, Any], schema: Dict[str, Any]) -> Dict[
     return result
 
 
+def scan_directory(dir_path: str) -> list[tuple[str, str]]:
+    """扫描目录下的 .docx 文件（排除临时文件和 AutoRefresh 文件）。
+
+    Args:
+        dir_path: 要扫描的目录路径
+
+    Returns:
+        [(filename, full_path), ...] 文件名和完整路径列表，按文件名排序
+
+    Raises:
+        ValueError: 目录不存在或不是有效目录
+    """
+    path = Path(dir_path)
+    if not path.exists() or not path.is_dir():
+        raise ValueError(f"目录不存在或不是有效目录: {dir_path}")
+
+    files = []
+    for f in sorted(path.glob("*.docx")):
+        if f.name.startswith("~$") or "_AutoRefresh" in f.name:
+            continue
+        files.append((f.name, str(f.absolute())))
+    return files
+
+
 def validate_elements_against_schema(
     elements: Dict[str, Any],
     schema: Dict[str, Any]
