@@ -1,6 +1,6 @@
 # report_maker 端到端自动化测试提示词
 
-本提示词用于自动化测试 report_maker skill。用户指定测试文件后，整个流程自动执行，无需任何确认。
+本提示词用于自动化测试 report_maker skill。整个流程自动执行，无需任何确认。
 
 ---
 
@@ -13,8 +13,7 @@
 ## 输入
 
 用户需提供：
-1. 测试文件路径（Word 草稿 .docx）
-2. 输出目录名（如 `test_xxx`）
+1. 输出目录名（如 `test_xxx`）
 
 ---
 
@@ -23,7 +22,7 @@
 ### 第一步：环境设置
 
 ```bash
-# 设置代理（如果需要）
+# 设置代理
 export HTTP_PROXY=http://127.0.0.1:7890
 export HTTPS_PROXY=http://127.0.0.1:7890
 
@@ -31,14 +30,61 @@ export HTTPS_PROXY=http://127.0.0.1:7890
 PYTHON=".venv/Scripts/python.exe"
 ```
 
-### 第二步：确定报告类型和语言
+### 第二步：选择报告类型
 
-根据文件路径和文件名自动判断：
-- 路径含 `inbox/samples/company/` 或 `samples/company/` → `company`
-- 路径含 `EN-` 或 `.docx` 含英文 → `en`
+显示报告类型菜单供用户选择：
+
+```
+【选择报告类型】
+请选择要制作的研报类型：
+  1. company       - 公司覆盖报告
+  2. sector        - 行业研究报告
+  3. flash         - 快讯
+  4. company_flash - 公司快讯
+  5. sector_flash  - 行业快讯
+  6. macro         - 宏观报告
+  7. strategy      - 策略报告
+  8. quantitative  - 量化报告
+  9. bond          - 债券报告
+```
+
+用户选择后，记录 `report_type`。
+
+### 第三步：扫描测试文件
+
+根据选择的报告类型，扫描对应目录：
+
+| 报告类型 | 扫描目录 |
+|---------|---------|
+| company | `inbox/samples/company/` |
+| sector | `inbox/samples/sector/` |
+| flash / company_flash / sector_flash | `inbox/samples/flash/` |
+| macro / strategy / quantitative / bond | `inbox/samples/macro/` |
+
+扫描规则：
+- 扫描 `.docx` 文件
+- 排除 `~$` 开头的临时文件
+- 排除 `_AutoRefresh` 后缀的文件
+
+显示扫描结果供用户选择：
+
+```
+【扫描到以下测试文件】
+  1. 0402威胜控股（3393.HK）首次覆盖：配网投资与AI算力双轮驱动，能源计量龙头再启航.docx
+  2. 西锐飞机首次覆盖报告（中文）提交版.docx
+  ...
+请选择测试文件 (1-9):
+```
+
+用户选择后，记录 `draft_path`。
+
+### 第四步：确定语言
+
+根据文件名判断语言：
+- 文件名含 `EN-` 或全英文 → `en`
 - 否则 → `zh`
 
-### 第三步：预处理文档
+### 第五步：预处理文档
 
 ```python
 import sys
@@ -56,13 +102,13 @@ doc = Document(draft_path)
 paragraphs = [(i, p.text.strip()) for i, p in enumerate(doc.paragraphs) if p.text.strip()]
 ```
 
-### 第四步：LLM 提取字段
+### 第六步：LLM 提取字段
 
 将表格和段落内容发送给 LLM，提取：
-- schema.yaml 所有字段
+- schema.yaml 所有字段（从 `templates/{report_type}/{language}/schema.yaml` 读取）
 - abstract/body/english_summary 的位置信息
 
-### 第五步：提取 fragment
+### 第七步：提取 fragment
 
 ```python
 from splitter import extract_abstract, extract_body, extract_english_summary
@@ -81,11 +127,11 @@ if has_english_summary:
     extract_english_summary(...)
 ```
 
-### 第六步：创建 elements.yaml
+### 第八步：创建 elements.yaml
 
 根据提取结果生成 `elements.yaml`，包含 schema.yaml 所有字段。
 
-### 第七步：渲染报告
+### 第九步：渲染报告
 
 ```python
 from renderer import render_report
@@ -100,7 +146,7 @@ result = render_report(
 )
 ```
 
-### 第八步：验证
+### 第十步：验证
 
 ```python
 from docx import Document
@@ -115,7 +161,7 @@ assert len(doc.paragraphs) > 0, "输出文档为空"
 print(f"✅ 验证通过: {len(doc.paragraphs)} 段落, {len(doc.tables)} 表格, {len(doc.inline_shapes)} 图片")
 ```
 
-### 第九步：创建 PROCESS.md
+### 第十一步：创建 PROCESS.md
 
 生成测试过程记录文档。
 
@@ -123,10 +169,16 @@ print(f"✅ 验证通过: {len(doc.paragraphs)} 段落, {len(doc.tables)} 表格
 
 ## 完整示例
 
-输入：`inbox/samples/company/0402威胜控股（3393.HK）首次覆盖.docx`
-输出目录：`test_wasion`
+用户输入：`test_wasion`
 
-执行后生成：
+执行流程：
+1. 选择报告类型 → `1. company`
+2. 扫描 `inbox/samples/company/` → 显示文件列表
+3. 用户选择 `1` → `0402威胜控股（3393.HK）首次覆盖...docx`
+4. 自动判断语言 → `zh`
+5. 后续流程自动执行
+
+输出目录 `test_wasion/` 结构：
 ```
 test_wasion/
 ├── draft.docx              # 原始草稿
@@ -150,3 +202,4 @@ test_wasion/
 4. **英文报告不需要 english_summary**（跳过即可）
 5. **不要询问确认**，自动执行完成
 6. **覆盖已有输出文件**时使用新文件名（如 `_v2`）
+7. **文件扫描结果为空时**，提示用户检查目录或选择其他报告类型
