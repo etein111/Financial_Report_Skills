@@ -1,0 +1,20 @@
+# neolyst-report 是 neoskills 仓库的一个 git worktree（feature/neolyst-report 分支的检出），
+# 不是独立项目。其历史以分支形式保留，不在此复制一份目录。
+neolyst-report/
+
+# Windows 下 `> nul` 误产生的空文件，且该文件名在 Windows 上无法正常检出
+nul
+
+# 依赖与缓存
+node_modules/
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.egg-info/
+
+# 编辑器与系统文件
+.DS_Store
+Thumbs.db
