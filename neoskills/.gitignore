@@ -1,0 +1,54 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+*.egg
+dist/
+build/
+
+# 测试与覆盖率
+.coverage
+.coverage.*
+.pytest_cache/
+htmlcov/
+
+# 虚拟环境
+.venv/
+.env
+.envrc
+
+# 类型检查
+.mypy_cache/
+
+# Lint
+.ruff_cache/
+
+# uv
+uv.lock
+
+# IDE
+.idea/
+.vscode/
+
+# 工具本地配置
+.opencode/
+.codex
+opencode.json
+
+# Supabase
+.supabase/
+supabase/.temp/
+
+# Claude Code
+.claude/
+.worktrees/
+
+# 产出文件
+reports/
+
+# 项目本地文件
+skills/neolyst/tests/output/
+skills/neolyst/user.json
+skills/neolyst/session.json

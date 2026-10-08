@@ -1,0 +1,7 @@
+{
+  "host": "47.239.121.31",
+  "port": "32427",
+  "user": "supabase_admin",
+  "password": "ch2MmNaEIbe3l60q95H7v8Gdo4xSU1yW",
+  "dbname": "postgres"
+}

@@ -1,0 +1,7 @@
+{
+  "supabase_url": "http://127.0.0.1:8000",
+  "anon_key": "***REMOVED-JWT***",
+  "email": "yangxue@opendelp.com",
+  "password": "Admin123",
+  "bearer_token": "***REMOVED-JWT***"
+}
