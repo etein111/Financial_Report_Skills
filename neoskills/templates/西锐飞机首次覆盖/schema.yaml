@@ -1,0 +1,132 @@
+a1_cn:
+  description: a1_cn
+  format: 杨斌
+a1_email:
+  description: a1_email
+  format: harryyang@hfisec.com.hk
+a1_en:
+  description: a1_en
+  format: Bin Yang
+a1_sfc:
+  description: a1_sfc
+  format: BSQ313
+a2_cn:
+  description: a2_cn
+a2_email:
+  description: a2_email
+a2_en:
+  description: a2_en
+a2_sfc:
+  description: a2_sfc
+a3_cn:
+  description: a3_cn
+a3_email:
+  description: a3_email
+a3_en:
+  description: a3_en
+a3_sfc:
+  description: a3_sfc
+a4_cn:
+  description: a4_cn
+a4_email:
+  description: a4_email
+a4_en:
+  description: a4_en
+a4_sfc:
+  description: a4_sfc
+a5_cn:
+  description: a5_cn
+a5_email:
+  description: a5_email
+a5_en:
+  description: a5_en
+a5_sfc:
+  description: a5_sfc
+a6_cn:
+  description: a6_cn
+a6_email:
+  description: a6_email
+a6_en:
+  description: a6_en
+a6_sfc:
+  description: a6_sfc
+a7_cn:
+  description: a7_cn
+a7_email:
+  description: a7_email
+a7_en:
+  description: a7_en
+a7_sfc:
+  description: a7_sfc
+a8_cn:
+  description: a8_cn
+a8_email:
+  description: a8_email
+a8_en:
+  description: a8_en
+a8_sfc:
+  description: a8_sfc
+abstract:
+  description: 报告摘要部分
+  hints:
+  - 通常包含投资亮点、核心观点
+  - 长度约 200-500 字
+  - 不应包含表格和图表
+  - 位于首页右侧区域
+  scope: '表格 0 (整个摘要表格): 0；【】跑不过【M[Table_Main]...'
+  type: fragment
+appendix:
+  description: 法律披露附录（IMPORTANT DISCLOSURES）
+  hints:
+  - 一定从新的一页开始（通过分节符隔离）
+  - 包含重要信息披露内容
+  - 通常有"附录APPENDIX"标题
+  scope: 正文之后，报告末尾
+  type: fragment
+body:
+  description: 报告正文部分
+  hints:
+  - 包含各章节详细内容
+  - 可能包含表格、图表引用
+  - 按原文结构保留段落和标题层级
+  scope: 段落 71 到 248
+  type: fragment
+company:
+  description: company
+  format: 西锐飞机
+current_price:
+  description: current_price
+  format: '60.40'
+current_price_date:
+  description: current_price_date
+  format: 2026 年 01 月 15 日
+market_cap:
+  description: market_cap
+  format: 22.11bn
+one_year_high:
+  description: one_year_high
+  format: '73.40'
+one_year_low:
+  description: one_year_low
+  format: '20.50'
+rating:
+  description: rating
+  format: OUTPERFORM
+report_date:
+  description: report_date
+  format: 21 Oct 2025
+shares_in_issue:
+  description: shares_in_issue
+  format: 365.99mn
+source:
+  description: source
+  format: xxx
+target_price:
+  description: target_price
+  format: '86.72'
+ticker:
+  description: ticker
+  format: 2507.HK
+title:
+  description: title
+  format: 首次覆盖：安全、创新与强大生态系统铸就西锐私人航空全球领导者地位

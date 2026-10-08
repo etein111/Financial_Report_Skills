@@ -1,0 +1,231 @@
+"""
+金融股票走势图生成脚本
+根据ticker从yfinance获取股价数据，绘制专业金融分析风格的图表
+"""
+
+import yfinance as yf
+import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
+from datetime import datetime, timedelta
+import numpy as np
+
+
+def get_stock_data(ticker: str, report_date: datetime) -> tuple:
+    """
+    获取股票数据
+    """
+    if not ('.' in ticker or '^' in ticker):
+        if ticker.isdigit() and len(ticker) == 4:
+            ticker = f"{ticker}.HK"
+
+    stock = yf.Ticker(ticker)
+    info = stock.info
+    company_name = info.get('shortName', ticker)
+
+    end_date = report_date
+    start_date = end_date - timedelta(days=365)
+
+    try:
+        if 'earliestHistoricalTime' in info and info['earliestHistoricalTime']:
+            earliest_date = info['earliestHistoricalTime']
+            if earliest_date > start_date:
+                start_date = earliest_date
+    except:
+        pass
+
+    hist = stock.history(start=start_date, end=end_date)
+    if hist.empty:
+        raise ValueError(f"无法获取 {ticker} 的历史数据")
+
+    dates = hist.index
+    prices = hist['Close'].values
+
+    return dates, prices, company_name, ticker
+
+
+def calc_yticks(prices, target_price=None):
+    """
+    计算合适的Y轴范围和刻度，确保折线居中
+    """
+    price_min = prices.min()
+    price_max = prices.max()
+
+    # 如果有目标价，也要考虑
+    if target_price:
+        price_max = max(price_max, target_price)
+
+    # 计算中点和range
+    mid = (price_min + price_max) / 2
+    data_range = price_max - price_min
+
+    # 设置可视范围，中点对齐，保留足够空间
+    # 上下各留 data_range * 0.4 的padding
+    padding = max(data_range * 0.4, (price_max - price_min) * 0.6)
+
+    y_min = mid - padding
+    y_max = mid + padding
+
+    # 确保不为负
+    y_min = max(0, y_min)
+    y_max = max(y_max, price_max + padding * 0.3)
+
+    # 生成合适的刻度（大约5-7个刻度）
+    y_range = y_max - y_min
+    rough_step = y_range / 5
+
+    # 选择一个好的刻度间隔
+    magnitude = 10 ** (len(str(int(rough_step))) - 1)
+    possible_steps = [magnitude, 2 * magnitude, 5 * magnitude, 10 * magnitude]
+
+    best_step = min(possible_steps, key=lambda x: abs(x - rough_step))
+
+    y_min_rounded = int(y_min / best_step) * best_step
+    if y_min_rounded > y_min:
+        y_min_rounded -= best_step
+
+    y_max_rounded = int(y_max / best_step) * best_step
+    if y_max_rounded < y_max:
+        y_max_rounded += best_step
+
+    # 生成刻度值
+    y_ticks = []
+    val = y_min_rounded
+    while val <= y_max_rounded:
+        y_ticks.append(round(val, 2))
+        val += best_step
+
+    return y_min_rounded, y_max_rounded, y_ticks
+
+
+def plot_stock_chart(
+    ticker: str,
+    report_date: datetime,
+    disclosures: list,
+    target_price: float,
+    output_path: str = None
+):
+    """绘制股票走势图"""
+
+    dates, prices, company_name, ticker_label = get_stock_data(ticker, report_date)
+
+    fig, ax = plt.subplots(figsize=(12, 7), dpi=100)
+
+    # 浅灰色背景
+    ax.set_facecolor('#f5f5f5')
+    fig.patch.set_facecolor('white')
+
+    # 绘制股价折线（浅蓝色）
+    ax.plot(dates, prices, color='#6B9BD1', linewidth=2, label='Stock Price')
+
+    # 计算合适的Y轴范围和刻度
+    y_min, y_max, y_ticks = calc_yticks(prices, target_price)
+    ax.set_ylim(y_min, y_max)
+    ax.set_yticks(y_ticks)
+
+    # X轴设置
+    ax.xaxis.set_major_formatter(mdates.DateFormatter('%b-%Y'))
+    ax.xaxis.set_major_locator(mdates.MonthLocator(interval=3))
+    plt.xticks(rotation=45)
+    ax.set_xlim(dates[0], dates[-1])
+
+    # 水平网格线
+    ax.yaxis.grid(True, linestyle='--', alpha=0.7, color='lightgray')
+    ax.set_axisbelow(True)
+
+    # 去掉边框
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+
+    # 处理披露日期
+    disclosure_dates = []
+    disclosure_prices = []
+    for d in disclosures:
+        if isinstance(d, tuple):
+            disclosure_dates.append(d[0])
+            disclosure_prices.append(d[1])
+        else:
+            disclosure_dates.append(d)
+            disclosure_prices.append(prices[-1])
+
+    # 获取数据范围
+    data_x_min = dates[0]
+    data_x_max = dates[-1]
+    y_range_max = y_max
+
+    # 绘制垂直线和标注
+    for i, (disc_date, disc_price) in enumerate(zip(disclosure_dates, disclosure_prices)):
+        ax.axvline(x=disc_date, color='#4A90D9', linestyle='--', linewidth=1.5, alpha=0.8)
+        ax.annotate(
+            f'{i+1}',
+            xy=(disc_date, prices.max()),
+            xytext=(disc_date, y_range_max * 0.97),
+            fontsize=14,
+            fontweight='bold',
+            color='#4A90D9',
+            ha='center',
+            va='top'
+        )
+
+    # 绘制目标价水平粗线
+    if len(disclosure_dates) == 1:
+        disc_date = disclosure_dates[0]
+        ax.axhline(y=target_price, xmin=0.5, xmax=1.0, color='#333333', linewidth=4, alpha=0.8)
+        ax.annotate(
+            f'{target_price:.2f}',
+            xy=(data_x_max, target_price),
+            xytext=(5, 5),
+            textcoords='offset points',
+            fontsize=12,
+            fontweight='bold',
+            color='#333333',
+            va='bottom'
+        )
+    elif len(disclosure_dates) == 2:
+        disc_date1, disc_date2 = disclosure_dates
+        ax.hlines(y=target_price, xmin=disc_date1, xmax=disc_date2, color='#333333', linewidth=4, alpha=0.8)
+        ax.annotate(
+            f'{target_price:.2f}',
+            xy=(disc_date2, target_price),
+            xytext=(5, 5),
+            textcoords='offset points',
+            fontsize=12,
+            fontweight='bold',
+            color='#333333',
+            va='bottom'
+        )
+
+    # 底部图例文字
+    legend_texts = []
+    for i, (disc_date, disc_price) in enumerate(zip(disclosure_dates, disclosure_prices)):
+        date_str = disc_date.strftime('%d %b %Y')
+        legend_texts.append(f'{i+1}. {date_str} OUTPERFORM at {disc_price:.1f} target {target_price:.2f}.')
+
+    fig.text(0.5, 0.02, '  |  '.join(legend_texts), ha='center', fontsize=10, style='italic', color='#333333')
+
+    # 标题
+    ax.set_title(f'{company_name} - {ticker_label}', fontsize=16, fontweight='bold', pad=20)
+    ax.set_ylabel('Price', fontsize=11)
+
+    plt.tight_layout(rect=[0, 0.05, 1, 1])
+
+    if output_path:
+        plt.savefig(output_path, dpi=150, bbox_inches='tight', facecolor='white')
+        print(f"图表已保存至: {output_path}")
+
+    plt.show()
+
+
+if __name__ == "__main__":
+    # 示例
+    ticker = "2507.HK"
+    report_date = datetime(2026, 1, 15)
+    disclosures = [(datetime(2026, 1, 15), 60.4)]
+    target_price = 86.72
+
+    plot_stock_chart(
+        ticker=ticker,
+        report_date=report_date,
+        disclosures=disclosures,
+        target_price=target_price,
+        output_path="reports/cirrus_2507_chart.png"
+    )
