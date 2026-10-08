@@ -22,3 +22,13 @@ Thumbs.db
 # 工具临时产物
 tmpclaude-*-cwd
 *.bak
+
+# 密钥与本地私有配置 —— 绝不入库
+.env
+.env.local
+**/settings.local.json
+**/test_config.json
+
+# 保留的示例文件（无真实密钥）
+!**/*.example.json
+!.env.example
